@@ -2,6 +2,7 @@ package org.stellar.reference.di
 
 import com.sksamuel.hoplite.*
 import org.stellar.reference.data.Config
+import org.stellar.reference.data.LocationConfig
 
 class ConfigContainer(envMap: Map<String, String>?) {
   var config: Config = readCfg(envMap)
@@ -20,14 +21,25 @@ class ConfigContainer(envMap: Map<String, String>?) {
     }
 
     private fun readCfg(envMap: Map<String, String>?): Config {
+      // The location of the config file is determined by the environment variable first
+      val locationCfgBuilder =
+        ConfigLoaderBuilder.default().addPropertySource(PropertySource.environment())
+
       val cfgBuilder = ConfigLoaderBuilder.default()
-      // Add environment variables as a property source.
+
+      // Add environment variables as a property source for the config object
       cfgBuilder.addPropertySource(PropertySource.environment())
+
+      // Add any environment variable overrides from the envMap
       envMap?.run {
+        locationCfgBuilder.addMapSource(this)
         cfgBuilder.addMapSource(this)
-        if (envMap[KT_REFERENCE_SERVER_CONFIG] != null) {
-          cfgBuilder.addFileSource(envMap[KT_REFERENCE_SERVER_CONFIG]!!)
-        }
+      }
+
+      //
+      val locationConfig = locationCfgBuilder.build().loadConfigOrThrow<LocationConfig>()
+      if (locationConfig.ktReferenceServerConfig != null) {
+        cfgBuilder.addFileSource(locationConfig.ktReferenceServerConfig)
       }
       return cfgBuilder.build().loadConfigOrThrow<Config>()
     }
