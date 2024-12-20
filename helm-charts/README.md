@@ -1,5 +1,7 @@
 # Getting Started
 
+The following instructions will guide you through the process of setting up the Anchor Platform on a local Kubernetes cluster using Minikube.
+
 ```bash
 minikube start
 
@@ -31,4 +33,14 @@ helm upgrade --install reference-server ./reference-server/ -f ./reference-serve
 
 # Install the Anchor Platform
 helm upgrade --install anchor-platform ./sep-service/ -f ./sep-service/values.yaml
+
+# Install the ingress controller
+helm upgrade --install ingress-nginx ingress-nginx \
+  --repo https://kubernetes.github.io/ingress-nginx \
+  --namespace ingress-nginx --create-namespace
+  
+# Port forward the ingress controller
+kubectl port-forward svc/ingress-nginx-controller 8080:80 -n ingress-nginx
+
+# Now you can access the Anchor Platform at http://localhost:8080
 ```

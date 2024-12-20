@@ -36,7 +36,6 @@ class ConfigContainer(envMap: Map<String, String>?) {
         cfgBuilder.addMapSource(this)
       }
 
-      //
       val locationConfig = locationCfgBuilder.build().loadConfigOrThrow<LocationConfig>()
       if (locationConfig.ktReferenceServerConfig != null) {
         cfgBuilder.addFileSource(locationConfig.ktReferenceServerConfig)
