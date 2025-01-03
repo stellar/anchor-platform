@@ -52,6 +52,31 @@ public class StringHelper {
         .toUpperCase();
   }
 
+  /**
+   * Converts a dot-separated string to camelCase. For example: - "kt.reference.server.config"
+   * becomes "ktReferenceServerConfig"
+   *
+   * @param s The dot-separated string to be converted.
+   * @return A string in camelCase format.
+   * @throws NullPointerException If the input string is null.
+   */
+  public static String dotToCamelCase(String s) {
+    String[] parts = s.split("\\."); // Split by dot
+    StringBuilder result = new StringBuilder();
+
+    for (int i = 0; i < parts.length; i++) {
+      String part = parts[i];
+      if (i == 0) {
+        // If it's the first part, leave it as is (in lowercase)
+        result.append(part);
+      } else {
+        // Capitalize the first letter of other parts
+        result.append(part.substring(0, 1).toUpperCase()).append(part.substring(1));
+      }
+    }
+    return result.toString();
+  }
+
   static Gson gson = GsonUtils.getInstance();
 
   /**

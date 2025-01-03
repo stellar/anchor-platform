@@ -21,6 +21,7 @@ dependencies {
   implementation(variantOf(libs.java.stellar.sdk) { classifier("uber") })
 
   implementation(project(mapOf("path" to ":api-schema")))
+  implementation(project(":lib-util"))
 }
 
 tasks {

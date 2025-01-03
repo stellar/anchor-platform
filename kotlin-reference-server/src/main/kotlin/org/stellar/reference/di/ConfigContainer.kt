@@ -1,6 +1,7 @@
 package org.stellar.reference.di
 
 import com.sksamuel.hoplite.*
+import org.stellar.anchor.util.StringHelper.dotToCamelCase
 import org.stellar.reference.data.Config
 import org.stellar.reference.data.LocationConfig
 
@@ -25,15 +26,14 @@ class ConfigContainer(envMap: Map<String, String>?) {
       val locationCfgBuilder =
         ConfigLoaderBuilder.default().addPropertySource(PropertySource.environment())
 
-      val cfgBuilder = ConfigLoaderBuilder.default()
-
       // Add environment variables as a property source for the config object
-      cfgBuilder.addPropertySource(PropertySource.environment())
+      val cfgBuilder = ConfigLoaderBuilder.default().addPropertySource(PropertySource.environment())
 
       // Add any environment variable overrides from the envMap
       envMap?.run {
-        locationCfgBuilder.addMapSource(this)
-        cfgBuilder.addMapSource(this)
+        val camelEnvMap = this.mapKeys { (key, _) -> dotToCamelCase(key) }
+        locationCfgBuilder.addMapSource(camelEnvMap)
+        cfgBuilder.addMapSource(camelEnvMap)
       }
 
       val locationConfig = locationCfgBuilder.build().loadConfigOrThrow<LocationConfig>()
