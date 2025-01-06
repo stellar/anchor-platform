@@ -66,6 +66,9 @@ public class StringHelper {
 
     for (int i = 0; i < parts.length; i++) {
       String part = parts[i];
+      if (part.isEmpty()) {
+        continue;
+      }
       if (i == 0) {
         // If it's the first part, leave it as is (in lowercase)
         result.append(part);
