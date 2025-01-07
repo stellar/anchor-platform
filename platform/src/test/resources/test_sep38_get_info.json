@@ -8,7 +8,7 @@
     },
     {
       "asset": "iso4217:USD",
-      "country_codes": ["USA"],
+      "country_codes": ["US"],
       "decimals": 4,
       "sell_delivery_methods": [
         {

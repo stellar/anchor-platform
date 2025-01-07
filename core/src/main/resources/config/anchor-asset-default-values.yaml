@@ -142,10 +142,10 @@ items:
       # - stellar:USDC:GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
       exchangeable_assets:
 
-      # The list of the country codes that the asset is available in.
+      # The list of the ISO 3166-1 alpha-2 country codes that the asset is available in.
       # Example:
-      #   - USA
-      #   - CAN
+      #   - US
+      #   - CA
       country_codes:
 
       # An array of objects describing the methods a client can use to sell/deliver funds to the anchor.

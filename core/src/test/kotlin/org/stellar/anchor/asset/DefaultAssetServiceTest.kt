@@ -239,7 +239,7 @@ internal class DefaultAssetServiceTest {
                     "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
                   ],
                   "country_codes": [
-                    "USA"
+                    "US"
                   ],
                   "sell_delivery_methods": [
                     {
