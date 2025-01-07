@@ -1,9 +1,9 @@
 package org.stellar.reference.di
 
 import com.sksamuel.hoplite.*
-import org.stellar.anchor.util.StringHelper.dotToCamelCase
 import org.stellar.reference.data.Config
 import org.stellar.reference.data.LocationConfig
+import org.stellar.reference.dotToCamelCase
 
 class ConfigContainer(envMap: Map<String, String>?) {
   var config: Config = readCfg(envMap)
@@ -31,9 +31,12 @@ class ConfigContainer(envMap: Map<String, String>?) {
 
       // Add any environment variable overrides from the envMap
       envMap?.run {
+        // env variables override
+        cfgBuilder.addMapSource(this)
+
+        // for the location config, we need to convert the keys to camel case
         val camelEnvMap = this.mapKeys { (key, _) -> dotToCamelCase(key) }
         locationCfgBuilder.addMapSource(camelEnvMap)
-        cfgBuilder.addMapSource(camelEnvMap)
       }
 
       val locationConfig = locationCfgBuilder.build().loadConfigOrThrow<LocationConfig>()
