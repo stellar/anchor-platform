@@ -142,7 +142,7 @@ items:
       # - stellar:USDC:GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
       exchangeable_assets:
 
-      # The list of 2-letter country codes defined in ISO 3166 that the asset is available in.
+      # The list of the ISO 3166-2 country codes that the asset is available in.
       # Example:
       #   - US
       #   - CA
