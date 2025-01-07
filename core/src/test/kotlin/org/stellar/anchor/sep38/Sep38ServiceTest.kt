@@ -120,7 +120,7 @@ class Sep38ServiceTest {
 
     val fiatUSD = assetMap[fiatUSD]
     assertNotNull(fiatUSD)
-    assertEquals(listOf("USA"), fiatUSD!!.countryCodes)
+    assertEquals(listOf("US"), fiatUSD!!.countryCodes)
     val wantSellDeliveryMethod =
       Sep38Info.DeliveryMethod("WIRE", "Send USD directly to the Anchor's bank account.")
     assertEquals(listOf(wantSellDeliveryMethod), fiatUSD.sellDeliveryMethods)
@@ -236,7 +236,7 @@ class Sep38ServiceTest {
         .sellAsset(fiatUSD)
         .buyAsset("stellar:JPYC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
         .sellAmount("100")
-        .countryCode("USA")
+        .countryCode("US")
         .sellDeliveryMethod("WIRE")
         .build()
     every { mockRateIntegration.getRate(getRateReq1) } returns
@@ -248,7 +248,7 @@ class Sep38ServiceTest {
         .sellAsset(fiatUSD)
         .buyAsset(stellarUSDC)
         .sellAmount("100")
-        .countryCode("USA")
+        .countryCode("US")
         .sellDeliveryMethod("WIRE")
         .build()
     every { mockRateIntegration.getRate(getRateReq2) } returns
@@ -258,7 +258,7 @@ class Sep38ServiceTest {
 
     // test happy path with all the parameters
     var gotResponse: GetPricesResponse? = null
-    assertDoesNotThrow { gotResponse = sep38Service.getPrices(fiatUSD, "100", "WIRE", null, "USA") }
+    assertDoesNotThrow { gotResponse = sep38Service.getPrices(fiatUSD, "100", "WIRE", null, "US") }
     val wantResponse = GetPricesResponse()
     wantResponse.addAsset(stellarJPYC, 2, "1.1")
     wantResponse.addAsset(stellarUSDC, 2, "2.1")
@@ -393,13 +393,13 @@ class Sep38ServiceTest {
 
     // unsupported country_code
     getPriceRequestBuilder = getPriceRequestBuilder.buyDeliveryMethod(null)
-    getPriceRequestBuilder = getPriceRequestBuilder.countryCode("BRA")
+    getPriceRequestBuilder = getPriceRequestBuilder.countryCode("BR")
     ex = assertThrows { sep38Service.getPrice(null, getPriceRequestBuilder.build()) }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("Unsupported country code", ex.message)
 
     // unsupported (null) context
-    getPriceRequestBuilder = getPriceRequestBuilder.countryCode("USA")
+    getPriceRequestBuilder = getPriceRequestBuilder.countryCode("US")
     ex = assertThrows { sep38Service.getPrice(null, getPriceRequestBuilder.build()) }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("Unsupported context. Should be one of [sep6, sep31].", ex.message)
@@ -497,7 +497,7 @@ class Sep38ServiceTest {
         .sellAsset(fiatUSD)
         .buyAsset(stellarUSDC)
         .sellAmount("100")
-        .countryCode("USA")
+        .countryCode("US")
         .sellDeliveryMethod("WIRE")
         .build()
     every { mockRateIntegration.getRate(getRateReq) } returns
@@ -512,7 +512,7 @@ class Sep38ServiceTest {
         .sellAmount("100")
         .sellDeliveryMethod("WIRE")
         .buyAssetName(stellarUSDC)
-        .countryCode("USA")
+        .countryCode("US")
         .context(SEP6)
         .build()
     var gotResponse: GetPriceResponse? = null
@@ -537,7 +537,7 @@ class Sep38ServiceTest {
         .sellAsset(fiatUSD)
         .buyAsset(stellarUSDC)
         .buyAmount("100")
-        .countryCode("USA")
+        .countryCode("US")
         .sellDeliveryMethod("WIRE")
         .build()
 
@@ -553,7 +553,7 @@ class Sep38ServiceTest {
         .sellDeliveryMethod("WIRE")
         .buyAssetName(stellarUSDC)
         .buyAmount("100")
-        .countryCode("USA")
+        .countryCode("US")
         .context(SEP31)
         .build()
     var gotResponse: GetPriceResponse? = null
@@ -788,7 +788,7 @@ class Sep38ServiceTest {
           .sellAmount("1.23")
           .sellDeliveryMethod("WIRE")
           .buyAssetName(stellarUSDC)
-          .countryCode("BRA")
+          .countryCode("BR")
           .build()
       )
     }
@@ -804,7 +804,7 @@ class Sep38ServiceTest {
           .sellAmount("1.23")
           .sellDeliveryMethod("WIRE")
           .buyAssetName(stellarUSDC)
-          .countryCode("USA")
+          .countryCode("US")
           .expireAfter("2022-04-18T23:33:24.629719Z")
           .build()
       )
@@ -1063,7 +1063,7 @@ class Sep38ServiceTest {
             .sellAmount("100")
             .sellDeliveryMethod("WIRE")
             .buyAssetName(stellarUSDC)
-            .countryCode("USA")
+            .countryCode("US")
             .expireAfter(now.toString())
             .build()
         )
@@ -1167,7 +1167,7 @@ class Sep38ServiceTest {
             .sellDeliveryMethod("WIRE")
             .buyAssetName(stellarUSDC)
             .buyAmount("100")
-            .countryCode("USA")
+            .countryCode("US")
             .expireAfter(now.toString())
             .build()
         )
@@ -1279,7 +1279,7 @@ class Sep38ServiceTest {
             .sellDeliveryMethod("WIRE")
             .buyAssetName(stellarUSDC)
             .buyAmount(requestBuyAmount)
-            .countryCode("USA")
+            .countryCode("US")
             .expireAfter(now.toString())
             .build()
         )
