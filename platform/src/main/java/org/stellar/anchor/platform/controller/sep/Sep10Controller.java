@@ -14,13 +14,13 @@ import org.stellar.anchor.api.sep.sep10.ChallengeRequest;
 import org.stellar.anchor.api.sep.sep10.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep10.ValidationRequest;
 import org.stellar.anchor.api.sep.sep10.ValidationResponse;
-import org.stellar.anchor.platform.condition.ConditionalOnAllSepsEnabled;
+import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.sep10.Sep10Service;
 import org.stellar.sdk.exception.InvalidSep10ChallengeException;
 
 @RestController
 @CrossOrigin(origins = "*")
-@ConditionalOnAllSepsEnabled(seps = {"sep10"})
+@OnAllSepsEnabled(seps = {"sep10"})
 public class Sep10Controller {
 
   private final Sep10Service sep10Service;
