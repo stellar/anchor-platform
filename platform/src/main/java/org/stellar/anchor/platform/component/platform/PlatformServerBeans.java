@@ -94,7 +94,6 @@ public class PlatformServerBeans {
   }
 
   @Bean
-  @ConditionalOnAnySepsEnabled(seps = {"sep24"})
   Sep24DepositInfoGenerator sep24DepositInfoGenerator(
       Sep24Config sep24Config, Optional<CustodyApiClient> custodyApiClient)
       throws InvalidConfigException {
