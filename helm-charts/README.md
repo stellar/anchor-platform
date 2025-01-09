@@ -14,12 +14,12 @@ helm install external-secrets \
 
 # Install postgres
 helm repo add bitnami https://charts.bitnami.com/bitnami
-helm install postgresql-ref bitnami/postgresql --set global.postgresql.auth.postgresPassword=123456789
-helm install postgresql bitnami/postgresql --set global.postgresql.auth.postgresPassword=123456789
+helm install postgresql-ref bitnami/postgresql --version 15.1.2 --set global.postgresql.auth.postgresPassword=123456789
+helm install postgresql bitnami/postgresql --version 15.1.2 --set global.postgresql.auth.postgresPassword=123456789
 
 # Install Kafka
 kubectl create secret generic ap-kafka-secrets --from-literal=client-passwords=123456789 --from-literal=controller-password=123456789 --from-literal=inter-broker-password=123456789 --from-literal=system-user-password=123456789
-helm install kafka bitnami/kafka --set sasl.existingSecret=ap-kafka-secrets
+helm install kafka bitnami/kafka --version 27.1.2 --set sasl.existingSecret=ap-kafka-secrets
 
 # Install the secret store
 helm upgrade --install fake-secret-store ./secret-store/
