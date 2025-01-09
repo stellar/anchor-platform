@@ -132,7 +132,9 @@ public class AssetValidator {
       }
     }
 
-    // Validate country codes
+    // TODO: Enable validate country codes in version 3.x because 2.x does not conform to the ISO
+    // country code
+    /*
     if (sep38Info.getCountryCodes() != null) {
       for (String country : sep38Info.getCountryCodes()) {
         if (!isCountryCodeValid(country))
@@ -140,7 +142,7 @@ public class AssetValidator {
               String.format("Invalid country code %s defined for asset %s.", country, assetId));
       }
     }
-
+    */
     if (sep38Info.getBuyDeliveryMethods() != null) {
       // Validate methods
       for (DeliveryMethod method : sep38Info.getBuyDeliveryMethods()) {
