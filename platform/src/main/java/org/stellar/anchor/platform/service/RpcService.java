@@ -19,7 +19,7 @@ import org.stellar.anchor.api.rpc.method.RpcMethod;
 import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.rpc.RpcMethodHandler;
 import org.stellar.anchor.platform.utils.RpcUtil;
-import org.stellar.sdk.requests.ErrorResponse;
+import org.stellar.sdk.exception.NetworkException;
 
 public class RpcService {
 
@@ -53,7 +53,7 @@ public class RpcService {
                 return RpcUtil.getRpcErrorResponse(rc, ex);
               } catch (BadRequestException ex) {
                 return RpcUtil.getRpcErrorResponse(rc, ex);
-              } catch (ErrorResponse ex) {
+              } catch (NetworkException ex) {
                 var message =
                     ex.getMessage() + " Code: " + ex.getCode() + " , body: " + ex.getBody();
                 errorEx(

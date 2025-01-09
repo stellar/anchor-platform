@@ -4,7 +4,6 @@ import com.google.gson.reflect.TypeToken
 import io.micrometer.core.instrument.Counter
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
-import java.io.IOException
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -45,6 +44,7 @@ import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31TransactionStore
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.sdk.exception.NetworkException
 import org.stellar.sdk.responses.operations.OperationResponse
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
 
@@ -163,7 +163,7 @@ class NotifyOnchainFundsSentHandlerTest {
     every { txn31Store.findByTransactionId(any()) } returns null
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
     every { horizon.getStellarTxnOperations(any()) } throws
-      IOException("Invalid stellar transaction")
+      NetworkException(400, "Invalid stellar transaction")
 
     val ex = assertThrows<InternalErrorException> { handler.handle(request) }
     assertEquals("Failed to retrieve Stellar transaction by ID[stellarTxId]", ex.message)

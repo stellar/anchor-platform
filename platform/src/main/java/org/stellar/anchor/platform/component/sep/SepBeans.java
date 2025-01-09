@@ -18,8 +18,8 @@ import org.stellar.anchor.config.*;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.filter.Sep10JwtFilter;
 import org.stellar.anchor.horizon.Horizon;
-import org.stellar.anchor.platform.condition.ConditionalOnAllSepsEnabled;
-import org.stellar.anchor.platform.condition.ConditionalOnAnySepsEnabled;
+import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
+import org.stellar.anchor.platform.condition.OnAnySepsEnabled;
 import org.stellar.anchor.platform.config.*;
 import org.stellar.anchor.platform.service.SimpleInteractiveUrlConstructor;
 import org.stellar.anchor.sep1.Sep1Service;
@@ -101,19 +101,19 @@ public class SepBeans {
   }
 
   @Bean
-  @ConditionalOnAllSepsEnabled(seps = {"sep1"})
+  @OnAllSepsEnabled(seps = {"sep1"})
   Sep1Service sep1Service(Sep1Config sep1Config) {
     return new Sep1Service(sep1Config);
   }
 
   @Bean
-  @ConditionalOnAnySepsEnabled(seps = {"sep6", "sep10", "sep24"})
+  @OnAnySepsEnabled(seps = {"sep6", "sep10", "sep24"})
   ClientFinder clientFinder(Sep10Config sep10Config, ClientService clientService) {
     return new ClientFinder(sep10Config, clientService);
   }
 
   @Bean
-  @ConditionalOnAllSepsEnabled(seps = {"sep6"})
+  @OnAllSepsEnabled(seps = {"sep6"})
   Sep6Service sep6Service(
       AppConfig appConfig,
       Sep6Config sep6Config,
@@ -139,7 +139,7 @@ public class SepBeans {
   }
 
   @Bean
-  @ConditionalOnAllSepsEnabled(seps = {"sep10"})
+  @OnAllSepsEnabled(seps = {"sep10"})
   Sep10Service sep10Service(
       AppConfig appConfig,
       SecretConfig secretConfig,
@@ -152,7 +152,7 @@ public class SepBeans {
   }
 
   @Bean
-  @ConditionalOnAllSepsEnabled(seps = {"sep12"})
+  @OnAllSepsEnabled(seps = {"sep12"})
   Sep12Service sep12Service(
       CustomerIntegration customerIntegration,
       PlatformApiClient platformApiClient,
@@ -161,7 +161,7 @@ public class SepBeans {
   }
 
   @Bean
-  @ConditionalOnAllSepsEnabled(seps = {"sep24"})
+  @OnAllSepsEnabled(seps = {"sep24"})
   Sep24Service sep24Service(
       AppConfig appConfig,
       Sep24Config sep24Config,
@@ -204,7 +204,7 @@ public class SepBeans {
   }
 
   @Bean
-  @ConditionalOnAllSepsEnabled(seps = {"sep31"})
+  @OnAllSepsEnabled(seps = {"sep31"})
   Sep31Service sep31Service(
       AppConfig appConfig,
       Sep10Config sep10Config,
@@ -228,7 +228,7 @@ public class SepBeans {
   }
 
   @Bean
-  @ConditionalOnAllSepsEnabled(seps = {"sep38"})
+  @OnAllSepsEnabled(seps = {"sep38"})
   Sep38Service sep38Service(
       Sep38Config sep38Config,
       AssetService assetService,

@@ -11,6 +11,7 @@ dependencies {
   implementation(libs.bundles.ktor)
   implementation(libs.bundles.ktor.client)
   implementation(libs.bcastle)
+  implementation(libs.bcutil)
   implementation(libs.google.gson)
   implementation(libs.hoplite.core)
   implementation(libs.hoplite.yaml)

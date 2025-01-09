@@ -16,13 +16,13 @@ import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.sep.SepExceptionResponse;
 import org.stellar.anchor.api.sep.sep24.*;
 import org.stellar.anchor.auth.Sep10Jwt;
-import org.stellar.anchor.platform.condition.ConditionalOnAllSepsEnabled;
+import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.sep24.Sep24Service;
 
 @RestController
 @CrossOrigin(origins = "*")
 @RequestMapping("/sep24")
-@ConditionalOnAllSepsEnabled(seps = {"sep24"})
+@OnAllSepsEnabled(seps = {"sep24"})
 public class Sep24Controller {
   private final Sep24Service sep24Service;
 

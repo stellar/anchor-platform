@@ -6,7 +6,9 @@ import lombok.Data;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.util.MemoHelper;
-import org.stellar.sdk.*;
+import org.stellar.sdk.AssetTypeCreditAlphaNum;
+import org.stellar.sdk.AssetTypeNative;
+import org.stellar.sdk.Memo;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
 import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 
@@ -44,8 +46,7 @@ public class ObservedPayment {
       throws SepException {
     String assetCode = null, assetIssuer = null;
 
-    if (paymentOp.getAsset() instanceof AssetTypeCreditAlphaNum) {
-      AssetTypeCreditAlphaNum issuedAsset = (AssetTypeCreditAlphaNum) paymentOp.getAsset();
+    if (paymentOp.getAsset() instanceof AssetTypeCreditAlphaNum issuedAsset) {
       assetCode = issuedAsset.getCode();
       assetIssuer = issuedAsset.getIssuer();
     } else if (paymentOp.getAsset() instanceof AssetTypeNative) {
@@ -55,16 +56,16 @@ public class ObservedPayment {
     String sourceAccount =
         paymentOp.getSourceAccount() != null
             ? paymentOp.getSourceAccount()
-            : paymentOp.getTransaction().get().getSourceAccount();
+            : paymentOp.getTransaction().getSourceAccount();
     String from = paymentOp.getFrom() != null ? paymentOp.getFrom() : sourceAccount;
-    Memo memo = paymentOp.getTransaction().get().getMemo();
+    Memo memo = paymentOp.getTransaction().getMemo();
     return ObservedPayment.builder()
         .id(paymentOp.getId().toString())
         .type(Type.PAYMENT)
         .from(from)
         .to(paymentOp.getTo())
         .amount(paymentOp.getAmount())
-        .assetType(paymentOp.getAsset().getType())
+        .assetType(paymentOp.getAssetType())
         .assetCode(assetCode)
         .assetIssuer(assetIssuer)
         .assetName(paymentOp.getAsset().toString())
@@ -73,7 +74,7 @@ public class ObservedPayment {
         .transactionHash(paymentOp.getTransactionHash())
         .transactionMemo(MemoHelper.memoAsString(memo))
         .transactionMemoType(MemoHelper.memoTypeAsString(memo))
-        .transactionEnvelope(paymentOp.getTransaction().get().getEnvelopeXdr())
+        .transactionEnvelope(paymentOp.getTransaction().getEnvelopeXdr())
         .build();
   }
 
@@ -101,21 +102,21 @@ public class ObservedPayment {
     String sourceAccount =
         pathPaymentOp.getSourceAccount() != null
             ? pathPaymentOp.getSourceAccount()
-            : pathPaymentOp.getTransaction().get().getSourceAccount();
+            : pathPaymentOp.getTransaction().getSourceAccount();
     String from = pathPaymentOp.getFrom() != null ? pathPaymentOp.getFrom() : sourceAccount;
-    Memo memo = pathPaymentOp.getTransaction().get().getMemo();
+    Memo memo = pathPaymentOp.getTransaction().getMemo();
     return ObservedPayment.builder()
         .id(pathPaymentOp.getId().toString())
         .type(Type.PATH_PAYMENT)
         .from(from)
         .to(pathPaymentOp.getTo())
         .amount(pathPaymentOp.getAmount())
-        .assetType(pathPaymentOp.getAsset().getType())
+        .assetType(pathPaymentOp.getAssetType())
         .assetCode(assetCode)
         .assetIssuer(assetIssuer)
         .assetName(pathPaymentOp.getAsset().toString())
         .sourceAmount(pathPaymentOp.getSourceAmount())
-        .sourceAssetType(pathPaymentOp.getSourceAsset().getType())
+        .sourceAssetType(pathPaymentOp.getSourceAssetType())
         .sourceAssetCode(sourceAssetCode)
         .sourceAssetIssuer(sourceAssetIssuer)
         .sourceAssetName(pathPaymentOp.getSourceAsset().toString())
@@ -124,7 +125,7 @@ public class ObservedPayment {
         .transactionHash(pathPaymentOp.getTransactionHash())
         .transactionMemo(MemoHelper.memoAsString(memo))
         .transactionMemoType(MemoHelper.memoTypeAsString(memo))
-        .transactionEnvelope(pathPaymentOp.getTransaction().get().getEnvelopeXdr())
+        .transactionEnvelope(pathPaymentOp.getTransaction().getEnvelopeXdr())
         .build();
   }
 

@@ -20,6 +20,9 @@ import org.stellar.anchor.util.GsonUtils
 import org.stellar.reference.data.*
 import org.stellar.reference.data.Transaction
 import org.stellar.sdk.*
+import org.stellar.sdk.exception.BadRequestException
+import org.stellar.sdk.operations.PaymentOperation
+import org.stellar.sdk.responses.TransactionResponse
 
 class SepHelper(private val cfg: Config) {
   private val log = KotlinLogging.logger {}
@@ -97,7 +100,11 @@ class SepHelper(private val cfg: Config) {
           TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(60)).build()
         )
         .addOperation(
-          PaymentOperation.Builder(destinationAddress, asset, amount.toPlainString()).build()
+          PaymentOperation.builder()
+            .destination(destinationAddress)
+            .asset(asset)
+            .amount(amount)
+            .build()
         )
 
     if (memo != null && memoType != null) {
@@ -115,14 +122,15 @@ class SepHelper(private val cfg: Config) {
 
     transaction.sign(cfg.sep24.keyPair)
 
-    val resp = server.submitTransaction(transaction)
-
-    if (!resp.isSuccess) {
+    val resp: TransactionResponse
+    try {
+      resp = server.submitTransaction(transaction)
+    } catch (e: BadRequestException) {
       throw Exception(
-        "Failed to submit transaction with code: ${resp?.extras?.resultCodes?.transactionResultCode}"
+        "Failed to submit transaction with code: ${e.problem?.extras?.resultCodes?.transactionResultCode}"
       )
     }
-
+    assert(resp.successful)
     return resp.hash
   }
 
