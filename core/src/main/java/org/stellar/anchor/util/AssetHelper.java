@@ -37,7 +37,7 @@ public class AssetHelper {
     try {
       KeyPair.fromAccountId(assetIssuer);
       return true;
-    } catch (Exception ex) {
+    } catch (IllegalArgumentException ex) {
       return false;
     }
   }

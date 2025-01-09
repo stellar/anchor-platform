@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Conditional;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @Conditional(OnAllSepEnabledCondition.class)
-public @interface ConditionalOnAllSepsEnabled {
+public @interface OnAllSepsEnabled {
   /**
    * The list of seps that are checked if enabled.
    *

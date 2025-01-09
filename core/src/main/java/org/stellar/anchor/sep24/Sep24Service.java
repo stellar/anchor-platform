@@ -188,7 +188,7 @@ public class Sep24Service {
     try {
       debugF("checking if withdraw source account:{} is valid", sourceAccount);
       KeyPair.fromAccountId(sourceAccount);
-    } catch (Exception ex) {
+    } catch (IllegalArgumentException ex) {
       infoF("invalid account format: {}", sourceAccount);
       throw new SepValidationException(String.format("invalid account: %s", sourceAccount), ex);
     }
@@ -382,7 +382,7 @@ public class Sep24Service {
     try {
       debugF("checking if deposit destination account:{} is valid", destinationAccount);
       KeyPair.fromAccountId(destinationAccount);
-    } catch (Exception ex) {
+    } catch (IllegalArgumentException ex) {
       infoF("invalid account format: {}", destinationAccount);
       throw new SepValidationException(
           String.format("invalid account: %s", destinationAccount), ex);

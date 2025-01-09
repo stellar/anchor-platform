@@ -9,9 +9,7 @@ import io.jsonwebtoken.Jwt;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.stellar.sdk.AccountConverter;
-import org.stellar.sdk.KeyPair;
-import org.stellar.sdk.xdr.MuxedAccount;
+import org.stellar.sdk.MuxedAccount;
 
 @Getter
 @Setter
@@ -111,13 +109,11 @@ public class Sep10Jwt extends AbstractJwt {
         this.accountMemo = null;
 
         try {
-          MuxedAccount maybeMuxedAccount = AccountConverter.enableMuxed().encode(sub);
-          MuxedAccount.MuxedAccountMed25519 muxedAccount = maybeMuxedAccount.getMed25519();
-          if (muxedAccount != null) {
+          MuxedAccount maybeMuxedAccount = new MuxedAccount(sub);
+          if (maybeMuxedAccount.getMuxedId() != null) {
             this.muxedAccount = sub;
-            byte[] pubKeyBytes = muxedAccount.getEd25519().getUint256();
-            this.account = KeyPair.fromPublicKey(pubKeyBytes).getAccountId();
-            this.muxedAccountId = muxedAccount.getId().getUint64().getNumber().longValue();
+            this.account = maybeMuxedAccount.getAccountId();
+            this.muxedAccountId = maybeMuxedAccount.getMuxedId().longValue();
           }
         } catch (Exception ignored) {
         }

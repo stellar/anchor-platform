@@ -26,6 +26,7 @@ dependencies {
   implementation(libs.aws.rds)
   implementation(libs.aws.sqs)
   implementation(libs.bcastle)
+  implementation(libs.bcutil)
   implementation(libs.commons.beanutils)
   implementation(libs.commons.cli)
   implementation(libs.commons.io)

@@ -1,14 +1,28 @@
+apiVersion: v1
+data:
+  {{- if .Values.ingress.responseHeaders }}
+  {{- range $key, $value := .Values.ingress.responseHeaders }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+kind: ConfigMap
+metadata:
+  name: {{ .Values.ingress.name }}-configmap
+  namespace: {{ .Values.namespace }}
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .Values.ingress.name}}
+  name: {{ .Values.ingress.name }}
   namespace: {{ .Values.namespace }}
-  {{- if .Values.ingress.annotations }}
   annotations:
-    {{- range $key, $value := .Values.ingress.annotations }}
-    {{ $key }}: {{ $value | quote }}
+    {{- $annotations := dict "nginx.ingress.kubernetes.io/custom-headers" (printf "%s/%s-configmap" .Values.namespace .Values.ingress.name) }}
+    {{- if .Values.ingress.annotations }}
+      {{- $annotations = merge $annotations .Values.ingress.annotations }}
     {{- end }}
-  {{- end }}
+    {{- range $key, $value := $annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
   labels:
     app.kubernetes.io/name: {{ .Values.fullName }}-ingress
     helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}

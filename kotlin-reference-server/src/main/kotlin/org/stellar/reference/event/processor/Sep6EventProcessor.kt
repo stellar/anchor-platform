@@ -1,5 +1,6 @@
 package org.stellar.reference.event.processor
 
+import java.math.BigDecimal
 import java.time.Instant
 import java.util.*
 import kotlinx.coroutines.runBlocking
@@ -17,6 +18,9 @@ import org.stellar.reference.log
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.transactionWithRetry
 import org.stellar.sdk.*
+import org.stellar.sdk.exception.BadRequestException
+import org.stellar.sdk.operations.PaymentOperation
+import org.stellar.sdk.responses.TransactionResponse
 
 class Sep6EventProcessor(
   private val config: Config,
@@ -438,14 +442,22 @@ class Sep6EventProcessor(
         .addPreconditions(
           TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(60)).build()
         )
-        .addOperation(PaymentOperation.Builder(destination, asset, amount).build())
+        .addOperation(
+          PaymentOperation.builder()
+            .destination(destination)
+            .asset(asset)
+            .amount(BigDecimal(amount))
+            .build()
+        )
         .build()
     transaction.sign(KeyPair.fromSecretSeed(config.appSettings.secret))
-    val txnResponse = server.submitTransaction(transaction)
-    if (!txnResponse.isSuccess) {
-      throw RuntimeException("Error submitting transaction: ${txnResponse.extras.resultCodes}")
+    val txnResponse: TransactionResponse
+    try {
+      txnResponse = server.submitTransaction(transaction)
+    } catch (e: BadRequestException) {
+      throw RuntimeException("Error submitting transaction: ${e.problem?.extras?.resultCodes}")
     }
-
+    assert(txnResponse.successful)
     return txnResponse.hash
   }
 
