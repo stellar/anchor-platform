@@ -2,8 +2,6 @@ package org.stellar.reference.di
 
 import com.sksamuel.hoplite.*
 import org.stellar.reference.data.Config
-import org.stellar.reference.data.LocationConfig
-import org.stellar.reference.dotToCamelCase
 
 class ConfigContainer(envMap: Map<String, String>?) {
   var config: Config = readCfg(envMap)
@@ -22,26 +20,14 @@ class ConfigContainer(envMap: Map<String, String>?) {
     }
 
     private fun readCfg(envMap: Map<String, String>?): Config {
-      // The location of the config file is determined by the environment variable first
-      val locationCfgBuilder =
-        ConfigLoaderBuilder.default().addPropertySource(PropertySource.environment())
-
-      // Add environment variables as a property source for the config object
-      val cfgBuilder = ConfigLoaderBuilder.default().addPropertySource(PropertySource.environment())
-
-      // Add any environment variable overrides from the envMap
+      val cfgBuilder = ConfigLoaderBuilder.default()
+      // Add environment variables as a property source.
+      cfgBuilder.addPropertySource(PropertySource.environment())
       envMap?.run {
-        // env variables override
         cfgBuilder.addMapSource(this)
-
-        // for the location config, we need to convert the keys to camel case
-        val camelEnvMap = this.mapKeys { (key, _) -> dotToCamelCase(key) }
-        locationCfgBuilder.addMapSource(camelEnvMap)
-      }
-
-      val locationConfig = locationCfgBuilder.build().loadConfigOrThrow<LocationConfig>()
-      if (locationConfig.ktReferenceServerConfig != null) {
-        cfgBuilder.addFileSource(locationConfig.ktReferenceServerConfig)
+        if (envMap[KT_REFERENCE_SERVER_CONFIG] != null) {
+          cfgBuilder.addFileSource(envMap[KT_REFERENCE_SERVER_CONFIG]!!)
+        }
       }
       return cfgBuilder.build().loadConfigOrThrow<Config>()
     }

@@ -2,6 +2,7 @@ package org.stellar.anchor.platform.job;
 
 import static org.stellar.anchor.util.Log.info;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -12,7 +13,6 @@ import org.stellar.anchor.platform.config.PropertyCustodyConfig;
 import org.stellar.anchor.platform.data.JdbcTransactionPendingTrust;
 import org.stellar.anchor.platform.data.JdbcTransactionPendingTrustRepo;
 import org.stellar.anchor.platform.rpc.NotifyTrustSetHandler;
-import org.stellar.sdk.exception.NetworkException;
 
 public class TrustlineCheckJob {
 
@@ -50,7 +50,7 @@ public class TrustlineCheckJob {
         boolean trustlineConfigured;
         try {
           trustlineConfigured = horizon.isTrustlineConfigured(t.getAccount(), t.getAsset());
-        } catch (NetworkException ex) {
+        } catch (IOException ex) {
           trustlineConfigured = false;
         }
 

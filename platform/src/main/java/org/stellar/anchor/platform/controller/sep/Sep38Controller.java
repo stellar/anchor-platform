@@ -15,14 +15,14 @@ import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.sep.SepExceptionResponse;
 import org.stellar.anchor.api.sep.sep38.*;
 import org.stellar.anchor.auth.Sep10Jwt;
-import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
+import org.stellar.anchor.platform.condition.ConditionalOnAllSepsEnabled;
 import org.stellar.anchor.sep38.Sep38Service;
 import org.stellar.anchor.util.GsonUtils;
 
 @RestController
 @CrossOrigin(origins = "*")
 @RequestMapping("/sep38")
-@OnAllSepsEnabled(seps = {"sep38"})
+@ConditionalOnAllSepsEnabled(seps = {"sep38"})
 public class Sep38Controller {
   private final Sep38Service sep38Service;
   private static final Gson gson = GsonUtils.getInstance();

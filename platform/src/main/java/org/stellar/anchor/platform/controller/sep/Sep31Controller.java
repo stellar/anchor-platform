@@ -14,13 +14,13 @@ import org.stellar.anchor.api.exception.Sep31CustomerInfoNeededException;
 import org.stellar.anchor.api.exception.Sep31MissingFieldException;
 import org.stellar.anchor.api.sep.sep31.*;
 import org.stellar.anchor.auth.Sep10Jwt;
-import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
+import org.stellar.anchor.platform.condition.ConditionalOnAllSepsEnabled;
 import org.stellar.anchor.sep31.Sep31Service;
 
 @RestController
 @CrossOrigin(origins = "*")
 @RequestMapping("sep31")
-@OnAllSepsEnabled(seps = {"sep31"})
+@ConditionalOnAllSepsEnabled(seps = {"sep31"})
 public class Sep31Controller {
   private final Sep31Service sep31Service;
 

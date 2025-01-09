@@ -11,6 +11,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
+import java.io.IOException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -35,10 +36,7 @@ import org.stellar.anchor.horizon.Horizon;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Sep10Challenge.ChallengeTransaction;
-import org.stellar.sdk.exception.InvalidSep10ChallengeException;
-import org.stellar.sdk.exception.NetworkException;
-import org.stellar.sdk.operations.ManageDataOperation;
-import org.stellar.sdk.operations.Operation;
+import org.stellar.sdk.requests.ErrorResponse;
 import org.stellar.sdk.responses.AccountResponse;
 
 /** The Sep-10 protocol service. */
@@ -116,7 +114,7 @@ public class Sep10Service implements ISep10Service {
   }
 
   public ValidationResponse validateChallenge(ValidationRequest request)
-      throws SepValidationException {
+      throws IOException, InvalidSep10ChallengeException, SepValidationException {
     info("Validating SEP-10 challenge.");
 
     ChallengeTransaction challenge = parseChallenge(request);
@@ -178,7 +176,8 @@ public class Sep10Service implements ISep10Service {
     }
   }
 
-  Transaction newChallenge(ChallengeRequest request, String clientSigningKey, Memo memo) {
+  Transaction newChallenge(ChallengeRequest request, String clientSigningKey, Memo memo)
+      throws InvalidSep10ChallengeException {
 
     KeyPair signer = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
     long now = Instant.now().getEpochSecond();
@@ -381,7 +380,7 @@ public class Sep10Service implements ISep10Service {
     // Validate account
     try {
       KeyPair.fromAccountId(request.getAccount());
-    } catch (IllegalArgumentException ex) {
+    } catch (Exception ex) {
       infoF("client wallet account ({}) is invalid", request.getAccount());
       throw new SepValidationException("Invalid account.");
     }
@@ -389,7 +388,7 @@ public class Sep10Service implements ISep10Service {
 
   void validateChallengeRequest(
       ValidationRequest request, AccountResponse account, String clientDomain)
-      throws SepValidationException {
+      throws InvalidSep10ChallengeException, IOException, SepValidationException {
     // fetch the signers from the transaction
     Set<Sep10Challenge.Signer> signers = fetchSigners(account);
     // the signatures must be greater than the medium threshold of the account.
@@ -416,7 +415,7 @@ public class Sep10Service implements ISep10Service {
 
   Set<Sep10Challenge.Signer> fetchSigners(AccountResponse account) {
     // Find the signers of the client account.
-    return account.getSigners().stream()
+    return Arrays.stream(account.getSigners())
         .filter(as -> as.getType().equals("ed25519_public_key"))
         .map(as -> new Sep10Challenge.Signer(as.getKey(), as.getWeight()))
         .collect(Collectors.toSet());
@@ -424,7 +423,7 @@ public class Sep10Service implements ISep10Service {
 
   AccountResponse fetchAccount(
       ValidationRequest request, ChallengeTransaction challenge, String clientDomain)
-      throws SepValidationException {
+      throws InvalidSep10ChallengeException, IOException, SepValidationException {
     // Check the client's account
     AccountResponse account;
     try {
@@ -433,7 +432,7 @@ public class Sep10Service implements ISep10Service {
       traceF("challenge account: {}", account);
       sep10ChallengeValidatedCounter.increment();
       return account;
-    } catch (NetworkException ex) {
+    } catch (ErrorResponse | IOException ex) {
       infoF("Account {} does not exist in the Stellar Network");
       // account not found
       // The client account does not exist, using the client's master key to verify.
@@ -495,7 +494,8 @@ public class Sep10Service implements ISep10Service {
     return clientDomain;
   }
 
-  ChallengeTransaction parseChallenge(ValidationRequest request) throws SepValidationException {
+  ChallengeTransaction parseChallenge(ValidationRequest request)
+      throws IOException, InvalidSep10ChallengeException, SepValidationException {
 
     if (request == null || request.getTransaction() == null) {
       throw new SepValidationException("{transaction} is required.");
@@ -554,17 +554,13 @@ public class Sep10Service implements ISep10Service {
    * @param network The network to connect to for verifying and retrieving.
    * @return The extracted home domain from the Manage Data operation within the SEP-10 challenge
    *     transaction.
+   * @throws IOException If read XDR string fails, the exception will be thrown.
    * @throws SepValidationException If the transaction is not a valid SEP-10 challenge transaction.
    */
   String extractHomeDomainFromChallengeXdr(String challengeXdr, Network network)
-      throws SepValidationException {
-    AbstractTransaction parsed;
-    try {
-      parsed = Transaction.fromEnvelopeXdr(challengeXdr, network);
-    } catch (IllegalArgumentException e) {
-      throw new SepValidationException("Invalid challenge transaction.");
-    }
-
+      throws IOException, SepValidationException {
+    AbstractTransaction parsed =
+        Transaction.fromEnvelopeXdr(AccountConverter.enableMuxed(), challengeXdr, network);
     if (!(parsed instanceof Transaction)) {
       throw new SepValidationException("Transaction cannot be a fee bump transaction");
     }
@@ -607,7 +603,8 @@ class Sep10ChallengeWrapper {
       TimeBounds timebounds,
       String clientDomain,
       String clientSigningKey,
-      Memo memo) {
+      Memo memo)
+      throws InvalidSep10ChallengeException {
     return Sep10Challenge.newChallenge(
         signer,
         network,
@@ -625,7 +622,8 @@ class Sep10ChallengeWrapper {
       String serverAccountId,
       Network network,
       String domainName,
-      String webAuthDomain) {
+      String webAuthDomain)
+      throws InvalidSep10ChallengeException, IOException {
     return Sep10Challenge.readChallengeTransaction(
         challengeXdr, serverAccountId, network, domainName, webAuthDomain);
   }
@@ -636,7 +634,8 @@ class Sep10ChallengeWrapper {
       Network network,
       String domainName,
       String webAuthDomain,
-      Set<String> signers) {
+      Set<String> signers)
+      throws InvalidSep10ChallengeException, IOException {
     Sep10Challenge.verifyChallengeTransactionSigners(
         challengeXdr, serverAccountId, network, domainName, webAuthDomain, signers);
   }
@@ -648,7 +647,8 @@ class Sep10ChallengeWrapper {
       String domainName,
       String webAuthDomain,
       int threshold,
-      Set<Sep10Challenge.Signer> signers) {
+      Set<Sep10Challenge.Signer> signers)
+      throws InvalidSep10ChallengeException, IOException {
     Sep10Challenge.verifyChallengeTransactionThreshold(
         challengeXdr, serverAccountId, network, domainName, webAuthDomain, threshold, signers);
   }

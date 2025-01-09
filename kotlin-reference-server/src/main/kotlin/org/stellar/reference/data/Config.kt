@@ -3,7 +3,7 @@ package org.stellar.reference.data
 import com.sksamuel.hoplite.ConfigAlias
 import org.stellar.sdk.KeyPair
 
-data class LocationConfig(val ktReferenceServerConfig: String?)
+data class LocationConfig(val ktReferenceServerConfig: String)
 
 data class Config(
   @ConfigAlias("app") val appSettings: AppSettings,

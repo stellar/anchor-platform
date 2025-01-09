@@ -7,7 +7,7 @@ import org.springframework.context.annotation.ConditionContext;
 public class OnAllSepEnabledCondition extends AbstractOnSepsEnabled {
   @Override
   String getAnnotatingClass() {
-    return OnAllSepsEnabled.class.getName();
+    return ConditionalOnAllSepsEnabled.class.getName();
   }
 
   @Override
