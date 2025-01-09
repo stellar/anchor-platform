@@ -16,14 +16,14 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 import org.stellar.anchor.api.sep.sep12.*;
 import org.stellar.anchor.auth.Sep10Jwt;
-import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
+import org.stellar.anchor.platform.condition.ConditionalOnAllSepsEnabled;
 import org.stellar.anchor.sep12.Sep12Service;
 import org.stellar.anchor.util.GsonUtils;
 
 @RestController
 @CrossOrigin(origins = "*")
 @RequestMapping("/sep12")
-@OnAllSepsEnabled(seps = {"sep12"})
+@ConditionalOnAllSepsEnabled(seps = {"sep12"})
 public class Sep12Controller {
   private final Sep12Service sep12Service;
 

@@ -17,7 +17,6 @@ dependencies {
 
   implementation(libs.apache.commons.lang3)
   implementation(libs.bcastle)
-  implementation(libs.bcutil)
   implementation(libs.commons.beanutils)
   implementation(libs.commons.codec)
   implementation(libs.commons.io)

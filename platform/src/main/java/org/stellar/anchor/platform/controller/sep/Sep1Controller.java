@@ -10,12 +10,12 @@ import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepNotFoundException;
 import org.stellar.anchor.api.sep.SepExceptionResponse;
 import org.stellar.anchor.config.Sep1Config;
-import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
+import org.stellar.anchor.platform.condition.ConditionalOnAllSepsEnabled;
 import org.stellar.anchor.sep1.Sep1Service;
 
 @RestController
 @CrossOrigin(origins = "*")
-@OnAllSepsEnabled(seps = {"sep1"})
+@ConditionalOnAllSepsEnabled(seps = {"sep1"})
 public class Sep1Controller {
   private final Sep1Config sep1Config;
   private final Sep1Service sep1Service;

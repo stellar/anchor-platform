@@ -51,7 +51,7 @@ class InfoResponseTest {
 
     val fiatUSD = assetMap["iso4217:USD"]
     assertNotNull(fiatUSD)
-    assertEquals(listOf("US"), fiatUSD!!.countryCodes)
+    assertEquals(listOf("USA"), fiatUSD!!.countryCodes)
     val wantSellDeliveryMethod =
       Sep38Info.DeliveryMethod("WIRE", "Send USD directly to the Anchor's bank account.")
     assertEquals(listOf(wantSellDeliveryMethod), fiatUSD.sellDeliveryMethods)

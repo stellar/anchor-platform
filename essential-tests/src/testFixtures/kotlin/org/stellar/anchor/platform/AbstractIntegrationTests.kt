@@ -69,7 +69,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
           .records
       for (payment in payments) {
         if (payment is PaymentOperationResponse) {
-          if (payment.transaction.memo.toString() == TEST_PAYMENT_MEMO) {
+          if (payment.transaction.get().memo.toString() == TEST_PAYMENT_MEMO) {
             println("Found test payment")
             // initialize the test payment value pairs for injection
             testPaymentValues =

@@ -10,6 +10,7 @@ import static org.stellar.anchor.platform.utils.PaymentsUtil.addStellarTransacti
 import static org.stellar.anchor.util.Log.errorEx;
 
 import com.google.common.collect.ImmutableSet;
+import java.io.IOException;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -32,7 +33,6 @@ import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
-import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.responses.operations.OperationResponse;
 
 public class NotifyOnchainFundsSentHandler
@@ -110,7 +110,7 @@ public class NotifyOnchainFundsSentHandler
     try {
       List<OperationResponse> txnOperations = horizon.getStellarTxnOperations(stellarTxnId);
       addStellarTransaction(txn, stellarTxnId, txnOperations);
-    } catch (NetworkException ex) {
+    } catch (IOException ex) {
       errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
       throw new InternalErrorException(
           String.format("Failed to retrieve Stellar transaction by ID[%s]", stellarTxnId), ex);

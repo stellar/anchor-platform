@@ -2,18 +2,16 @@ package org.stellar.anchor.horizon;
 
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
 
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import lombok.Getter;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.sdk.AssetTypeCreditAlphaNum;
 import org.stellar.sdk.Server;
-import org.stellar.sdk.TrustLineAsset;
-import org.stellar.sdk.exception.NetworkException;
-import org.stellar.sdk.requests.PaymentsRequestBuilder;
 import org.stellar.sdk.responses.AccountResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
-import org.stellar.sdk.xdr.AssetType;
 
 /** The horizon-server. */
 public class Horizon {
@@ -32,7 +30,7 @@ public class Horizon {
     return this.horizonServer;
   }
 
-  public boolean isTrustlineConfigured(String account, String asset) throws NetworkException {
+  public boolean isTrustlineConfigured(String account, String asset) throws IOException {
     String assetCode = AssetHelper.getAssetCode(asset);
     if (NATIVE_ASSET_CODE.equals(assetCode)) {
       return true;
@@ -40,15 +38,13 @@ public class Horizon {
     String assetIssuer = AssetHelper.getAssetIssuer(asset);
 
     AccountResponse accountResponse = getServer().accounts().account(account);
-    return accountResponse.getBalances().stream()
+    return Arrays.stream(accountResponse.getBalances())
         .anyMatch(
             balance -> {
-              TrustLineAsset trustLineAsset = balance.getTrustLineAsset();
-              if (trustLineAsset.getAssetType() == AssetType.ASSET_TYPE_CREDIT_ALPHANUM4
-                  || trustLineAsset.getAssetType() == AssetType.ASSET_TYPE_CREDIT_ALPHANUM12) {
+              if (balance.getAssetType().equals("credit_alphanum4")
+                  || balance.getAssetType().equals("credit_alphanum12")) {
                 AssetTypeCreditAlphaNum creditAsset =
-                    (AssetTypeCreditAlphaNum) trustLineAsset.getAsset();
-                assert creditAsset != null;
+                    (AssetTypeCreditAlphaNum) balance.getAsset().get();
                 return creditAsset.getCode().equals(assetCode)
                     && creditAsset.getIssuer().equals(assetIssuer);
               }
@@ -56,14 +52,7 @@ public class Horizon {
             });
   }
 
-  /**
-   * Get payment operations for a transaction.
-   *
-   * @param stellarTxnId the transaction id
-   * @return the operations
-   * @throws NetworkException request failed, see {@link PaymentsRequestBuilder#execute()}
-   */
-  public List<OperationResponse> getStellarTxnOperations(String stellarTxnId) {
+  public List<OperationResponse> getStellarTxnOperations(String stellarTxnId) throws IOException {
     return getServer()
         .payments()
         .includeTransactions(true)
