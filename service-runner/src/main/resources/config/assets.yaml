@@ -181,7 +181,7 @@ items:
         - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
         - stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
       country_codes:
-        - USA
+        - US
       sell_delivery_methods:
         - name: WIRE
           description: Send USD directly to the Anchor's bank account.
@@ -204,7 +204,7 @@ items:
         - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
         - stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
       country_codes:
-        - CAN
+        - CA
       sell_delivery_methods:
         - name: WIRE
           description: Send CAD directly to the Anchor's bank account.
