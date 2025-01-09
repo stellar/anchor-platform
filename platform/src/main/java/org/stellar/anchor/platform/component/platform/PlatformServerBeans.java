@@ -19,7 +19,6 @@ import org.stellar.anchor.filter.NoneFilter;
 import org.stellar.anchor.filter.PlatformAuthJwtFilter;
 import org.stellar.anchor.horizon.Horizon;
 import org.stellar.anchor.platform.apiclient.CustodyApiClient;
-import org.stellar.anchor.platform.condition.OnAnySepsEnabled;
 import org.stellar.anchor.platform.config.PlatformApiConfig;
 import org.stellar.anchor.platform.config.PlatformServerConfig;
 import org.stellar.anchor.platform.config.PropertyCustodyConfig;
