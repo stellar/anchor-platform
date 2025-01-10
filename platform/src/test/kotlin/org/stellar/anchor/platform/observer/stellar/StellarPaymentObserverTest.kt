@@ -5,6 +5,7 @@ package org.stellar.anchor.platform.observer.stellar
 import com.google.gson.reflect.TypeToken
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
+import java.io.IOException
 import java.util.*
 import javax.net.ssl.SSLProtocolException
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -14,11 +15,10 @@ import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.platform.HealthCheckStatus.RED
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.sdk.Server
-import org.stellar.sdk.exception.NetworkException
 import org.stellar.sdk.requests.RequestBuilder
 import org.stellar.sdk.requests.SSEStream
+import org.stellar.sdk.responses.GsonSingleton
 import org.stellar.sdk.responses.Page
-import org.stellar.sdk.responses.gson.GsonSingleton
 import org.stellar.sdk.responses.operations.OperationResponse
 
 class StellarPaymentObserverTest {
@@ -76,7 +76,7 @@ class StellarPaymentObserverTest {
         .order(RequestBuilder.Order.DESC)
         .limit(1)
         .execute()
-    } throws NetworkException(null, "Some IO Problem happened!")
+    } throws IOException("Some IO Problem happened!")
 
     gotCursor = stellarObserver.fetchStreamingCursor()
     verify(exactly = 2) { paymentStreamerCursorStore.load() }

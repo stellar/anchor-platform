@@ -21,7 +21,6 @@ import org.stellar.anchor.config.Sep10Config;
 import org.stellar.anchor.util.KeyUtil;
 import org.stellar.anchor.util.NetUtil;
 import org.stellar.sdk.*;
-import org.stellar.sdk.operations.ManageDataOperation;
 
 @Data
 public class PropertySep10Config implements Sep10Config, Validator {
@@ -113,7 +112,7 @@ public class PropertySep10Config implements Sep10Config, Validator {
 
     if (isNotEmpty(webAuthDomain)) {
       try {
-        ManageDataOperation.builder().name(webAuthDomain).value(new byte[64]).build();
+        new ManageDataOperation.Builder(webAuthDomain, new byte[64]).build();
       } catch (IllegalArgumentException iaex) {
         errors.rejectValue(
             "webAuthDomain",
@@ -191,10 +190,7 @@ public class PropertySep10Config implements Sep10Config, Validator {
 
   private void validateDomain(Errors errors, String domain) {
     try {
-      ManageDataOperation.builder()
-          .name(String.format("%s %s", domain, "auth"))
-          .value(new byte[64])
-          .build();
+      new ManageDataOperation.Builder(String.format("%s %s", domain, "auth"), new byte[64]).build();
     } catch (IllegalArgumentException iaex) {
       errors.rejectValue(
           "homeDomain",

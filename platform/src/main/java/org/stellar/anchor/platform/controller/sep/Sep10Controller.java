@@ -2,6 +2,7 @@ package org.stellar.anchor.platform.controller.sep;
 
 import static org.stellar.anchor.util.Log.*;
 
+import java.io.IOException;
 import java.net.URISyntaxException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -14,13 +15,13 @@ import org.stellar.anchor.api.sep.sep10.ChallengeRequest;
 import org.stellar.anchor.api.sep.sep10.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep10.ValidationRequest;
 import org.stellar.anchor.api.sep.sep10.ValidationResponse;
-import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
+import org.stellar.anchor.platform.condition.ConditionalOnAllSepsEnabled;
 import org.stellar.anchor.sep10.Sep10Service;
-import org.stellar.sdk.exception.InvalidSep10ChallengeException;
+import org.stellar.sdk.InvalidSep10ChallengeException;
 
 @RestController
 @CrossOrigin(origins = "*")
-@OnAllSepsEnabled(seps = {"sep10"})
+@ConditionalOnAllSepsEnabled(seps = {"sep10"})
 public class Sep10Controller {
 
   private final Sep10Service sep10Service;
@@ -64,7 +65,8 @@ public class Sep10Controller {
       produces = {MediaType.APPLICATION_JSON_VALUE},
       method = {RequestMethod.POST})
   public ValidationResponse validateChallenge(
-      @RequestParam(name = "transaction") String transaction) throws SepValidationException {
+      @RequestParam(name = "transaction") String transaction)
+      throws InvalidSep10ChallengeException, IOException, SepValidationException {
     debugF("POST /auth transaction={}", transaction);
     return validateChallenge(ValidationRequest.of(transaction));
   }
@@ -77,7 +79,7 @@ public class Sep10Controller {
       method = {RequestMethod.POST})
   public ValidationResponse validateChallenge(
       @RequestBody(required = false) ValidationRequest validationRequest)
-      throws SepValidationException {
+      throws InvalidSep10ChallengeException, IOException, SepValidationException {
     debug("POST /auth details:", validationRequest);
     return sep10Service.validateChallenge(validationRequest);
   }

@@ -67,7 +67,7 @@ public class CustodyPayment {
       id = paymentOperation.get().getId().toString();
       to = paymentOperation.get().getTo();
       amount = paymentOperation.get().getAmount();
-      assetType = paymentOperation.get().getAssetType();
+      assetType = paymentOperation.get().getAsset().getType();
       assetName = paymentOperation.get().getAsset().toString();
 
       if (paymentOperation.get().getAsset() instanceof AssetTypeCreditAlphaNum) {
@@ -76,22 +76,23 @@ public class CustodyPayment {
         assetCode = issuedAsset.getCode();
         assetIssuer = issuedAsset.getIssuer();
       } else if (paymentOperation.get().getAsset() instanceof AssetTypeNative) {
-        assetCode = paymentOperation.get().getAssetType(); // "native"
+        AssetTypeNative issuedAsset = (AssetTypeNative) paymentOperation.get().getAsset();
+        assetCode = issuedAsset.getType();
       }
 
       String sourceAccount =
           paymentOperation.get().getSourceAccount() != null
               ? paymentOperation.get().getSourceAccount()
-              : paymentOperation.get().getTransaction().getSourceAccount();
+              : paymentOperation.get().getTransaction().get().getSourceAccount();
       from =
           paymentOperation.get().getFrom() != null
               ? paymentOperation.get().getFrom()
               : sourceAccount;
-      Memo memo = paymentOperation.get().getTransaction().getMemo();
+      Memo memo = paymentOperation.get().getTransaction().get().getMemo();
 
       transactionMemo = MemoHelper.memoAsString(memo);
       transactionMemoType = MemoHelper.memoTypeAsString(memo);
-      transactionEnvelope = paymentOperation.get().getTransaction().getEnvelopeXdr();
+      transactionEnvelope = paymentOperation.get().getTransaction().get().getEnvelopeXdr();
     }
 
     return CustodyPayment.builder()
@@ -139,7 +140,7 @@ public class CustodyPayment {
       id = pathPaymentOperation.get().getId().toString();
       to = pathPaymentOperation.get().getTo();
       amount = pathPaymentOperation.get().getAmount();
-      assetType = pathPaymentOperation.get().getAssetType();
+      assetType = pathPaymentOperation.get().getAsset().getType();
       assetName = pathPaymentOperation.get().getAsset().toString();
 
       if (pathPaymentOperation.get().getAsset() instanceof AssetTypeCreditAlphaNum) {
@@ -148,22 +149,23 @@ public class CustodyPayment {
         assetCode = issuedAsset.getCode();
         assetIssuer = issuedAsset.getIssuer();
       } else if (pathPaymentOperation.get().getAsset() instanceof AssetTypeNative) {
-        assetCode = pathPaymentOperation.get().getAssetType(); // "native"
+        AssetTypeNative issuedAsset = (AssetTypeNative) pathPaymentOperation.get().getAsset();
+        assetCode = issuedAsset.getType();
       }
 
       String sourceAccount =
           pathPaymentOperation.get().getSourceAccount() != null
               ? pathPaymentOperation.get().getSourceAccount()
-              : pathPaymentOperation.get().getTransaction().getSourceAccount();
+              : pathPaymentOperation.get().getTransaction().get().getSourceAccount();
       from =
           pathPaymentOperation.get().getFrom() != null
               ? pathPaymentOperation.get().getFrom()
               : sourceAccount;
-      Memo memo = pathPaymentOperation.get().getTransaction().getMemo();
+      Memo memo = pathPaymentOperation.get().getTransaction().get().getMemo();
 
       transactionMemo = MemoHelper.memoAsString(memo);
       transactionMemoType = MemoHelper.memoTypeAsString(memo);
-      transactionEnvelope = pathPaymentOperation.get().getTransaction().getEnvelopeXdr();
+      transactionEnvelope = pathPaymentOperation.get().getTransaction().get().getEnvelopeXdr();
     }
 
     return CustodyPayment.builder()

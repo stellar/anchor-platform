@@ -8,7 +8,7 @@ public class OnAnySepEnabledCondition extends AbstractOnSepsEnabled {
 
   @Override
   String getAnnotatingClass() {
-    return OnAnySepsEnabled.class.getName();
+    return ConditionalOnAnySepsEnabled.class.getName();
   }
 
   @Override
