@@ -115,7 +115,7 @@ public class RequestValidator {
   public void validateAccount(String account) throws AnchorException {
     try {
       KeyPair.fromAccountId(account);
-    } catch (RuntimeException ex) {
+    } catch (IllegalArgumentException ex) {
       throw new SepValidationException(String.format("invalid account %s", account));
     }
   }

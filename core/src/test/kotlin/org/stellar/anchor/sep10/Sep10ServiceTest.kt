@@ -5,11 +5,8 @@ package org.stellar.anchor.sep10
 import com.google.common.io.BaseEncoding
 import com.google.gson.annotations.SerializedName
 import io.jsonwebtoken.Jwts
-import io.mockk.MockKAnnotations
-import io.mockk.every
+import io.mockk.*
 import io.mockk.impl.annotations.MockK
-import io.mockk.spyk
-import io.mockk.verify
 import java.io.IOException
 import java.security.SecureRandom
 import java.time.Instant
@@ -64,7 +61,10 @@ import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.NetUtil
 import org.stellar.sdk.*
 import org.stellar.sdk.Network.*
-import org.stellar.sdk.requests.ErrorResponse
+import org.stellar.sdk.exception.BadRequestException
+import org.stellar.sdk.exception.InvalidSep10ChallengeException
+import org.stellar.sdk.operations.ManageDataOperation
+import org.stellar.sdk.operations.SetOptionsOperation
 import org.stellar.sdk.responses.AccountResponse
 import org.stellar.walletsdk.auth.DefaultAuthHeaderSigner
 import org.stellar.walletsdk.auth.createAuthSignToken
@@ -202,20 +202,26 @@ internal class Sep10ServiceTest {
 
     val sourceAccount = Account(serverKP.accountId, -1L)
     val op1DomainNameMandatory =
-      ManageDataOperation.Builder("$serverHomeDomain auth", encodedNonce)
-        .setSourceAccount(clientKP.accountId)
+      ManageDataOperation.builder()
+        .name("$serverHomeDomain auth")
+        .value(encodedNonce)
+        .sourceAccount(clientKP.accountId)
         .build()
     val op2WebAuthDomainMandatory =
-      ManageDataOperation.Builder("web_auth_domain", serverWebAuthDomain.toByteArray())
-        .setSourceAccount(serverKP.accountId)
+      ManageDataOperation.builder()
+        .name("web_auth_domain")
+        .value(serverWebAuthDomain.toByteArray())
+        .sourceAccount(serverKP.accountId)
         .build()
     val op3clientDomainOptional =
-      ManageDataOperation.Builder("client_domain", "lobstr.co".toByteArray())
-        .setSourceAccount(clientDomainKP.accountId)
+      ManageDataOperation.builder()
+        .name("client_domain")
+        .value("lobstr.co".toByteArray())
+        .sourceAccount(clientDomainKP.accountId)
         .build()
 
     val transaction =
-      TransactionBuilder(AccountConverter.enableMuxed(), sourceAccount, TESTNET)
+      TransactionBuilder(sourceAccount, TESTNET)
         .addPreconditions(
           TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(900)).build()
         )
@@ -279,20 +285,26 @@ internal class Sep10ServiceTest {
 
     val sourceAccount = Account(serverKP.accountId, -1L)
     val op1DomainNameMandatory =
-      ManageDataOperation.Builder("$serverHomeDomain auth", encodedNonce)
-        .setSourceAccount(clientKP.accountId)
+      ManageDataOperation.builder()
+        .name("$serverHomeDomain auth")
+        .value(encodedNonce)
+        .sourceAccount(clientKP.accountId)
         .build()
     val op2WebAuthDomainMandatory =
-      ManageDataOperation.Builder("web_auth_domain", serverWebAuthDomain.toByteArray())
-        .setSourceAccount(serverKP.accountId)
+      ManageDataOperation.builder()
+        .name("web_auth_domain")
+        .value(serverWebAuthDomain.toByteArray())
+        .sourceAccount(serverKP.accountId)
         .build()
     val op3clientDomainOptional =
-      ManageDataOperation.Builder("client_domain", "lobstr.co".toByteArray())
-        .setSourceAccount(clientDomainKP.accountId)
+      ManageDataOperation.builder()
+        .name("client_domain")
+        .value("lobstr.co".toByteArray())
+        .sourceAccount(clientDomainKP.accountId)
         .build()
 
     val transaction =
-      TransactionBuilder(AccountConverter.enableMuxed(), sourceAccount, TESTNET)
+      TransactionBuilder(sourceAccount, TESTNET)
         .addPreconditions(
           TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(900)).build()
         )
@@ -360,12 +372,16 @@ internal class Sep10ServiceTest {
     val vr = ValidationRequest()
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
 
-    val accountResponse = spyk(AccountResponse(clientKeyPair.accountId, 1))
-    val signers =
-      arrayOf(TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner())
+    val mockSigners =
+      listOf(TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner())
+    val accountResponse =
+      mockk<AccountResponse> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { signers } returns mockSigners
+        every { thresholds.medThreshold } returns 1
+      }
 
-    every { accountResponse.signers } returns signers
-    every { accountResponse.thresholds.medThreshold } returns 1
     every { horizon.server.accounts().account(ofType(String::class)) } returns accountResponse
 
     val response = sep10Service.validateChallenge(vr)
@@ -376,15 +392,20 @@ internal class Sep10ServiceTest {
   @Test
   @LockAndMockStatic([Sep10Challenge::class])
   fun `test validate challenge with client domain`() {
-    val accountResponse = spyk(AccountResponse(clientKeyPair.accountId, 1))
-    val signers =
-      arrayOf(
+    val mockSigners =
+      listOf(
         TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner(),
         TestSigner(clientDomainKeyPair.accountId, "ed25519_public_key", 1, "").toSigner()
       )
 
-    every { accountResponse.signers } returns signers
-    every { accountResponse.thresholds.medThreshold } returns 1
+    val accountResponse =
+      mockk<AccountResponse> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { signers } returns mockSigners
+        every { thresholds.medThreshold } returns 1
+      }
+
     every { horizon.server.accounts().account(ofType(String::class)) } returns accountResponse
 
     val vr = ValidationRequest()
@@ -404,7 +425,7 @@ internal class Sep10ServiceTest {
     // exists
     every { horizon.server.accounts().account(ofType(String::class)) } answers
       {
-        throw ErrorResponse(0, "mock error")
+        throw BadRequestException(400, "mock error", null, null)
       }
     vr.transaction = createTestChallenge(TEST_CLIENT_DOMAIN, TEST_HOME_DOMAIN, false)
 
@@ -418,7 +439,7 @@ internal class Sep10ServiceTest {
 
     every { horizon.server.accounts().account(ofType(String::class)) } answers
       {
-        throw ErrorResponse(0, "mock error")
+        throw BadRequestException(400, "mock error", null, null)
       }
 
     sep10Service.validateChallenge(vr)
@@ -709,20 +730,26 @@ internal class Sep10ServiceTest {
 
     val sourceAccount = Account(serverKP.accountId, -1L)
     val op1DomainNameMandatory =
-      ManageDataOperation.Builder("$serverHomeDomain auth", encodedNonce)
-        .setSourceAccount(clientAddress)
+      ManageDataOperation.builder()
+        .name("$serverHomeDomain auth")
+        .value(encodedNonce)
+        .sourceAccount(clientAddress)
         .build()
     val op2WebAuthDomainMandatory =
-      ManageDataOperation.Builder("web_auth_domain", serverWebAuthDomain.toByteArray())
-        .setSourceAccount(serverKP.accountId)
+      ManageDataOperation.builder()
+        .name("web_auth_domain")
+        .value(serverWebAuthDomain.toByteArray())
+        .sourceAccount(serverKP.accountId)
         .build()
     val op3clientDomainOptional =
-      ManageDataOperation.Builder("client_domain", "lobstr.co".toByteArray())
-        .setSourceAccount(clientDomainKP.accountId)
+      ManageDataOperation.builder()
+        .name("client_domain")
+        .value("lobstr.co".toByteArray())
+        .sourceAccount(clientDomainKP.accountId)
         .build()
 
     val transaction =
-      TransactionBuilder(AccountConverter.enableMuxed(), sourceAccount, network)
+      TransactionBuilder(sourceAccount, network)
         .addPreconditions(
           TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(900)).build()
         )
@@ -757,18 +784,19 @@ internal class Sep10ServiceTest {
 
     val clientAccount = horizon.server.accounts().account(clientMasterKP.accountId)
     val multisigTx =
-      TransactionBuilder(AccountConverter.enableMuxed(), clientAccount, network)
+      TransactionBuilder(clientAccount, network)
         .addPreconditions(
           TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(900)).build()
         )
         .setBaseFee(300)
         .addOperation(
-          SetOptionsOperation.Builder()
-            .setLowThreshold(20)
-            .setMediumThreshold(20)
-            .setHighThreshold(20)
-            .setSigner(Signer.ed25519PublicKey(clientSecondaryKP), 10)
-            .setMasterKeyWeight(10)
+          SetOptionsOperation.builder()
+            .lowThreshold(20)
+            .mediumThreshold(20)
+            .highThreshold(20)
+            .signer(Signer.ed25519PublicKey(clientSecondaryKP))
+            .signerWeight(10)
+            .masterKeyWeight(10)
             .build()
         )
         .build()

@@ -5,7 +5,8 @@ assertj = "3.26.0"
 aws-iam-auth = "2.1.1"
 aws-rds = "1.12.759"
 aws-sqs = "1.12.757"
-bcastle = "1.77"
+bcastle = "1.79"
+bcutil = "1.79"
 commons-beanutils = "1.9.4"
 commons-cli = "1.8.0"
 commons-codec = "1.17.0"
@@ -27,7 +28,7 @@ jakarta-annotation-api = "3.0.0"
 jakarta-transaction-api = "2.0.1"
 jakarta-validation-api = "3.1.0"
 jakarta-xml-bind-api = "4.0.2"
-java-stellar-sdk = "0.44.1"
+java-stellar-sdk = "1.0.0"
 jjwt = "0.12.5"
 jsonassert = "1.5.0"
 junit = "5.10.3"
@@ -52,7 +53,7 @@ spotbugs-annotations = "4.8.6"
 spring-context = "6.1.11"
 spring-kafka = "3.2.1"
 spring-retry = "2.0.6"
-stellar-wallet-sdk = "1.7.1"
+stellar-wallet-sdk = "2.0.0"
 
 # Plugin versions
 spotless = "6.25.0"
@@ -67,6 +68,7 @@ aws-iam-auth = { module = "software.amazon.msk:aws-msk-iam-auth", version.ref = 
 aws-rds = { module = "com.amazonaws:aws-java-sdk-rds", version.ref = "aws-rds" }
 aws-sqs = { module = "com.amazonaws:aws-java-sdk-sqs", version.ref = "aws-sqs" }
 bcastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bcastle" }
+bcutil = { module = "org.bouncycastle:bcutil-jdk18on", version.ref = "bcutil" }
 commons-beanutils = { module = "commons-beanutils:commons-beanutils", version.ref = "commons-beanutils" }
 commons-cli = { module = "commons-cli:commons-cli", version.ref = "commons-cli" }
 commons-codec = { module = "commons-codec:commons-codec", version.ref = "commons-codec" }
@@ -90,7 +92,7 @@ jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api",
 jakarta-transaction-api = { module = "jakarta.transaction:jakarta.transaction-api", version.ref = "jakarta-transaction-api" }
 jakarta-validation-api = { module = "jakarta.validation:jakarta.validation-api", version.ref = "jakarta-validation-api" }
 jakarta-xml-bind-api = { module = "jakarta.xml.bind:jakarta.xml.bind-api", version.ref = "jakarta-xml-bind-api" }
-java-stellar-sdk = { module = "com.github.stellar:java-stellar-sdk", version.ref = "java-stellar-sdk" }
+java-stellar-sdk = { module = "network.lightsail:stellar-sdk", version.ref = "java-stellar-sdk" }
 jjwt = { module = "io.jsonwebtoken:jjwt", version.ref = "jjwt" }
 jsonassert = { module = "org.skyscreamer:jsonassert", version.ref = "jsonassert" }
 junit-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }

@@ -12,7 +12,7 @@ services:
         To start the services: `docker-compose --profile v2-stable up`
       maintainer: "jamie@stellar.org"
 
-  stable-servers:
+  latest-servers:
     extends:
       file: service-runner/src/main/resources/common/docker-compose.yaml
       service: dev-servers

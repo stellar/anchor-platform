@@ -19,7 +19,6 @@ import org.stellar.anchor.filter.NoneFilter;
 import org.stellar.anchor.filter.PlatformAuthJwtFilter;
 import org.stellar.anchor.horizon.Horizon;
 import org.stellar.anchor.platform.apiclient.CustodyApiClient;
-import org.stellar.anchor.platform.condition.ConditionalOnAnySepsEnabled;
 import org.stellar.anchor.platform.config.PlatformApiConfig;
 import org.stellar.anchor.platform.config.PlatformServerConfig;
 import org.stellar.anchor.platform.config.PropertyCustodyConfig;
@@ -71,7 +70,6 @@ public class PlatformServerBeans {
   }
 
   @Bean
-  @ConditionalOnAnySepsEnabled(seps = {"sep31"})
   Sep31DepositInfoGenerator sep31DepositInfoGenerator(
       Sep31Config sep31Config, Optional<CustodyApiClient> custodyApiClient)
       throws InvalidConfigException {
@@ -94,7 +92,6 @@ public class PlatformServerBeans {
   }
 
   @Bean
-  @ConditionalOnAnySepsEnabled(seps = {"sep24"})
   Sep24DepositInfoGenerator sep24DepositInfoGenerator(
       Sep24Config sep24Config, Optional<CustodyApiClient> custodyApiClient)
       throws InvalidConfigException {
@@ -117,7 +114,6 @@ public class PlatformServerBeans {
   }
 
   @Bean
-  @ConditionalOnAnySepsEnabled(seps = {"sep6"})
   Sep6DepositInfoGenerator sep6DepositInfoGenerator(
       Sep6Config sep6Config, AssetService assetService, Optional<CustodyApiClient> custodyApiClient)
       throws InvalidConfigException {

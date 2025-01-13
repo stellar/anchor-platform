@@ -9,7 +9,6 @@ import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_STELLAR;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_TRUST;
 
 import com.google.common.collect.ImmutableSet;
-import java.io.IOException;
 import java.time.Instant;
 import java.util.Set;
 import org.stellar.anchor.api.exception.AnchorException;
@@ -32,6 +31,7 @@ import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
+import org.stellar.sdk.exception.NetworkException;
 
 public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStellarPaymentRequest> {
 
@@ -103,7 +103,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
         default:
           break;
       }
-    } catch (IOException ex) {
+    } catch (NetworkException ex) {
       // assume trustline is not configured
     }
 
@@ -150,7 +150,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
         try {
           trustlineConfigured =
               horizon.isTrustlineConfigured(txn6.getToAccount(), txn6.getAmountOutAsset());
-        } catch (IOException ex) {
+        } catch (NetworkException ex) {
           trustlineConfigured = false;
         }
 
@@ -172,7 +172,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
         try {
           trustlineConfigured =
               horizon.isTrustlineConfigured(txn24.getToAccount(), txn24.getAmountOutAsset());
-        } catch (IOException ex) {
+        } catch (NetworkException ex) {
           trustlineConfigured = false;
         }
 

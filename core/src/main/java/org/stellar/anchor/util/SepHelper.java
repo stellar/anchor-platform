@@ -11,9 +11,9 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.InvalidStellarAccountException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
-import org.stellar.sdk.AccountConverter;
 import org.stellar.sdk.KeyPair;
-import org.stellar.sdk.xdr.*;
+import org.stellar.sdk.MuxedAccount;
+import org.stellar.sdk.xdr.MemoType;
 
 public class SepHelper {
   /**
@@ -59,15 +59,11 @@ public class SepHelper {
   public static String getAccountMemo(String strAccount) throws InvalidStellarAccountException {
     String[] tokens = strAccount.split(":");
     switch (tokens.length) {
+        // TODO: Should we add a catch here to throw an InvalidStellarAccountException exception in
+        // case of invalid address?
       case 1:
-        AccountConverter accountConverter;
-        if (tokens[0].startsWith("G")) {
-          accountConverter = AccountConverter.disableMuxed();
-        } else {
-          accountConverter = AccountConverter.enableMuxed();
-        }
         // Check if the account is a valid G... or M...
-        accountConverter.encode(tokens[0]);
+        new MuxedAccount(tokens[0]);
         return null;
       case 2:
         KeyPair.fromAccountId(tokens[0]);
