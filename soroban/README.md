@@ -1,3 +1,19 @@
+# Anchor Platform Test Contracts
+
+This directory contains all the contracts used by the Anchor Platform for testing.
+
+## Prerequisites
+
+- [Rust](https://www.rust-lang.org/tools/install)
+- [Stellar CLI](https://developers.stellar.org/docs/build/guides/cli)
+
+This assumes that you have the Stellar CLI installed and configured with a testnet account `${MY_ACCOUNT}`.
+
+## Contracts
+
+- `account` - A custom account contract with a single Ed25519 signer. This is the account that will be authenticated in SEP-45 tests.
+- `web-auth` - The web authentication contract as specified by SEP-45.
+
 ## Deploy all contracts
 
 One time deployment instructions. If you need to make changes to a previously deployed contract, upgrade it instead (see below).
