@@ -1,22 +1,26 @@
 # Anchor Platform Test Contracts
 
-This directory contains all the contracts used by the Anchor Platform for testing.
+This directory contains all the contracts used by the Anchor Platform for
+testing.
 
 ## Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install)
 - [Stellar CLI](https://developers.stellar.org/docs/build/guides/cli)
 
-This assumes that you have the Stellar CLI installed and configured with a testnet account `${MY_ACCOUNT}`.
+This assumes that you have the Stellar CLI installed and configured with a
+testnet account `${MY_ACCOUNT}`.
 
 ## Contracts
 
-- `account` - A custom account contract with a single Ed25519 signer. This is the account that will be authenticated in SEP-45 tests.
+- `account` - A custom account contract with a single Ed25519 signer. This is
+  the account that will be authenticated in SEP-45 tests.
 - `web-auth` - The web authentication contract as specified by SEP-45.
 
 ## Deploy all contracts
 
-One time deployment instructions. If you need to make changes to a previously deployed contract, upgrade it instead (see below).
+One time deployment instructions. If you need to make changes to a previously
+deployed contract, upgrade it instead (see below).
 
 ```bash
 # Build the contracts
@@ -29,6 +33,7 @@ stellar contract deploy \
 --network testnet \
 -- \
 --admin ${MY_ACCOUNT}
+--signer ${MY_ACCOUNT_PUBLIC_KEY_BYTES} # you can get this by calling KeyPair#rawPublicKey using the JS SDK
 
 # Deploy the web auth contract
 stellar contract deploy \
@@ -44,7 +49,7 @@ stellar contract deploy \
 ```bash
 # Install the account wasm on the network
 stellar contract install \
---source-account ${MY_ACCOUNT} \
+--source ${MY_ACCOUNT} \
 --wasm target/wasm32-unknown-unknown/release/account.wasm \
 --network testnet
 
@@ -63,7 +68,7 @@ stellar contract invoke \
 ```bash
 # Install the account wasm on the network
 stellar contract install \
---source-account ${MY_ACCOUNT} \
+--source ${MY_ACCOUNT} \
 --wasm target/wasm32-unknown-unknown/release/web_auth.wasm \
 --network testnet
 
