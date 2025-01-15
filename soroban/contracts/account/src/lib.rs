@@ -42,6 +42,7 @@ pub struct Signature {
 #[derive(Clone)]
 pub enum AccountError {
     UnknownSigner = 1,
+    TooManySignatures = 2,
 }
 
 #[contractimpl]
@@ -63,6 +64,10 @@ impl CustomAccountInterface for Account {
         signatures: Self::Signature,
         _auth_context: Vec<Context>,
     ) -> Result<(), AccountError> {
+        if signatures.len() > 1 {
+            return Err(AccountError::TooManySignatures);
+        }
+
         let signature = signatures.get_unchecked(0);
 
         if env
@@ -76,7 +81,7 @@ impl CustomAccountInterface for Account {
 
         env.crypto().ed25519_verify(
             &signature.public_key,
-            &signature_payload.clone().into(),
+            &signature_payload.into(),
             &signature.signature,
         );
 
