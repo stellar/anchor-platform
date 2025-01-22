@@ -12,7 +12,7 @@ This documentation will configure AWS Infrastructure, Anchor Platform and a samp
 
 # Steps
 1. Pre-requisites
-   1. Fork the [stellar-java-anchor-sdk](https://github.com/stellar/java-stellar-anchor-sdk) github repository
+   1. Fork the [stellar-java-anchor-sdk](https://github.com/stellar/anchor-platform) github repository
    2. Create AWS Account and IAM account with deployment permissions
    3. Create DNS Hosted Zone for Anchor Platform with public DNS
    4. Configure Terraform Cloud Account 

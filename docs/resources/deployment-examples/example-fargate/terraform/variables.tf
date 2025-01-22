@@ -55,7 +55,7 @@ variable "codebuild_source_version" {
 
 variable "anchor_config_repository" {
   type = string
-  default = "https://github.com/reecexlm/java-stellar-anchor-sdk"
+  default = "https://github.com/reecexlm/anchor-platform"
 }
 
 variable "aws_account" {
