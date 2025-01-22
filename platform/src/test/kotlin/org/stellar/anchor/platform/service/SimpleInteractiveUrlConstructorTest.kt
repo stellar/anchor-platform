@@ -18,8 +18,8 @@ import org.stellar.anchor.api.callback.PutCustomerResponse
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.JwtService.*
-import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
+import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.client.ClientService
 import org.stellar.anchor.client.DefaultClientService
 import org.stellar.anchor.config.CustodySecretConfig
@@ -46,7 +46,7 @@ class SimpleInteractiveUrlConstructorTest {
   @MockK(relaxed = true) private lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) private lateinit var customerIntegration: CustomerIntegration
   @MockK(relaxed = true) private lateinit var testAsset: AssetInfo
-  @MockK(relaxed = true) private lateinit var sep10Jwt: Sep10Jwt
+  @MockK(relaxed = true) private lateinit var sep10Jwt: WebAuthJwt
 
   private lateinit var jwtService: JwtService
   private lateinit var sep24Config: PropertySep24Config

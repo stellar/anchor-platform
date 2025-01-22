@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.sep.SepExceptionResponse;
 import org.stellar.anchor.api.sep.sep24.*;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.sep24.Sep24Service;
 
@@ -49,7 +49,7 @@ public class Sep24Controller {
       HttpServletRequest request, @RequestBody HashMap<String, String> requestData)
       throws AnchorException, MalformedURLException, URISyntaxException {
     debug("/deposit", requestData);
-    Sep10Jwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = Sep10Helper.getSep10Token(request);
     InteractiveTransactionResponse itr = sep24Service.deposit(token, requestData);
     info("interactive redirection:", itr);
     return itr;
@@ -81,7 +81,7 @@ public class Sep24Controller {
       HttpServletRequest request, @RequestBody HashMap<String, String> requestData)
       throws AnchorException, MalformedURLException, URISyntaxException {
     debug("/withdraw", requestData);
-    Sep10Jwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = Sep10Helper.getSep10Token(request);
     InteractiveTransactionResponse itr = sep24Service.withdraw(token, requestData);
     info("interactive redirection:", itr);
     return itr;
@@ -113,7 +113,7 @@ public class Sep24Controller {
       HttpServletRequest request, @RequestBody GetTransactionsRequest tr)
       throws SepException, MalformedURLException, URISyntaxException {
     debug("/transactions", tr);
-    Sep10Jwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = Sep10Helper.getSep10Token(request);
     return sep24Service.findTransactions(token, tr);
   }
 
@@ -154,7 +154,7 @@ public class Sep24Controller {
       HttpServletRequest request, @RequestBody(required = false) GetTransactionRequest tr)
       throws SepException, IOException, URISyntaxException {
     debug("/transaction", tr);
-    Sep10Jwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = Sep10Helper.getSep10Token(request);
 
     return sep24Service.findTransaction(token, tr);
   }

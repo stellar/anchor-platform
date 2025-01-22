@@ -80,7 +80,7 @@ public class JwtService {
     Security.addProvider(new BouncyCastleProvider());
   }
 
-  public String encode(Sep10Jwt token) {
+  public String encode(WebAuthJwt token) {
     Instant timeExp = Instant.ofEpochSecond(token.getExp());
     Instant timeIat = Instant.ofEpochSecond(token.getIat());
 
@@ -182,7 +182,7 @@ public class JwtService {
     String secret;
     if (cls.equals(Sep6MoreInfoUrlJwt.class)) {
       secret = sep6MoreInfoUrlJwtSecret;
-    } else if (cls.equals(Sep10Jwt.class)) {
+    } else if (cls.equals(WebAuthJwt.class)) {
       secret = sep10JwtSecret;
     } else if (cls.equals(Sep24InteractiveUrlJwt.class)) {
       secret = sep24InteractiveUrlJwtSecret;
@@ -203,8 +203,8 @@ public class JwtService {
 
     if (cls.equals(Sep6MoreInfoUrlJwt.class)) {
       return (T) Sep6MoreInfoUrlJwt.class.getConstructor(Jwt.class).newInstance(jwt);
-    } else if (cls.equals(Sep10Jwt.class)) {
-      return (T) Sep10Jwt.class.getConstructor(Jwt.class).newInstance(jwt);
+    } else if (cls.equals(WebAuthJwt.class)) {
+      return (T) WebAuthJwt.class.getConstructor(Jwt.class).newInstance(jwt);
     } else if (cls.equals(Sep24InteractiveUrlJwt.class)) {
       return (T) Sep24InteractiveUrlJwt.class.getConstructor(Jwt.class).newInstance(jwt);
     } else if (cls.equals(Sep24MoreInfoUrlJwt.class)) {

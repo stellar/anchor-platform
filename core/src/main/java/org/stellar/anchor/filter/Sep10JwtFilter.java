@@ -6,7 +6,7 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.NonNull;
 import org.stellar.anchor.auth.JwtService;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 
 public class Sep10JwtFilter extends AbstractJwtFilter {
   public Sep10JwtFilter(JwtService jwtService) {
@@ -17,7 +17,7 @@ public class Sep10JwtFilter extends AbstractJwtFilter {
   @Override
   public void check(String jwtCipher, HttpServletRequest request, ServletResponse servletResponse)
       throws Exception {
-    @NonNull Sep10Jwt token = jwtService.decode(jwtCipher, Sep10Jwt.class);
+    @NonNull WebAuthJwt token = jwtService.decode(jwtCipher, WebAuthJwt.class);
     infoF("token created. account={} url={}", shorter(token.getAccount()), request.getRequestURL());
     debugF("storing token to request {}:", request.getRequestURL(), token);
     request.setAttribute(JWT_TOKEN, token);

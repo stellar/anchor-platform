@@ -1,4 +1,4 @@
-package org.stellar.anchor.horizon;
+package org.stellar.anchor.network;
 
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
 

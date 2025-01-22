@@ -22,7 +22,7 @@ import org.stellar.anchor.api.platform.GetTransactionResponse;
 import org.stellar.anchor.api.sep.sep12.*;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.apiclient.PlatformApiClient;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.MemoHelper;
@@ -65,7 +65,7 @@ public class Sep12Service {
     }
   }
 
-  public Sep12GetCustomerResponse getCustomer(Sep10Jwt token, Sep12GetCustomerRequest request)
+  public Sep12GetCustomerResponse getCustomer(WebAuthJwt token, Sep12GetCustomerRequest request)
       throws AnchorException {
     populateRequestFromTransactionId(request);
 
@@ -83,7 +83,7 @@ public class Sep12Service {
     return res;
   }
 
-  public Sep12PutCustomerResponse putCustomer(Sep10Jwt token, Sep12PutCustomerRequest request)
+  public Sep12PutCustomerResponse putCustomer(WebAuthJwt token, Sep12PutCustomerRequest request)
       throws AnchorException {
     populateRequestFromTransactionId(request);
 
@@ -126,7 +126,7 @@ public class Sep12Service {
     return Sep12PutCustomerResponse.builder().id(updatedCustomer.getId()).build();
   }
 
-  public void deleteCustomer(Sep10Jwt sep10Jwt, String account, String memo, String memoType)
+  public void deleteCustomer(WebAuthJwt sep10Jwt, String account, String memo, String memoType)
       throws AnchorException {
     boolean isAccountAuthenticated =
         Stream.of(sep10Jwt.getAccount(), sep10Jwt.getMuxedAccount())
@@ -168,7 +168,7 @@ public class Sep12Service {
     sep12DeleteCustomerCounter.increment();
   }
 
-  void validateGetOrPutRequest(Sep12CustomerRequestBase requestBase, Sep10Jwt token)
+  void validateGetOrPutRequest(Sep12CustomerRequestBase requestBase, WebAuthJwt token)
       throws SepException {
     if (requestBase.getTransactionId() != null) {
       try {
@@ -193,7 +193,8 @@ public class Sep12Service {
   }
 
   void validateRequestAndTokenAccounts(
-      @NotNull Sep12CustomerRequestBase requestBase, @NotNull Sep10Jwt token) throws SepException {
+      @NotNull Sep12CustomerRequestBase requestBase, @NotNull WebAuthJwt token)
+      throws SepException {
     // Validate request.account - SEP-12 says: This field should match the `sub` value of the
     // decoded SEP-10 JWT.
     String tokenAccount = token.getAccount();
@@ -211,7 +212,7 @@ public class Sep12Service {
     }
   }
 
-  void validateRequestAndTokenMemos(Sep12CustomerRequestBase requestBase, @NotNull Sep10Jwt token)
+  void validateRequestAndTokenMemos(Sep12CustomerRequestBase requestBase, @NotNull WebAuthJwt token)
       throws SepException {
     String tokenSubMemo = token.getAccountMemo();
     String tokenMuxedAccountId = Objects.toString(token.getMuxedAccountId(), null);
@@ -239,7 +240,7 @@ public class Sep12Service {
         "The memo specified does not match the memo ID authorized via SEP-10");
   }
 
-  void updateRequestMemoAndMemoType(@NotNull Sep12CustomerRequestBase requestBase, Sep10Jwt token)
+  void updateRequestMemoAndMemoType(@NotNull Sep12CustomerRequestBase requestBase, WebAuthJwt token)
       throws SepException {
     String memo = requestBase.getMemo();
     if (memo == null) {

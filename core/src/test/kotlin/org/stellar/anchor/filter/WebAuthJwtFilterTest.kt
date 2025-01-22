@@ -15,7 +15,7 @@ import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.TestHelper.Companion.createSep10Jwt
 import org.stellar.anchor.auth.AbstractJwt
 import org.stellar.anchor.auth.JwtService
-import org.stellar.anchor.auth.Sep10Jwt
+import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
@@ -24,7 +24,7 @@ import org.stellar.anchor.filter.Sep10JwtFilter.JWT_TOKEN
 import org.stellar.anchor.setupMock
 
 @Order(85)
-internal class Sep10JwtFilterTest {
+internal class WebAuthJwtFilterTest {
   companion object {
     private const val PUBLIC_KEY = "GBJDSMTMG4YBP27ZILV665XBISBBNRP62YB7WZA2IQX2HIPK7ABLF4C2"
   }
@@ -153,7 +153,7 @@ internal class Sep10JwtFilterTest {
   @ValueSource(strings = ["GET", "PUT", "POST", "DELETE"])
   fun `make sure a valid token returns OK`(method: String) {
     every { request.method } returns method
-    val slot = slot<Sep10Jwt>()
+    val slot = slot<WebAuthJwt>()
     every { request.setAttribute(JWT_TOKEN, capture(slot)) } answers {}
 
     val jwtToken = jwtService.encode(createSep10Jwt(PUBLIC_KEY, null, "stellar.org"))

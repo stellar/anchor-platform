@@ -2,7 +2,6 @@ package org.stellar.anchor.auth
 
 import io.jsonwebtoken.MalformedJwtException
 import io.mockk.mockk
-import java.util.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -41,16 +40,10 @@ internal class JwtServiceTest {
   fun `test apply Sep10Jwt encoding and decoding and make sure the original values are not changed`() {
     val jwtService = JwtService(secretConfig, custodySecretConfig)
     val token =
-      Sep10Jwt.of(
-        TEST_ISS,
-        TEST_SUB,
-        TEST_IAT,
-        TEST_EXP,
-        TEST_JTI,
-        TEST_CLIENT_DOMAIN,
-      ) as Sep10Jwt
+      WebAuthJwt.of(TEST_ISS, TEST_SUB, TEST_IAT, TEST_EXP, TEST_JTI, TEST_CLIENT_DOMAIN)
+        as WebAuthJwt
     val cipher = jwtService.encode(token)
-    val sep10Jwt = jwtService.decode(cipher, Sep10Jwt::class.java)
+    val sep10Jwt = jwtService.decode(cipher, WebAuthJwt::class.java)
 
     assertEquals(sep10Jwt.iss, token.iss)
     assertEquals(sep10Jwt.sub, token.sub)
@@ -90,7 +83,7 @@ internal class JwtServiceTest {
         TEST_EXP,
         TEST_CLIENT_DOMAIN,
         TEST_CLIENT_NAME,
-        TEST_HOME_DOMAIN
+        TEST_HOME_DOMAIN,
       )
     val cipher = jwtService.encode(token)
     val sep24InteractiveUrlJwt = jwtService.decode(cipher, Sep24InteractiveUrlJwt::class.java)
@@ -108,7 +101,7 @@ internal class JwtServiceTest {
     val jwtService = JwtService(secretConfig, custodySecretConfig)
 
     assertThrows<MalformedJwtException> {
-      jwtService.decode("This is a bad cipher", Sep10Jwt::class.java)
+      jwtService.decode("This is a bad cipher", WebAuthJwt::class.java)
     }
   }
 }
