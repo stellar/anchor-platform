@@ -332,7 +332,7 @@ public class StellarPaymentObserver implements HealthCheckable {
     // Fetch the latest cursor from the stellar network
     Page<OperationResponse> pageOpResponse;
     try {
-      infoF("Fetching  the latest payments records. (limit={})", MIN_RESULTS);
+      infoF("Fetching the latest payments records. (limit={})", MIN_RESULTS);
       pageOpResponse =
           server.payments().order(RequestBuilder.Order.DESC).limit(MIN_RESULTS).execute();
     } catch (NetworkException e) {
