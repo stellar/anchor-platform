@@ -33,46 +33,30 @@ import org.stellar.sdk.xdr.*;
 
 @AllArgsConstructor
 public class Sep45Service implements ISep45Service {
+  private static final String WEB_AUTH_VERIFY_FN = "web_auth_verify";
+  private static final String KEY_ACCOUNT = "account";
+  private static final String KEY_HOME_DOMAIN = "home_domain";
+  private static final String KEY_HOME_DOMAIN_ADDRESS = "home_domain_address";
+  private static final String KEY_CLIENT_DOMAIN = "client_domain";
+  private static final String KEY_CLIENT_DOMAIN_ADDRESS = "client_domain_address";
+  private static final String KEY_WEB_AUTH_DOMAIN = "web_auth_domain";
   private final AppConfig appConfig;
   private final SecretConfig secretConfig;
   private final Sep45Config sep45Config;
   private final Rpc rpc;
   private final JwtService jwtService;
 
-  private static final String WEB_AUTH_VERIFY_FN = "web_auth_verify";
-  private static final String WEB_AUTH_VERIFY_ACCOUNT_KEY = "account";
-  private static final String WEB_AUTH_VERIFY_HOME_DOMAIN_KEY = "home_domain";
-  private static final String WEB_AUTH_VERIFY_HOME_DOMAIN_ADDRESS_KEY = "home_domain_address";
-  private static final String WEB_AUTH_VERIFY_CLIENT_DOMAIN_KEY = "client_domain";
-  private static final String WEB_AUTH_VERIFY_CLIENT_DOMAIN_ADDRESS_KEY = "client_domain_address";
-  private static final String WEB_AUTH_VERIFY_WEB_AUTH_DOMAIN_KEY = "web_auth_domain";
-
   @Override
   public ChallengeResponse getChallenge(ChallengeRequest request) throws AnchorException {
     KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
-    KeyPair submittingKeypair =
+    KeyPair simulatingKeypair =
         KeyPair.fromSecretSeed(secretConfig.getSep45SimulatingSigningSeed());
-    TransactionBuilderAccount source =
-        rpc.getAccount(submittingKeypair.getAccountId()); // this should be a different account
-    LinkedHashMap<String, String> argsMap =
-        new LinkedHashMap<>(
-            Map.of(
-                WEB_AUTH_VERIFY_ACCOUNT_KEY,
-                request.getAccount(),
-                WEB_AUTH_VERIFY_HOME_DOMAIN_KEY,
-                request.getHomeDomain(),
-                WEB_AUTH_VERIFY_HOME_DOMAIN_ADDRESS_KEY,
-                signingKeypair.getAccountId(),
-                WEB_AUTH_VERIFY_WEB_AUTH_DOMAIN_KEY,
-                sep45Config.getWebAuthDomain()));
-    if (!isEmpty(request.getClientDomain())) {
-      String clientDomainSigner =
-          ClientDomainHelper.fetchSigningKeyFromClientDomain(request.getClientDomain(), false);
-      argsMap.put(WEB_AUTH_VERIFY_CLIENT_DOMAIN_KEY, request.getClientDomain());
-      argsMap.put(WEB_AUTH_VERIFY_CLIENT_DOMAIN_ADDRESS_KEY, clientDomainSigner);
-    }
+    Network network = new Network(appConfig.getStellarNetworkPassphrase());
 
-    SCVal[] args = createArguments(argsMap);
+    SCVal[] args = createArgsFromRequest(request);
+
+    // Simulate the transaction in recording mode to get the authorization entries
+    TransactionBuilderAccount source = rpc.getAccount(simulatingKeypair.getAccountId());
     InvokeHostFunctionOperation operation =
         InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
                 sep45Config.getWebAuthContractId(), WEB_AUTH_VERIFY_FN, Arrays.asList(args))
@@ -80,7 +64,7 @@ public class Sep45Service implements ISep45Service {
             .build();
 
     Transaction transaction =
-        new TransactionBuilder(source, new Network(appConfig.getStellarNetworkPassphrase()))
+        new TransactionBuilder(source, network)
             .setBaseFee(Transaction.MIN_BASE_FEE)
             .addOperation(operation)
             .setTimeout(300)
@@ -92,23 +76,14 @@ public class Sep45Service implements ISep45Service {
     if (simulateTransactionResponse.getError() != null) {
       throw new InternalServerErrorException("Failed to simulate transaction");
     } else {
+
+      // Find and sign the authorization entry belonging to the server
       for (String xdr : simulateTransactionResponse.getResults().get(0).getAuth()) {
         try {
           SorobanAuthorizationEntry entry = SorobanAuthorizationEntry.fromXdrBase64(xdr);
-          if (entry
-              .getCredentials()
-              .getAddress()
-              .getAddress()
-              .getDiscriminant()
-              .equals(SCAddressType.SC_ADDRESS_TYPE_ACCOUNT)) {
+          if (hasAccountCredentials(entry) && matchesKeypairAccount(entry, signingKeypair)) {
             long sequenceNumber = rpc.getLatestLedger().getSequence().longValue();
-            // Sign the entry with the anchor's key
-            entry =
-                authorizeEntry(
-                    xdr,
-                    signingKeypair,
-                    sequenceNumber + 10,
-                    new Network(appConfig.getStellarNetworkPassphrase()));
+            entry = authorizeEntry(xdr, signingKeypair, sequenceNumber + 10, network);
           }
           authEntries.add(entry);
         } catch (IOException e) {
@@ -131,6 +106,36 @@ public class Sep45Service implements ISep45Service {
     }
   }
 
+  /**
+   * Creates the arguments for the web_auth_verify function.
+   *
+   * @param request the challenge request
+   * @return the arguments
+   * @throws SepException if the client domain is invalid
+   */
+  private SCVal[] createArgsFromRequest(ChallengeRequest request) throws SepException {
+    LinkedHashMap<String, String> argsMap = new LinkedHashMap<>();
+    argsMap.put(KEY_ACCOUNT, request.getAccount());
+    argsMap.put(KEY_HOME_DOMAIN, request.getHomeDomain());
+    argsMap.put(
+        KEY_HOME_DOMAIN_ADDRESS,
+        KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed()).getAccountId());
+    argsMap.put(KEY_WEB_AUTH_DOMAIN, sep45Config.getWebAuthDomain());
+    if (!isEmpty(request.getClientDomain())) {
+      String clientDomainSigner =
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(request.getClientDomain(), false);
+      argsMap.put(KEY_CLIENT_DOMAIN, request.getClientDomain());
+      argsMap.put(KEY_CLIENT_DOMAIN_ADDRESS, clientDomainSigner);
+    }
+    return createArguments(argsMap);
+  }
+
+  /**
+   * Transactions a map of arguments to a SCVal.
+   *
+   * @param args the map of arguments
+   * @return the SCVal
+   */
   private SCVal[] createArguments(LinkedHashMap<String, String> args) {
     SCMapEntry[] entries =
         args.entrySet().stream()
@@ -149,6 +154,11 @@ public class Sep45Service implements ISep45Service {
 
   @Override
   public ValidationResponse validate(ValidationRequest request) throws AnchorException {
+    KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
+    KeyPair simulatingKeypair =
+        KeyPair.fromSecretSeed(secretConfig.getSep45SimulatingSigningSeed());
+    Network network = new Network(appConfig.getStellarNetworkPassphrase());
+
     SorobanAuthorizationEntryList authEntries;
     try {
       authEntries = SorobanAuthorizationEntryList.fromXdrBase64(request.getAuthorizationEntries());
@@ -170,19 +180,13 @@ public class Sep45Service implements ISep45Service {
       }
 
       // If the entry is signed by the server, verify the signature
-      KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
-      SCAddress scAddress = entry.getCredentials().getAddress().getAddress();
-      if (scAddress.getDiscriminant().equals(SCAddressType.SC_ADDRESS_TYPE_ACCOUNT)) {
-        AccountID accountID = scAddress.getAccountId();
-        KeyPair accountKeyPair = KeyPair.fromXdrPublicKey(accountID.getAccountID());
-        if (accountKeyPair.getAccountId().equals(signingKeypair.getAccountId())) {
-          verifyServerSignature(entry, signingKeypair);
-        }
+      if (hasAccountCredentials(entry) && matchesKeypairAccount(entry, signingKeypair)) {
+        verifyServerSignature(entry, signingKeypair);
       }
     }
 
-    KeyPair keyPair = KeyPair.fromSecretSeed(secretConfig.getSep45SimulatingSigningSeed());
-    TransactionBuilderAccount source = rpc.getAccount(keyPair.getAccountId());
+    // Simulate the transaction in enforcing mode to check the authorization entry credentials
+    TransactionBuilderAccount source = rpc.getAccount(simulatingKeypair.getAccountId());
 
     InvokeHostFunctionOperation operation =
         InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
@@ -194,7 +198,7 @@ public class Sep45Service implements ISep45Service {
             .build();
 
     Transaction transaction =
-        new TransactionBuilder(source, new Network(appConfig.getStellarNetworkPassphrase()))
+        new TransactionBuilder(source, network)
             .setBaseFee(Transaction.MIN_BASE_FEE)
             .addOperation(operation)
             .setTimeout(300)
@@ -205,14 +209,15 @@ public class Sep45Service implements ISep45Service {
       throw new InvalidRequestException("Failed to simulate transaction");
     }
 
+    // Construct the JWT token
     Map<String, String> argsMap = extractArgs(firstEntryArgs[0].getMap().getSCMap());
 
     long issuedAt = Instant.now().getEpochSecond();
-    String account = argsMap.get("account");
-    String homeDomain = argsMap.get("home_domain");
-    String clientDomain = argsMap.get("client_domain");
+    String account = argsMap.get(KEY_ACCOUNT);
+    String homeDomain = argsMap.get(KEY_HOME_DOMAIN);
+    String clientDomain = argsMap.get(KEY_CLIENT_DOMAIN);
 
-    String authUrl = "http://" + homeDomain + "/sep45/auth"; // TODO: check if this is right
+    String authUrl = "http://" + homeDomain + "/sep45/auth";
     String hashHex;
     try {
       hashHex =
@@ -236,6 +241,14 @@ public class Sep45Service implements ISep45Service {
     return ValidationResponse.builder().token(jwtService.encode(jwt)).build();
   }
 
+  /**
+   * Verifies an auth entry has been signed by a particular keypair.
+   *
+   * @param entry entry to verify
+   * @param keyPair keypair to verify the signature with
+   * @throws BadRequestException if the signature is invalid
+   * @throws InternalServerErrorException if the preimage cannot be hashed
+   */
   private void verifyServerSignature(SorobanAuthorizationEntry entry, KeyPair keyPair)
       throws BadRequestException, InternalServerErrorException {
     SCVal[] signatures = entry.getCredentials().getAddress().getSignature().getVec().getSCVec();
@@ -259,6 +272,7 @@ public class Sep45Service implements ISep45Service {
     byte[] payload;
     try {
       payload = Util.hash(preimage.toXdrByteArray());
+      // Extract and verify the signature
       if (!keyPair.verify(
           payload, signatures[0].getMap().getSCMap()[1].getVal().getBytes().getSCBytes())) {
         throw new BadRequestException("Invalid server signature");
@@ -268,6 +282,42 @@ public class Sep45Service implements ISep45Service {
     }
   }
 
+  /**
+   * Checks if an authorization entry has account credentials.
+   *
+   * @param entry entry to check
+   * @return true if the entry has account credentials, false otherwise
+   */
+  private boolean hasAccountCredentials(SorobanAuthorizationEntry entry) {
+    return entry
+        .getCredentials()
+        .getAddress()
+        .getAddress()
+        .getDiscriminant()
+        .equals(SCAddressType.SC_ADDRESS_TYPE_ACCOUNT);
+  }
+
+  /**
+   * Checks if an authorization entry matches a keypair.
+   *
+   * @param entry entry to check
+   * @param keyPair keypair to check
+   * @return true if the entry matches the keypair, false otherwise
+   */
+  private boolean matchesKeypairAccount(SorobanAuthorizationEntry entry, KeyPair keyPair) {
+    SCAddress scAddress = entry.getCredentials().getAddress().getAddress();
+    AccountID accountID = scAddress.getAccountId();
+    KeyPair accountKeyPair = KeyPair.fromXdrPublicKey(accountID.getAccountID());
+
+    return accountKeyPair.getAccountId().equals(keyPair.getAccountId());
+  }
+
+  /**
+   * Extracts the arguments from a list of map entries.
+   *
+   * @param entries list of map entries
+   * @return map of arguments
+   */
   private Map<String, String> extractArgs(SCMapEntry[] entries) {
     return Arrays.stream(entries)
         .map(
@@ -278,27 +328,33 @@ public class Sep45Service implements ISep45Service {
         .collect(HashMap::new, (m, v) -> m.put(v.getKey(), v.getValue()), HashMap::putAll);
   }
 
+  /**
+   * Verifies that the arguments have the expected values.
+   *
+   * @param entries list of map entries
+   * @throws BadRequestException if the arguments are invalid
+   * @throws SepException if the client domain is invalid
+   */
   private void verifyArguments(SCMapEntry[] entries) throws BadRequestException, SepException {
     Map<String, String> argsMap = extractArgs(entries);
 
-    if (!sep45Config.getHomeDomains().contains(argsMap.get(WEB_AUTH_VERIFY_HOME_DOMAIN_KEY))) {
+    if (!sep45Config.getHomeDomains().contains(argsMap.get(KEY_HOME_DOMAIN))) {
       throw new BadRequestException("Invalid home domain");
     }
 
     KeyPair keyPair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
-    if (!keyPair.getAccountId().equals(argsMap.get(WEB_AUTH_VERIFY_HOME_DOMAIN_ADDRESS_KEY))) {
+    if (!keyPair.getAccountId().equals(argsMap.get(KEY_HOME_DOMAIN_ADDRESS))) {
       throw new BadRequestException("Invalid home domain address");
     }
 
-    if (!sep45Config.getWebAuthDomain().equals(argsMap.get(WEB_AUTH_VERIFY_WEB_AUTH_DOMAIN_KEY))) {
+    if (!sep45Config.getWebAuthDomain().equals(argsMap.get(KEY_WEB_AUTH_DOMAIN))) {
       throw new BadRequestException("Invalid web auth domain");
     }
 
-    if (argsMap.containsKey(WEB_AUTH_VERIFY_CLIENT_DOMAIN_KEY)) {
+    if (argsMap.containsKey(KEY_CLIENT_DOMAIN)) {
       String clientDomainSigner =
-          ClientDomainHelper.fetchSigningKeyFromClientDomain(
-              argsMap.get(WEB_AUTH_VERIFY_CLIENT_DOMAIN_KEY), false);
-      if (!clientDomainSigner.equals(argsMap.get(WEB_AUTH_VERIFY_CLIENT_DOMAIN_ADDRESS_KEY))) {
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(argsMap.get(KEY_CLIENT_DOMAIN), false);
+      if (!clientDomainSigner.equals(argsMap.get(KEY_CLIENT_DOMAIN_ADDRESS))) {
         throw new BadRequestException("Invalid client domain address");
       }
     }
