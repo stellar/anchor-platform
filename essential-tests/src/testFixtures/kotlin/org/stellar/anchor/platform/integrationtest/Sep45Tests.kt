@@ -48,7 +48,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
       sep45Client.getChallenge(
         ChallengeRequest.builder()
           .account(CLIENT_SMART_WALLET_ACCOUNT)
-          .homeDomain("localhost:8080") // TODO: check if home domain parsing is correct
+          .homeDomain("localhost:8080")
           .build()
       )
     Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")
@@ -75,7 +75,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
       sep45Client.getChallenge(
         ChallengeRequest.builder()
           .account(CLIENT_SMART_WALLET_ACCOUNT)
-          .homeDomain("localhost:8080") // TODO: check if home domain parsing is correct
+          .homeDomain("localhost:8080")
           .build()
       )
     Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")
@@ -93,7 +93,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
       sep45Client.getChallenge(
         ChallengeRequest.builder()
           .account(CLIENT_SMART_WALLET_ACCOUNT)
-          .homeDomain("localhost:8080") // TODO: check if home domain parsing is correct
+          .homeDomain("localhost:8080")
           .build()
       )
     Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")
