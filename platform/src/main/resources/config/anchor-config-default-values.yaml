@@ -416,6 +416,9 @@ sep38:
   # Whether to enforce SEP-10 authentication for SEP-38 /info, /price, /prices endpoints.
   sep10_enforced: false
 
+######################
+# SEP-45 Configuration (TODO(philip): to be updated)
+######################
 sep45:
   enabled: false
   web_auth_domain:
