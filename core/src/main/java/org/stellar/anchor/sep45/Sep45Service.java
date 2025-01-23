@@ -23,6 +23,7 @@ import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
 import org.stellar.anchor.network.Rpc;
 import org.stellar.anchor.util.ClientDomainHelper;
+import org.stellar.anchor.util.Log;
 import org.stellar.anchor.xdr.SorobanAuthorizationEntryList;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Transaction;
@@ -339,6 +340,10 @@ public class Sep45Service implements ISep45Service {
     Map<String, String> argsMap = extractArgs(entries);
 
     if (!sep45Config.getHomeDomains().contains(argsMap.get(KEY_HOME_DOMAIN))) {
+      Log.debugF(
+          "Invalid home domain: {} allowed: {}",
+          argsMap.get(KEY_HOME_DOMAIN),
+          sep45Config.getHomeDomains());
       throw new BadRequestException("Invalid home domain");
     }
 
