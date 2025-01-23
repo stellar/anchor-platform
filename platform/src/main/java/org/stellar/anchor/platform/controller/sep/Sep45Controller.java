@@ -1,11 +1,16 @@
 package org.stellar.anchor.platform.controller.sep;
 
 import static org.stellar.anchor.util.Log.debugF;
+import static org.stellar.anchor.util.Log.errorEx;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.BadRequestException;
+import org.stellar.anchor.api.exception.SepException;
+import org.stellar.anchor.api.sep.SepExceptionResponse;
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest;
 import org.stellar.anchor.api.sep.sep45.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep45.ValidationRequest;
@@ -42,7 +47,19 @@ public class Sep45Controller {
     return sep45Service.getChallenge(challengeRequest);
   }
 
-  // TODO: URL-encoded
+  @CrossOrigin
+  @RequestMapping(
+      value = "/auth",
+      consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE},
+      produces = {MediaType.APPLICATION_JSON_VALUE},
+      method = {RequestMethod.POST})
+  public ValidationResponse validate(
+      @RequestParam(name = "authorization_entries") String authorizationEntries)
+      throws AnchorException {
+    debugF("POST /auth authorization_entries", authorizationEntries);
+    return sep45Service.validate(
+        ValidationRequest.builder().authorizationEntries(authorizationEntries).build());
+  }
 
   @CrossOrigin
   @RequestMapping(
@@ -56,5 +73,13 @@ public class Sep45Controller {
     return sep45Service.validate(validationRequest);
   }
 
-  // TODO: errors
+  @ExceptionHandler({
+    SepException.class,
+    BadRequestException.class,
+  })
+  @ResponseStatus(value = HttpStatus.BAD_REQUEST)
+  public SepExceptionResponse handleSepValidationException(Exception ex) {
+    errorEx(ex);
+    return new SepExceptionResponse(ex.getMessage());
+  }
 }
