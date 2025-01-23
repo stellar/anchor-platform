@@ -8,9 +8,9 @@ import lombok.NonNull;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.WebAuthJwt;
 
-public class Sep10JwtFilter extends AbstractJwtFilter {
-  public Sep10JwtFilter(JwtService jwtService) {
-    // SEP-10 tokens are passed in the Authorization header.
+public class WebAuthJwtFilter extends AbstractJwtFilter {
+  public WebAuthJwtFilter(JwtService jwtService) {
+    // SEP-10/SEP-45 tokens are passed in the Authorization header.
     super(jwtService, "Authorization");
   }
 

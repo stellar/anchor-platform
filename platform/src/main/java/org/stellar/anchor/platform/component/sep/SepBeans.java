@@ -16,7 +16,7 @@ import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.*;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.filter.Sep10JwtFilter;
+import org.stellar.anchor.filter.WebAuthJwtFilter;
 import org.stellar.anchor.network.Horizon;
 import org.stellar.anchor.network.Rpc;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
@@ -87,7 +87,7 @@ public class SepBeans {
   public FilterRegistrationBean<Filter> sep10TokenFilter(
       JwtService jwtService, Sep38Config sep38Config) {
     FilterRegistrationBean<Filter> registrationBean = new FilterRegistrationBean<>();
-    registrationBean.setFilter(new Sep10JwtFilter(jwtService));
+    registrationBean.setFilter(new WebAuthJwtFilter(jwtService));
     registrationBean.addUrlPatterns("/sep6/deposit/*");
     registrationBean.addUrlPatterns("/sep6/deposit-exchange/*");
     registrationBean.addUrlPatterns("/sep6/withdraw/*");
