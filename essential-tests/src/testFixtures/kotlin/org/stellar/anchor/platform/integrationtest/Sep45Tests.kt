@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.integrationtest
 
+import java.net.URI
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
@@ -41,6 +42,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
     )
 
   private var webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
+  private var homeDomain = "http://${URI.create(webAuthDomain).authority}"
 
   @Test
   fun testChallengeSigningAndVerification() {
@@ -48,7 +50,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
       sep45Client.getChallenge(
         ChallengeRequest.builder()
           .account(CLIENT_SMART_WALLET_ACCOUNT)
-          .homeDomain(webAuthDomain)
+          .homeDomain(homeDomain)
           .build()
       )
     Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")
@@ -61,10 +63,10 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
 
     val jwt = jwtService.decode(validationResponse.token, WebAuthJwt::class.java)
 
-    assertEquals("localhost:8080", jwt.homeDomain)
+    assertEquals(homeDomain, jwt.homeDomain)
     assertEquals(CLIENT_SMART_WALLET_ACCOUNT, jwt.account)
     assertNotNull(jwt.jti)
-    assertEquals(webAuthDomain, jwt.iss)
+    assertEquals(homeDomain, jwt.iss)
     assertNotNull(jwt.issuedAt)
     assertNotNull(jwt.expiresAt)
   }
@@ -75,7 +77,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
       sep45Client.getChallenge(
         ChallengeRequest.builder()
           .account(CLIENT_SMART_WALLET_ACCOUNT)
-          .homeDomain("localhost:8080")
+          .homeDomain(homeDomain)
           .build()
       )
     Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")
@@ -93,7 +95,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
       sep45Client.getChallenge(
         ChallengeRequest.builder()
           .account(CLIENT_SMART_WALLET_ACCOUNT)
-          .homeDomain("localhost:8080")
+          .homeDomain(homeDomain)
           .build()
       )
     Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")

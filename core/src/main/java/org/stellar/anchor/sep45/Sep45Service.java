@@ -4,6 +4,7 @@ import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.Auth.authorizeEntry;
 
 import java.io.IOException;
+import java.net.URI;
 import java.time.Instant;
 import java.util.*;
 import lombok.AllArgsConstructor;
@@ -23,7 +24,6 @@ import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
 import org.stellar.anchor.network.Rpc;
 import org.stellar.anchor.util.ClientDomainHelper;
-import org.stellar.anchor.util.Log;
 import org.stellar.anchor.xdr.SorobanAuthorizationEntryList;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Transaction;
@@ -218,7 +218,6 @@ public class Sep45Service implements ISep45Service {
     String homeDomain = argsMap.get(KEY_HOME_DOMAIN);
     String clientDomain = argsMap.get(KEY_CLIENT_DOMAIN);
 
-    String authUrl = "http://" + homeDomain + "/sep45/auth";
     String hashHex;
     try {
       hashHex =
@@ -231,7 +230,7 @@ public class Sep45Service implements ISep45Service {
 
     WebAuthJwt jwt =
         WebAuthJwt.of(
-            authUrl,
+            homeDomain,
             account,
             issuedAt,
             issuedAt + sep45Config.getJwtTimeout(),
@@ -339,11 +338,14 @@ public class Sep45Service implements ISep45Service {
   private void verifyArguments(SCMapEntry[] entries) throws BadRequestException, SepException {
     Map<String, String> argsMap = extractArgs(entries);
 
-    if (!sep45Config.getHomeDomains().contains(argsMap.get(KEY_HOME_DOMAIN))) {
-      Log.debugF(
-          "Invalid home domain: {} allowed: {}",
-          argsMap.get(KEY_HOME_DOMAIN),
-          sep45Config.getHomeDomains());
+    if (sep45Config.getHomeDomains().stream()
+        .noneMatch(
+            homeDomain -> {
+              URI expected = URI.create("http://" + homeDomain);
+              URI given = URI.create(argsMap.get(KEY_HOME_DOMAIN));
+
+              return expected.getAuthority().equals(given.getAuthority());
+            })) {
       throw new BadRequestException("Invalid home domain");
     }
 
