@@ -48,12 +48,12 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
       sep45Client.getChallenge(
         ChallengeRequest.builder()
           .account(CLIENT_SMART_WALLET_ACCOUNT)
-          .homeDomain("localhost:8080")
+          .homeDomain(webAuthDomain)
           .build()
       )
     Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")
 
-    val validationRequest = sep45Client.sign(challenge, CLIENT_SMART_WALLET_ACCOUNT)
+    val validationRequest = sep45Client.sign(challenge)
     Log.info("Validation request: ${GsonUtils.getInstance().toJson(validationRequest)}")
 
     val validationResponse = sep45Client.validate(validationRequest)
@@ -98,7 +98,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
       )
     Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")
 
-    val validationRequest = sep45Client.sign(challenge, CLIENT_SMART_WALLET_ACCOUNT)
+    val validationRequest = sep45Client.sign(challenge)
     Log.info("Validation request: ${GsonUtils.getInstance().toJson(validationRequest)}")
 
     val tamperedEntries =

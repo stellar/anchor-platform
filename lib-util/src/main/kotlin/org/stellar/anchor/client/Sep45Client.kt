@@ -34,8 +34,7 @@ class Sep45Client(
     return gson.fromJson(response, ChallengeResponse::class.java)
   }
 
-  fun sign(challengeResponse: ChallengeResponse, contractId: String): ValidationRequest {
-    // TODO: verify server signature
+  fun sign(challengeResponse: ChallengeResponse): ValidationRequest {
     val authEntries =
       SorobanAuthorizationEntryList.fromXdrBase64(challengeResponse.authorizationEntries)
         .authorizationEntryList
