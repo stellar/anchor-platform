@@ -17,7 +17,7 @@ import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.*;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.filter.Sep10JwtFilter;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.platform.condition.OnAnySepsEnabled;
 import org.stellar.anchor.platform.config.*;

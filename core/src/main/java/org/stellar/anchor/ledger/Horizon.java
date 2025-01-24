@@ -1,22 +1,25 @@
-package org.stellar.anchor.horizon;
+package org.stellar.anchor.ledger;
 
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
 
 import java.util.List;
+import java.util.stream.Collectors;
 import lombok.Getter;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.sdk.AssetTypeCreditAlphaNum;
 import org.stellar.sdk.Server;
+import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TrustLineAsset;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.requests.PaymentsRequestBuilder;
 import org.stellar.sdk.responses.AccountResponse;
+import org.stellar.sdk.responses.TransactionResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.xdr.AssetType;
 
 /** The horizon-server. */
-public class Horizon {
+public class Horizon implements LedgerApi {
 
   @Getter private final String horizonUrl;
   @Getter private final String stellarNetworkPassphrase;
@@ -32,7 +35,7 @@ public class Horizon {
     return this.horizonServer;
   }
 
-  public boolean isTrustlineConfigured(String account, String asset) throws NetworkException {
+  public boolean hasTrustline(String account, String asset) throws NetworkException {
     String assetCode = AssetHelper.getAssetCode(asset);
     if (NATIVE_ASSET_CODE.equals(assetCode)) {
       return true;
@@ -56,6 +59,46 @@ public class Horizon {
             });
   }
 
+  @Override
+  public Account getAccount(String account) throws NetworkException {
+    AccountResponse response = getServer().accounts().account(account);
+    AccountResponse.Thresholds thresholds = response.getThresholds();
+
+    return Account.builder()
+        .accountId(response.getAccountId())
+        .sequenceNumber(response.getSequenceNumber())
+        .thresholds(
+            LedgerApi.Thresholds.builder()
+                .lowThreshold(thresholds.getLowThreshold())
+                .medThreshold(thresholds.getMedThreshold())
+                .highThreshold(thresholds.getHighThreshold())
+                .build())
+        .balances(
+            response.getBalances().stream()
+                .map(
+                    b ->
+                        Balance.builder()
+                            .assetType(b.getAssetType())
+                            .assetCode(b.getAssetCode())
+                            .assetIssuer(b.getAssetIssuer())
+                            .liquidityPoolId(b.getLiquidityPoolId())
+                            .limit(b.getLimit())
+                            .build())
+                .collect(Collectors.toList()))
+        .signers(
+            response.getSigners().stream()
+                .map(
+                    s ->
+                        Signer.builder()
+                            .key(s.getKey())
+                            .type(s.getType())
+                            .weight(s.getWeight())
+                            .sponsor(s.getSponsor())
+                            .build())
+                .collect(Collectors.toList()))
+        .build();
+  }
+
   /**
    * Get payment operations for a transaction.
    *
@@ -63,6 +106,7 @@ public class Horizon {
    * @return the operations
    * @throws NetworkException request failed, see {@link PaymentsRequestBuilder#execute()}
    */
+  @Override
   public List<OperationResponse> getStellarTxnOperations(String stellarTxnId) {
     return getServer()
         .payments()
@@ -70,5 +114,10 @@ public class Horizon {
         .forTransaction(stellarTxnId)
         .execute()
         .getRecords();
+  }
+
+  @Override
+  public TransactionResponse submitTransaction(Transaction transaction) throws NetworkException {
+    return getServer().submitTransaction(transaction, false);
   }
 }

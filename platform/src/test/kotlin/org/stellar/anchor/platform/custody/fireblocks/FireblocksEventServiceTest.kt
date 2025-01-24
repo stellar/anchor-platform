@@ -18,7 +18,7 @@ import org.stellar.anchor.api.custody.fireblocks.TransactionDetails
 import org.stellar.anchor.api.custody.fireblocks.TransactionStatus
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.InvalidConfigException
-import org.stellar.anchor.horizon.Horizon
+import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.platform.config.FireblocksConfig
 import org.stellar.anchor.platform.config.PropertyCustodySecretConfig
 import org.stellar.anchor.platform.custody.CustodyPayment

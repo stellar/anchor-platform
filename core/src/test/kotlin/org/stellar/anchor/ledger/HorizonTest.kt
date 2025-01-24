@@ -1,4 +1,4 @@
-package org.stellar.anchor.horizon
+package org.stellar.anchor.ledger
 
 import io.mockk.every
 import io.mockk.mockk
@@ -37,7 +37,7 @@ internal class HorizonTest {
   }
 
   @Test
-  fun test_isTrustlineConfigured_native() {
+  fun test_hasTrustline_native() {
     val appConfig = mockk<AppConfig>()
     every { appConfig.horizonUrl } returns TEST_HORIZON_URI
     every { appConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
@@ -47,11 +47,11 @@ internal class HorizonTest {
     val account = "testAccount"
     val asset = "stellar:native"
 
-    assertTrue(horizon.isTrustlineConfigured(account, asset))
+    assertTrue(horizon.hasTrustline(account, asset))
   }
 
   @Test
-  fun test_isTrustlineConfigured_horizonError() {
+  fun test_hasTrustline_horizonError() {
     val appConfig = mockk<AppConfig>()
     val server = mockk<Server>()
     val account = "testAccount"
@@ -63,13 +63,13 @@ internal class HorizonTest {
 
     val horizon = mockk<Horizon>()
     every { horizon.server } returns server
-    every { horizon.isTrustlineConfigured(account, asset) } answers { callOriginal() }
+    every { horizon.hasTrustline(account, asset) } answers { callOriginal() }
 
-    assertThrows<RuntimeException> { horizon.isTrustlineConfigured(account, asset) }
+    assertThrows<RuntimeException> { horizon.hasTrustline(account, asset) }
   }
 
   @Test
-  fun test_isTrustlineConfigured_present() {
+  fun test_hasTrustline_present() {
     val appConfig = mockk<AppConfig>()
     val server = mockk<Server>()
     val account = "testAccount"
@@ -99,12 +99,12 @@ internal class HorizonTest {
 
     val horizon = mockk<Horizon>()
     every { horizon.server } returns server
-    every { horizon.isTrustlineConfigured(account, asset) } answers { callOriginal() }
-    assertTrue(horizon.isTrustlineConfigured(account, asset))
+    every { horizon.hasTrustline(account, asset) } answers { callOriginal() }
+    assertTrue(horizon.hasTrustline(account, asset))
   }
 
   @Test
-  fun test_isTrustlineConfigured_absent() {
+  fun test_hasTrustline_absent() {
     val appConfig = mockk<AppConfig>()
     val server = mockk<Server>()
     val account = "testAccount"
@@ -139,7 +139,7 @@ internal class HorizonTest {
 
     val horizon = mockk<Horizon>()
     every { horizon.server } returns server
-    every { horizon.isTrustlineConfigured(account, asset) } answers { callOriginal() }
-    assertFalse(horizon.isTrustlineConfigured(account, asset))
+    every { horizon.hasTrustline(account, asset) } answers { callOriginal() }
+    assertFalse(horizon.hasTrustline(account, asset))
   }
 }

@@ -54,7 +54,8 @@ import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
-import org.stellar.anchor.horizon.Horizon
+import org.stellar.anchor.ledger.Horizon
+import org.stellar.anchor.ledger.LedgerApi
 import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.FileUtil
 import org.stellar.anchor.util.GsonUtils
@@ -65,7 +66,6 @@ import org.stellar.sdk.exception.BadRequestException
 import org.stellar.sdk.exception.InvalidSep10ChallengeException
 import org.stellar.sdk.operations.ManageDataOperation
 import org.stellar.sdk.operations.SetOptionsOperation
-import org.stellar.sdk.responses.AccountResponse
 import org.stellar.walletsdk.auth.DefaultAuthHeaderSigner
 import org.stellar.walletsdk.auth.createAuthSignToken
 import org.stellar.walletsdk.horizon.AccountKeyPair
@@ -79,10 +79,10 @@ internal class TestSigner(
   @SerializedName("weight") val weight: Int,
   @SerializedName("sponsor") val sponsor: String
 ) {
-  fun toSigner(): AccountResponse.Signer {
+  fun toSigner(): LedgerApi.Signer {
     val gson = GsonUtils.getInstance()
     val json = gson.toJson(this)
-    return gson.fromJson(json, AccountResponse.Signer::class.java)
+    return gson.fromJson(json, LedgerApi.Signer::class.java)
   }
 }
 
@@ -119,7 +119,7 @@ internal class Sep10ServiceTest {
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
   @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) lateinit var sep10Config: Sep10Config
-  @MockK(relaxed = true) lateinit var horizon: Horizon
+  @MockK(relaxed = true) lateinit var ledgerApi: LedgerApi
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
 
   private lateinit var jwtService: JwtService
@@ -142,7 +142,7 @@ internal class Sep10ServiceTest {
 
     this.jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
     this.sep10Service =
-      Sep10Service(appConfig, secretConfig, sep10Config, horizon, jwtService, clientFinder)
+      Sep10Service(appConfig, secretConfig, sep10Config, ledgerApi, jwtService, clientFinder)
     this.httpClient = `create httpClient`()
   }
 
@@ -239,9 +239,10 @@ internal class Sep10ServiceTest {
     every { secretConfig.sep10SigningSeed } returns String(serverKP.secretSeed)
     every { appConfig.horizonUrl } returns horizonUrl
     every { appConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
-    val horizon = Horizon(appConfig)
+    val ledgerApi = Horizon(appConfig)
+    // TODO: to be parameterized for Stellar RPC and Horizon
     this.sep10Service =
-      Sep10Service(appConfig, secretConfig, sep10Config, horizon, jwtService, clientFinder)
+      Sep10Service(appConfig, secretConfig, sep10Config, ledgerApi, jwtService, clientFinder)
 
     // 3 ------ Run tests
     val validationRequest = ValidationRequest.of(transaction.toEnvelopeXdrBase64())
@@ -322,9 +323,9 @@ internal class Sep10ServiceTest {
     every { secretConfig.sep10SigningSeed } returns String(serverKP.secretSeed)
     every { appConfig.horizonUrl } returns mockHorizonUrl
     every { appConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
-    val horizon = Horizon(appConfig)
+    val ledgerApi = Horizon(appConfig)
     this.sep10Service =
-      Sep10Service(appConfig, secretConfig, sep10Config, horizon, jwtService, clientFinder)
+      Sep10Service(appConfig, secretConfig, sep10Config, ledgerApi, jwtService, clientFinder)
 
     // 3 ------ Run tests
     val validationRequest = ValidationRequest.of(transaction.toEnvelopeXdrBase64())
@@ -375,14 +376,14 @@ internal class Sep10ServiceTest {
     val mockSigners =
       listOf(TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner())
     val accountResponse =
-      mockk<AccountResponse> {
+      mockk<LedgerApi.Account> {
         every { accountId } returns clientKeyPair.accountId
         every { sequenceNumber } returns 1
         every { signers } returns mockSigners
         every { thresholds.medThreshold } returns 1
       }
 
-    every { horizon.server.accounts().account(ofType(String::class)) } returns accountResponse
+    every { ledgerApi.getAccount(any()) } returns accountResponse
 
     val response = sep10Service.validateChallenge(vr)
     val jwt = jwtService.decode(response.token, Sep10Jwt::class.java)
@@ -399,14 +400,14 @@ internal class Sep10ServiceTest {
       )
 
     val accountResponse =
-      mockk<AccountResponse> {
+      mockk<LedgerApi.Account> {
         every { accountId } returns clientKeyPair.accountId
         every { sequenceNumber } returns 1
         every { signers } returns mockSigners
         every { thresholds.medThreshold } returns 1
       }
 
-    every { horizon.server.accounts().account(ofType(String::class)) } returns accountResponse
+    every { ledgerApi.getAccount(any()) } returns accountResponse
 
     val vr = ValidationRequest()
     vr.transaction = createTestChallenge(TEST_CLIENT_DOMAIN, TEST_HOME_DOMAIN, true)
@@ -423,7 +424,7 @@ internal class Sep10ServiceTest {
 
     // Test when the transaction was not signed by the client domain and the client account not
     // exists
-    every { horizon.server.accounts().account(ofType(String::class)) } answers
+    every { ledgerApi.getAccount(any()) } answers
       {
         throw BadRequestException(400, "mock error", null, null)
       }
@@ -437,7 +438,7 @@ internal class Sep10ServiceTest {
     val vr = ValidationRequest()
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
 
-    every { horizon.server.accounts().account(ofType(String::class)) } answers
+    every { ledgerApi.getAccount(any()) } answers
       {
         throw BadRequestException(400, "mock error", null, null)
       }
@@ -768,9 +769,9 @@ internal class Sep10ServiceTest {
     every { secretConfig.sep10SigningSeed } returns String(serverKP.secretSeed)
     every { appConfig.horizonUrl } returns horizonUrl
     every { appConfig.stellarNetworkPassphrase } returns network.networkPassphrase
-    val horizon = Horizon(appConfig)
+    val ledgerApi = Horizon(appConfig)
     this.sep10Service =
-      Sep10Service(appConfig, secretConfig, sep10Config, horizon, jwtService, clientFinder)
+      Sep10Service(appConfig, secretConfig, sep10Config, ledgerApi, jwtService, clientFinder)
 
     // 3 ------ Setup multisig
     val httpRequest =
@@ -782,7 +783,7 @@ internal class Sep10ServiceTest {
     val response = httpClient.newCall(httpRequest).execute()
     assertEquals(200, response.code)
 
-    val clientAccount = horizon.server.accounts().account(clientMasterKP.accountId)
+    val clientAccount = ledgerApi.getAccount(clientMasterKP.accountId)
     val multisigTx =
       TransactionBuilder(clientAccount, network)
         .addPreconditions(
@@ -801,7 +802,7 @@ internal class Sep10ServiceTest {
         )
         .build()
     multisigTx.sign(clientMasterKP)
-    horizon.server.submitTransaction(multisigTx)
+    ledgerApi.submitTransaction(multisigTx)
 
     // 4 ------ Run tests
     val validationRequest = ValidationRequest.of(transaction.toEnvelopeXdrBase64())
