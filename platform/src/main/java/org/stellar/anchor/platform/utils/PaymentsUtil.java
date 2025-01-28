@@ -10,6 +10,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep;
 import org.stellar.anchor.api.shared.Amount;
@@ -20,6 +21,7 @@ import org.stellar.anchor.platform.data.JdbcSep31Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
 import org.stellar.anchor.platform.observer.ObservedPayment;
 import org.stellar.anchor.util.Log;
+import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
 import org.stellar.sdk.responses.operations.PaymentOperationResponse;
@@ -91,15 +93,21 @@ public class PaymentsUtil {
 
   private static List<ObservedPayment> getObservedPayments(List<OperationResponse> payments) {
     return payments.stream()
-        .map(
+        .flatMap(
             operation -> {
               try {
                 if (operation instanceof PaymentOperationResponse) {
-                  return ObservedPayment.fromPaymentOperationResponse(
-                      (PaymentOperationResponse) operation);
+                  return Stream.of(
+                      ObservedPayment.fromPaymentOperationResponse(
+                          (PaymentOperationResponse) operation));
                 } else if (operation instanceof PathPaymentBaseOperationResponse) {
-                  return ObservedPayment.fromPathPaymentOperationResponse(
-                      (PathPaymentBaseOperationResponse) operation);
+                  return Stream.of(
+                      ObservedPayment.fromPathPaymentOperationResponse(
+                          (PathPaymentBaseOperationResponse) operation));
+                } else if (operation instanceof InvokeHostFunctionOperationResponse) {
+                  return ObservedPayment.fromInvokeHostFunctionOperationResponse(
+                      (InvokeHostFunctionOperationResponse) operation)
+                      .stream();
                 }
               } catch (SepException e) {
                 error("Failed to parse operation response", e);
