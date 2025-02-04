@@ -1,4 +1,4 @@
-rootProject.name = "java-stellar-anchor-sdk"
+rootProject.name = "anchor-platform"
 
 /** APIs and Schemas */
 include("api-schema")

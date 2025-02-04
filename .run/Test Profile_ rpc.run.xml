@@ -4,7 +4,7 @@
       <env name="TEST_PROFILE_NAME" value="rpc" />
     </envs>
     <option name="MAIN_CLASS_NAME" value="org.stellar.anchor.platform.run_profiles.RunTestProfile" />
-    <module name="java-stellar-anchor-sdk.service-runner.main" />
+    <module name="anchor-platform.service-runner.main" />
     <shortenClasspath name="ARGS_FILE" />
     <extension name="net.ashald.envfile">
       <option name="IS_ENABLED" value="false" />
