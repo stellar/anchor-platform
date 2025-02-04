@@ -27,7 +27,7 @@ jobs:
           distribution: 'adopt'
 
       - name: Download anchor-platform.tar
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: anchor-platform-tar
           path: /home/runner/
@@ -52,7 +52,7 @@ jobs:
 
       #############################################
       - name: Gradle Build with unit tests only
-        if : ${{ inputs.forceRebuild }}
+        if: ${{ inputs.forceRebuild }}
         run: |
           cd /home/runner/anchor-platform
           ./gradlew clean build jacocoTestReport -x essential-tests:test -x extended-tests:test
