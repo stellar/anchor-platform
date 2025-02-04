@@ -42,9 +42,52 @@ import org.stellar.sdk.requests.PaymentsRequestBuilder;
 import org.stellar.sdk.requests.RequestBuilder;
 import org.stellar.sdk.requests.SSEStream;
 import org.stellar.sdk.responses.Page;
+import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
 import org.stellar.sdk.responses.operations.PaymentOperationResponse;
+
+enum ObserverStatus {
+  // healthy
+  RUNNING,
+  // errors
+  DATABASE_ERROR,
+  PUBLISHER_ERROR,
+  SILENCE_ERROR,
+  STREAM_ERROR,
+  // shutdown
+  NEEDS_SHUTDOWN,
+  SHUTDOWN;
+
+  static final Map<ObserverStatus, Set<ObserverStatus>> stateTransition = new HashMap<>();
+
+  // Build the state transition
+  static {
+    addStateTransition(
+        RUNNING,
+        DATABASE_ERROR,
+        PUBLISHER_ERROR,
+        SILENCE_ERROR,
+        STREAM_ERROR,
+        NEEDS_SHUTDOWN,
+        SHUTDOWN);
+    addStateTransition(DATABASE_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
+    addStateTransition(PUBLISHER_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
+    addStateTransition(SILENCE_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
+    addStateTransition(STREAM_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
+    addStateTransition(NEEDS_SHUTDOWN, SHUTDOWN);
+    addStateTransition(SHUTDOWN, SHUTDOWN);
+  }
+
+  static void addStateTransition(ObserverStatus source, ObserverStatus... dests) {
+    stateTransition.put(source, Set.of(dests));
+  }
+
+  public boolean isSettable(ObserverStatus dest) {
+    Set<ObserverStatus> dests = stateTransition.get(this);
+    return dests != null && dests.contains(dest);
+  }
+}
 
 public class StellarPaymentObserver implements HealthCheckable {
   /** The maximum number of results the Stellar Blockchain can return. */
@@ -59,20 +102,17 @@ public class StellarPaymentObserver implements HealthCheckable {
   final StellarPaymentStreamerCursorStore paymentStreamerCursorStore;
   final Map<SSEStream<OperationResponse>, String> mapStreamToAccount = new HashMap<>();
   final PaymentObservingAccountsManager paymentObservingAccountsManager;
-  SSEStream<OperationResponse> stream;
-
   final ExponentialBackoffTimer publishingBackoffTimer;
   final ExponentialBackoffTimer streamBackoffTimer;
   final ExponentialBackoffTimer databaseBackoffTimer = new ExponentialBackoffTimer(1, 20);
-
+  final ScheduledExecutorService silenceWatcher = DaemonExecutors.newScheduledThreadPool(1);
+  final ScheduledExecutorService statusWatcher = DaemonExecutors.newScheduledThreadPool(1);
+  SSEStream<OperationResponse> stream;
   int silenceTimeoutCount = 0;
   ObserverStatus status = RUNNING;
   Instant lastActivityTime;
   AtomicLong metricLatestBlockRead = new AtomicLong(0);
   AtomicLong metricLatestBlockProcessed = new AtomicLong(0);
-
-  final ScheduledExecutorService silenceWatcher = DaemonExecutors.newScheduledThreadPool(1);
-  final ScheduledExecutorService statusWatcher = DaemonExecutors.newScheduledThreadPool(1);
 
   public StellarPaymentObserver(
       String horizonServer,
@@ -357,15 +397,14 @@ public class StellarPaymentObserver implements HealthCheckable {
       return;
     }
 
-    ObservedPayment observedPayment = null;
+    List<ObservedPayment> observedPayments = new ArrayList<>();
     try {
-      if (operationResponse instanceof PaymentOperationResponse) {
-        PaymentOperationResponse payment = (PaymentOperationResponse) operationResponse;
-        observedPayment = ObservedPayment.fromPaymentOperationResponse(payment);
-      } else if (operationResponse instanceof PathPaymentBaseOperationResponse) {
-        PathPaymentBaseOperationResponse pathPayment =
-            (PathPaymentBaseOperationResponse) operationResponse;
-        observedPayment = ObservedPayment.fromPathPaymentOperationResponse(pathPayment);
+      if (operationResponse instanceof PaymentOperationResponse payment) {
+        observedPayments.add(ObservedPayment.fromPaymentOperationResponse(payment));
+      } else if (operationResponse instanceof PathPaymentBaseOperationResponse pathPayment) {
+        observedPayments.add(ObservedPayment.fromPathPaymentOperationResponse(pathPayment));
+      } else if (operationResponse instanceof InvokeHostFunctionOperationResponse invoke) {
+        observedPayments.addAll(ObservedPayment.fromInvokeHostFunctionOperationResponse(invoke));
       }
     } catch (SepException ex) {
       if (operationResponse.getTransaction() != null) {
@@ -377,38 +416,41 @@ public class StellarPaymentObserver implements HealthCheckable {
       warnEx(ex);
     }
 
-    if (observedPayment == null) {
-      savePagingToken(operationResponse.getPagingToken());
-    } else {
-      try {
-        if (paymentObservingAccountsManager.lookupAndUpdate(observedPayment.getTo())) {
-          for (PaymentListener listener : paymentListeners) {
-            listener.onReceived(observedPayment);
-          }
-        }
+    observedPayments.forEach(
+        observedPayment -> {
+          if (observedPayment == null) {
+            savePagingToken(operationResponse.getPagingToken());
+          } else {
+            try {
+              if (paymentObservingAccountsManager.lookupAndUpdate(observedPayment.getTo())) {
+                for (PaymentListener listener : paymentListeners) {
+                  listener.onReceived(observedPayment);
+                }
+              }
 
-        if (paymentObservingAccountsManager.lookupAndUpdate(observedPayment.getFrom())
-            && !observedPayment.getTo().equals(observedPayment.getFrom())) {
-          for (PaymentListener listener : paymentListeners) {
-            listener.onSent(observedPayment);
-          }
-        }
+              if (paymentObservingAccountsManager.lookupAndUpdate(observedPayment.getFrom())
+                  && !observedPayment.getTo().equals(observedPayment.getFrom())) {
+                for (PaymentListener listener : paymentListeners) {
+                  listener.onSent(observedPayment);
+                }
+              }
 
-        publishingBackoffTimer.reset();
-        paymentStreamerCursorStore.save(operationResponse.getPagingToken());
-      } catch (EventPublishException ex) {
-        // restart the observer from where it stopped, in case the queue fails to
-        // publish the message.
-        errorEx("Failed to send event to payment listeners.", ex);
-        setStatus(PUBLISHER_ERROR);
-      } catch (TransactionException tex) {
-        errorEx("Cannot save the cursor to database", tex);
-        setStatus(DATABASE_ERROR);
-      } catch (Throwable t) {
-        errorEx("Something went wrong in the observer while sending the event", t);
-        setStatus(PUBLISHER_ERROR);
-      }
-    }
+              publishingBackoffTimer.reset();
+              paymentStreamerCursorStore.save(operationResponse.getPagingToken());
+            } catch (EventPublishException ex) {
+              // restart the observer from where it stopped, in case the queue fails to
+              // publish the message.
+              errorEx("Failed to send event to payment listeners.", ex);
+              setStatus(PUBLISHER_ERROR);
+            } catch (TransactionException tex) {
+              errorEx("Cannot save the cursor to database", tex);
+              setStatus(DATABASE_ERROR);
+            } catch (Throwable t) {
+              errorEx("Something went wrong in the observer while sending the event", t);
+              setStatus(PUBLISHER_ERROR);
+            }
+          }
+        });
   }
 
   void handleFailure(Optional<Throwable> throwable) {
@@ -567,46 +609,4 @@ class StreamHealth {
 
   @SerializedName("seconds_since_last_event")
   String silenceSinceLastEvent;
-}
-
-enum ObserverStatus {
-  // healthy
-  RUNNING,
-  // errors
-  DATABASE_ERROR,
-  PUBLISHER_ERROR,
-  SILENCE_ERROR,
-  STREAM_ERROR,
-  // shutdown
-  NEEDS_SHUTDOWN,
-  SHUTDOWN;
-
-  static final Map<ObserverStatus, Set<ObserverStatus>> stateTransition = new HashMap<>();
-
-  // Build the state transition
-  static {
-    addStateTransition(
-        RUNNING,
-        DATABASE_ERROR,
-        PUBLISHER_ERROR,
-        SILENCE_ERROR,
-        STREAM_ERROR,
-        NEEDS_SHUTDOWN,
-        SHUTDOWN);
-    addStateTransition(DATABASE_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
-    addStateTransition(PUBLISHER_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
-    addStateTransition(SILENCE_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
-    addStateTransition(STREAM_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
-    addStateTransition(NEEDS_SHUTDOWN, SHUTDOWN);
-    addStateTransition(SHUTDOWN, SHUTDOWN);
-  }
-
-  static void addStateTransition(ObserverStatus source, ObserverStatus... dests) {
-    stateTransition.put(source, Set.of(dests));
-  }
-
-  public boolean isSettable(ObserverStatus dest) {
-    Set<ObserverStatus> dests = stateTransition.get(this);
-    return dests != null && dests.contains(dest);
-  }
 }
