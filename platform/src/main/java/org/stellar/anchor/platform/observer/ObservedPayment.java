@@ -7,7 +7,6 @@ import lombok.Builder;
 import lombok.Data;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.exception.SepException;
-import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.AssetTypeCreditAlphaNum;
 import org.stellar.sdk.AssetTypeNative;
@@ -139,13 +138,16 @@ public class ObservedPayment {
     return invokeOp.getAssetBalanceChanges().stream()
         .map(
             balanceChange -> {
+              String assetCode = null, assetIssuer = null;
+
+              if (balanceChange.getAsset() instanceof AssetTypeCreditAlphaNum issuedAsset) {
+                assetCode = issuedAsset.getCode();
+                assetIssuer = issuedAsset.getIssuer();
+              } else if (balanceChange.getAsset() instanceof AssetTypeNative) {
+                assetCode = AssetInfo.NATIVE_ASSET_CODE;
+              }
+
               String assetType = balanceChange.getAssetType();
-              String assetCode =
-                  assetType.equals("native")
-                      ? AssetInfo.NATIVE_ASSET_CODE
-                      : balanceChange.getAssetCode();
-              String assetIssuer = balanceChange.getAssetIssuer();
-              String assetName = AssetHelper.getSep11AssetName(assetCode, assetIssuer);
 
               return ObservedPayment.builder()
                   .id(invokeOp.getId().toString())
@@ -156,7 +158,7 @@ public class ObservedPayment {
                   .assetType(assetType)
                   .assetCode(assetCode)
                   .assetIssuer(assetIssuer)
-                  .assetName(assetName)
+                  .assetName(balanceChange.getAsset().toString())
                   .sourceAccount(invokeOp.getSourceAccount())
                   .createdAt(invokeOp.getCreatedAt())
                   .transactionHash(invokeOp.getTransactionHash())
