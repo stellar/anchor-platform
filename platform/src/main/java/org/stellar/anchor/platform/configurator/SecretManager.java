@@ -22,6 +22,8 @@ public class SecretManager
           PropertySecretConfig.SECRET_SEP_10_SIGNING_SEED,
           PropertySecretConfig.SECRET_SEP_24_INTERACTIVE_URL_JWT_SECRET,
           PropertySecretConfig.SECRET_SEP_24_MORE_INFO_URL_JWT_SECRET,
+          PropertySecretConfig.SECRET_SEP_45_JWT_SECRET,
+          PropertySecretConfig.SECRET_SEP_45_SIMULATING_SIGNING_SEED,
           PropertySecretConfig.SECRET_CALLBACK_API_AUTH_SECRET,
           PropertySecretConfig.SECRET_PLATFORM_API_AUTH_SECRET,
           PropertyCustodySecretConfig.SECRET_CUSTODY_SERVER_AUTH_SECRET,

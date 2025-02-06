@@ -102,6 +102,10 @@ sep31.enabled:
 sep31.payment_type:
 sep38.enabled:
 sep38.sep10_enforced:
+sep45.enabled:
+sep45.web_auth_domain:
+sep45.web_auth_contract_id:
+sep45.home_domains:
 sep6.deposit_info_generator_type:
 sep6.enabled:
 sep6.more_info_url.base_url:
@@ -116,6 +120,7 @@ sep_server.port:
 stellar_network.horizon_url:
 stellar_network.network:
 stellar_network.network_passphrase:
+stellar_network.rpc_url:
 custody_server.context_path:
 custody_server.port:
 custody_server.auth.api_key.http_header:

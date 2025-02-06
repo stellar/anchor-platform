@@ -16,8 +16,9 @@ import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.*;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.filter.Sep10JwtFilter;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.filter.WebAuthJwtFilter;
+import org.stellar.anchor.network.Horizon;
+import org.stellar.anchor.network.StellarRpc;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.platform.condition.OnAnySepsEnabled;
 import org.stellar.anchor.platform.config.*;
@@ -32,6 +33,7 @@ import org.stellar.anchor.sep31.Sep31Service;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.sep38.Sep38Service;
+import org.stellar.anchor.sep45.Sep45Service;
 import org.stellar.anchor.sep6.ExchangeAmountsCalculator;
 import org.stellar.anchor.sep6.RequestValidator;
 import org.stellar.anchor.sep6.Sep6Service;
@@ -69,6 +71,13 @@ public class SepBeans {
     return new PropertySep38Config();
   }
 
+  @Bean
+  @ConfigurationProperties(prefix = "sep45")
+  Sep45Config sep45Config(
+      AppConfig appConfig, SecretConfig secretConfig, ClientService clientService) {
+    return new PropertySep45Config(appConfig, clientService, secretConfig);
+  }
+
   /**
    * Register sep-10 token filter.
    *
@@ -78,7 +87,7 @@ public class SepBeans {
   public FilterRegistrationBean<Filter> sep10TokenFilter(
       JwtService jwtService, Sep38Config sep38Config) {
     FilterRegistrationBean<Filter> registrationBean = new FilterRegistrationBean<>();
-    registrationBean.setFilter(new Sep10JwtFilter(jwtService));
+    registrationBean.setFilter(new WebAuthJwtFilter(jwtService));
     registrationBean.addUrlPatterns("/sep6/deposit/*");
     registrationBean.addUrlPatterns("/sep6/deposit-exchange/*");
     registrationBean.addUrlPatterns("/sep6/withdraw/*");
@@ -237,5 +246,16 @@ public class SepBeans {
       EventService eventService) {
     return new Sep38Service(
         sep38Config, assetService, rateIntegration, sep38QuoteStore, eventService);
+  }
+
+  @Bean
+  @OnAnySepsEnabled(seps = {"sep45"})
+  Sep45Service sep45Service(
+      AppConfig appConfig,
+      SecretConfig secretConfig,
+      Sep45Config sep45Config,
+      StellarRpc stellarRpc,
+      JwtService jwtService) {
+    return new Sep45Service(appConfig, secretConfig, sep45Config, stellarRpc, jwtService);
   }
 }

@@ -15,7 +15,8 @@ import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.*;
 import org.stellar.anchor.healthcheck.HealthCheckable;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.network.Horizon;
+import org.stellar.anchor.network.StellarRpc;
 import org.stellar.anchor.platform.config.*;
 import org.stellar.anchor.platform.service.HealthCheckService;
 import org.stellar.anchor.platform.service.Sep24MoreInfoUrlConstructor;
@@ -101,6 +102,11 @@ public class UtilityBeans {
   @Bean
   public Horizon horizon(AppConfig appConfig) {
     return new Horizon(appConfig);
+  }
+
+  @Bean
+  public StellarRpc rpc(AppConfig appConfig) {
+    return new StellarRpc(appConfig);
   }
 
   @Bean

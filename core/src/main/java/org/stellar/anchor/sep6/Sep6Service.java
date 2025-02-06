@@ -20,7 +20,7 @@ import org.stellar.anchor.api.sep.sep6.*;
 import org.stellar.anchor.api.sep.sep6.InfoResponse.*;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.Sep6Config;
@@ -94,7 +94,7 @@ public class Sep6Service {
     return infoResponse;
   }
 
-  public StartDepositResponse deposit(Sep10Jwt token, StartDepositRequest request)
+  public StartDepositResponse deposit(WebAuthJwt token, StartDepositRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
@@ -169,7 +169,7 @@ public class Sep6Service {
         .build();
   }
 
-  public StartDepositResponse depositExchange(Sep10Jwt token, StartDepositExchangeRequest request)
+  public StartDepositResponse depositExchange(WebAuthJwt token, StartDepositExchangeRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
@@ -271,7 +271,7 @@ public class Sep6Service {
         .build();
   }
 
-  public StartWithdrawResponse withdraw(Sep10Jwt token, StartWithdrawRequest request)
+  public StartWithdrawResponse withdraw(WebAuthJwt token, StartWithdrawRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
@@ -343,7 +343,7 @@ public class Sep6Service {
   }
 
   public StartWithdrawResponse withdrawExchange(
-      Sep10Jwt token, StartWithdrawExchangeRequest request) throws AnchorException {
+      WebAuthJwt token, StartWithdrawExchangeRequest request) throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
     // Pre-validation
@@ -439,7 +439,7 @@ public class Sep6Service {
     return StartWithdrawResponse.builder().id(txn.getId()).build();
   }
 
-  public GetTransactionsResponse findTransactions(Sep10Jwt token, GetTransactionsRequest request)
+  public GetTransactionsResponse findTransactions(WebAuthJwt token, GetTransactionsRequest request)
       throws SepException {
     // Pre-validation
     if (token == null) {
@@ -470,7 +470,7 @@ public class Sep6Service {
     return new GetTransactionsResponse(responses);
   }
 
-  public GetTransactionResponse findTransaction(Sep10Jwt token, GetTransactionRequest request)
+  public GetTransactionResponse findTransaction(WebAuthJwt token, GetTransactionRequest request)
       throws AnchorException {
     // Pre-validation
     if (token == null) {

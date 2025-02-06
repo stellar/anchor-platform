@@ -2,7 +2,7 @@ package org.stellar.anchor
 
 import io.mockk.every
 import javax.crypto.SecretKey
-import org.stellar.anchor.auth.Sep10Jwt
+import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.util.KeyUtil
@@ -18,17 +18,17 @@ class TestHelper {
       accountMemo: String? = null,
       hostUrl: String = "",
       clientDomain: String = "vibrant.stellar.org",
-      homeDomain: String = "test.stellar.org"
-    ): Sep10Jwt {
+      homeDomain: String = "test.stellar.org",
+    ): WebAuthJwt {
       val issuedAt: Long = System.currentTimeMillis() / 1000L
-      return Sep10Jwt.of(
+      return WebAuthJwt.of(
         "$hostUrl/auth",
         if (accountMemo == null) account else "$account:$accountMemo",
         issuedAt,
         issuedAt + 60,
         "",
         clientDomain,
-        homeDomain
+        homeDomain,
       )
     }
   }

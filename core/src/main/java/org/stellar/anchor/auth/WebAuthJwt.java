@@ -14,7 +14,7 @@ import org.stellar.sdk.MuxedAccount;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Sep10Jwt extends AbstractJwt {
+public class WebAuthJwt extends AbstractJwt {
   @SerializedName(value = "client_domain")
   String clientDomain;
 
@@ -47,7 +47,7 @@ public class Sep10Jwt extends AbstractJwt {
     return this.exp;
   }
 
-  public Sep10Jwt(Jwt jwt) {
+  public WebAuthJwt(Jwt jwt) {
     super(jwt);
     if (isNotEmpty(claims.get(CLIENT_DOMAIN)))
       this.clientDomain = claims.get(CLIENT_DOMAIN).toString();
@@ -55,7 +55,7 @@ public class Sep10Jwt extends AbstractJwt {
     updateAccountAndMemo();
   }
 
-  public Sep10Jwt(
+  public WebAuthJwt(
       String iss,
       String sub,
       long iat,
@@ -73,12 +73,12 @@ public class Sep10Jwt extends AbstractJwt {
     updateAccountAndMemo();
   }
 
-  public static Sep10Jwt of(
+  public static WebAuthJwt of(
       String iss, String sub, long iat, long exp, String jti, String clientDomain) {
-    return new Sep10Jwt(iss, sub, iat, exp, jti, clientDomain, null);
+    return new WebAuthJwt(iss, sub, iat, exp, jti, clientDomain, null);
   }
 
-  public static Sep10Jwt of(
+  public static WebAuthJwt of(
       String iss,
       String sub,
       long iat,
@@ -86,11 +86,11 @@ public class Sep10Jwt extends AbstractJwt {
       String jti,
       String clientDomain,
       String homeDomain) {
-    return new Sep10Jwt(iss, sub, iat, exp, jti, clientDomain, homeDomain);
+    return new WebAuthJwt(iss, sub, iat, exp, jti, clientDomain, homeDomain);
   }
 
-  public static Sep10Jwt of(String iss, long iat, long exp) {
-    Sep10Jwt token = new Sep10Jwt(iss, null, iat, 0, null, null, null);
+  public static WebAuthJwt of(String iss, long iat, long exp) {
+    WebAuthJwt token = new WebAuthJwt(iss, null, iat, 0, null, null, null);
     token.iss = iss;
     token.iat = iat;
     token.exp = exp;

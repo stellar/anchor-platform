@@ -6,7 +6,12 @@ public interface SecretConfig {
   @Deprecated // TODO: ANCHOR-667
   String getSep10JwtSecretKey();
 
+  @Deprecated // TODO: ANCHOR-667
+  String getSep45JwtSecretKey();
+
   String getSep10SigningSeed();
+
+  String getSep45SimulatingSigningSeed();
 
   String getSep24InteractiveUrlJwtSecret();
 

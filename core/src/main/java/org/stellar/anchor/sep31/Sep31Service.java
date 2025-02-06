@@ -43,7 +43,7 @@ import org.stellar.anchor.api.shared.Amount;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientConfig;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.AppConfig;
@@ -100,7 +100,7 @@ public class Sep31Service {
 
   @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
   public Sep31PostTransactionResponse postTransaction(
-      Sep10Jwt sep10Jwt, Sep31PostTransactionRequest request) throws AnchorException {
+      WebAuthJwt sep10Jwt, Sep31PostTransactionRequest request) throws AnchorException {
     Context.reset();
     Context.get().setRequest(request);
     Context.get().setSep10Jwt(sep10Jwt);
@@ -590,7 +590,7 @@ public class Sep31Service {
     private Sep31Transaction transaction;
     private Sep31PostTransactionRequest request;
     private Sep38Quote quote;
-    private Sep10Jwt sep10Jwt;
+    private WebAuthJwt sep10Jwt;
     private Amount fee;
     private AssetInfo asset;
     private Map<String, String> transactionFields;

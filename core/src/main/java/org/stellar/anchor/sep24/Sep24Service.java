@@ -43,7 +43,7 @@ import org.stellar.anchor.api.sep.sep24.Sep24GetTransactionResponse;
 import org.stellar.anchor.api.sep.sep24.TransactionResponse;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.client.CustodialClient;
@@ -121,7 +121,7 @@ public class Sep24Service {
   }
 
   public InteractiveTransactionResponse withdraw(
-      Sep10Jwt token, Map<String, String> withdrawRequest)
+      WebAuthJwt token, Map<String, String> withdrawRequest)
       throws AnchorException, MalformedURLException, URISyntaxException {
     info("Creating withdrawal transaction.");
     // increment counter
@@ -290,7 +290,8 @@ public class Sep24Service {
     return response;
   }
 
-  public InteractiveTransactionResponse deposit(Sep10Jwt token, Map<String, String> depositRequest)
+  public InteractiveTransactionResponse deposit(
+      WebAuthJwt token, Map<String, String> depositRequest)
       throws AnchorException, MalformedURLException, URISyntaxException {
     info("Creating deposit transaction.");
     counter(SEP24_TRANSACTION_REQUESTED, TYPE, TV_SEP24_DEPOSIT);
@@ -468,7 +469,7 @@ public class Sep24Service {
     return response;
   }
 
-  public GetTransactionsResponse findTransactions(Sep10Jwt token, GetTransactionsRequest txReq)
+  public GetTransactionsResponse findTransactions(WebAuthJwt token, GetTransactionsRequest txReq)
       throws SepException, MalformedURLException, URISyntaxException {
     if (token == null) {
       info("missing SEP-10 token");
@@ -512,7 +513,7 @@ public class Sep24Service {
     return result;
   }
 
-  public Sep24GetTransactionResponse findTransaction(Sep10Jwt token, GetTransactionRequest txReq)
+  public Sep24GetTransactionResponse findTransaction(WebAuthJwt token, GetTransactionRequest txReq)
       throws SepException, IOException, URISyntaxException {
     if (token == null) {
       info("missing SEP-10 token");

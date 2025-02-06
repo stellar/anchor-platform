@@ -36,8 +36,8 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.JwtService.CLIENT_DOMAIN
-import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
+import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.client.*
 import org.stellar.anchor.config.*
 import org.stellar.anchor.event.EventService
@@ -174,7 +174,7 @@ internal class Sep24ServiceTest {
         interactiveUrlConstructor,
         moreInfoUrlConstructor,
         custodyConfig,
-        calculator
+        calculator,
       )
     depositQuote = gson.fromJson(DEPOSIT_QUOTE_JSON, PojoSep38Quote::class.java)
     withdrawQuote = gson.fromJson(WITHDRAW_QUOTE_JSON, PojoSep38Quote::class.java)
@@ -203,7 +203,7 @@ internal class Sep24ServiceTest {
     assertEquals("USDC", slotTxn.captured.requestAssetCode)
     assertEquals(
       slotTxn.captured.requestAssetIssuer,
-      "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
     )
     assertEquals(TEST_ACCOUNT, slotTxn.captured.fromAccount)
     assertEquals(TEST_CLIENT_DOMAIN, slotTxn.captured.clientDomain)
@@ -225,7 +225,7 @@ internal class Sep24ServiceTest {
     assertEquals("test.client.stellar.org", decodedToken.claims["client_domain"])
     assertEquals(
       "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-      decodedToken.claims["asset"]
+      decodedToken.claims["asset"],
     )
   }
 
@@ -244,10 +244,7 @@ internal class Sep24ServiceTest {
     assertEquals(tokenStrings.size, 1)
     val tokenString = tokenStrings[0].value
     val decodedToken = jwtService.decode(tokenString, Sep24InteractiveUrlJwt::class.java)
-    assertEquals(
-      "$TEST_ACCOUNT:$TEST_MEMO",
-      decodedToken.sub,
-    )
+    assertEquals("$TEST_ACCOUNT:$TEST_MEMO", decodedToken.sub)
     assertEquals(TEST_CLIENT_DOMAIN, decodedToken.claims()[CLIENT_DOMAIN])
 
     assertEquals("incomplete", slotTxn.captured.status)
@@ -255,7 +252,7 @@ internal class Sep24ServiceTest {
     assertEquals("USDC", slotTxn.captured.requestAssetCode)
     assertEquals(
       slotTxn.captured.requestAssetIssuer,
-      "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
     )
     assertEquals(TEST_ACCOUNT, slotTxn.captured.sep10Account)
     assertEquals(TEST_MEMO, slotTxn.captured.sep10AccountMemo)
@@ -272,7 +269,7 @@ internal class Sep24ServiceTest {
     every { sep38QuoteStore.findByQuoteId(any()) } returns withdrawQuote
     sep24Service.withdraw(
       createTestSep10JwtWithMemo(),
-      createTestTransactionRequest(withdrawQuote.id)
+      createTestTransactionRequest(withdrawQuote.id),
     )
     assertEquals(withdrawQuote.id, slotTxn.captured.quoteId)
     assertEquals(withdrawQuote.buyAsset, slotTxn.captured.amountOutAsset)
@@ -289,11 +286,11 @@ internal class Sep24ServiceTest {
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
     Assertions.assertTrue(
       dbDeadline >= expectedDeadline - 2,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
     Assertions.assertTrue(
       dbDeadline <= expectedDeadline,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
   }
 
@@ -402,10 +399,7 @@ internal class Sep24ServiceTest {
     assertEquals(tokenStrings.size, 1)
     val tokenString = tokenStrings[0].value
     val decodedToken = jwtService.decode(tokenString, Sep24InteractiveUrlJwt::class.java)
-    assertEquals(
-      "$TEST_ACCOUNT:$TEST_MEMO",
-      decodedToken.sub,
-    )
+    assertEquals("$TEST_ACCOUNT:$TEST_MEMO", decodedToken.sub)
     assertEquals(TEST_CLIENT_DOMAIN, decodedToken.claims[CLIENT_DOMAIN])
 
     assertEquals("incomplete", slotTxn.captured.status)
@@ -413,7 +407,7 @@ internal class Sep24ServiceTest {
     assertEquals("USDC", slotTxn.captured.requestAssetCode)
     assertEquals(
       slotTxn.captured.requestAssetIssuer,
-      "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
     )
     assertEquals(TEST_ACCOUNT, slotTxn.captured.sep10Account)
     assertEquals(TEST_MEMO, slotTxn.captured.sep10AccountMemo)
@@ -429,7 +423,7 @@ internal class Sep24ServiceTest {
     every { sep38QuoteStore.findByQuoteId(any()) } returns depositQuote
     sep24Service.deposit(
       createTestSep10JwtWithMemo(),
-      createTestTransactionRequest(depositQuote.id)
+      createTestTransactionRequest(depositQuote.id),
     )
     assertEquals(depositQuote.id, slotTxn.captured.quoteId)
     assertEquals(depositQuote.sellAsset, slotTxn.captured.amountInAsset)
@@ -446,11 +440,11 @@ internal class Sep24ServiceTest {
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
     Assertions.assertTrue(
       dbDeadline >= expectedDeadline - 2,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
     Assertions.assertTrue(
       dbDeadline <= expectedDeadline,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
   }
 
@@ -617,7 +611,7 @@ internal class Sep24ServiceTest {
           10,
           "2021-12-20T19:30:58+00:00",
           "1",
-          "en-US"
+          "en-US",
         )
       sep24Service.findTransactions(createTestSep10JwtToken(), gtr)
     }
@@ -721,11 +715,11 @@ internal class Sep24ServiceTest {
     assertTrue(response.url.indexOf("lang=en") != -1)
   }
 
-  private fun createTestSep10JwtToken(): Sep10Jwt {
+  private fun createTestSep10JwtToken(): WebAuthJwt {
     return TestHelper.createSep10Jwt(TEST_ACCOUNT, null, TEST_HOME_DOMAIN, TEST_CLIENT_DOMAIN)
   }
 
-  private fun createTestSep10JwtWithMemo(): Sep10Jwt {
+  private fun createTestSep10JwtWithMemo(): WebAuthJwt {
     return TestHelper.createSep10Jwt(TEST_ACCOUNT, TEST_MEMO, TEST_HOME_DOMAIN, TEST_CLIENT_DOMAIN)
   }
 
@@ -737,7 +731,7 @@ internal class Sep24ServiceTest {
         Instant.now().epochSecond + 1000,
         TEST_CLIENT_DOMAIN,
         TEST_CLIENT_NAME,
-        TEST_HOME_DOMAIN
+        TEST_HOME_DOMAIN,
       )
     jwt.claim("asset", "stellar:${TEST_ASSET}:${TEST_ASSET_ISSUER_ACCOUNT_ID}")
     return jwt
