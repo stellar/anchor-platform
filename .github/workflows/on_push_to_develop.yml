@@ -14,6 +14,9 @@ jobs:
   gradle_build:
     uses: ./.github/workflows/sub_gradle_build.yml
 
+  rust_build:
+    uses: ./.github/workflows/sub_rust_build.yml
+
   jacoco_report:
     needs: [ gradle_build ]
     uses: ./.github/workflows/sub_jacoco_report.yml
