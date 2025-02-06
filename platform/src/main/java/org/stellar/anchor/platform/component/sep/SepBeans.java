@@ -18,7 +18,7 @@ import org.stellar.anchor.config.*;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.filter.WebAuthJwtFilter;
 import org.stellar.anchor.network.Horizon;
-import org.stellar.anchor.network.Rpc;
+import org.stellar.anchor.network.StellarRpc;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.platform.condition.OnAnySepsEnabled;
 import org.stellar.anchor.platform.config.*;
@@ -254,8 +254,8 @@ public class SepBeans {
       AppConfig appConfig,
       SecretConfig secretConfig,
       Sep45Config sep45Config,
-      Rpc rpc,
+      StellarRpc stellarRpc,
       JwtService jwtService) {
-    return new Sep45Service(appConfig, secretConfig, sep45Config, rpc, jwtService);
+    return new Sep45Service(appConfig, secretConfig, sep45Config, stellarRpc, jwtService);
   }
 }

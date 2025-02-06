@@ -22,7 +22,7 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
-import org.stellar.anchor.network.Rpc;
+import org.stellar.anchor.network.StellarRpc;
 import org.stellar.anchor.util.ClientDomainHelper;
 import org.stellar.anchor.xdr.SorobanAuthorizationEntryList;
 import org.stellar.sdk.*;
@@ -33,7 +33,7 @@ import org.stellar.sdk.scval.Scv;
 import org.stellar.sdk.xdr.*;
 
 @AllArgsConstructor
-public class Sep45Service implements ISep45Service {
+public class Sep45Service {
   private static final String WEB_AUTH_VERIFY_FN = "web_auth_verify";
   private static final String KEY_ACCOUNT = "account";
   private static final String KEY_HOME_DOMAIN = "home_domain";
@@ -44,10 +44,9 @@ public class Sep45Service implements ISep45Service {
   private final AppConfig appConfig;
   private final SecretConfig secretConfig;
   private final Sep45Config sep45Config;
-  private final Rpc rpc;
+  private final StellarRpc stellarRpc;
   private final JwtService jwtService;
 
-  @Override
   public ChallengeResponse getChallenge(ChallengeRequest request) throws AnchorException {
     KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
     KeyPair simulatingKeypair =
@@ -57,7 +56,7 @@ public class Sep45Service implements ISep45Service {
     SCVal[] args = createArgsFromRequest(request);
 
     // Simulate the transaction in recording mode to get the authorization entries
-    TransactionBuilderAccount source = rpc.getAccount(simulatingKeypair.getAccountId());
+    TransactionBuilderAccount source = stellarRpc.getAccount(simulatingKeypair.getAccountId());
     InvokeHostFunctionOperation operation =
         InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
                 sep45Config.getWebAuthContractId(), WEB_AUTH_VERIFY_FN, Arrays.asList(args))
@@ -71,7 +70,8 @@ public class Sep45Service implements ISep45Service {
             .setTimeout(300)
             .build();
 
-    SimulateTransactionResponse simulateTransactionResponse = rpc.simulateTransaction(transaction);
+    SimulateTransactionResponse simulateTransactionResponse =
+        stellarRpc.simulateTransaction(transaction);
 
     List<SorobanAuthorizationEntry> authEntries = new ArrayList<>();
     if (simulateTransactionResponse.getError() != null) {
@@ -83,7 +83,7 @@ public class Sep45Service implements ISep45Service {
         try {
           SorobanAuthorizationEntry entry = SorobanAuthorizationEntry.fromXdrBase64(xdr);
           if (hasAccountCredentials(entry) && matchesKeypairAccount(entry, signingKeypair)) {
-            long sequenceNumber = rpc.getLatestLedger().getSequence().longValue();
+            long sequenceNumber = stellarRpc.getLatestLedger().getSequence().longValue();
             entry = authorizeEntry(xdr, signingKeypair, sequenceNumber + 10, network);
           }
           authEntries.add(entry);
@@ -100,7 +100,7 @@ public class Sep45Service implements ISep45Service {
 
       return ChallengeResponse.builder()
           .authorizationEntries(authEntriesXdr)
-          .networkPassphrase(rpc.getRpc().getNetwork().getPassphrase())
+          .networkPassphrase(stellarRpc.getRpc().getNetwork().getPassphrase())
           .build();
     } catch (IOException e) {
       throw new InternalServerErrorException("Failed to encode auth entries");
@@ -108,10 +108,10 @@ public class Sep45Service implements ISep45Service {
   }
 
   /**
-   * Creates the arguments for the web_auth_verify function.
+   * Creates the arguments for the web_auth_verify function from a challenge request.
    *
-   * @param request the challenge request
-   * @return the arguments
+   * @param request the challenge request to create the arguments from
+   * @return the arguments for the web_auth_verify function
    * @throws SepException if the client domain is invalid
    */
   private SCVal[] createArgsFromRequest(ChallengeRequest request) throws SepException {
@@ -153,7 +153,6 @@ public class Sep45Service implements ISep45Service {
     return new SCVal[] {SCVal.builder().discriminant(SCValType.SCV_MAP).map(scMap).build()};
   }
 
-  @Override
   public ValidationResponse validate(ValidationRequest request) throws AnchorException {
     KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
     KeyPair simulatingKeypair =
@@ -187,7 +186,7 @@ public class Sep45Service implements ISep45Service {
     }
 
     // Simulate the transaction in enforcing mode to check the authorization entry credentials
-    TransactionBuilderAccount source = rpc.getAccount(simulatingKeypair.getAccountId());
+    TransactionBuilderAccount source = stellarRpc.getAccount(simulatingKeypair.getAccountId());
 
     InvokeHostFunctionOperation operation =
         InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
@@ -205,7 +204,8 @@ public class Sep45Service implements ISep45Service {
             .setTimeout(300)
             .build();
 
-    SimulateTransactionResponse simulateTransactionResponse = rpc.simulateTransaction(transaction);
+    SimulateTransactionResponse simulateTransactionResponse =
+        stellarRpc.simulateTransaction(transaction);
     if (simulateTransactionResponse.getError() != null) {
       throw new InvalidRequestException("Failed to simulate transaction");
     }

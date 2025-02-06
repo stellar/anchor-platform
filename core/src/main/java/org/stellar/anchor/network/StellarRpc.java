@@ -9,10 +9,10 @@ import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.responses.sorobanrpc.SimulateTransactionResponse;
 
 @Getter
-public class Rpc {
+public class StellarRpc {
   private final SorobanServer rpc;
 
-  public Rpc(AppConfig appConfig) {
+  public StellarRpc(AppConfig appConfig) {
     this.rpc = new SorobanServer(appConfig.getRpcUrl());
   }
 
