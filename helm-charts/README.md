@@ -34,8 +34,7 @@ helm upgrade --install reference-server ./reference-server/ -f ./reference-serve
 # Install the Anchor Platform
 helm upgrade --install anchor-platform ./sep-service/ -f ./sep-service/values.yaml
 
-# Build and Install SEP-24 Reference UI
-docker build -t sep24-reference-ui:local ../../sep24-reference-ui
+# Install SEP-24 Reference UI
 helm upgrade --install sep24-reference-ui ./sep24-reference-ui/ -f ./sep24-reference-ui/values.yaml
 
 # Install the ingress controller

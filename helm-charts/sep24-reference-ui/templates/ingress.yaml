@@ -2,6 +2,15 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ .Values.ingress.name }}
+  namespace: {{ .Values.namespace }}
+  annotations:
+    {{- $annotations := dict "nginx.ingress.kubernetes.io/custom-headers" (printf "%s/%s-configmap" .Values.namespace .Values.ingress.name) }}
+    {{- if .Values.ingress.annotations }}
+      {{- $annotations = merge $annotations .Values.ingress.annotations }}
+    {{- end }}
+    {{- range $key, $value := $annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
   labels:
     app.kubernetes.io/name: {{ .Values.fullName }}-ingress
     helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
@@ -20,13 +29,13 @@ spec:
     {{- end }}
   {{- end }}
   rules:
-    - host: sep24-reference-ui.local
+    - host: {{ .Values.ingress.host }}
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ .Values.fullName }}-svc-{{ .Values.services.ref.name }}
+                name: {{ .Values.fullName }}-svc-{{ .Values.services.ui.name }}
                 port:
-                  number: {{ .Values.services.ref.servicePort | default 3000 }}
+                  number: {{ .Values.services.ui.servicePort | default 3000 }}
