@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.fullName }}-svc-{{ .Values.services.ref.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.fullName }}-sep24-reference-ui
+    helm.sh/chart: {{ include "common.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.services.ref.deployment.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ .Values.fullName }}-svc-{{ .Values.services.ref.name }}
+  template:
+    metadata:
+      {{- if .Values.services.ref.deployment.annotations }}
+      annotations:
+        {{- toYaml .Values.services.ref.deployment.annotations | nindent 8 }}
+      {{- end }}
+      namespace: {{ .Values.namespace }}
+      labels:
+        app: {{ .Values.fullName }}-svc-{{ .Values.services.ref.name }}
+    spec:
+      containers:
+        - name: sep24-reference-ui
+          image: {{ .Values.container.image }}
+          imagePullPolicy: {{ .Values.container.imagePullPolicy | default "Always" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.services.ref.containerPort | default 3000 }}
+              protocol: TCP
+          env:
+            - name: BUSINESS_SERVER_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: sep24-reference-ui-config
+                  key: BUSINESS_SERVER_ENDPOINT
+          resources:
+            requests:
+              memory: {{ .Values.services.ref.deployment.resources.requests.memory }}
+              cpu: {{ .Values.services.ref.deployment.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.services.ref.deployment.resources.limits.memory }}
+              cpu: {{ .Values.services.ref.deployment.resources.limits.cpu }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: config-volume
+          configMap:
+            name: sep24-reference-ui-config

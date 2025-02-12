@@ -126,9 +126,9 @@ config:
   sep24:
     enabled: true
     interactive_url:
-      base_url: http://localhost:8091
+      base_url: http://localhost:3000
     more_info_url:
-      base_url: http://localhost:8091
+      base_url: http://localhost:3000
 
 ingress:
   name: ingress-anchor-platform

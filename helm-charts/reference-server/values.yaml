@@ -29,3 +29,8 @@ services:
         limits:
           memory: 1Gi
           cpu: 1
+ingress:
+  name: ingress-reference-server
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /

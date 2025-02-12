@@ -34,13 +34,23 @@ helm upgrade --install reference-server ./reference-server/ -f ./reference-serve
 # Install the Anchor Platform
 helm upgrade --install anchor-platform ./sep-service/ -f ./sep-service/values.yaml
 
+# Build and Install SEP-24 Reference UI
+docker build -t sep24-reference-ui:local ../../sep24-reference-ui
+helm upgrade --install sep24-reference-ui ./sep24-reference-ui/ -f ./sep24-reference-ui/values.yaml
+
 # Install the ingress controller
 helm upgrade --install ingress-nginx ingress-nginx \
   --repo https://kubernetes.github.io/ingress-nginx \
   --namespace ingress-nginx --create-namespace
   
-# Port forward the ingress controller
-kubectl port-forward svc/ingress-nginx-controller 8080:80 -n ingress-nginx
+# Port forward the ingress controller, reference server, and SEP-24 Reference UI
+kubectl port-forward svc/ingress-nginx-controller 8080:80 -n ingress-nginx &
+kubectl port-forward svc/reference-server-svc-reference-server 8091:8091 -n default &
+kubectl port-forward svc/sep24-reference-ui-svc-sep24-reference-ui 3000:3000 -n default &
 
-# Now you can access the Anchor Platform at http://localhost:8080
+echo "Anchor Platform is running at http://localhost:8080"
+echo "Reference Server is available at http://localhost:8091"
+echo "SEP-24 Reference UI is available at http://localhost:3000"
+
+wait
 ```

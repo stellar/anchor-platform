@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sep24-reference-ui-config
+  namespace: {{ .Values.namespace }}
+data:
+  BUSINESS_SERVER_ENDPOINT: "http://localhost:8091"
