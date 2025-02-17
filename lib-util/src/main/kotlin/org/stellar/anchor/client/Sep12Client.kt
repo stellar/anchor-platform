@@ -21,10 +21,17 @@ const val MULTIPART_FORM_DATA_CHARSET_UTF_8 = "multipart/form-data; charset=utf-
 val TYPE_MULTIPART_FORM_DATA = MULTIPART_FORM_DATA_CHARSET_UTF_8.toMediaType()
 
 class Sep12Client(private val endpoint: String, private val jwt: String) : SepClient() {
-  fun getCustomer(id: String, type: String? = null): Sep12GetCustomerResponse? {
+  fun getCustomer(
+    id: String,
+    type: String? = null,
+    transactionId: String? = null,
+  ): Sep12GetCustomerResponse? {
     var url = String.format(this.endpoint + "/customer?id=%s", id)
     if (type != null) {
       url += "&type=$type"
+    }
+    if (transactionId != null) {
+      url += "&transaction_id=$transactionId"
     }
     val responseBody = httpGet(url, jwt)
     return gson.fromJson(responseBody, Sep12GetCustomerResponse::class.java)
@@ -32,7 +39,7 @@ class Sep12Client(private val endpoint: String, private val jwt: String) : SepCl
 
   fun putCustomer(
     customerRequest: Sep12PutCustomerRequest,
-    mediaType: MediaType = TYPE_JSON
+    mediaType: MediaType = TYPE_JSON,
   ): Sep12PutCustomerResponse? {
     val body: RequestBody?
     when (mediaType) {

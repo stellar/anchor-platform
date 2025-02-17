@@ -15,6 +15,7 @@ import org.stellar.reference.sep24.WithdrawalService
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.service.sep31.ReceiveService
 import org.stellar.sdk.Server
+import org.stellar.sdk.SorobanServer
 
 object ServiceContainer {
   private val config = ConfigContainer.getInstance().config
@@ -37,6 +38,7 @@ object ServiceContainer {
   val customerService = CustomerService(customerRepo, transactionKYCRepo, sepHelper)
   val rateService = RateService(quotesRepo)
   val horizon = Server(config.appSettings.horizonEndpoint)
+  val rpc = SorobanServer(config.appSettings.rpcEndpoint)
   val platform =
     PlatformClient(
       HttpClient {

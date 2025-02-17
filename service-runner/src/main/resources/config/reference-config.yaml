@@ -6,6 +6,8 @@ app:
   port: 8091
   # The URL of the Stellar network to which the Anchor will connect.
   horizonEndpoint: https://horizon-testnet.stellar.org
+  # The URL of the Stellar RPC server to which the Anchor will connect.
+  rpcEndpoint: https://soroban-testnet.stellar.org
   # The URL of the platform server.
   platformApiEndpoint: http://platform:8085
   # The Stellar wallet to which the customer will send the Stellar assets.

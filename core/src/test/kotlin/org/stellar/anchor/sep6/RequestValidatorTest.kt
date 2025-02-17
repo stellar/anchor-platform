@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
-import org.stellar.anchor.TestConstants.Companion.TEST_ACCOUNT
 import org.stellar.anchor.TestConstants.Companion.TEST_ASSET
 import org.stellar.anchor.api.asset.DepositWithdrawOperation
 import org.stellar.anchor.api.asset.Sep6Info
@@ -152,9 +151,17 @@ class RequestValidatorTest {
     }
   }
 
-  @Test
-  fun `test validateAccount`() {
-    requestValidator.validateAccount(TEST_ACCOUNT)
+  @ValueSource(
+    strings =
+      [
+        "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        "MBFZNZTFSI6TWLVAID7VOLCIFX2PMUOS2X7U6H4TNK4PAPSHPWMMUAAAAAAAAAPCIA2IM",
+        "CAASCQKVVBSLREPEUGPOTQZ4BC2NDBY2MW7B2LGIGFUPIY4Z3XUZRVTX",
+      ]
+  )
+  @ParameterizedTest
+  fun `test validateAccount`(account: String) {
+    requestValidator.validateAccount(account)
   }
 
   @Test

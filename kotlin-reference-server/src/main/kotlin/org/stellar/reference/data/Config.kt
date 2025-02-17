@@ -21,6 +21,7 @@ data class AppSettings(
   val isTest: Boolean,
   val port: Int,
   val horizonEndpoint: String,
+  val rpcEndpoint: String,
   val platformApiEndpoint: String,
   val distributionWallet: String,
   val distributionWalletMemo: String,
@@ -40,7 +41,7 @@ data class AuthSettings(
   enum class Type {
     NONE,
     API_KEY,
-    JWT
+    JWT,
   }
 }
 
@@ -48,5 +49,5 @@ data class DataSettings(
   val url: String,
   val database: String,
   val user: String,
-  val password: String
+  val password: String,
 )
