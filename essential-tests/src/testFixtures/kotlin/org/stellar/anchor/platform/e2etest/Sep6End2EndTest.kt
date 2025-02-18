@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.e2etest
 
 import io.ktor.http.*
+import java.net.URI
 import kotlin.test.DefaultAsserter.fail
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
@@ -10,14 +11,22 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
+import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep12.Sep12Status
+import org.stellar.anchor.api.sep.sep45.ChallengeRequest
 import org.stellar.anchor.api.sep.sep6.GetTransactionResponse
 import org.stellar.anchor.api.shared.InstructionField
+import org.stellar.anchor.client.Sep12Client
+import org.stellar.anchor.client.Sep45Client
 import org.stellar.anchor.client.Sep6Client
 import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.CLIENT_SMART_WALLET_ACCOUNT
+import org.stellar.anchor.platform.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
 import org.stellar.reference.wallet.WalletServerClient
+import org.stellar.sdk.SorobanServer
 import org.stellar.walletsdk.anchor.MemoType
 import org.stellar.walletsdk.anchor.auth
 import org.stellar.walletsdk.anchor.customer
@@ -28,6 +37,7 @@ import org.stellar.walletsdk.horizon.sign
 open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
   private val maxTries = 30
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
+  private val gson = GsonUtils.getInstance()
 
   companion object {
     private val USDC =
@@ -126,9 +136,74 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
       listOf(
         Sep12Status.ACCEPTED, // initial customer status before SEP-6 transaction
         Sep12Status.NEEDS_INFO, // SEP-6 transaction requires additional info
-        Sep12Status.ACCEPTED // additional info provided
+        Sep12Status.ACCEPTED, // additional info provided
       )
     assertWalletReceivedCustomerStatuses(customer.id, expectedCustomerStatuses)
+  }
+
+  @Test
+  fun `test typical deposit to contract account end-to-end`() = runBlocking {
+    val webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
+    val homeDomain = "http://${URI.create(webAuthDomain).authority}"
+
+    val sep45Client =
+      Sep45Client(
+        toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"),
+        SorobanServer("https://soroban-testnet.stellar.org"),
+        CLIENT_WALLET_SECRET,
+      )
+    val challenge =
+      sep45Client.getChallenge(
+        ChallengeRequest.builder()
+          .account(CLIENT_SMART_WALLET_ACCOUNT)
+          .homeDomain(homeDomain)
+          .build()
+      )
+    val token = sep45Client.validate(sep45Client.sign(challenge)).token
+    val sep12Client = Sep12Client(toml.getString("KYC_SERVER"), token)
+    val sep6Client = Sep6Client("${config.env["anchor.domain"]}/sep6", token)
+
+    val customerRequest =
+      gson.fromJson(
+        gson.toJson(basicInfoFields.associateWith { customerInfo[it]!! }),
+        Sep12PutCustomerRequest::class.java,
+      )
+    val customer = sep12Client.putCustomer(customerRequest)!!
+
+    val deposit =
+      sep6Client.deposit(
+        mapOf(
+          "asset_code" to USDC.code,
+          "account" to CLIENT_SMART_WALLET_ACCOUNT,
+          "amount" to "1",
+          "type" to "SWIFT",
+        )
+      )
+    Log.info("Deposit initiated: ${deposit.id}")
+
+    val additionalRequiredFields =
+      sep12Client
+        .getCustomer(customer.id, "sep-6", deposit.id)!!
+        .fields
+        ?.filter { it.key != null && it.value?.optional == false }
+        ?.map { it.key!! }
+        .orEmpty()
+    val additionalCustomerRequest =
+      gson.fromJson(
+        gson.toJson(additionalRequiredFields.associateWith { customerInfo[it]!! }),
+        Sep12PutCustomerRequest::class.java,
+      )
+    sep12Client.putCustomer(additionalCustomerRequest)
+
+    Log.info("Bank transfer complete")
+    waitStatus(deposit.id, COMPLETED, sep6Client)
+
+    val completedDepositTxn = sep6Client.getTransaction(mapOf("id" to deposit.id))
+    val transactionByStellarId: GetTransactionResponse =
+      sep6Client.getTransaction(
+        mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
+      )
+    assertEquals(completedDepositTxn.transaction.id, transactionByStellarId.transaction.id)
   }
 
   @Test
@@ -206,9 +281,76 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
       listOf(
         Sep12Status.ACCEPTED, // initial customer status before SEP-6 transaction
         Sep12Status.NEEDS_INFO, // SEP-6 transaction requires additional info
-        Sep12Status.ACCEPTED // additional info provided
+        Sep12Status.ACCEPTED, // additional info provided
       )
     assertWalletReceivedCustomerStatuses(customer.id, expectedCustomerStatuses)
+  }
+
+  @Test
+  fun `test typical deposit-exchange to contract account end-to-end`() = runBlocking {
+    val webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
+    val homeDomain = "http://${URI.create(webAuthDomain).authority}"
+
+    val sep45Client =
+      Sep45Client(
+        toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"),
+        SorobanServer("https://soroban-testnet.stellar.org"),
+        CLIENT_WALLET_SECRET,
+      )
+    val challenge =
+      sep45Client.getChallenge(
+        ChallengeRequest.builder()
+          .account(CLIENT_SMART_WALLET_ACCOUNT)
+          .homeDomain(homeDomain)
+          .build()
+      )
+    val token = sep45Client.validate(sep45Client.sign(challenge)).token
+    val sep12Client = Sep12Client(toml.getString("KYC_SERVER"), token)
+    val sep6Client = Sep6Client("${config.env["anchor.domain"]}/sep6", token)
+
+    val customerRequest =
+      gson.fromJson(
+        gson.toJson(basicInfoFields.associateWith { customerInfo[it]!! }),
+        Sep12PutCustomerRequest::class.java,
+      )
+    val customer = sep12Client.putCustomer(customerRequest)!!
+
+    val deposit =
+      sep6Client.deposit(
+        mapOf(
+          "destination_asset" to USDC.code,
+          "source_asset" to "iso4217:CAD",
+          "amount" to "1",
+          "account" to CLIENT_SMART_WALLET_ACCOUNT,
+          "type" to "SWIFT",
+        ),
+        exchange = true,
+      )
+    Log.info("Deposit initiated: ${deposit.id}")
+
+    val additionalRequiredFields =
+      sep12Client
+        .getCustomer(customer.id, "sep-6", deposit.id)!!
+        .fields
+        ?.filter { it.key != null && it.value?.optional == false }
+        ?.map { it.key!! }
+        .orEmpty()
+    val additionalCustomerRequest =
+      gson.fromJson(
+        gson.toJson(additionalRequiredFields.associateWith { customerInfo[it]!! }),
+        Sep12PutCustomerRequest::class.java,
+      )
+    sep12Client.putCustomer(additionalCustomerRequest)
+
+    Log.info("Bank transfer complete")
+    waitStatus(deposit.id, COMPLETED, sep6Client)
+
+    val completedDepositTxn = sep6Client.getTransaction(mapOf("id" to deposit.id))
+    val transactionByStellarId: GetTransactionResponse =
+      sep6Client.getTransaction(
+        mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
+      )
+    assertEquals(completedDepositTxn.transaction.id, transactionByStellarId.transaction.id)
   }
 
   @Test
@@ -275,7 +417,7 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
       listOf(
         Sep12Status.ACCEPTED, // initial customer status before SEP-6 transaction
         Sep12Status.NEEDS_INFO, // SEP-6 transaction requires additional info
-        Sep12Status.ACCEPTED // additional info provided
+        Sep12Status.ACCEPTED, // additional info provided
       )
     assertWalletReceivedCustomerStatuses(customer.id, expectedCustomerStatuses)
   }
@@ -350,7 +492,7 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
       listOf(
         Sep12Status.ACCEPTED, // initial customer status before SEP-6 transaction
         Sep12Status.NEEDS_INFO, // SEP-6 transaction requires additional info
-        Sep12Status.ACCEPTED // additional info provided
+        Sep12Status.ACCEPTED, // additional info provided
       )
     assertWalletReceivedCustomerStatuses(customer.id, expectedCustomerStatuses)
   }
@@ -364,7 +506,7 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
         "sep6",
         txnId,
         expected.size,
-        GetTransactionResponse::class.java
+        GetTransactionResponse::class.java,
       )
     val statuses = callbacks.map { it.transaction.status }
     assertEquals(expected.map { it.status }, statuses)
@@ -372,7 +514,7 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
 
   private suspend fun assertWalletReceivedCustomerStatuses(
     id: String,
-    expected: List<Sep12Status>
+    expected: List<Sep12Status>,
   ) {
     val callbacks = walletServerClient.pollCustomerCallbacks(id, expected.size)
     val statuses: List<Sep12Status> = callbacks.map { it.status }

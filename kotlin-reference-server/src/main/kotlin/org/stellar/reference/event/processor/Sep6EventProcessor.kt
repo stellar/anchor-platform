@@ -1,8 +1,12 @@
 package org.stellar.reference.event.processor
 
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.time.Instant
 import java.util.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.runBlocking
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.callback.PutCustomerRequest
@@ -18,13 +22,19 @@ import org.stellar.reference.log
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.transactionWithRetry
 import org.stellar.sdk.*
+import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
 import org.stellar.sdk.exception.BadRequestException
+import org.stellar.sdk.operations.InvokeHostFunctionOperation
 import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.responses.TransactionResponse
+import org.stellar.sdk.scval.Scv
+import org.stellar.sdk.xdr.SCVal
+import org.stellar.sdk.xdr.SCValType
 
 class Sep6EventProcessor(
   private val config: Config,
   private val server: Server,
+  private val rpc: SorobanServer,
   private val platformClient: PlatformClient,
   private val customerService: CustomerService,
   private val sepHelper: SepHelper,
@@ -102,7 +112,7 @@ class Sep6EventProcessor(
         } else {
           transactionWithRetry {
             stellarTxnId =
-              submitStellarTransaction(
+              sendAsset(
                 keypair.accountId,
                 transaction.destinationAccount,
                 Asset.create(transaction.amountExpected.asset.toAssetId()),
@@ -134,14 +144,27 @@ class Sep6EventProcessor(
           ),
         )
       PENDING_STELLAR ->
-        sepHelper.rpcAction(
-          RpcMethod.NOTIFY_ONCHAIN_FUNDS_SENT.toString(),
-          NotifyOnchainFundsSentRequest(
-            transactionId = transaction.id,
-            message = "Funds sent to user",
-            stellarTransactionId = onchainPayments[transaction.id]!!,
-          ),
-        )
+        // SAC transfers submitted to RPC are asynchronous, we will need to retry
+        // until the RPC returns a success response
+        flow<Unit> {
+            sepHelper.rpcAction(
+              RpcMethod.NOTIFY_ONCHAIN_FUNDS_SENT.toString(),
+              NotifyOnchainFundsSentRequest(
+                transactionId = transaction.id,
+                message = "Funds sent to user",
+                stellarTransactionId = onchainPayments[transaction.id]!!,
+              ),
+            )
+          }
+          .retryWhen { _, attempt ->
+            if (attempt < 5) {
+              delay(5_000)
+              return@retryWhen true
+            } else {
+              return@retryWhen false
+            }
+          }
+          .collect {}
       COMPLETED -> {
         log.info { "Transaction ${transaction.id} completed" }
       }
@@ -412,7 +435,7 @@ class Sep6EventProcessor(
             transactionId = event.payload.transaction.id,
             message = "Please update your info",
             customerId = existingCustomerId,
-            customerType = "sep6"
+            customerType = "sep6",
           ),
         )
       }
@@ -428,7 +451,14 @@ class Sep6EventProcessor(
     }
   }
 
-  private fun submitStellarTransaction(
+  private fun sendAsset(source: String, destination: String, asset: Asset, amount: String): String {
+    return when (destination[0]) {
+      'C' -> sendToContractAccount(source, destination, asset, amount)
+      else -> sendToClassicAccount(source, destination, asset, amount)
+    }
+  }
+
+  private fun sendToClassicAccount(
     source: String,
     destination: String,
     asset: Asset,
@@ -459,6 +489,54 @@ class Sep6EventProcessor(
     }
     assert(txnResponse.successful)
     return txnResponse.hash
+  }
+
+  private fun sendToContractAccount(
+    source: String,
+    destination: String,
+    asset: Asset,
+    amount: String,
+  ): String {
+    val parameters =
+      mutableListOf(
+        // from=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_ADDRESS)
+          .address(Scv.toAddress(source).address)
+          .build(),
+        // to=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_ADDRESS)
+          .address(Scv.toAddress(destination).address)
+          .build(),
+        SCVal.builder()
+          .discriminant(SCValType.SCV_I128)
+          .i128(Scv.toInt128(BigInteger.valueOf(amount.toLong() * 10000000)).i128)
+          .build(),
+      )
+    val operation =
+      InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
+          asset.getContractId(Network.TESTNET),
+          "transfer",
+          parameters,
+        )
+        .sourceAccount(source)
+        .build()
+
+    val account = rpc.getAccount(source)
+    val transaction =
+      TransactionBuilder(account, Network.TESTNET)
+        .addOperation(operation)
+        .setBaseFee(MIN_BASE_FEE)
+        .setTimeout(300)
+        .build()
+
+    val preparedTransaction = rpc.prepareTransaction(transaction)
+    preparedTransaction.sign(KeyPair.fromSecretSeed(config.appSettings.secret))
+
+    val transactionResponse = rpc.sendTransaction(preparedTransaction)
+
+    return transactionResponse.hash
   }
 
   private suspend fun patchTransaction(data: PlatformTransactionData) {

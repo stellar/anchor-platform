@@ -38,7 +38,6 @@ class Sep45Client(
     val authEntries =
       SorobanAuthorizationEntryList.fromXdrBase64(challengeResponse.authorizationEntries)
         .authorizationEntryList
-    authEntries.forEach { println(it.toXdrBase64()) }
     val walletAuthEntry =
       authEntries.find {
         it.credentials.address.address.discriminant.equals(SCAddressType.SC_ADDRESS_TYPE_CONTRACT)

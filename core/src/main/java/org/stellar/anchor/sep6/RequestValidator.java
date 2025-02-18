@@ -11,7 +11,9 @@ import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.util.StringHelper;
-import org.stellar.sdk.KeyPair;
+import org.stellar.sdk.Address;
+import org.stellar.sdk.MuxedAccount;
+import org.stellar.sdk.scval.Scv;
 
 /** SEP-6 request validations */
 @RequiredArgsConstructor
@@ -113,10 +115,24 @@ public class RequestValidator {
    * @throws SepValidationException if the account is invalid
    */
   public void validateAccount(String account) throws AnchorException {
-    try {
-      KeyPair.fromAccountId(account);
-    } catch (IllegalArgumentException ex) {
-      throw new SepValidationException(String.format("invalid account %s", account));
+    switch (account.charAt(0)) {
+      case 'G':
+      case 'C':
+        try {
+          Address.fromSCAddress(Scv.fromAddress(Scv.toAddress(account)).toSCAddress());
+        } catch (RuntimeException ex) {
+          throw new SepValidationException(String.format("invalid account %s", account));
+        }
+        break;
+      case 'M':
+        try {
+          new MuxedAccount(account);
+        } catch (RuntimeException ex) {
+          throw new SepValidationException(String.format("invalid account %s", account));
+        }
+        break;
+      default:
+        throw new SepValidationException(String.format("invalid account %s", account));
     }
   }
 }
