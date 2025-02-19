@@ -485,12 +485,12 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
 
     waitStatus(withdraw.id, COMPLETED, sep6Client)
 
-    val completedDepositTxn = sep6Client.getTransaction(mapOf("id" to withdraw.id))
+    val completedWithdrawTxn = sep6Client.getTransaction(mapOf("id" to withdraw.id))
     val transactionByStellarId: GetTransactionResponse =
       sep6Client.getTransaction(
-        mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
+        mapOf("stellar_transaction_id" to completedWithdrawTxn.transaction.stellarTransactionId)
       )
-    assertEquals(completedDepositTxn.transaction.id, transactionByStellarId.transaction.id)
+    assertEquals(completedWithdrawTxn.transaction.id, transactionByStellarId.transaction.id)
   }
 
   @Test
@@ -636,12 +636,12 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
 
     waitStatus(withdraw.id, COMPLETED, sep6Client)
 
-    val completedDepositTxn = sep6Client.getTransaction(mapOf("id" to withdraw.id))
+    val completedWithdrawTxn = sep6Client.getTransaction(mapOf("id" to withdraw.id))
     val transactionByStellarId: GetTransactionResponse =
       sep6Client.getTransaction(
-        mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
+        mapOf("stellar_transaction_id" to completedWithdrawTxn.transaction.stellarTransactionId)
       )
-    assertEquals(completedDepositTxn.transaction.id, transactionByStellarId.transaction.id)
+    assertEquals(completedWithdrawTxn.transaction.id, transactionByStellarId.transaction.id)
   }
 
   private suspend fun assertWalletReceivedStatuses(
