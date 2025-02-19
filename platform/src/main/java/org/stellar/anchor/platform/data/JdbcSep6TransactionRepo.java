@@ -25,6 +25,9 @@ public interface JdbcSep6TransactionRepo
   JdbcSep6Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
       String withdrawAnchorAccount, String memo, String status);
 
+  JdbcSep6Transaction findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
+      String withdrawAnchorAccount, String fromAccount, String status);
+
   List<Sep6Transaction> findBySep10AccountAndRequestAssetCodeOrderByStartedAtDesc(
       String sep10Account, String requestAssetCode);
 

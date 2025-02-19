@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.e2etest
 
 import io.ktor.http.*
+import java.math.BigInteger
 import java.net.URI
 import kotlin.test.DefaultAsserter.fail
 import kotlin.test.assertEquals
@@ -26,7 +27,14 @@ import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
 import org.stellar.reference.wallet.WalletServerClient
-import org.stellar.sdk.SorobanServer
+import org.stellar.sdk.*
+import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
+import org.stellar.sdk.Auth.authorizeEntry
+import org.stellar.sdk.operations.InvokeHostFunctionOperation
+import org.stellar.sdk.scval.Scv
+import org.stellar.sdk.xdr.SCVal
+import org.stellar.sdk.xdr.SCValType
+import org.stellar.sdk.xdr.SorobanAuthorizationEntry
 import org.stellar.walletsdk.anchor.MemoType
 import org.stellar.walletsdk.anchor.auth
 import org.stellar.walletsdk.anchor.customer
@@ -37,6 +45,7 @@ import org.stellar.walletsdk.horizon.sign
 open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
   private val maxTries = 30
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
+  private val rpc = SorobanServer("https://soroban-testnet.stellar.org")
   private val gson = GsonUtils.getInstance()
 
   companion object {
@@ -147,11 +156,7 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
     val homeDomain = "http://${URI.create(webAuthDomain).authority}"
 
     val sep45Client =
-      Sep45Client(
-        toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"),
-        SorobanServer("https://soroban-testnet.stellar.org"),
-        CLIENT_WALLET_SECRET,
-      )
+      Sep45Client(toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"), rpc, CLIENT_WALLET_SECRET)
     val challenge =
       sep45Client.getChallenge(
         ChallengeRequest.builder()
@@ -292,11 +297,7 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
     val homeDomain = "http://${URI.create(webAuthDomain).authority}"
 
     val sep45Client =
-      Sep45Client(
-        toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"),
-        SorobanServer("https://soroban-testnet.stellar.org"),
-        CLIENT_WALLET_SECRET,
-      )
+      Sep45Client(toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"), rpc, CLIENT_WALLET_SECRET)
     val challenge =
       sep45Client.getChallenge(
         ChallengeRequest.builder()
@@ -423,6 +424,76 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
   }
 
   @Test
+  fun `test typical withdraw to contract account end-to-end`() = runBlocking {
+    val webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
+    val homeDomain = "http://${URI.create(webAuthDomain).authority}"
+
+    val sep45Client =
+      Sep45Client(toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"), rpc, CLIENT_WALLET_SECRET)
+    val challenge =
+      sep45Client.getChallenge(
+        ChallengeRequest.builder()
+          .account(CLIENT_SMART_WALLET_ACCOUNT)
+          .homeDomain(homeDomain)
+          .build()
+      )
+    val token = sep45Client.validate(sep45Client.sign(challenge)).token
+    val sep12Client = Sep12Client(toml.getString("KYC_SERVER"), token)
+    val sep6Client = Sep6Client("${config.env["anchor.domain"]}/sep6", token)
+
+    val customerRequest =
+      gson.fromJson(
+        gson.toJson(basicInfoFields.associateWith { customerInfo[it]!! }),
+        Sep12PutCustomerRequest::class.java,
+      )
+    val customer = sep12Client.putCustomer(customerRequest)!!
+
+    val withdraw =
+      sep6Client.withdraw(
+        mapOf("asset_code" to USDC.code, "amount" to "1", "type" to "bank_account")
+      )
+    Log.info("Withdrawal initiated: ${withdraw.id}")
+
+    val additionalRequiredFields =
+      sep12Client
+        .getCustomer(customer.id, "sep-6", withdraw.id)!!
+        .fields
+        ?.filter { it.key != null && it.value?.optional == false }
+        ?.map { it.key!! }
+        .orEmpty()
+    val additionalCustomerRequest =
+      gson.fromJson(
+        gson.toJson(additionalRequiredFields.associateWith { customerInfo[it]!! }),
+        Sep12PutCustomerRequest::class.java,
+      )
+    sep12Client.putCustomer(additionalCustomerRequest)
+    Log.info("Submitted additional KYC info: $additionalRequiredFields")
+
+    waitStatus(withdraw.id, PENDING_USR_TRANSFER_START, sep6Client)
+
+    val withdrawTxn = sep6Client.getTransaction(mapOf("id" to withdraw.id)).transaction
+
+    val txHash =
+      transferFunds(
+        CLIENT_SMART_WALLET_ACCOUNT,
+        withdrawTxn.withdrawAnchorAccount,
+        Asset.create(USDC.id),
+        "1",
+        walletKeyPair.keyPair,
+      )
+    Log.info("Transfer complete: $txHash")
+
+    waitStatus(withdraw.id, COMPLETED, sep6Client)
+
+    val completedWithdrawTxn = sep6Client.getTransaction(mapOf("id" to withdraw.id))
+    val transactionByStellarId: GetTransactionResponse =
+      sep6Client.getTransaction(
+        mapOf("stellar_transaction_id" to completedWithdrawTxn.transaction.stellarTransactionId)
+      )
+    assertEquals(completedWithdrawTxn.transaction.id, transactionByStellarId.transaction.id)
+  }
+
+  @Test
   fun `test typical withdraw-exchange without quote end-to-end flow`() = runBlocking {
     val memo = (50000..60000).random().toULong()
     val token = anchor.auth().authenticate(walletKeyPair, memoId = memo)
@@ -497,6 +568,82 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
     assertWalletReceivedCustomerStatuses(customer.id, expectedCustomerStatuses)
   }
 
+  @Test
+  fun `test withdraw-exchange to contract account end-to-end`() = runBlocking {
+    val webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
+    val homeDomain = "http://${URI.create(webAuthDomain).authority}"
+
+    val sep45Client =
+      Sep45Client(toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"), rpc, CLIENT_WALLET_SECRET)
+    val challenge =
+      sep45Client.getChallenge(
+        ChallengeRequest.builder()
+          .account(CLIENT_SMART_WALLET_ACCOUNT)
+          .homeDomain(homeDomain)
+          .build()
+      )
+    val token = sep45Client.validate(sep45Client.sign(challenge)).token
+    val sep12Client = Sep12Client(toml.getString("KYC_SERVER"), token)
+    val sep6Client = Sep6Client("${config.env["anchor.domain"]}/sep6", token)
+
+    val customerRequest =
+      gson.fromJson(
+        gson.toJson(basicInfoFields.associateWith { customerInfo[it]!! }),
+        Sep12PutCustomerRequest::class.java,
+      )
+    val customer = sep12Client.putCustomer(customerRequest)!!
+
+    val withdraw =
+      sep6Client.withdraw(
+        mapOf(
+          "destination_asset" to "iso4217:CAD",
+          "source_asset" to USDC.code,
+          "amount" to "1",
+          "type" to "bank_account",
+        ),
+        exchange = true,
+      )
+    Log.info("Withdrawal initiated: ${withdraw.id}")
+
+    val additionalRequiredFields =
+      sep12Client
+        .getCustomer(customer.id, "sep-6", withdraw.id)!!
+        .fields
+        ?.filter { it.key != null && it.value?.optional == false }
+        ?.map { it.key!! }
+        .orEmpty()
+    val additionalCustomerRequest =
+      gson.fromJson(
+        gson.toJson(additionalRequiredFields.associateWith { customerInfo[it]!! }),
+        Sep12PutCustomerRequest::class.java,
+      )
+    sep12Client.putCustomer(additionalCustomerRequest)
+    Log.info("Submitted additional KYC info: $additionalRequiredFields")
+
+    waitStatus(withdraw.id, PENDING_USR_TRANSFER_START, sep6Client)
+
+    val withdrawTxn = sep6Client.getTransaction(mapOf("id" to withdraw.id)).transaction
+
+    val txHash =
+      transferFunds(
+        CLIENT_SMART_WALLET_ACCOUNT,
+        withdrawTxn.withdrawAnchorAccount,
+        Asset.create(USDC.id),
+        "1",
+        walletKeyPair.keyPair,
+      )
+    Log.info("Transfer complete: $txHash")
+
+    waitStatus(withdraw.id, COMPLETED, sep6Client)
+
+    val completedWithdrawTxn = sep6Client.getTransaction(mapOf("id" to withdraw.id))
+    val transactionByStellarId: GetTransactionResponse =
+      sep6Client.getTransaction(
+        mapOf("stellar_transaction_id" to completedWithdrawTxn.transaction.stellarTransactionId)
+      )
+    assertEquals(completedWithdrawTxn.transaction.id, transactionByStellarId.transaction.id)
+  }
+
   private suspend fun assertWalletReceivedStatuses(
     txnId: String,
     expected: List<SepTransactionStatus>,
@@ -541,5 +688,83 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
       delay(1.seconds)
     }
     fail("Transaction status $status did not match expected status $expectedStatus")
+  }
+
+  private fun transferFunds(
+    source: String,
+    destination: String,
+    asset: Asset,
+    amount: String,
+    signer: KeyPair,
+  ): String {
+    val parameters =
+      mutableListOf(
+        // from=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_ADDRESS)
+          .address(Scv.toAddress(source).address)
+          .build(),
+        // to=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_ADDRESS)
+          .address(Scv.toAddress(destination).address)
+          .build(),
+        SCVal.builder()
+          .discriminant(SCValType.SCV_I128)
+          .i128(Scv.toInt128(BigInteger.valueOf(amount.toLong() * 10000000)).i128)
+          .build(),
+      )
+    val operation =
+      InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
+          asset.getContractId(Network.TESTNET),
+          "transfer",
+          parameters,
+        )
+        .build()
+
+    var account = rpc.getAccount(walletKeyPair.keyPair.accountId)
+    val transaction =
+      TransactionBuilder(account, Network.TESTNET)
+        .addOperation(operation)
+        .setBaseFee(MIN_BASE_FEE)
+        .setTimeout(300)
+        .build()
+
+    val simulationResponse = rpc.simulateTransaction(transaction)
+    val signedAuthEntries = mutableListOf<SorobanAuthorizationEntry>()
+    simulationResponse.results.forEach {
+      it.auth.forEach { entryXdr ->
+        val entry = SorobanAuthorizationEntry.fromXdrBase64(entryXdr)
+        val validUntilLedgerSeq = simulationResponse.latestLedger + 10
+
+        val signedEntry = authorizeEntry(entry, signer, validUntilLedgerSeq, Network.TESTNET)
+        signedAuthEntries.add(signedEntry)
+      }
+    }
+
+    val signedOperation =
+      InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
+          asset.getContractId(Network.TESTNET),
+          "transfer",
+          parameters,
+        )
+        .sourceAccount(walletKeyPair.keyPair.accountId)
+        .auth(signedAuthEntries)
+        .build()
+
+    account = rpc.getAccount(walletKeyPair.keyPair.accountId)
+    val authorizedTransaction =
+      TransactionBuilder(account, Network.TESTNET)
+        .addOperation(signedOperation)
+        .setBaseFee(Transaction.MIN_BASE_FEE)
+        .setTimeout(300)
+        .build()
+
+    val preparedTransaction = rpc.prepareTransaction(authorizedTransaction)
+    preparedTransaction.sign(signer)
+
+    val transactionResponse = rpc.sendTransaction(preparedTransaction)
+
+    return transactionResponse.hash
   }
 }
