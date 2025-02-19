@@ -33,10 +33,7 @@ spec:
               protocol: TCP
           env:
             - name: BUSINESS_SERVER_ENDPOINT
-              valueFrom:
-                configMapKeyRef:
-                  name: sep24-reference-ui-config
-                  key: BUSINESS_SERVER_ENDPOINT
+              value: {{ .Values.config.businessServerEndpoint }}
           resources:
             requests:
               memory: {{ .Values.services.ui.deployment.resources.requests.memory }}
@@ -44,11 +41,3 @@ spec:
             limits:
               memory: {{ .Values.services.ui.deployment.resources.limits.memory }}
               cpu: {{ .Values.services.ui.deployment.resources.limits.cpu }}
-          volumeMounts:
-            - name: config-volume
-              mountPath: /config
-              readOnly: true
-      volumes:
-        - name: config-volume
-          configMap:
-            name: sep24-reference-ui-config
