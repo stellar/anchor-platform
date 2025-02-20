@@ -97,18 +97,18 @@ kubectl get pods
 
 The following output should be displayed:
 ```
-NAME                                                         READY   STATUS              RESTARTS   AGE
-anchor-platform-svc-event-processor-5d44b69766-jslb7         1/1     Running             0          45m
-anchor-platform-svc-observer-5f44cb7bd7-xqqs2                1/1     Running             0          45m
-anchor-platform-svc-platform-8d7bc55f7-ghp5p                 1/1     Running             0          45m
-anchor-platform-svc-sep-7f56755dfc-r29q9                     1/1     Running             0          45m
-kafka-controller-0                                           1/1     Running             0          76m
-kafka-controller-1                                           1/1     Running             0          76m
-kafka-controller-2                                           1/1     Running             0          76m
-postgresql-0                                                 1/1     Running             0          77m
-postgresql-ref-0                                             1/1     Running             0          77m
-reference-server-svc-reference-server-775cfd7d49-wrg9s       1/1     Running             0          44m
-sep24-reference-ui-svc-sep24-reference-ui-5dcc6b8f5b-cffzf   0/1     ContainerCreating   0          4s
+NAME                                                         READY   STATUS    RESTARTS   AGE
+anchor-platform-svc-event-processor-5d44b69766-lgw2d         1/1     Running   0          116m
+anchor-platform-svc-observer-5f44cb7bd7-5kdw2                1/1     Running   0          116m
+anchor-platform-svc-platform-8d7bc55f7-6srkf                 1/1     Running   0          116m
+anchor-platform-svc-sep-7f56755dfc-87gdw                     1/1     Running   0          116m
+kafka-controller-0                                           1/1     Running   0          117m
+kafka-controller-1                                           1/1     Running   0          117m
+kafka-controller-2                                           1/1     Running   0          117m
+postgresql-0                                                 1/1     Running   0          117m
+postgresql-ref-0                                             1/1     Running   0          117m
+reference-server-svc-reference-server-775cfd7d49-l27ct       1/1     Running   0          116m
+sep24-reference-ui-svc-sep24-reference-ui-5bf7cd5d4f-8hkbx   1/1     Running   0          55m
 ```
 
 ```bash
@@ -142,9 +142,22 @@ helm upgrade --install ingress-nginx ingress-nginx \
 ```
 
 ## Set up port forwarding 
-Port forward the ingress controller, reference server, and SEP-24 Reference UI
+Set up kube port forwarding for debugging.
+### Ingress controller
 ```bash
 kubectl port-forward svc/ingress-nginx-controller 8080:80 -n ingress-nginx &
+```
+### SEP server
+```bash
+kubectl port-forward svc/anchor-platform-svc-sep 8080:8080 -n default &
+```
+
+### Reference business server
+```bash
 kubectl port-forward svc/reference-server-svc-reference-server 8091:8091 -n default &
+```
+
+### SEP-24 Reference UI
+```bash
 kubectl port-forward svc/sep24-reference-ui-svc-sep24-reference-ui 3000:3000 -n default &
 ```
