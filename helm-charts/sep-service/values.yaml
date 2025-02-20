@@ -128,7 +128,7 @@ config:
     interactive_url:
       base_url: http://localhost:3000
     more_info_url:
-      base_url: http://localhost:3000
+      base_url: http://localhost:3000/txn
 
 ingress:
   name: ingress-anchor-platform
