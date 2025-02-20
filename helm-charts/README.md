@@ -2,7 +2,8 @@
 
 The following instructions will guide you through the process of setting up the Anchor Platform on a local Kubernetes cluster using Minikube.
 
-## Optionally clone the Anchor Platform repository
+## Clone the repository
+Clone the Anchor Platform repository and change working folder to the helm-charts directory.
 ```bash
 
 git clone git@github.com:stellar/anchor-platform.git
@@ -26,20 +27,23 @@ helm install external-secrets \
 ```
 
 ## Install postgres and postgres-ref
+To install `postgresql` and `postgresql-ref`, run the following commands:
 ```bash
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm install postgresql-ref bitnami/postgresql --version 15.1.2 --set global.postgresql.auth.postgresPassword=123456789
 helm install postgresql bitnami/postgresql --version 15.1.2 --set global.postgresql.auth.postgresPassword=123456789
 ```
+This should only be run one time.
 
 ## Install Kafka
+To install Kafka, run the following commands:
 ```bash
 kubectl create secret generic ap-kafka-secrets --from-literal=client-passwords=123456789 --from-literal=controller-password=123456789 --from-literal=inter-broker-password=123456789 --from-literal=system-user-password=123456789
 helm install kafka bitnami/kafka --version 27.1.2 --set sasl.existingSecret=ap-kafka-secrets
 ```
+This should only be run one time.
 
 ## Install and check the secret store `fake-secret-store`
-To install the fake secret store, run the following command:
 ```bash
 helm upgrade --install fake-secret-store ./secret-store/
 ```
@@ -140,6 +144,8 @@ helm upgrade --install ingress-nginx ingress-nginx \
   --repo https://kubernetes.github.io/ingress-nginx \
   --namespace ingress-nginx --create-namespace
 ```
+
+This should only be run one time.
 
 ## Set up port forwarding 
 Set up kube port forwarding for debugging.
