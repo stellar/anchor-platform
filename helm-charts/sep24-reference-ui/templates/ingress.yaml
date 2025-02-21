@@ -25,7 +25,7 @@ spec:
         - {{ .Values.ingress.tls.host }}
     {{- end }}
     {{- if .Values.ingress.tls.secretName }}
-    secretName: {{ .Values.ingress.tls.secretName }}
+      secretName: {{ .Values.ingress.tls.secretName }}
     {{- end }}
   {{- end }}
   rules:
