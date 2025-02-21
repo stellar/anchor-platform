@@ -31,7 +31,8 @@ services:
           cpu: 1
 ingress:
   name: ingress-reference-server
-  host: reference-server.local
+  rules:
+    host: reference-server.local
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
