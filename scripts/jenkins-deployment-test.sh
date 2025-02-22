@@ -1,7 +1,7 @@
 #!/bin/bash
 
 export APP_NAME=anchor-platform
-export NAMESPACE=${NAMESPACE:-anchor-platform-stg}
+export NAMESPACE=${NAMESPACE:-anchor-platform-dev}
 export LABEL=`curl --silent -X GET "https://docker-registry.services.stellar-ops.com/api/v2.0/projects/dev/repositories/anchor-platform/artifacts?page=1&page_size=5" | jq -r '.[].tags[].name' 2>/dev/null`
 export kubeconfig=~/.kube/config
 
