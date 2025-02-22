@@ -1,9 +1,16 @@
 package org.stellar.anchor.platform.config;
 
+import static org.stellar.anchor.util.StringHelper.isEmpty;
+
+import org.jetbrains.annotations.NotNull;
+import org.springframework.validation.Errors;
+import org.springframework.validation.Validator;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.platform.configurator.SecretManager;
+import org.stellar.anchor.util.KeyUtil;
+import org.stellar.sdk.KeyPair;
 
-public class PropertySecretConfig implements SecretConfig {
+public class PropertySecretConfig implements SecretConfig, Validator {
 
   public static final String SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET =
       "secret.sep6.more_info_url.jwt_secret";
@@ -86,5 +93,28 @@ public class PropertySecretConfig implements SecretConfig {
   @Override
   public String getEventsQueueKafkaPassword() {
     return SecretManager.getInstance().get(SECRET_EVENTS_QUEUE_KAFKA_PASSWORD);
+  }
+
+  @Override
+  public boolean supports(@NotNull Class<?> clazz) {
+    return PropertySecretConfig.class.isAssignableFrom(clazz);
+  }
+
+  @Override
+  public void validate(@NotNull Object target, @NotNull Errors errors) {
+    PropertySecretConfig config = (PropertySecretConfig) target;
+
+    if (!isEmpty(config.getSep45JwtSecretKey())) {
+      KeyUtil.rejectWeakJWTSecret(config.getSep45JwtSecretKey(), errors, "secret.sep45.jwt_secret");
+    }
+
+    if (!isEmpty(config.getSep45SimulatingSigningSeed())) {
+      try {
+        KeyPair.fromSecretSeed(config.getSep45SimulatingSigningSeed());
+      } catch (Throwable ex) {
+        errors.reject(
+            "sep45-simulating-seed-invalid", "The secret.sep45.simulating_seed is not valid.");
+      }
+    }
   }
 }
