@@ -7,7 +7,6 @@ import java.time.Instant
 import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -37,8 +36,10 @@ import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.config.Sep6Config
 import org.stellar.anchor.event.EventService
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator.Amounts
+import org.stellar.anchor.util.ExchangeAmountsCalculator
+import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.SepRequestValidator
 
 class Sep6ServiceTest {
   companion object {
@@ -50,7 +51,7 @@ class Sep6ServiceTest {
 
   @MockK(relaxed = true) lateinit var appConfig: AppConfig
   @MockK(relaxed = true) lateinit var sep6Config: Sep6Config
-  @MockK(relaxed = true) lateinit var requestValidator: RequestValidator
+  @MockK(relaxed = true) lateinit var requestValidator: SepRequestValidator
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
   @MockK(relaxed = true) lateinit var txnStore: Sep6TransactionStore
   @MockK(relaxed = true) lateinit var exchangeAmountsCalculator: ExchangeAmountsCalculator
@@ -93,7 +94,7 @@ class Sep6ServiceTest {
     val infoResponse = sep6Service.info
     assertEquals(
       gson.fromJson(Sep6ServiceTestData.infoJson, InfoResponse::class.java),
-      infoResponse
+      infoResponse,
     )
   }
 
@@ -139,7 +140,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositTxnJson,
       gson.toJson(slotTxn.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotTxn.captured.id.isNotEmpty())
     assertNotNull(slotTxn.captured.startedAt)
@@ -147,17 +148,17 @@ class Sep6ServiceTest {
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
     Assertions.assertTrue(
       dbDeadline >= expectedDeadline - 2,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
     Assertions.assertTrue(
       dbDeadline <= expectedDeadline,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
 
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositTxnEventJson,
       gson.toJson(slotEvent.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotEvent.captured.id.isNotEmpty())
     assert(slotEvent.captured.transaction.id.isNotEmpty())
@@ -168,7 +169,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositResJson,
       gson.toJson(response),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -194,7 +195,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositTxnJsonWithoutAmountOrType,
       gson.toJson(slotTxn.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotTxn.captured.id.isNotEmpty())
     assertNotNull(slotTxn.captured.startedAt)
@@ -202,7 +203,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositTxnEventWithoutAmountOrTypeJson,
       gson.toJson(slotEvent.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotEvent.captured.id.isNotEmpty())
     assert(slotEvent.captured.transaction.id.isNotEmpty())
@@ -213,7 +214,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositResJson,
       gson.toJson(response),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -399,7 +400,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositExchangeTxnJson,
       gson.toJson(slotTxn.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotTxn.captured.id.isNotEmpty())
     assertNotNull(slotTxn.captured.startedAt)
@@ -407,17 +408,17 @@ class Sep6ServiceTest {
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
     Assertions.assertTrue(
       dbDeadline >= expectedDeadline - 2,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
     Assertions.assertTrue(
       dbDeadline <= expectedDeadline,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
 
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositExchangeTxnEventJson,
       gson.toJson(slotEvent.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotEvent.captured.id.isNotEmpty())
     assert(slotEvent.captured.transaction.id.isNotEmpty())
@@ -428,7 +429,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositResJson,
       gson.toJson(response),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -477,7 +478,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositExchangeTxnWithoutQuoteJson,
       gson.toJson(slotTxn.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotTxn.captured.id.isNotEmpty())
     assertNotNull(slotTxn.captured.startedAt)
@@ -485,7 +486,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositExchangeTxnEventWithoutQuoteJson,
       gson.toJson(slotEvent.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotEvent.captured.id.isNotEmpty())
     assert(slotEvent.captured.transaction.id.isNotEmpty())
@@ -496,7 +497,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.depositResJson,
       gson.toJson(response),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -695,7 +696,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawTxnJson,
       gson.toJson(slotTxn.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotTxn.captured.id.isNotEmpty())
     assertNotNull(slotTxn.captured.startedAt)
@@ -703,17 +704,17 @@ class Sep6ServiceTest {
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
     Assertions.assertTrue(
       dbDeadline >= expectedDeadline - 2,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
     Assertions.assertTrue(
       dbDeadline <= expectedDeadline,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
 
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawTxnEventJson,
       gson.toJson(slotEvent.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotEvent.captured.id.isNotEmpty())
     assert(slotEvent.captured.transaction.id.isNotEmpty())
@@ -725,7 +726,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawResJson,
       gson.toJson(response),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -782,7 +783,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawTxnWithoutAmountOrTypeJson,
       gson.toJson(slotTxn.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotTxn.captured.id.isNotEmpty())
     assertNotNull(slotTxn.captured.startedAt)
@@ -790,7 +791,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawTxnEventWithoutAmountOrTypeJson,
       gson.toJson(slotEvent.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotEvent.captured.id.isNotEmpty())
     assert(slotEvent.captured.transaction.id.isNotEmpty())
@@ -802,7 +803,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawResJson,
       gson.toJson(response),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -984,7 +985,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawExchangeTxnJson,
       gson.toJson(slotTxn.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotTxn.captured.id.isNotEmpty())
     assertNotNull(slotTxn.captured.startedAt)
@@ -992,7 +993,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawExchangeTxnEventJson,
       gson.toJson(slotEvent.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotEvent.captured.id.isNotEmpty())
     assert(slotEvent.captured.transaction.id.isNotEmpty())
@@ -1004,7 +1005,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawResJson,
       gson.toJson(response),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -1055,7 +1056,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawExchangeTxnWithoutQuoteJson,
       gson.toJson(slotTxn.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotTxn.captured.id.isNotEmpty())
     assertNotNull(slotTxn.captured.startedAt)
@@ -1063,17 +1064,17 @@ class Sep6ServiceTest {
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
     Assertions.assertTrue(
       dbDeadline >= expectedDeadline - 2,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
     Assertions.assertTrue(
       dbDeadline <= expectedDeadline,
-      "Expected $expectedDeadline got $dbDeadline}"
+      "Expected $expectedDeadline got $dbDeadline}",
     )
 
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawExchangeTxnWithoutQuoteEventJson,
       gson.toJson(slotEvent.captured),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     assert(slotEvent.captured.id.isNotEmpty())
     assert(slotEvent.captured.transaction.id.isNotEmpty())
@@ -1085,7 +1086,7 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(
       Sep6ServiceTestData.withdrawResJson,
       gson.toJson(response),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -1420,7 +1421,7 @@ class Sep6ServiceTest {
 
   private fun createDepositTxn(
     sep10Account: String,
-    sep10AccountMemo: String? = null
+    sep10AccountMemo: String? = null,
   ): Sep6Transaction {
     val txn = PojoSep6Transaction()
 

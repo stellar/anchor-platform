@@ -1,4 +1,4 @@
-package org.stellar.anchor.sep6
+package org.stellar.anchor.util
 
 import io.mockk.MockKAnnotations
 import io.mockk.every
@@ -18,7 +18,7 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.sep38.PojoSep38Quote
 import org.stellar.anchor.sep38.Sep38QuoteStore
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator.Amounts
+import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts
 
 class ExchangeAmountsCalculatorTest {
   companion object {
@@ -64,7 +64,7 @@ class ExchangeAmountsCalculatorTest {
         .amountOutAsset("iso4217:USD")
         .feeDetails(FeeDetails("2", "iso4217:USD"))
         .build(),
-      result
+      result,
     )
   }
 
@@ -112,7 +112,7 @@ class ExchangeAmountsCalculatorTest {
         quoteId,
         assetService.getAsset("USDC"),
         assetService.getAsset("JPYC"),
-        "100"
+        "100",
       )
     }
   }

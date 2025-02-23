@@ -43,10 +43,11 @@ import org.stellar.anchor.config.*
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.sep38.PojoSep38Quote
 import org.stellar.anchor.sep38.Sep38QuoteStore
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator
 import org.stellar.anchor.setupMock
+import org.stellar.anchor.util.ExchangeAmountsCalculator
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.MemoHelper.makeMemo
+import org.stellar.anchor.util.SepRequestValidator
 import org.stellar.sdk.MemoHash
 import org.stellar.sdk.MemoId
 import org.stellar.sdk.MemoText
@@ -120,6 +121,7 @@ internal class Sep24ServiceTest {
 
   private val assetService: AssetService = DefaultAssetService.fromJsonResource("test_assets.json")
 
+  private lateinit var requestValidator: SepRequestValidator
   private lateinit var jwtService: JwtService
   private lateinit var sep24Service: Sep24Service
   private lateinit var testInteractiveUrlJwt: Sep24InteractiveUrlJwt
@@ -135,6 +137,7 @@ internal class Sep24ServiceTest {
     secretConfig.setupMock()
     every { txnStore.newInstance() } returns PojoSep24Transaction()
 
+    requestValidator = spyk(SepRequestValidator(assetService))
     jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
     testInteractiveUrlJwt = createTestInteractiveJwt(null)
     val strToken = jwtService.encode(testInteractiveUrlJwt)
@@ -167,6 +170,7 @@ internal class Sep24ServiceTest {
         sep24Config,
         clientService,
         assetService,
+        requestValidator,
         jwtService,
         clientFinder,
         txnStore,

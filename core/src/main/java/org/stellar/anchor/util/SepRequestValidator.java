@@ -1,4 +1,4 @@
-package org.stellar.anchor.sep6;
+package org.stellar.anchor.util;
 
 import static org.stellar.anchor.util.AssetHelper.isDepositEnabled;
 import static org.stellar.anchor.util.AssetHelper.isWithdrawEnabled;
@@ -10,14 +10,13 @@ import lombok.RequiredArgsConstructor;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.util.StringHelper;
 import org.stellar.sdk.Address;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.scval.Scv;
 
-/** SEP-6 request validations */
+/** SEP request validations */
 @RequiredArgsConstructor
-public class RequestValidator {
+public class SepRequestValidator {
   @NonNull private final AssetService assetService;
 
   /**

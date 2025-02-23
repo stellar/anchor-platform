@@ -52,17 +52,21 @@ import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator;
 import org.stellar.anchor.util.*;
-import org.stellar.sdk.KeyPair;
+import org.stellar.anchor.util.ExchangeAmountsCalculator;
+import org.stellar.anchor.util.SepRequestValidator;
 import org.stellar.sdk.Memo;
 
 public class Sep24Service {
 
+  public static final List<String> INTERACTIVE_URL_JWT_REQUIRED_FIELDS_FROM_REQUEST =
+      List.of("amount", "client_domain", "lang", "customer_id");
+  public static String ERR_TOKEN_ACCOUNT_MISMATCH = "'account' does not match the one in the token";
   final AppConfig appConfig;
   final Sep24Config sep24Config;
   final ClientService clientService;
   final AssetService assetService;
+  final SepRequestValidator requestValidator;
   final JwtService jwtService;
   final ClientFinder clientFinder;
   final Sep24TransactionStore txnStore;
@@ -71,7 +75,6 @@ public class Sep24Service {
   final MoreInfoUrlConstructor moreInfoUrlConstructor;
   final CustodyConfig custodyConfig;
   final ExchangeAmountsCalculator exchangeAmountsCalculator;
-
   final Counter sep24TransactionRequestedCounter =
       counter(MetricConstants.SEP24_TRANSACTION_REQUESTED);
   final Counter sep24TransactionQueriedCounter = counter(MetricConstants.SEP24_TRANSACTION_QUERIED);
@@ -86,15 +89,12 @@ public class Sep24Service {
           MetricConstants.TYPE,
           MetricConstants.TV_SEP24_DEPOSIT);
 
-  public static final List<String> INTERACTIVE_URL_JWT_REQUIRED_FIELDS_FROM_REQUEST =
-      List.of("amount", "client_domain", "lang", "customer_id");
-  public static String ERR_TOKEN_ACCOUNT_MISMATCH = "'account' does not match the one in the token";
-
   public Sep24Service(
       AppConfig appConfig,
       Sep24Config sep24Config,
       ClientService clientsService,
       AssetService assetService,
+      SepRequestValidator requestValidator,
       JwtService jwtService,
       ClientFinder clientFinder,
       Sep24TransactionStore txnStore,
@@ -109,6 +109,7 @@ public class Sep24Service {
     this.sep24Config = sep24Config;
     this.clientService = clientsService;
     this.assetService = assetService;
+    this.requestValidator = requestValidator;
     this.jwtService = jwtService;
     this.clientFinder = clientFinder;
     this.txnStore = txnStore;
@@ -185,13 +186,7 @@ public class Sep24Service {
     }
 
     // Validate sourceAccount
-    try {
-      debugF("checking if withdraw source account:{} is valid", sourceAccount);
-      KeyPair.fromAccountId(sourceAccount);
-    } catch (IllegalArgumentException ex) {
-      infoF("invalid account format: {}", sourceAccount);
-      throw new SepValidationException(String.format("invalid account: %s", sourceAccount), ex);
-    }
+    requestValidator.validateAccount(sourceAccount);
 
     if (token.getClientDomain() != null)
       withdrawRequest.put("client_domain", token.getClientDomain());
@@ -380,14 +375,8 @@ public class Sep24Service {
       }
     }
 
-    try {
-      debugF("checking if deposit destination account:{} is valid", destinationAccount);
-      KeyPair.fromAccountId(destinationAccount);
-    } catch (IllegalArgumentException ex) {
-      infoF("invalid account format: {}", destinationAccount);
-      throw new SepValidationException(
-          String.format("invalid account: %s", destinationAccount), ex);
-    }
+    // validate destination account
+    requestValidator.validateAccount(destinationAccount);
 
     if (token.getClientDomain() != null)
       depositRequest.put("client_domain", token.getClientDomain());

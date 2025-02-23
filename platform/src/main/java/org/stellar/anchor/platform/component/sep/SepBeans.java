@@ -34,10 +34,10 @@ import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.sep38.Sep38Service;
 import org.stellar.anchor.sep45.Sep45Service;
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator;
-import org.stellar.anchor.sep6.RequestValidator;
 import org.stellar.anchor.sep6.Sep6Service;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
+import org.stellar.anchor.util.ExchangeAmountsCalculator;
+import org.stellar.anchor.util.SepRequestValidator;
 
 /** SEP configurations */
 @Configuration
@@ -122,17 +122,23 @@ public class SepBeans {
   }
 
   @Bean
+  @OnAnySepsEnabled(seps = {"sep6", "sep24"})
+  SepRequestValidator sepRequestValidator(AssetService assetService) {
+    return new SepRequestValidator(assetService);
+  }
+
+  @Bean
   @OnAllSepsEnabled(seps = {"sep6"})
   Sep6Service sep6Service(
       AppConfig appConfig,
       Sep6Config sep6Config,
       AssetService assetService,
+      SepRequestValidator requestValidator,
       ClientFinder clientFinder,
       Sep6TransactionStore txnStore,
       EventService eventService,
       Sep38QuoteStore sep38QuoteStore,
       @Qualifier("sep6MoreInfoUrlConstructor") MoreInfoUrlConstructor sep6MoreInfoUrlConstructor) {
-    RequestValidator requestValidator = new RequestValidator(assetService);
     ExchangeAmountsCalculator exchangeAmountsCalculator =
         new ExchangeAmountsCalculator(sep38QuoteStore);
     return new Sep6Service(
@@ -176,6 +182,7 @@ public class SepBeans {
       Sep24Config sep24Config,
       ClientService clientService,
       AssetService assetService,
+      SepRequestValidator requestValidator,
       JwtService jwtService,
       ClientFinder clientFinder,
       Sep24TransactionStore sep24TransactionStore,
@@ -191,6 +198,7 @@ public class SepBeans {
         sep24Config,
         clientService,
         assetService,
+        requestValidator,
         jwtService,
         clientFinder,
         sep24TransactionStore,

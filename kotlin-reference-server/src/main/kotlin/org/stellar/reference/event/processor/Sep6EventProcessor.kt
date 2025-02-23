@@ -1,7 +1,5 @@
 package org.stellar.reference.event.processor
 
-import java.math.BigDecimal
-import java.math.BigInteger
 import java.time.Instant
 import java.util.*
 import kotlinx.coroutines.delay
@@ -16,26 +14,23 @@ import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
 import org.stellar.anchor.api.rpc.method.RpcMethod
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
 import org.stellar.reference.callbacks.customer.CustomerService
+import org.stellar.reference.client.PaymentClient
 import org.stellar.reference.client.PlatformClient
 import org.stellar.reference.data.*
 import org.stellar.reference.log
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.transactionWithRetry
-import org.stellar.sdk.*
-import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
-import org.stellar.sdk.exception.BadRequestException
-import org.stellar.sdk.operations.InvokeHostFunctionOperation
-import org.stellar.sdk.operations.PaymentOperation
-import org.stellar.sdk.responses.TransactionResponse
-import org.stellar.sdk.scval.Scv
-import org.stellar.sdk.xdr.SCVal
-import org.stellar.sdk.xdr.SCValType
+import org.stellar.sdk.Asset
+import org.stellar.sdk.KeyPair
+import org.stellar.sdk.Server
+import org.stellar.sdk.SorobanServer
 
 class Sep6EventProcessor(
   private val config: Config,
   private val server: Server,
   private val rpc: SorobanServer,
   private val platformClient: PlatformClient,
+  private val paymentClient: PaymentClient,
   private val customerService: CustomerService,
   private val sepHelper: SepHelper,
   /** Map of transaction ID to Stellar transaction ID. */
@@ -112,8 +107,7 @@ class Sep6EventProcessor(
         } else {
           transactionWithRetry {
             stellarTxnId =
-              sendAsset(
-                keypair.accountId,
+              paymentClient.send(
                 transaction.destinationAccount,
                 Asset.create(transaction.amountExpected.asset.toAssetId()),
                 // If no amount was specified at transaction initialization, assume the user
@@ -449,94 +443,6 @@ class Sep6EventProcessor(
       2 -> parts[1]
       else -> throw RuntimeException("Invalid asset format: $this")
     }
-  }
-
-  private fun sendAsset(source: String, destination: String, asset: Asset, amount: String): String {
-    return when (destination[0]) {
-      'C' -> sendToContractAccount(source, destination, asset, amount)
-      else -> sendToClassicAccount(source, destination, asset, amount)
-    }
-  }
-
-  private fun sendToClassicAccount(
-    source: String,
-    destination: String,
-    asset: Asset,
-    amount: String,
-  ): String {
-    // TODO: use Kotlin wallet SDK
-    val account = server.accounts().account(source)
-    val transaction =
-      TransactionBuilder(account, Network.TESTNET)
-        .setBaseFee(100)
-        .addPreconditions(
-          TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(60)).build()
-        )
-        .addOperation(
-          PaymentOperation.builder()
-            .destination(destination)
-            .asset(asset)
-            .amount(BigDecimal(amount))
-            .build()
-        )
-        .build()
-    transaction.sign(KeyPair.fromSecretSeed(config.appSettings.secret))
-    val txnResponse: TransactionResponse
-    try {
-      txnResponse = server.submitTransaction(transaction)
-    } catch (e: BadRequestException) {
-      throw RuntimeException("Error submitting transaction: ${e.problem?.extras?.resultCodes}")
-    }
-    assert(txnResponse.successful)
-    return txnResponse.hash
-  }
-
-  private fun sendToContractAccount(
-    source: String,
-    destination: String,
-    asset: Asset,
-    amount: String,
-  ): String {
-    val parameters =
-      mutableListOf(
-        // from=
-        SCVal.builder()
-          .discriminant(SCValType.SCV_ADDRESS)
-          .address(Scv.toAddress(source).address)
-          .build(),
-        // to=
-        SCVal.builder()
-          .discriminant(SCValType.SCV_ADDRESS)
-          .address(Scv.toAddress(destination).address)
-          .build(),
-        SCVal.builder()
-          .discriminant(SCValType.SCV_I128)
-          .i128(Scv.toInt128(BigInteger.valueOf(amount.toLong() * 10000000)).i128)
-          .build(),
-      )
-    val operation =
-      InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
-          asset.getContractId(Network.TESTNET),
-          "transfer",
-          parameters,
-        )
-        .sourceAccount(source)
-        .build()
-
-    val account = rpc.getAccount(source)
-    val transaction =
-      TransactionBuilder(account, Network.TESTNET)
-        .addOperation(operation)
-        .setBaseFee(MIN_BASE_FEE)
-        .setTimeout(300)
-        .build()
-
-    val preparedTransaction = rpc.prepareTransaction(transaction)
-    preparedTransaction.sign(KeyPair.fromSecretSeed(config.appSettings.secret))
-
-    val transactionResponse = rpc.sendTransaction(preparedTransaction)
-
-    return transactionResponse.hash
   }
 
   private suspend fun patchTransaction(data: PlatformTransactionData) {
