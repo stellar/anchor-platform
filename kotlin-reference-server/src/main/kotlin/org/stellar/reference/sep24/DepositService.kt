@@ -159,14 +159,27 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
     asset: String,
     amount: BigDecimal,
   ) {
+    // SAC transfers submitted to RPC are asynchronous, we will need to retry
+    // until the RPC returns a success response
     if (cfg.appSettings.rpcEnabled) {
-      sep24.rpcAction(
-        "notify_onchain_funds_sent",
-        NotifyOnchainFundsSentRequest(
-          transactionId = transactionId,
-          stellarTransactionId = stellarTransactionId,
-        ),
-      )
+      flow<Unit> {
+          sep24.rpcAction(
+            "notify_onchain_funds_sent",
+            NotifyOnchainFundsSentRequest(
+              transactionId = transactionId,
+              stellarTransactionId = stellarTransactionId,
+            ),
+          )
+        }
+        .retryWhen { _, attempt ->
+          if (attempt < 5) {
+            delay(5_000)
+            return@retryWhen true
+          } else {
+            return@retryWhen false
+          }
+        }
+        .collect {}
     } else {
       val operationId: Long = getFirstOperationIdWithRetry(stellarTransactionId)
 
