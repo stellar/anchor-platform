@@ -4,7 +4,7 @@ metadata:
   name: {{ .Values.ingress.name }}
   namespace: {{ .Values.namespace }}
   annotations:
-    {{- $annotations := dict "nginx.ingress.kubernetes.io/custom-headers" (printf "%s/%s-configmap" .Values.namespace .Values.ingress.name) }}
+    {{- $annotations := dict }}
     {{- if .Values.ingress.annotations }}
       {{- $annotations = merge $annotations .Values.ingress.annotations }}
     {{- end }}
