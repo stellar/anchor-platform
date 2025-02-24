@@ -13,7 +13,7 @@ class TestHelper {
     const val TEST_ACCOUNT = "GBJDSMTMG4YBP27ZILV665XBISBBNRP62YB7WZA2IQX2HIPK7ABLF4C2"
     const val TEST_MEMO = "123456"
 
-    fun createSep10Jwt(
+    fun createWebAuthJwt(
       account: String = TEST_ACCOUNT,
       accountMemo: String? = null,
       hostUrl: String = "",
