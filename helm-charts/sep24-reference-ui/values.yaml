@@ -26,7 +26,8 @@ services:
           cpu: 1
 ingress:
   name: ingress-sep24-reference-ui
-  host: sep24-reference-ui.local
+  rules:
+    host: sep24-reference-ui.local
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
