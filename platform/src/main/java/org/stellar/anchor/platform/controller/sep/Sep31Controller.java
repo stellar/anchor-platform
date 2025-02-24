@@ -47,9 +47,9 @@ public class Sep31Controller {
   public Sep31PostTransactionResponse postTransaction(
       HttpServletRequest servletRequest, @RequestBody Sep31PostTransactionRequest request)
       throws AnchorException {
-    WebAuthJwt sep10Jwt = Sep10Helper.getSep10Token(servletRequest);
+    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(servletRequest);
     debugF("POST /transactions request={}", request);
-    return sep31Service.postTransaction(sep10Jwt, request);
+    return sep31Service.postTransaction(webAuthJwt, request);
   }
 
   @CrossOrigin(origins = "*")

@@ -22,7 +22,7 @@ import org.stellar.anchor.sep6.ExchangeAmountsCalculator.Amounts
 
 class ExchangeAmountsCalculatorTest {
   companion object {
-    val token = TestHelper.createSep10Jwt(TEST_ACCOUNT, TestConstants.TEST_MEMO)
+    val token = TestHelper.createWebAuthJwt(TEST_ACCOUNT, TestConstants.TEST_MEMO)
   }
 
   private val assetService: AssetService = DefaultAssetService.fromJsonResource("test_assets.json")
@@ -64,7 +64,7 @@ class ExchangeAmountsCalculatorTest {
         .amountOutAsset("iso4217:USD")
         .feeDetails(FeeDetails("2", "iso4217:USD"))
         .build(),
-      result
+      result,
     )
   }
 
@@ -112,7 +112,7 @@ class ExchangeAmountsCalculatorTest {
         quoteId,
         assetService.getAsset("USDC"),
         assetService.getAsset("JPYC"),
-        "100"
+        "100",
       )
     }
   }

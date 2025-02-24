@@ -126,25 +126,25 @@ public class Sep12Service {
     return Sep12PutCustomerResponse.builder().id(updatedCustomer.getId()).build();
   }
 
-  public void deleteCustomer(WebAuthJwt sep10Jwt, String account, String memo, String memoType)
+  public void deleteCustomer(WebAuthJwt token, String account, String memo, String memoType)
       throws AnchorException {
     boolean isAccountAuthenticated =
-        Stream.of(sep10Jwt.getAccount(), sep10Jwt.getMuxedAccount())
+        Stream.of(token.getAccount(), token.getMuxedAccount())
             .filter(Objects::nonNull)
             .anyMatch(tokenAccount -> Objects.equals(tokenAccount, account));
 
     boolean isMemoMissingAuthentication = false;
-    String muxedAccountId = Objects.toString(sep10Jwt.getMuxedAccountId(), null);
+    String muxedAccountId = Objects.toString(token.getMuxedAccountId(), null);
     if (muxedAccountId != null) {
-      if (!Objects.equals(sep10Jwt.getMuxedAccount(), account)) {
+      if (!Objects.equals(token.getMuxedAccount(), account)) {
         isMemoMissingAuthentication = !Objects.equals(muxedAccountId, memo);
       }
-    } else if (sep10Jwt.getAccountMemo() != null) {
-      isMemoMissingAuthentication = !Objects.equals(sep10Jwt.getAccountMemo(), memo);
+    } else if (token.getAccountMemo() != null) {
+      isMemoMissingAuthentication = !Objects.equals(token.getAccountMemo(), memo);
     }
 
     if (!isAccountAuthenticated || isMemoMissingAuthentication) {
-      infoF("Requester ({}) not authorized to delete account ({})", sep10Jwt.getAccount(), account);
+      infoF("Requester ({}) not authorized to delete account ({})", token.getAccount(), account);
       throw new SepNotAuthorizedException(
           String.format("Not authorized to delete account [%s] with memo [%s]", account, memo));
     }

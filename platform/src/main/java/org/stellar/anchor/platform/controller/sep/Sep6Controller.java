@@ -58,7 +58,7 @@ public class Sep6Controller {
           Boolean claimableBalancesSupported)
       throws AnchorException {
     debugF("GET /deposit");
-    WebAuthJwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     StartDepositRequest startDepositRequest =
         StartDepositRequest.builder()
             .assetCode(assetCode)
@@ -100,7 +100,7 @@ public class Sep6Controller {
           Boolean claimableBalancesSupported)
       throws AnchorException {
     debugF("GET /deposit-exchange");
-    WebAuthJwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     StartDepositExchangeRequest startDepositExchangeRequest =
         StartDepositExchangeRequest.builder()
             .destinationAsset(destinationAsset)
@@ -135,7 +135,7 @@ public class Sep6Controller {
       @RequestParam(value = "refundMemoType", required = false) String refundMemoType)
       throws AnchorException {
     debugF("GET /withdraw");
-    WebAuthJwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     StartWithdrawRequest startWithdrawRequest =
         StartWithdrawRequest.builder()
             .assetCode(assetCode)
@@ -167,7 +167,7 @@ public class Sep6Controller {
       @RequestParam(value = "refund_memo_type", required = false) String refundMemoType)
       throws AnchorException {
     debugF("GET /withdraw-exchange");
-    WebAuthJwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     StartWithdrawExchangeRequest startWithdrawExchangeRequest =
         StartWithdrawExchangeRequest.builder()
             .sourceAsset(sourceAsset)
@@ -206,7 +206,7 @@ public class Sep6Controller {
         pagingId,
         noOlderThan,
         lang);
-    WebAuthJwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     GetTransactionsRequest getTransactionsRequest =
         GetTransactionsRequest.builder()
             .assetCode(assetCode)
@@ -239,7 +239,7 @@ public class Sep6Controller {
         stellarTransactionId,
         externalTransactionId,
         lang);
-    WebAuthJwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     GetTransactionRequest getTransactionRequest =
         GetTransactionRequest.builder()
             .id(id)

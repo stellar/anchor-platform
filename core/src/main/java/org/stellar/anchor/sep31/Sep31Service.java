@@ -100,10 +100,10 @@ public class Sep31Service {
 
   @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
   public Sep31PostTransactionResponse postTransaction(
-      WebAuthJwt sep10Jwt, Sep31PostTransactionRequest request) throws AnchorException {
+      WebAuthJwt webAuthJwt, Sep31PostTransactionRequest request) throws AnchorException {
     Context.reset();
     Context.get().setRequest(request);
-    Context.get().setSep10Jwt(sep10Jwt);
+    Context.get().setWebAuthJwt(webAuthJwt);
 
     StellarAssetInfo assetInfo =
         (StellarAssetInfo) assetService.getAsset(request.getAssetCode(), request.getAssetIssuer());
@@ -139,7 +139,8 @@ public class Sep31Service {
      */
     if (request.getFields() == null) {
       infoF(
-          "POST /transaction with id ({}) cannot have empty `fields`", sep10Jwt.getTransactionId());
+          "POST /transaction with id ({}) cannot have empty `fields`",
+          webAuthJwt.getTransactionId());
       throw new BadRequestException("'fields' field cannot be empty");
     }
     Context.get().setTransactionFields(request.getFields().getTransaction());
@@ -154,8 +155,9 @@ public class Sep31Service {
     // Get the creator's stellarId
     StellarId creatorStellarId =
         StellarId.builder()
-            .account(Objects.requireNonNullElse(sep10Jwt.getMuxedAccount(), sep10Jwt.getAccount()))
-            .memo(sep10Jwt.getAccountMemo())
+            .account(
+                Objects.requireNonNullElse(webAuthJwt.getMuxedAccount(), webAuthJwt.getAccount()))
+            .memo(webAuthJwt.getAccountMemo())
             .build();
 
     Sep38Quote quote = Context.get().getQuote();
@@ -184,7 +186,7 @@ public class Sep31Service {
             .externalTransactionId(null)
             .requiredInfoMessage(null)
             .quoteId(request.getQuoteId())
-            .clientDomain(sep10Jwt.getClientDomain())
+            .clientDomain(webAuthJwt.getClientDomain())
             .clientName(getClientName())
             .requiredInfoUpdates(null)
             .fields(request.getFields().getTransaction())
@@ -519,7 +521,7 @@ public class Sep31Service {
   }
 
   String getClientName() throws BadRequestException {
-    return getClientName(Context.get().getSep10Jwt().getAccount());
+    return getClientName(Context.get().getWebAuthJwt().getAccount());
   }
 
   String getClientName(String account) throws BadRequestException {
@@ -590,7 +592,7 @@ public class Sep31Service {
     private Sep31Transaction transaction;
     private Sep31PostTransactionRequest request;
     private Sep38Quote quote;
-    private WebAuthJwt sep10Jwt;
+    private WebAuthJwt webAuthJwt;
     private Amount fee;
     private AssetInfo asset;
     private Map<String, String> transactionFields;

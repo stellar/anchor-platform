@@ -10,7 +10,7 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode.STRICT
-import org.stellar.anchor.TestHelper.Companion.createSep10Jwt
+import org.stellar.anchor.TestHelper.Companion.createWebAuthJwt
 import org.stellar.anchor.api.asset.Sep38Info
 import org.stellar.anchor.api.callback.GetRateRequest
 import org.stellar.anchor.api.callback.GetRateRequest.Type.FIRM
@@ -592,7 +592,7 @@ class Sep38ServiceTest {
         sep38Service.assetService,
         mockRateIntegration,
         mockQuoteStore,
-        eventService
+        eventService,
       )
 
     // empty token
@@ -601,13 +601,13 @@ class Sep38ServiceTest {
     assertEquals("missing sep10 jwt token", ex.message)
 
     // malformed token
-    var token = createSep10Jwt("")
+    var token = createWebAuthJwt("")
     ex = assertThrows { sep38Service.postQuote(token, Sep38PostQuoteRequest.builder().build()) }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("sep10 token is malformed", ex.message)
 
     // empty sell_asset
-    token = createSep10Jwt()
+    token = createWebAuthJwt()
     ex = assertThrows { sep38Service.postQuote(token, Sep38PostQuoteRequest.builder().build()) }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("sell_asset cannot be empty", ex.message)
@@ -616,7 +616,7 @@ class Sep38ServiceTest {
     ex = assertThrows {
       sep38Service.postQuote(
         token,
-        Sep38PostQuoteRequest.builder().sellAssetName("foo:bar").build()
+        Sep38PostQuoteRequest.builder().sellAssetName("foo:bar").build(),
       )
     }
     assertInstanceOf(NotFoundException::class.java, ex)
@@ -633,7 +633,7 @@ class Sep38ServiceTest {
     ex = assertThrows {
       sep38Service.postQuote(
         token,
-        Sep38PostQuoteRequest.builder().sellAssetName(fiatUSD).buyAssetName("foo:bar").build()
+        Sep38PostQuoteRequest.builder().sellAssetName(fiatUSD).buyAssetName("foo:bar").build(),
       )
     }
     assertInstanceOf(NotFoundException::class.java, ex)
@@ -643,7 +643,7 @@ class Sep38ServiceTest {
     ex = assertThrows {
       sep38Service.postQuote(
         token,
-        Sep38PostQuoteRequest.builder().sellAssetName(fiatUSD).buyAssetName(stellarUSDC).build()
+        Sep38PostQuoteRequest.builder().sellAssetName(fiatUSD).buyAssetName(stellarUSDC).build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -658,7 +658,7 @@ class Sep38ServiceTest {
           .sellAmount("100")
           .buyAssetName(stellarUSDC)
           .buyAmount("100")
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -672,7 +672,7 @@ class Sep38ServiceTest {
           .sellAssetName(fiatUSD)
           .sellAmount("foo")
           .buyAssetName(stellarUSDC)
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -686,7 +686,7 @@ class Sep38ServiceTest {
           .sellAssetName(fiatUSD)
           .sellAmount("-0.01")
           .buyAssetName(stellarUSDC)
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -700,7 +700,7 @@ class Sep38ServiceTest {
           .sellAssetName(fiatUSD)
           .sellAmount("0")
           .buyAssetName(stellarUSDC)
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -714,7 +714,7 @@ class Sep38ServiceTest {
           .sellAssetName(fiatUSD)
           .buyAssetName(stellarUSDC)
           .buyAmount("bar")
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -728,7 +728,7 @@ class Sep38ServiceTest {
           .sellAssetName(fiatUSD)
           .buyAssetName(stellarUSDC)
           .buyAmount("-0.02")
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -742,7 +742,7 @@ class Sep38ServiceTest {
           .sellAssetName(fiatUSD)
           .buyAssetName(stellarUSDC)
           .buyAmount("0")
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -757,7 +757,7 @@ class Sep38ServiceTest {
           .sellAmount("1.23")
           .sellDeliveryMethod("FOO")
           .buyAssetName(stellarUSDC)
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -773,7 +773,7 @@ class Sep38ServiceTest {
           .sellDeliveryMethod("WIRE")
           .buyAssetName(stellarUSDC)
           .buyDeliveryMethod("BAR")
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -789,7 +789,7 @@ class Sep38ServiceTest {
           .sellDeliveryMethod("WIRE")
           .buyAssetName(stellarUSDC)
           .countryCode("BR")
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -806,7 +806,7 @@ class Sep38ServiceTest {
           .buyAssetName(stellarUSDC)
           .countryCode("US")
           .expireAfter("2022-04-18T23:33:24.629719Z")
-          .build()
+          .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
@@ -843,7 +843,7 @@ class Sep38ServiceTest {
         sep38Service.assetService,
         mockRateIntegration,
         mockQuoteStore,
-        eventService
+        eventService,
       )
 
     val slotQuote = slot<Sep38Quote>()
@@ -854,7 +854,7 @@ class Sep38ServiceTest {
     every { eventSession.publish(capture(slotEvent)) } just Runs
 
     // test happy path with the minimum parameters using sellAmount
-    val token = createSep10Jwt()
+    val token = createWebAuthJwt()
     var gotResponse: Sep38QuoteResponse? = null
     assertDoesNotThrow {
       gotResponse =
@@ -865,7 +865,7 @@ class Sep38ServiceTest {
             .sellAssetName(fiatUSD)
             .sellAmount("103")
             .buyAssetName(stellarUSDC)
-            .build()
+            .build(),
         )
     }
     val wantResponse =
@@ -953,7 +953,7 @@ class Sep38ServiceTest {
     every { eventSession.publish(capture(slotEvent)) } just Runs
 
     // test happy path with the minimum parameters using sellAmount
-    val token = createSep10Jwt()
+    val token = createWebAuthJwt()
     var gotResponse: Sep38QuoteResponse? = null
     assertDoesNotThrow {
       gotResponse =
@@ -964,7 +964,7 @@ class Sep38ServiceTest {
             .sellAssetName(fiatUSD)
             .buyAssetName(stellarUSDC)
             .buyAmount("100")
-            .build()
+            .build(),
         )
     }
     val wantResponse =
@@ -1040,7 +1040,7 @@ class Sep38ServiceTest {
         sep38Service.assetService,
         mockRateIntegration,
         mockQuoteStore,
-        eventService
+        eventService,
       )
 
     val slotQuote = slot<Sep38Quote>()
@@ -1051,7 +1051,7 @@ class Sep38ServiceTest {
     every { eventSession.publish(capture(slotEvent)) } just Runs
 
     // test happy path with the minimum parameters using sellAmount
-    val token = createSep10Jwt()
+    val token = createWebAuthJwt()
     var gotResponse: Sep38QuoteResponse? = null
     assertDoesNotThrow {
       gotResponse =
@@ -1065,7 +1065,7 @@ class Sep38ServiceTest {
             .buyAssetName(stellarUSDC)
             .countryCode("US")
             .expireAfter(now.toString())
-            .build()
+            .build(),
         )
     }
     val wantResponse =
@@ -1144,7 +1144,7 @@ class Sep38ServiceTest {
         sep38Service.assetService,
         mockRateIntegration,
         mockQuoteStore,
-        eventService
+        eventService,
       )
 
     val slotQuote = slot<Sep38Quote>()
@@ -1155,7 +1155,7 @@ class Sep38ServiceTest {
     every { eventSession.publish(capture(slotEvent)) } just Runs
 
     // test happy path with the minimum parameters using sellAmount
-    val token = createSep10Jwt()
+    val token = createWebAuthJwt()
     var gotResponse: Sep38QuoteResponse? = null
     assertDoesNotThrow {
       gotResponse =
@@ -1169,7 +1169,7 @@ class Sep38ServiceTest {
             .buyAmount("100")
             .countryCode("US")
             .expireAfter(now.toString())
-            .build()
+            .build(),
         )
     }
     val wantResponse =
@@ -1256,7 +1256,7 @@ class Sep38ServiceTest {
         sep38Service.assetService,
         mockRateIntegration,
         mockQuoteStore,
-        eventService
+        eventService,
       )
 
     val slotQuote = slot<Sep38Quote>()
@@ -1267,7 +1267,7 @@ class Sep38ServiceTest {
     every { eventSession.publish(capture(slotEvent)) } just Runs
 
     // test happy path with the minimum parameters using sellAmount
-    val token = createSep10Jwt()
+    val token = createWebAuthJwt()
     var gotResponse: Sep38QuoteResponse? = null
     assertDoesNotThrow {
       gotResponse =
@@ -1281,7 +1281,7 @@ class Sep38ServiceTest {
             .buyAmount(requestBuyAmount)
             .countryCode("US")
             .expireAfter(now.toString())
-            .build()
+            .build(),
         )
     }
     val wantResponse =
@@ -1359,13 +1359,13 @@ class Sep38ServiceTest {
     assertEquals("missing sep10 jwt token", ex.message)
 
     // malformed token
-    var token = createSep10Jwt("")
+    var token = createWebAuthJwt("")
     ex = assertThrows { sep38Service.getQuote(token, null) }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("sep10 token is malformed", ex.message)
 
     // empty quote id
-    token = createSep10Jwt()
+    token = createWebAuthJwt()
     ex = assertThrows { sep38Service.getQuote(token, null) }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("quote id cannot be empty", ex.message)
@@ -1457,7 +1457,7 @@ class Sep38ServiceTest {
     every { mockQuoteStore.findByQuoteId(capture(slotQuoteId)) } returns mockQuote
 
     // execute request
-    val token = createSep10Jwt()
+    val token = createWebAuthJwt()
     var gotQuoteResponse: Sep38QuoteResponse? = null
     assertDoesNotThrow { gotQuoteResponse = sep38Service.getQuote(token, "123") }
 
@@ -1488,7 +1488,7 @@ class Sep38ServiceTest {
     every { mockRateIntegration.getRate(capture(slotGetRateRequest)) } returns
       GetRateResponse.indicativePrice("1", "100", "100", mockSellAssetFee(fiatUSD))
 
-    val token = createSep10Jwt(PUBLIC_KEY)
+    val token = createWebAuthJwt(PUBLIC_KEY)
     val getPriceRequest =
       Sep38GetPriceRequest.builder()
         .sellAssetName(fiatUSD)
