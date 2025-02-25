@@ -24,11 +24,13 @@ fun Route.testSep24(
 ) {
   route("/sep24/interactive") {
     get {
-      log.info { "Called /sep24/interactive with parameters ${call.parameters}" }
+      log.info {
+        "Called /sep24/interactive with parameters ${call.request.queryParameters.entries()}"
+      }
 
       val token =
         JwtDecoder.decode(
-          call.parameters["token"]
+          call.request.queryParameters["token"]
             ?: throw ClientException("Missing token parameter in the request"),
           jwtKey,
         )
