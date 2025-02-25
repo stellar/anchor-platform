@@ -5,6 +5,7 @@ import io.ktor.client.plugins.*
 import org.jetbrains.exposed.sql.Database
 import org.stellar.reference.callbacks.customer.CustomerService
 import org.stellar.reference.callbacks.rate.RateService
+import org.stellar.reference.client.PaymentClient
 import org.stellar.reference.client.PlatformClient
 import org.stellar.reference.dao.JdbcCustomerRepository
 import org.stellar.reference.dao.JdbcQuoteRepository
@@ -14,14 +15,18 @@ import org.stellar.reference.sep24.DepositService
 import org.stellar.reference.sep24.WithdrawalService
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.service.sep31.ReceiveService
+import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Server
 import org.stellar.sdk.SorobanServer
 
 object ServiceContainer {
   private val config = ConfigContainer.getInstance().config
   val eventService = EventService()
+  val horizon = Server(config.appSettings.horizonEndpoint)
+  val rpc = SorobanServer(config.appSettings.rpcEndpoint)
+  val sep24PaymentClient = PaymentClient(horizon, rpc, KeyPair.fromSecretSeed(config.sep24.secret))
   val sepHelper = SepHelper(config)
-  val depositService = DepositService(config)
+  val depositService = DepositService(config, sep24PaymentClient)
   val withdrawalService = WithdrawalService(config)
   val receiveService = ReceiveService(config)
 
@@ -37,8 +42,7 @@ object ServiceContainer {
   private val quotesRepo = JdbcQuoteRepository(database)
   val customerService = CustomerService(customerRepo, transactionKYCRepo, sepHelper)
   val rateService = RateService(quotesRepo)
-  val horizon = Server(config.appSettings.horizonEndpoint)
-  val rpc = SorobanServer(config.appSettings.rpcEndpoint)
+
   val platform =
     PlatformClient(
       HttpClient {

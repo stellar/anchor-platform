@@ -1,4 +1,4 @@
-package org.stellar.anchor.sep6
+package org.stellar.anchor.util
 
 import io.mockk.MockKAnnotations
 import io.mockk.every
@@ -16,15 +16,15 @@ import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.asset.AssetService
 
-class RequestValidatorTest {
+class SepRequestValidatorTest {
   @MockK(relaxed = true) lateinit var assetService: AssetService
 
-  private lateinit var requestValidator: RequestValidator
+  private lateinit var requestValidator: SepRequestValidator
 
   @BeforeEach
   fun setup() {
     MockKAnnotations.init(this, relaxUnitFun = true)
-    requestValidator = RequestValidator(assetService)
+    requestValidator = SepRequestValidator(assetService)
   }
 
   @Test

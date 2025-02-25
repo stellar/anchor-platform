@@ -25,17 +25,15 @@ import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.Sep6Config;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator.Amounts;
-import org.stellar.anchor.util.MetricConstants;
-import org.stellar.anchor.util.SepHelper;
-import org.stellar.anchor.util.TransactionMapper;
+import org.stellar.anchor.util.*;
+import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts;
 import org.stellar.sdk.Memo;
 
 public class Sep6Service {
   private final AppConfig appConfig;
   private final Sep6Config sep6Config;
   private final AssetService assetService;
-  private final RequestValidator requestValidator;
+  private final SepRequestValidator requestValidator;
   private final ClientFinder clientFinder;
   private final Sep6TransactionStore txnStore;
   private final ExchangeAmountsCalculator exchangeAmountsCalculator;
@@ -71,7 +69,7 @@ public class Sep6Service {
       AppConfig appConfig,
       Sep6Config sep6Config,
       AssetService assetService,
-      RequestValidator requestValidator,
+      SepRequestValidator requestValidator,
       ClientFinder clientFinder,
       Sep6TransactionStore txnStore,
       ExchangeAmountsCalculator exchangeAmountsCalculator,
@@ -234,7 +232,7 @@ public class Sep6Service {
             .amountInAsset(amounts.getAmountInAsset())
             .amountOut(amounts.getAmountOut())
             .amountOutAsset(amounts.getAmountOutAsset())
-            .feeDetails(amounts.feeDetails)
+            .feeDetails(amounts.getFeeDetails())
             .amountExpected(request.getAmount())
             .startedAt(Instant.now())
             .userActionRequiredBy(

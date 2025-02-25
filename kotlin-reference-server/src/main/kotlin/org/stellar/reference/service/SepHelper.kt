@@ -11,18 +11,13 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import java.math.BigDecimal
 import java.util.*
-import java.util.Base64
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
-import org.apache.commons.codec.binary.Hex
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.reference.data.*
 import org.stellar.reference.data.Transaction
 import org.stellar.sdk.*
-import org.stellar.sdk.exception.BadRequestException
-import org.stellar.sdk.operations.PaymentOperation
-import org.stellar.sdk.responses.TransactionResponse
 
 class SepHelper(private val cfg: Config) {
   private val log = KotlinLogging.logger {}
@@ -74,64 +69,13 @@ class SepHelper(private val cfg: Config) {
   internal suspend fun patchTransaction(
     transactionId: String,
     newStatus: String,
-    message: String? = null
+    message: String? = null,
   ) {
     patchTransaction(PatchTransactionTransaction(transactionId, newStatus, message))
   }
 
   internal suspend fun getTransaction(transactionId: String): Transaction {
     return client.get("$baseUrl/transactions/$transactionId").body()
-  }
-
-  internal fun sendStellarTransaction(
-    destinationAddress: String,
-    assetString: String,
-    amount: BigDecimal,
-    memo: String?,
-    memoType: String?
-  ): String {
-    val myAccount = server.accounts().account(cfg.sep24.keyPair!!.accountId)
-    val asset = Asset.create(assetString.replace("stellar:", ""))
-
-    val transactionBuilder =
-      TransactionBuilder(myAccount, Network.TESTNET)
-        .setBaseFee(100)
-        .addPreconditions(
-          TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(60)).build()
-        )
-        .addOperation(
-          PaymentOperation.builder()
-            .destination(destinationAddress)
-            .asset(asset)
-            .amount(amount)
-            .build()
-        )
-
-    if (memo != null && memoType != null) {
-      transactionBuilder.addMemo(
-        when (memoType) {
-          "text" -> Memo.text(memo)
-          "id" -> Memo.id(memo.toLong())
-          "hash" -> Memo.hash(Hex.encodeHexString(Base64.getDecoder().decode(memo)))
-          else -> throw Exception("Unsupported memo type")
-        }
-      )
-    }
-
-    val transaction = transactionBuilder.build()
-
-    transaction.sign(cfg.sep24.keyPair)
-
-    val resp: TransactionResponse
-    try {
-      resp = server.submitTransaction(transaction)
-    } catch (e: BadRequestException) {
-      throw Exception(
-        "Failed to submit transaction with code: ${e.problem?.extras?.resultCodes?.transactionResultCode}"
-      )
-    }
-    assert(resp.successful)
-    return resp.hash
   }
 
   internal suspend fun sendCustodyStellarTransaction(transactionId: String) {

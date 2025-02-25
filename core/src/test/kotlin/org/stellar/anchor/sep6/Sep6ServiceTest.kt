@@ -36,8 +36,10 @@ import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.config.Sep6Config
 import org.stellar.anchor.event.EventService
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator.Amounts
+import org.stellar.anchor.util.ExchangeAmountsCalculator
+import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.SepRequestValidator
 
 class Sep6ServiceTest {
   companion object {
@@ -49,7 +51,7 @@ class Sep6ServiceTest {
 
   @MockK(relaxed = true) lateinit var appConfig: AppConfig
   @MockK(relaxed = true) lateinit var sep6Config: Sep6Config
-  @MockK(relaxed = true) lateinit var requestValidator: RequestValidator
+  @MockK(relaxed = true) lateinit var requestValidator: SepRequestValidator
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
   @MockK(relaxed = true) lateinit var txnStore: Sep6TransactionStore
   @MockK(relaxed = true) lateinit var exchangeAmountsCalculator: ExchangeAmountsCalculator
