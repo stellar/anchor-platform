@@ -59,6 +59,14 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
     return optTxn.orElse(null);
   }
 
+  public JdbcSep24Transaction findOneByToAccountAndFromAccountAndStatus(
+      String toAccount, String fromAccount, String status) {
+    Optional<JdbcSep24Transaction> optTxn =
+        Optional.ofNullable(
+            txnRepo.findOneByToAccountAndFromAccountAndStatus(toAccount, fromAccount, status));
+    return optTxn.orElse(null);
+  }
+
   @Override
   public List<Sep24Transaction> findTransactions(
       String accountId, String accountMemo, GetTransactionsRequest tr)

@@ -100,9 +100,19 @@ public class PaymentOperationToEventListener implements PaymentListener {
     // Find a transaction matching the memo, assumes transactions are unique to account+memo
     JdbcSep24Transaction sep24Txn = null;
     try {
-      sep24Txn =
-          sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
-              payment.getTo(), memo, SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+      if (memo != null) {
+        sep24Txn =
+            sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+                payment.getTo(), memo, SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+      } else {
+        // SAC transfers do not include a memo so we need to find the transaction by the
+        // from_account
+        sep24Txn =
+            sep24TransactionStore.findOneByToAccountAndFromAccountAndStatus(
+                payment.getTo(),
+                payment.getFrom(),
+                SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+      }
     } catch (Exception ex) {
       errorEx(ex);
     }

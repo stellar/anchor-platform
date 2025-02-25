@@ -2,6 +2,7 @@ package org.stellar.anchor.platform
 
 import io.ktor.client.plugins.*
 import io.ktor.http.*
+import java.math.BigInteger
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
@@ -11,9 +12,16 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.stellar.anchor.util.Sep1Helper.TomlContent
 import org.stellar.anchor.util.Sep1Helper.parse
-import org.stellar.sdk.Server
+import org.stellar.sdk.*
+import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
+import org.stellar.sdk.Auth.authorizeEntry
+import org.stellar.sdk.operations.InvokeHostFunctionOperation
 import org.stellar.sdk.requests.RequestBuilder
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.sdk.scval.Scv
+import org.stellar.sdk.xdr.SCVal
+import org.stellar.sdk.xdr.SCValType
+import org.stellar.sdk.xdr.SorobanAuthorizationEntry
 import org.stellar.walletsdk.ApplicationConfiguration
 import org.stellar.walletsdk.StellarConfiguration
 import org.stellar.walletsdk.Wallet
@@ -80,7 +88,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
                 Pair("%TESTPAYMENT_SRC_ACCOUNT%", payment.from),
                 Pair("%TESTPAYMENT_DEST_ACCOUNT%", payment.to),
                 Pair("%TESTPAYMENT_ASSET_CIRCLE_USDC%", TEST_PAYMENT_ASSET_CIRCLE_USDC),
-                Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT)
+                Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT),
               )
 
             return
@@ -107,18 +115,97 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
   var wallet =
     Wallet(
       StellarConfiguration.Testnet,
-      ApplicationConfiguration { defaultRequest { url { protocol = URLProtocol.HTTP } } }
+      ApplicationConfiguration { defaultRequest { url { protocol = URLProtocol.HTTP } } },
     )
   var walletKeyPair = SigningKeyPair.fromSecret(CLIENT_WALLET_SECRET)
   var anchor = wallet.anchor(config.env["anchor.domain"]!!)
   var token: AuthToken
+  var rpc = SorobanServer("https://soroban-testnet.stellar.org")
+
+  fun transferFunds(
+    source: String,
+    destination: String,
+    asset: Asset,
+    amount: String,
+    signer: KeyPair,
+  ): String {
+    val parameters =
+      mutableListOf(
+        // from=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_ADDRESS)
+          .address(Scv.toAddress(source).address)
+          .build(),
+        // to=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_ADDRESS)
+          .address(Scv.toAddress(destination).address)
+          .build(),
+        SCVal.builder()
+          .discriminant(SCValType.SCV_I128)
+          .i128(Scv.toInt128(BigInteger.valueOf(amount.toLong() * 10000000)).i128)
+          .build(),
+      )
+    val operation =
+      InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
+          asset.getContractId(Network.TESTNET),
+          "transfer",
+          parameters,
+        )
+        .build()
+
+    var account = rpc.getAccount(walletKeyPair.keyPair.accountId)
+    val transaction =
+      TransactionBuilder(account, Network.TESTNET)
+        .addOperation(operation)
+        .setBaseFee(MIN_BASE_FEE)
+        .setTimeout(300)
+        .build()
+
+    val simulationResponse = rpc.simulateTransaction(transaction)
+    val signedAuthEntries = mutableListOf<SorobanAuthorizationEntry>()
+    simulationResponse.results.forEach {
+      it.auth.forEach { entryXdr ->
+        val entry = SorobanAuthorizationEntry.fromXdrBase64(entryXdr)
+        val validUntilLedgerSeq = simulationResponse.latestLedger + 10
+
+        val signedEntry = authorizeEntry(entry, signer, validUntilLedgerSeq, Network.TESTNET)
+        signedAuthEntries.add(signedEntry)
+      }
+    }
+
+    val signedOperation =
+      InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
+          asset.getContractId(Network.TESTNET),
+          "transfer",
+          parameters,
+        )
+        .sourceAccount(walletKeyPair.keyPair.accountId)
+        .auth(signedAuthEntries)
+        .build()
+
+    account = rpc.getAccount(walletKeyPair.keyPair.accountId)
+    val authorizedTransaction =
+      TransactionBuilder(account, Network.TESTNET)
+        .addOperation(signedOperation)
+        .setBaseFee(Transaction.MIN_BASE_FEE)
+        .setTimeout(300)
+        .build()
+
+    val preparedTransaction = rpc.prepareTransaction(authorizedTransaction)
+    preparedTransaction.sign(signer)
+
+    val transactionResponse = rpc.sendTransaction(preparedTransaction)
+
+    return transactionResponse.hash
+  }
 
   private val submissionLock = Mutex()
 
   suspend fun transactionWithRetry(
     maxAttempts: Int = 5,
     delay: Int = 5,
-    transactionLogic: suspend () -> Unit
+    transactionLogic: suspend () -> Unit,
   ) =
     flow<Unit> { submissionLock.withLock { transactionLogic() } }
       .retryWhen { _, attempt ->
