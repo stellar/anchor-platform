@@ -37,25 +37,25 @@ internal class JwtServiceTest {
   }
 
   @Test
-  fun `test apply Sep10Jwt encoding and decoding and make sure the original values are not changed`() {
+  fun `test apply WebAuthJwt encoding and decoding and make sure the original values are not changed`() {
     val jwtService = JwtService(secretConfig, custodySecretConfig)
     val token =
       WebAuthJwt.of(TEST_ISS, TEST_SUB, TEST_IAT, TEST_EXP, TEST_JTI, TEST_CLIENT_DOMAIN)
         as WebAuthJwt
     val cipher = jwtService.encode(token)
-    val sep10Jwt = jwtService.decode(cipher, WebAuthJwt::class.java)
+    val webAuthJwt = jwtService.decode(cipher, WebAuthJwt::class.java)
 
-    assertEquals(sep10Jwt.iss, token.iss)
-    assertEquals(sep10Jwt.sub, token.sub)
-    assertEquals(sep10Jwt.iat, token.iat)
-    assertEquals(sep10Jwt.exp, token.exp)
-    assertEquals(sep10Jwt.jti, token.jti)
-    assertEquals(sep10Jwt.clientDomain, token.clientDomain)
-    assertEquals(sep10Jwt.account, token.sub)
-    assertEquals(sep10Jwt.transactionId, token.jti)
-    assertEquals(sep10Jwt.issuer, token.iss)
-    assertEquals(sep10Jwt.issuedAt, token.iat)
-    assertEquals(sep10Jwt.expiresAt, token.exp)
+    assertEquals(webAuthJwt.iss, token.iss)
+    assertEquals(webAuthJwt.sub, token.sub)
+    assertEquals(webAuthJwt.iat, token.iat)
+    assertEquals(webAuthJwt.exp, token.exp)
+    assertEquals(webAuthJwt.jti, token.jti)
+    assertEquals(webAuthJwt.clientDomain, token.clientDomain)
+    assertEquals(webAuthJwt.account, token.sub)
+    assertEquals(webAuthJwt.transactionId, token.jti)
+    assertEquals(webAuthJwt.issuer, token.iss)
+    assertEquals(webAuthJwt.issuedAt, token.iat)
+    assertEquals(webAuthJwt.expiresAt, token.exp)
   }
 
   @Test

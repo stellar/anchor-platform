@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
-import org.stellar.anchor.TestHelper.Companion.createSep10Jwt
+import org.stellar.anchor.TestHelper.Companion.createWebAuthJwt
 import org.stellar.anchor.auth.AbstractJwt
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.WebAuthJwt
@@ -159,7 +159,7 @@ internal class WebAuthJwtFilterTest {
     val slot = slot<WebAuthJwt>()
     every { request.setAttribute(JWT_TOKEN, capture(slot)) } answers {}
 
-    val jwtToken = jwtService.encode(createSep10Jwt(PUBLIC_KEY, null, "stellar.org"))
+    val jwtToken = jwtService.encode(createWebAuthJwt(PUBLIC_KEY, null, "stellar.org"))
     every { request.getHeader("Authorization") } returns "Bearer $jwtToken"
     webAuthJwtFilter.doFilter(request, response, mockFilterChain)
 

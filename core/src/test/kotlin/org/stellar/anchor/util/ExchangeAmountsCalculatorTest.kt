@@ -22,7 +22,7 @@ import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts
 
 class ExchangeAmountsCalculatorTest {
   companion object {
-    val token = TestHelper.createSep10Jwt(TEST_ACCOUNT, TestConstants.TEST_MEMO)
+    val token = TestHelper.createWebAuthJwt(TEST_ACCOUNT, TestConstants.TEST_MEMO)
   }
 
   private val assetService: AssetService = DefaultAssetService.fromJsonResource("test_assets.json")

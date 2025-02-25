@@ -324,9 +324,7 @@ class Sep31ServiceTest {
   @Test
   fun `test quotes supported and required validation`() {
     val ex: AnchorException = assertThrows {
-      DefaultAssetService.fromJsonResource(
-        "test_assets.json.quotes_required_but_not_supported",
-      )
+      DefaultAssetService.fromJsonResource("test_assets.json.quotes_required_but_not_supported")
     }
     assertInstanceOf(InvalidConfigException::class.java, ex)
     assertEquals(
@@ -476,7 +474,7 @@ class Sep31ServiceTest {
 
   @Test
   fun `test POST transaction failures`() {
-    val jwtToken = TestHelper.createSep10Jwt()
+    val jwtToken = TestHelper.createWebAuthJwt()
 
     // missing asset code
     val postTxRequest = Sep31PostTransactionRequest()
@@ -617,7 +615,7 @@ class Sep31ServiceTest {
           "receiver_account_number" to "1",
           "type" to "1",
           "receiver_routing_number" to "SWIFT",
-        ),
+        )
       )
 
     // Make sure we can get the sender and receiver customers
@@ -651,7 +649,7 @@ class Sep31ServiceTest {
       }
 
     // POST transaction
-    val jwtToken = TestHelper.createSep10Jwt(accountMemo = TestHelper.TEST_MEMO)
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
     var gotResponse: Sep31PostTransactionResponse? = null
     assertDoesNotThrow { gotResponse = sep31Service.postTransaction(jwtToken, postTxRequest) }
 
@@ -718,7 +716,7 @@ class Sep31ServiceTest {
           "receiver_account_number" to "1",
           "type" to "1",
           "receiver_routing_number" to "SWIFT",
-        ),
+        )
       )
 
     // Make sure we can get the sender and receiver customers
@@ -727,7 +725,7 @@ class Sep31ServiceTest {
     every { customerIntegration.getCustomer(any()) } returns mockCustomer
 
     // POST transaction
-    val jwtToken = TestHelper.createSep10Jwt()
+    val jwtToken = TestHelper.createWebAuthJwt()
     val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("quotes_required is set to true; quote id cannot be empty", ex.message)
@@ -745,9 +743,7 @@ class Sep31ServiceTest {
       }
 
     val assetServiceQuotesNotSupported: AssetService =
-      DefaultAssetService.fromJsonResource(
-        "test_assets.json.quotes_not_supported",
-      )
+      DefaultAssetService.fromJsonResource("test_assets.json.quotes_not_supported")
     sep31Service =
       Sep31Service(
         appConfig,
@@ -758,7 +754,7 @@ class Sep31ServiceTest {
         clientService,
         assetServiceQuotesNotSupported,
         rateIntegration,
-        eventService
+        eventService,
       )
 
     val senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"
@@ -776,7 +772,7 @@ class Sep31ServiceTest {
           "receiver_account_number" to "1",
           "type" to "1",
           "receiver_routing_number" to "SWIFT",
-        ),
+        )
       )
 
     // Provide fee response.
@@ -789,7 +785,7 @@ class Sep31ServiceTest {
     every { customerIntegration.getCustomer(any()) } returns mockCustomer
 
     // POST transaction
-    val jwtToken = TestHelper.createSep10Jwt()
+    val jwtToken = TestHelper.createWebAuthJwt()
     var gotResponse: Sep31PostTransactionResponse? = null
     assertDoesNotThrow { gotResponse = sep31Service.postTransaction(jwtToken, postTxRequest) }
 
@@ -842,9 +838,9 @@ class Sep31ServiceTest {
 
   @Test
   fun `Test update fee ok`() {
-    val jwtToken = TestHelper.createSep10Jwt()
+    val jwtToken = TestHelper.createWebAuthJwt()
     Context.get().request = request
-    Context.get().sep10Jwt = jwtToken
+    Context.get().webAuthJwt = jwtToken
 
     // With quote
     Context.get().quote = quote
@@ -861,7 +857,7 @@ class Sep31ServiceTest {
           .fee(
             FeeDetails(
               "10",
-              "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+              "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
             )
           )
           .build()
@@ -883,9 +879,9 @@ class Sep31ServiceTest {
 
   @Test
   fun `test update fee failure`() {
-    val jwtToken = TestHelper.createSep10Jwt()
+    val jwtToken = TestHelper.createWebAuthJwt()
     Context.get().request = request
-    Context.get().sep10Jwt = jwtToken
+    Context.get().webAuthJwt = jwtToken
 
     // With quote
     Context.get().quote = quote

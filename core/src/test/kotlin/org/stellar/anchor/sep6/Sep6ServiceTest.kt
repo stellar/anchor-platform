@@ -44,7 +44,7 @@ import org.stellar.anchor.util.SepRequestValidator
 class Sep6ServiceTest {
   companion object {
     val gson: Gson = GsonUtils.getInstance()
-    val token = TestHelper.createSep10Jwt(TEST_ACCOUNT, TEST_MEMO)
+    val token = TestHelper.createWebAuthJwt(TEST_ACCOUNT, TEST_MEMO)
   }
 
   private val assetService: AssetService = DefaultAssetService.fromJsonResource("test_assets.json")
@@ -1274,7 +1274,7 @@ class Sep6ServiceTest {
     val request = GetTransactionRequest.builder().id(depositTxn.id).lang("en-US").build()
     every { txnStore.findByTransactionId(depositTxn.id) } returns depositTxn
 
-    sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+    sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
 
     verify { txnStore.findByTransactionId(depositTxn.id) }
   }
@@ -1290,7 +1290,7 @@ class Sep6ServiceTest {
     every { txnStore.findByStellarTransactionId(depositTxn.stellarTransactionId) } returns
       depositTxn
 
-    sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+    sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
 
     verify { txnStore.findByStellarTransactionId(depositTxn.stellarTransactionId) }
   }
@@ -1306,7 +1306,7 @@ class Sep6ServiceTest {
     every { txnStore.findByExternalTransactionId(depositTxn.externalTransactionId) } returns
       depositTxn
 
-    sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+    sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
 
     verify { txnStore.findByExternalTransactionId(depositTxn.externalTransactionId) }
   }
@@ -1316,7 +1316,7 @@ class Sep6ServiceTest {
     val request = GetTransactionRequest.builder().lang("en-US").build()
 
     assertThrows<SepValidationException> {
-      sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
     }
     verify { txnStore wasNot Called }
   }
@@ -1328,7 +1328,7 @@ class Sep6ServiceTest {
     every { txnStore.findByTransactionId(any()) } returns null
 
     assertThrows<NotFoundException> {
-      sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
     }
 
     verify { txnStore.findByTransactionId(any()) }
@@ -1341,7 +1341,7 @@ class Sep6ServiceTest {
     every { txnStore.findByTransactionId(depositTxn.id) } returns depositTxn
 
     assertThrows<NotFoundException> {
-      sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
     }
 
     verify { txnStore.findByTransactionId(depositTxn.id) }
@@ -1354,7 +1354,7 @@ class Sep6ServiceTest {
     every { txnStore.findByTransactionId(depositTxn.id) } returns depositTxn
 
     assertThrows<NotFoundException> {
-      sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
     }
 
     verify { txnStore.findByTransactionId(depositTxn.id) }
@@ -1374,7 +1374,7 @@ class Sep6ServiceTest {
         .build()
 
     assertThrows<SepNotAuthorizedException> {
-      sep6Service.findTransactions(TestHelper.createSep10Jwt("other-account"), request)
+      sep6Service.findTransactions(TestHelper.createWebAuthJwt("other-account"), request)
     }
     verify { txnStore wasNot Called }
   }
@@ -1393,7 +1393,7 @@ class Sep6ServiceTest {
         .build()
 
     assertThrows<SepValidationException> {
-      sep6Service.findTransactions(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+      sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
     }
     verify { txnStore wasNot Called }
   }
@@ -1412,7 +1412,7 @@ class Sep6ServiceTest {
         .pagingId("1")
         .lang("en-US")
         .build()
-    val response = sep6Service.findTransactions(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+    val response = sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
 
     verify(exactly = 1) { txnStore.findTransactions(TEST_ACCOUNT, null, request) }
 

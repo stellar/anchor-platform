@@ -133,14 +133,14 @@ public class Sep10Service implements ISep10Service {
 
     if (account == null) {
       // The account does not exist from Horizon, using the client's master key to verify.
-      return ValidationResponse.of(generateSep10Jwt(challenge, clientDomain, homeDomain));
+      return ValidationResponse.of(generateWebAuthJwt(challenge, clientDomain, homeDomain));
     }
     // Since the account exists, we should check the signers and the client domain
     validateChallengeRequest(request, account, clientDomain);
     // increment counter
     incrementValidationRequestValidatedCounter();
     // Generate the JWT token
-    return ValidationResponse.of(generateSep10Jwt(challenge, clientDomain, homeDomain));
+    return ValidationResponse.of(generateWebAuthJwt(challenge, clientDomain, homeDomain));
   }
 
   @Override
@@ -527,10 +527,11 @@ public class Sep10Service implements ISep10Service {
     return challenge;
   }
 
-  String generateSep10Jwt(ChallengeTransaction challenge, String clientDomain, String homeDomain) {
+  String generateWebAuthJwt(
+      ChallengeTransaction challenge, String clientDomain, String homeDomain) {
     long issuedAt = challenge.getTransaction().getTimeBounds().getMinTime().longValue();
     Memo memo = challenge.getTransaction().getMemo();
-    WebAuthJwt sep10Jwt =
+    WebAuthJwt webAuthJwt =
         WebAuthJwt.of(
             authUrl(),
             (memo == null || memo instanceof MemoNone)
@@ -541,8 +542,8 @@ public class Sep10Service implements ISep10Service {
             challenge.getTransaction().hashHex(),
             clientDomain,
             homeDomain);
-    debug("jwtToken:", sep10Jwt);
-    return jwtService.encode(sep10Jwt);
+    debug("jwtToken:", webAuthJwt);
+    return jwtService.encode(webAuthJwt);
   }
 
   private String authUrl() {
