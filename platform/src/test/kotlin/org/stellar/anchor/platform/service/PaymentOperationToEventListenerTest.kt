@@ -43,6 +43,9 @@ class PaymentOperationToEventListenerTest {
     every { sep24TransactionStore.findOneByToAccountAndMemoAndStatus(any(), any(), any()) } returns
       null
     every {
+      sep24TransactionStore.findOneByToAccountAndFromAccountAndStatus(any(), any(), any())
+    } returns null
+    every {
       sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
     } returns null
     every {
