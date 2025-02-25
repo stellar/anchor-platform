@@ -14,12 +14,24 @@ import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.SCVal
 import org.stellar.sdk.xdr.SCValType
 
+/** Sends payments to classic accounts and contract accounts. */
 class PaymentClient(
   private val horizon: Server,
   private val rpc: SorobanServer,
   private val keyPair: KeyPair,
 ) {
 
+  /**
+   * Sends a payment to a destination account.
+   *
+   * @param destination The destination account ID.
+   * @param asset The asset to send.
+   * @param amount The amount to send.
+   * @param memo The memo to attach to the transaction. Currently ignored for contract accounts.
+   * @param memoType The type of memo to attach to the transaction. Currently ignored for contract
+   *   accounts.
+   * @return The transaction hash.
+   */
   fun send(
     destination: String,
     asset: Asset,
@@ -27,9 +39,14 @@ class PaymentClient(
     memo: String? = null,
     memoType: String? = null,
   ): String {
+    if (destination.isEmpty()) {
+      throw Exception("Destination account is required")
+    }
     return when (destination[0]) {
       'C' -> sendToContractAccount(destination, asset, amount)
-      else -> sendToClassicAccount(destination, asset, amount, memo, memoType)
+      'G',
+      'M' -> sendToClassicAccount(destination, asset, amount, memo, memoType)
+      else -> throw Exception("Unsupported destination account type")
     }
   }
 
