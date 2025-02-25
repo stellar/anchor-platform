@@ -223,7 +223,7 @@ public class Sep12Service {
       return;
     }
 
-    // SEP-12 says: If a memo is present in the decoded SEP-10 JWT's `sub` value, it must match this
+    // SEP-12 says: If a memo is present in the decoded JWT's `sub` value, it must match this
     // parameter value. If a muxed account is used as the JWT's `sub` value, memos sent in requests
     // must match the 64-bit integer subaccount ID of the muxed account. See the Shared Account's
     // section for more information.
@@ -249,7 +249,7 @@ public class Sep12Service {
     }
     String memoTypeId = MemoHelper.memoTypeAsString(MemoType.MEMO_ID);
     String memoType = Objects.toString(requestBase.getMemoType(), memoTypeId);
-    // SEP-12 says: If a memo is present in the decoded SEP-10 JWT's `sub` value, this parameter
+    // SEP-12 says: If a memo is present in the decoded JWT's `sub` value, this parameter
     // (memoType) can be ignored:
     if (token.getAccountMemo() != null || token.getMuxedAccountId() != null) {
       memoType = MemoHelper.memoTypeAsString(MemoType.MEMO_ID);
