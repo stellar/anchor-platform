@@ -8,6 +8,7 @@ container:
 
 config:
   businessServerEndpoint: "http://localhost:8091"
+  allowedHost: "localhost"
 
 services:
   ui:

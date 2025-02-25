@@ -34,6 +34,8 @@ spec:
           env:
             - name: BUSINESS_SERVER_ENDPOINT
               value: {{ .Values.config.businessServerEndpoint }}
+            - name: ALLOWED_HOST
+              value: {{ .Values.config.allowedHost }}
           resources:
             requests:
               memory: {{ .Values.services.ui.deployment.resources.requests.memory }}
