@@ -1,7 +1,6 @@
 package org.stellar.anchor.platform.e2etest
 
 import io.ktor.http.*
-import java.math.BigInteger
 import java.net.URI
 import kotlin.test.DefaultAsserter.fail
 import kotlin.test.assertEquals
@@ -28,13 +27,6 @@ import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.*
-import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
-import org.stellar.sdk.Auth.authorizeEntry
-import org.stellar.sdk.operations.InvokeHostFunctionOperation
-import org.stellar.sdk.scval.Scv
-import org.stellar.sdk.xdr.SCVal
-import org.stellar.sdk.xdr.SCValType
-import org.stellar.sdk.xdr.SorobanAuthorizationEntry
 import org.stellar.walletsdk.anchor.MemoType
 import org.stellar.walletsdk.anchor.auth
 import org.stellar.walletsdk.anchor.customer
@@ -45,7 +37,6 @@ import org.stellar.walletsdk.horizon.sign
 open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
   private val maxTries = 30
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
-  private val rpc = SorobanServer("https://soroban-testnet.stellar.org")
   private val gson = GsonUtils.getInstance()
 
   companion object {
@@ -688,83 +679,5 @@ open class Sep6End2EndTest : AbstractIntegrationTests(TestConfig()) {
       delay(1.seconds)
     }
     fail("Transaction status $status did not match expected status $expectedStatus")
-  }
-
-  private fun transferFunds(
-    source: String,
-    destination: String,
-    asset: Asset,
-    amount: String,
-    signer: KeyPair,
-  ): String {
-    val parameters =
-      mutableListOf(
-        // from=
-        SCVal.builder()
-          .discriminant(SCValType.SCV_ADDRESS)
-          .address(Scv.toAddress(source).address)
-          .build(),
-        // to=
-        SCVal.builder()
-          .discriminant(SCValType.SCV_ADDRESS)
-          .address(Scv.toAddress(destination).address)
-          .build(),
-        SCVal.builder()
-          .discriminant(SCValType.SCV_I128)
-          .i128(Scv.toInt128(BigInteger.valueOf(amount.toLong() * 10000000)).i128)
-          .build(),
-      )
-    val operation =
-      InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
-          asset.getContractId(Network.TESTNET),
-          "transfer",
-          parameters,
-        )
-        .build()
-
-    var account = rpc.getAccount(walletKeyPair.keyPair.accountId)
-    val transaction =
-      TransactionBuilder(account, Network.TESTNET)
-        .addOperation(operation)
-        .setBaseFee(MIN_BASE_FEE)
-        .setTimeout(300)
-        .build()
-
-    val simulationResponse = rpc.simulateTransaction(transaction)
-    val signedAuthEntries = mutableListOf<SorobanAuthorizationEntry>()
-    simulationResponse.results.forEach {
-      it.auth.forEach { entryXdr ->
-        val entry = SorobanAuthorizationEntry.fromXdrBase64(entryXdr)
-        val validUntilLedgerSeq = simulationResponse.latestLedger + 10
-
-        val signedEntry = authorizeEntry(entry, signer, validUntilLedgerSeq, Network.TESTNET)
-        signedAuthEntries.add(signedEntry)
-      }
-    }
-
-    val signedOperation =
-      InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
-          asset.getContractId(Network.TESTNET),
-          "transfer",
-          parameters,
-        )
-        .sourceAccount(walletKeyPair.keyPair.accountId)
-        .auth(signedAuthEntries)
-        .build()
-
-    account = rpc.getAccount(walletKeyPair.keyPair.accountId)
-    val authorizedTransaction =
-      TransactionBuilder(account, Network.TESTNET)
-        .addOperation(signedOperation)
-        .setBaseFee(Transaction.MIN_BASE_FEE)
-        .setTimeout(300)
-        .build()
-
-    val preparedTransaction = rpc.prepareTransaction(authorizedTransaction)
-    preparedTransaction.sign(signer)
-
-    val transactionResponse = rpc.sendTransaction(preparedTransaction)
-
-    return transactionResponse.hash
   }
 }

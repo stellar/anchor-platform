@@ -41,7 +41,7 @@ import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.Log.info
 import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.reference.wallet.WalletServerClient
-import org.stellar.sdk.SorobanServer
+import org.stellar.sdk.Asset
 import org.stellar.walletsdk.InteractiveFlowResponse
 import org.stellar.walletsdk.anchor.*
 import org.stellar.walletsdk.anchor.TransactionStatus.*
@@ -70,7 +70,6 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
   private val anchorReferenceServerClient =
     AnchorReferenceServerClient(Url(config.env["reference.server.url"]!!))
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
-  private val rpc = SorobanServer("https://soroban-testnet.stellar.org")
   private val jwtService: JwtService =
     JwtService(
       config.env["secret.sep6.more_info_url.jwt_secret"],
@@ -310,6 +309,58 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
     // Check the callbacks sent to the wallet reference server are recorded correctly
     val actualCallbacks = waitForWalletServerCallbacks(withdrawTxn.id, 5)
     assertCallbacks(actualCallbacks, getExpectedWithdrawalStatus())
+  }
+
+  @Test
+  fun `test withdraw from contract address end-to-end flow`() = runBlocking {
+    val webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
+    val homeDomain = "http://${URI.create(webAuthDomain).authority}"
+
+    val sep45Client =
+      Sep45Client(toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"), rpc, CLIENT_WALLET_SECRET)
+    val challenge =
+      sep45Client.getChallenge(
+        ChallengeRequest.builder()
+          .account(CLIENT_SMART_WALLET_ACCOUNT)
+          .homeDomain(homeDomain)
+          .build()
+      )
+    val token = sep45Client.validate(sep45Client.sign(challenge)).token
+    val sep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), token)
+
+    val request =
+      mapOf(
+        "asset_code" to "USDC",
+        "asset_issuer" to "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        "account" to CLIENT_SMART_WALLET_ACCOUNT,
+        "amount" to "1",
+      )
+    val response = sep24Client.withdraw(request)
+
+    // Start the withdrawal process
+    val interactiveUrlRes = client.get(response.url)
+    assertEquals(200, interactiveUrlRes.status.value)
+
+    // Wait for the status to change to PENDING_USER_TRANSFER_START
+    waitForTxnStatusWithoutSDK(
+      response.id,
+      "USDC",
+      SepTransactionStatus.PENDING_USR_TRANSFER_START,
+      sep24Client,
+    )
+
+    // Submit transfer transaction
+    val withdrawTxn = sep24Client.getTransaction(response.id, "USDC")
+    transferFunds(
+      CLIENT_SMART_WALLET_ACCOUNT,
+      withdrawTxn.transaction.to,
+      Asset.create(USDC.id),
+      "1",
+      walletKeyPair.keyPair,
+    )
+
+    // Wait for the status to change to COMPLETED
+    waitForTxnStatusWithoutSDK(response.id, "USDC", SepTransactionStatus.COMPLETED, sep24Client)
   }
 
   private suspend fun waitForWalletServerCallbacks(
