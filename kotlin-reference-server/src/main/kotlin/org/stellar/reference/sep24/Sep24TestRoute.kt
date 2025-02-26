@@ -22,6 +22,7 @@ fun Route.testSep24(
   withdrawalService: WithdrawalService,
   jwtKey: String,
 ) {
+  route("/") { get { call.respondText("Reference server is running ...") } }
   route("/sep24/interactive") {
     get {
       log.info {
