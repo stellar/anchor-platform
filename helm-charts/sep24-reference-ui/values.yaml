@@ -1,0 +1,34 @@
+fullName: sep24-reference-ui
+namespace: default
+
+container:
+  name: sep24-reference-ui
+  image: stellar/sep24-reference-ui:latest
+  imagePullPolicy: IfNotPresent
+
+config:
+  businessServerEndpoint: "http://localhost:8091"
+  allowedHost: "localhost"
+
+services:
+  ui:
+    containerPort: 3000
+    servicePort: 3000
+    type: ClusterIP
+    name: sep24-reference-ui
+    deployment:
+      replicas: 1
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 500m
+        limits:
+          memory: 1Gi
+          cpu: 1
+ingress:
+  name: ingress-sep24-reference-ui
+  rules:
+    host: sep24-reference-ui.local
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
