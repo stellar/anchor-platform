@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.fullName }}-svc-{{ .Values.services.ui.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.fullName }}-{{ .Values.services.ui.name }}
+    helm.sh/chart: {{ include "common.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.services.ui.deployment.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ .Values.fullName }}-svc-{{ .Values.services.ui.name }}
+  template:
+    metadata:
+      {{- if .Values.services.ui.deployment.annotations }}
+      annotations:
+        {{- toYaml .Values.services.ui.deployment.annotations | nindent 8 }}
+      {{- end }}
+      namespace: {{ .Values.namespace }}
+      labels:
+        app: {{ .Values.fullName }}-svc-{{ .Values.services.ui.name }}
+    spec:
+      containers:
+        - name: {{ .Values.container.name }}
+          image: {{ .Values.container.image }}
+          imagePullPolicy: {{ .Values.container.imagePullPolicy | default "Always" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.services.ui.containerPort | default 3000 }}
+              protocol: TCP
+          env:
+            - name: BUSINESS_SERVER_ENDPOINT
+              value: {{ .Values.config.businessServerEndpoint }}
+            - name: ALLOWED_HOST
+              value: {{ .Values.config.allowedHost }}
+          resources:
+            requests:
+              memory: {{ .Values.services.ui.deployment.resources.requests.memory }}
+              cpu: {{ .Values.services.ui.deployment.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.services.ui.deployment.resources.limits.memory }}
+              cpu: {{ .Values.services.ui.deployment.resources.limits.cpu }}

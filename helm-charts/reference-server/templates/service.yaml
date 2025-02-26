@@ -9,6 +9,10 @@ metadata:
         {{ $key }}: {{ $value | quote }}
       {{- end }}
     {{- end}}
+    app.kubernetes.io/name: {{ .Values.fullName }}-{{ .Values.services.ref.name }}
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   type: {{ .Values.services.ref.type | default "ClusterIP" }}
   ports:
