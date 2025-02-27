@@ -43,13 +43,13 @@ java -version
 To check out the project, run:
 
 ```shell
-git clone git@github.com:stellar/java-stellar-anchor-sdk.git 
+git clone git@github.com:stellar/anchor-platform.git 
 ```
 
 or
 
 ```shell
-git clone https://github.com/stellar/java-stellar-anchor-sdk.git
+git clone https://github.com/stellar/anchor-platform.git
 ```
 
 ## Set up `docker`
@@ -155,7 +155,7 @@ The project is mostly developed with IntelliJ, therefore we will only cover the 
 1. Clone the repository:
 
     ```shell
-    git clone git@github.com:stellar/java-stellar-anchor-sdk.git
+    git clone git@github.com:stellar/anchor-platform.git
     ```
 2. Install IntelliJ
 3. Install and configure `google-java-format`
@@ -167,7 +167,7 @@ The project is mostly developed with IntelliJ, therefore we will only cover the 
     2. File -> Settings -> Editor -> ktfmt -> Check `Enable ktfmt` and choose `Google (internal)` -> Apply
 5. Use IntelliJ to open as a Gradle project:
     1. Launch IntelliJ
-    2. File -> Open, choose the folder `java-stellar-anchor-sdk` where you cloned the repository.
+    2. File -> Open, choose the folder `anchor-platform` where you cloned the repository.
     3. When asked, choose `Open as Project`.
     4. IntelliJ will parse Gradle buildscript `build.gradle.kts` file and configure the project accordingly.
 6. Configure Gradle to build & run using IntelliJ IDEA:

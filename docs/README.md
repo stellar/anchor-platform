@@ -1,7 +1,7 @@
-[![License](https://badgen.net/badge/license/Apache%202/blue?icon=github&label=License)](https://github.com/stellar/java-stellar-anchor-sdk/blob/develop/LICENSE)
-[![GitHub Version](https://badgen.net/github/release/stellar/java-stellar-anchor-sdk?icon=github&label=Latest%20release)](https://github.com/stellar/java-stellar-anchor-sdk/releases)
-[![Docker](https://badgen.net/badge/Latest%20Release/v3.0.1/blue?icon=docker)](https://hub.docker.com/r/stellar/anchor-platform/tags?page=1&name=3.0.1)
-![Develop Branch](https://github.com/stellar/java-stellar-anchor-sdk/actions/workflows/on_push_to_develop.yml/badge.svg?branch=develop)
+[![License](https://badgen.net/badge/license/Apache%202/blue?icon=github&label=License)](https://github.com/stellar/anchor-platform/blob/develop/LICENSE)
+[![GitHub Version](https://badgen.net/github/release/stellar/anchor-platform?icon=github&label=Latest%20release)](https://github.com/stellar/anchor-platform/releases)
+[![Docker](https://badgen.net/badge/Latest%20Release/v3.0.2/blue?icon=docker)](https://hub.docker.com/r/stellar/anchor-platform/tags?page=1&name=3.0.2)
+![Develop Branch](https://github.com/stellar/anchor-platform/actions/workflows/on_push_to_develop.yml/badge.svg?branch=develop)
 
 <div style="text-align: center">
 <img alt="Stellar" src="https://github.com/stellar/.github/raw/master/stellar-logo.png" width="558" />
@@ -25,7 +25,7 @@ anchor, allowing businesses to focus on the core business logic necessary to pro
 
 To get started, visit the [Anchor Platform documentation](https://developers.stellar.org/docs/category/anchor-platform).
 Release notes can be found on the
-project's [releases page](https://github.com/stellar/java-stellar-anchor-sdk/releases).
+project's [releases page](https://github.com/stellar/anchor-platform/releases).
 
 ## Contributing
 

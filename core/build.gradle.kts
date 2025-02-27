@@ -63,11 +63,11 @@ publishing {
           pom {
             name.set("stellar-anchor-sdk")
             description.set("Stellar Anchor SDK - Java")
-            url.set("https://github.com/stellar/java-stellar-anchor-sdk")
+            url.set("https://github.com/stellar/anchor-platform")
             licenses {
               license {
                 name.set("Apache 2.0")
-                url.set("https://github.com/stellar/java-stellar-anchor-sdk/blob/main/LICENSE")
+                url.set("https://github.com/stellar/anchor-platform/blob/main/LICENSE")
               }
             }
             developers {
@@ -88,9 +88,9 @@ publishing {
               }
             }
             scm {
-              connection.set("scm:git:git://github.com/stellar/java-stellar-anchor-sdk")
-              developerConnection.set("scm:git:git://github.com/stellar/java-stellar-anchor-sdk")
-              url.set("https://github.com/stellar/java-stellar-anchor-sdk")
+              connection.set("scm:git:git://github.com/stellar/anchor-platform")
+              developerConnection.set("scm:git:git://github.com/stellar/anchor-platform")
+              url.set("https://github.com/stellar/anchor-platform")
             }
           }
         }

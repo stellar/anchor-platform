@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.fullName }}-svc-{{ .Values.services.ui.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- if .Values.services.ui.lsabels }}
+      {{- range $key, $value := .Values.services.ui.labels }}
+        {{ $key }}: {{ $value | quote }}
+      {{- end }}
+    {{- end }}
+    app.kubernetes.io/name: {{ .Values.fullName }}-{{ .Values.services.ui.name }}
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: {{ .Values.services.ui.type | default "ClusterIP"}}
+  ports:
+    - port: {{ .Values.services.ui.servicePort | default 3000 }}
+      targetPort: {{ .Values.services.ui.containerPort | default 3000 }}
+      protocol: TCP
+  selector:
+    app: {{ .Values.fullName }}-svc-{{ .Values.services.ui.name }}

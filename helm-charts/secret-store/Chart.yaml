@@ -5,6 +5,6 @@ maintainers:
   - name: Philip Liu
     email: philip.liu@stellar.org
 sources:
-  - "https//github.com/stellar/java-stellar-anchor-sdk"
+  - "https//github.com/stellar/anchor-platform"
 name: ap-secret-store
 version: 0.1.0
