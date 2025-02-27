@@ -6,11 +6,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 import lombok.Getter;
 import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.anchor.util.AssetHelper;
-import org.stellar.sdk.AssetTypeCreditAlphaNum;
-import org.stellar.sdk.Server;
-import org.stellar.sdk.Transaction;
-import org.stellar.sdk.TrustLineAsset;
+import org.stellar.sdk.*;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.requests.PaymentsRequestBuilder;
 import org.stellar.sdk.responses.AccountResponse;
@@ -99,6 +97,36 @@ public class Horizon implements LedgerApi {
         .build();
   }
 
+  @Override
+  public LedgerTransaction getTransaction(String transactionId) throws NetworkException {
+    TransactionResponse response = getServer().transactions().transaction(transactionId);
+    return LedgerTransaction.builder()
+        .hash(response.getHash())
+        .sourceAccount(response.getSourceAccount())
+        .envelopXdr(response.getEnvelopeXdr())
+        .metaXdr(response.getResultMetaXdr())
+        .sourceAccount(response.getSourceAccount())
+        .memo(response.getMemo())
+        .sequenceNumber(response.getSourceAccountSequence())
+        .createdAt(response.getCreatedAt())
+        .build();
+  }
+
+  @Override
+  public LedgerTransactionResponse submitTransaction(Transaction transaction)
+      throws NetworkException {
+    TransactionResponse txnR = getServer().submitTransaction(transaction, false);
+
+    return LedgerTransactionResponse.builder()
+        .hash(txnR.getHash())
+        .metaXdr(txnR.getEnvelopeXdr())
+        .envelopXdr(txnR.getEnvelopeXdr())
+        .sourceAccount(txnR.getSourceAccount())
+        .feeCharged(txnR.getFeeCharged().toString())
+        .createdAt(txnR.getCreatedAt())
+        .build();
+  }
+
   /**
    * Get payment operations for a transaction.
    *
@@ -106,7 +134,6 @@ public class Horizon implements LedgerApi {
    * @return the operations
    * @throws NetworkException request failed, see {@link PaymentsRequestBuilder#execute()}
    */
-  @Override
   public List<OperationResponse> getStellarTxnOperations(String stellarTxnId) {
     return getServer()
         .payments()
@@ -114,10 +141,5 @@ public class Horizon implements LedgerApi {
         .forTransaction(stellarTxnId)
         .execute()
         .getRecords();
-  }
-
-  @Override
-  public TransactionResponse submitTransaction(Transaction transaction) throws NetworkException {
-    return getServer().submitTransaction(transaction, false);
   }
 }

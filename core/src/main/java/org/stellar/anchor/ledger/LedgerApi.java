@@ -9,8 +9,6 @@ import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TransactionBuilderAccount;
 import org.stellar.sdk.exception.NetworkException;
-import org.stellar.sdk.responses.TransactionResponse;
-import org.stellar.sdk.responses.operations.OperationResponse;
 
 public interface LedgerApi {
   /**
@@ -38,16 +36,17 @@ public interface LedgerApi {
    * @param stellarTxnId The Stellar transaction ID.
    * @return The operations for the transaction.
    */
-  List<OperationResponse> getStellarTxnOperations(String stellarTxnId);
+  LedgerTransaction getTransaction(String stellarTxnId);
 
   /**
    * Submit a transaction to the network.
    *
-   * @param transaction
+   * @param transaction The transaction to submit.
    * @return The transaction response.
-   * @throws NetworkException
+   * @throws NetworkException If there was an error communicating with the network.
    */
-  TransactionResponse submitTransaction(Transaction transaction) throws NetworkException;
+  LedgerTransaction.LedgerTransactionResponse submitTransaction(Transaction transaction)
+      throws NetworkException;
 
   @Builder
   @Getter
