@@ -129,7 +129,7 @@ public class ObservedPayment {
         .build();
   }
 
-  // TODO: Replace this method when refactoring the observer
+  // TODO: Remove this method when refactoring the observer with mock unified event classes
   public static ObservedPayment fromPaymentOperationResponse(PaymentOperationResponse paymentOp)
       throws SepException {
     String assetCode = null, assetIssuer = null;
@@ -166,7 +166,7 @@ public class ObservedPayment {
         .build();
   }
 
-  // TODO: Replace this method when refactoring the observer
+  // TODO: Remove this method when refactoring the observer with mock unified event classes
   public static ObservedPayment fromPathPaymentOperationResponse(
       PathPaymentBaseOperationResponse pathPaymentOp) throws SepException {
     String assetCode = null, assetIssuer = null;
