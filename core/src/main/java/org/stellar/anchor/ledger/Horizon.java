@@ -103,7 +103,7 @@ public class Horizon implements LedgerApi {
     return LedgerTransaction.builder()
         .hash(response.getHash())
         .sourceAccount(response.getSourceAccount())
-        .envelopXdr(response.getEnvelopeXdr())
+        .envelopeXdr(response.getEnvelopeXdr())
         .metaXdr(response.getResultMetaXdr())
         .sourceAccount(response.getSourceAccount())
         .memo(response.getMemo())

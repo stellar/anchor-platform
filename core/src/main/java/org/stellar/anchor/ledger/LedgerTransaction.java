@@ -11,9 +11,10 @@ import org.stellar.sdk.xdr.OperationType;
 @Data
 public class LedgerTransaction {
   String hash;
-  String envelopXdr;
+  String envelopeXdr;
   String metaXdr;
   String sourceAccount;
+  Asset sourceAsset;
   Long fee;
   Memo memo;
   Long sequenceNumber;
@@ -26,8 +27,7 @@ public class LedgerTransaction {
   public static class LedgerOperation {
     OperationType type;
     LedgerPaymentOperation paymentOperation;
-    LedgerPathPaymentStrictReceiveOperation pathPaymentStrictReceiveOperation;
-    LedgerPathPaymentStrictSendOperation pathPaymentStrictSendOperation;
+    LedgerPathPaymentOperation pathPaymentOperation;
   }
 
   @Builder
@@ -43,7 +43,7 @@ public class LedgerTransaction {
 
   @Builder
   @Data
-  public static class LedgerPathPaymentStrictReceiveOperation {
+  public static class LedgerPathPaymentOperation {
     String assetType;
     String sourceAccount;
     String sourceAmount;
@@ -54,41 +54,6 @@ public class LedgerTransaction {
     String amount;
     Asset asset;
   }
-
-  @Builder
-  @Data
-  public static class LedgerPathPaymentStrictSendOperation {
-    String assetType;
-    String sourceAccount;
-    String sourceAmount;
-    String sourceAsset;
-    String sourceAssetType;
-    String from;
-    String to;
-    String amount;
-    Asset asset;
-  }
-
-  //
-  //  public interface LedgerPathPaymentOperation {
-  //    String getAssetType();
-  //
-  //    String getSourceAccount();
-  //
-  //    String getSourceAmount();
-  //
-  //    String getSourceAsset();
-  //
-  //    String getSourceAssetType();
-  //
-  //    String getFrom();
-  //
-  //    String getTo();
-  //
-  //    String getAmount();
-  //
-  //    Asset getAsset();
-  //  }
 
   @Builder
   @Data
