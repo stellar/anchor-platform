@@ -1420,8 +1420,8 @@ class Sep6ServiceTest {
   }
 
   private fun createDepositTxn(
-    sep10Account: String,
-    sep10AccountMemo: String? = null,
+    webAuthAccount: String,
+    webAuthAccountMemo: String? = null,
   ): Sep6Transaction {
     val txn = PojoSep6Transaction()
 
@@ -1446,8 +1446,8 @@ class Sep6ServiceTest {
     txn.amountOutAsset = "USDC"
     txn.amountFee = "2"
     txn.amountOutAsset = "stellar:USDC:GABCD"
-    txn.sep10Account = sep10Account
-    txn.sep10AccountMemo = sep10AccountMemo
+    txn.webAuthAccount = webAuthAccount
+    txn.webAuthAccountMemo = webAuthAccountMemo
     txn.fromAccount = "GABCD"
     txn.toAccount = "GABCD"
     txn.memo = "some memo"

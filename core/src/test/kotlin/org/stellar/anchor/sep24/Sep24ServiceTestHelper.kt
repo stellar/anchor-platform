@@ -38,7 +38,7 @@ fun createTestTransaction(kind: String): Sep24Transaction {
 
   txn.requestAssetCode = TEST_ASSET
   txn.requestAssetIssuer = TEST_ASSET_ISSUER_ACCOUNT_ID
-  txn.sep10Account = TEST_ACCOUNT
+  txn.webAuthAccount = TEST_ACCOUNT
   txn.toAccount = TEST_ACCOUNT
   txn.fromAccount = TEST_ACCOUNT
   txn.clientDomain = TestConstants.TEST_CLIENT_DOMAIN
@@ -61,7 +61,7 @@ fun createTestTransactions(kind: String): MutableList<Sep24Transaction> {
 
   txn.requestAssetCode = TEST_ASSET
   txn.requestAssetIssuer = TEST_ASSET_ISSUER_ACCOUNT_ID
-  txn.sep10Account = TEST_ACCOUNT
+  txn.webAuthAccount = TEST_ACCOUNT
   txn.toAccount = TEST_ACCOUNT
   txn.fromAccount = TEST_ACCOUNT
   txn.clientDomain = TestConstants.TEST_CLIENT_DOMAIN
@@ -80,7 +80,7 @@ fun createTestTransactions(kind: String): MutableList<Sep24Transaction> {
 
   txn.requestAssetCode = TEST_ASSET
   txn.requestAssetIssuer = TEST_ASSET_ISSUER_ACCOUNT_ID
-  txn.sep10Account = TEST_ACCOUNT
+  txn.webAuthAccount = TEST_ACCOUNT
   txn.toAccount = TEST_ACCOUNT
   txn.fromAccount = TEST_ACCOUNT
   txn.clientDomain = TestConstants.TEST_CLIENT_DOMAIN

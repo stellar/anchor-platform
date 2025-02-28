@@ -28,10 +28,10 @@ public interface JdbcSep6TransactionRepo
   JdbcSep6Transaction findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
       String withdrawAnchorAccount, String fromAccount, String status);
 
-  List<Sep6Transaction> findBySep10AccountAndRequestAssetCodeOrderByStartedAtDesc(
-      String sep10Account, String requestAssetCode);
+  List<Sep6Transaction> findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
+      String webAuthAccount, String requestAssetCode);
 
   List<Sep6Transaction>
-      findBySep10AccountAndSep10AccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
-          String sep10Account, String sep10AccountMemo, String requestAssetCode);
+      findByWebAuthAccountAndWebAuthAccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
+          String webAuthAccount, String webAuthAccountMemo, String requestAssetCode);
 }

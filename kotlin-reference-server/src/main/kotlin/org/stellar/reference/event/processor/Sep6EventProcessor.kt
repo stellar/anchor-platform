@@ -371,13 +371,17 @@ class Sep6EventProcessor(
     }
   }
 
-  private fun verifyKyc(sep10Account: String, sep10AccountMemo: String?, kind: Kind): List<String> {
+  private fun verifyKyc(
+    webAuthAccount: String,
+    webAuthAccountMemo: String?,
+    kind: Kind,
+  ): List<String> {
     val customer = runBlocking {
       customerService.getCustomer(
         GetCustomerRequest.builder()
-          .account(sep10Account)
-          .memo(sep10AccountMemo)
-          .memoType(if (sep10AccountMemo != null) "id" else null)
+          .account(webAuthAccount)
+          .memo(webAuthAccountMemo)
+          .memoType(if (webAuthAccountMemo != null) "id" else null)
           .build()
       )
     }

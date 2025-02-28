@@ -138,8 +138,8 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token));
@@ -239,8 +239,8 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
@@ -317,8 +317,8 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
@@ -413,8 +413,8 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
@@ -495,10 +495,10 @@ public class Sep6Service {
     if (txn == null) {
       throw new NotFoundException("transaction not found");
     }
-    if (!Objects.equals(txn.getSep10Account(), token.getAccount())) {
+    if (!Objects.equals(txn.getWebAuthAccount(), token.getAccount())) {
       throw new NotFoundException("account does not match token");
     }
-    if (!Objects.equals(txn.getSep10AccountMemo(), token.getAccountMemo())) {
+    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
       throw new NotFoundException("account memo does not match token");
     }
 

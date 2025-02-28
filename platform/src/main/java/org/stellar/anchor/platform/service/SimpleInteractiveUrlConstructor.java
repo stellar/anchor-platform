@@ -80,8 +80,8 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
   String constructToken(
       Sep24Transaction txn, Map<String, String> request, AssetInfo asset, String homeDomain) {
     ClientConfig clientConfig =
-        clientsService.getClientConfigByDomainAndSep10Account(
-            txn.getClientDomain(), txn.getSep10Account());
+        clientsService.getClientConfigByDomainAndAccount(
+            txn.getClientDomain(), txn.getWebAuthAccount());
 
     debugF(
         "Resolving configs for token construct. Got config: {}, all configs: {}",

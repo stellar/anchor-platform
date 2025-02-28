@@ -91,7 +91,7 @@ class SimpleInteractiveUrlConstructorTest {
           testTxn,
           testRequest as HashMap<String, String>?,
           testAsset,
-          webAuthJwt
+          webAuthJwt,
         )
       )
     testJwt(jwt)
@@ -102,7 +102,7 @@ class SimpleInteractiveUrlConstructorTest {
     assertEquals(TEST_HOME_DOMAIN, claims[HOME_DOMAIN])
 
     // Unknown client domain
-    testTxn.sep10AccountMemo = null
+    testTxn.webAuthAccountMemo = null
     testTxn.clientDomain = "unknown.com"
     jwt = parseJwtFromUrl(constructor.construct(testTxn, testRequest, testAsset, webAuthJwt))
     claims = jwt.claims
@@ -113,8 +113,8 @@ class SimpleInteractiveUrlConstructorTest {
     assertNull(claims["client_name"])
 
     // Custodial wallet
-    testTxn.sep10Account = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-    testTxn.sep10AccountMemo = "1234"
+    testTxn.webAuthAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    testTxn.webAuthAccountMemo = "1234"
     testTxn.clientDomain = null
     jwt = parseJwtFromUrl(constructor.construct(testTxn, testRequest, testAsset, webAuthJwt))
     claims = jwt.claims
@@ -237,8 +237,8 @@ private const val TXN_JSON_1 =
   "transaction_id": "txn_123",
   "status": "incomplete",
   "kind" : "deposit",
-  "sep10_account": "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO",
-  "sep10_account_memo": "1234",
+  "web_auth_account": "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO",
+  "web_auth_account_memo": "1234",
   "amount_in": "100",
   "amount_in_asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
   "client_domain": "lobstr.co"

@@ -57,12 +57,12 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
     List<Sep6Transaction> txns;
     if (accountMemo == null) {
       txns =
-          transactionRepo.findBySep10AccountAndRequestAssetCodeOrderByStartedAtDesc(
+          transactionRepo.findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
               accountId, request.getAssetCode());
     } else {
       txns =
           transactionRepo
-              .findBySep10AccountAndSep10AccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
+              .findByWebAuthAccountAndWebAuthAccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
                   accountId, accountMemo, request.getAssetCode());
     }
 
