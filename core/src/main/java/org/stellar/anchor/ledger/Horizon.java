@@ -71,18 +71,6 @@ public class Horizon implements LedgerApi {
                 .medThreshold(thresholds.getMedThreshold())
                 .highThreshold(thresholds.getHighThreshold())
                 .build())
-        .balances(
-            response.getBalances().stream()
-                .map(
-                    b ->
-                        Balance.builder()
-                            .assetType(b.getAssetType())
-                            .assetCode(b.getAssetCode())
-                            .assetIssuer(b.getAssetIssuer())
-                            .liquidityPoolId(b.getLiquidityPoolId())
-                            .limit(b.getLimit())
-                            .build())
-                .collect(Collectors.toList()))
         .signers(
             response.getSigners().stream()
                 .map(
@@ -104,7 +92,6 @@ public class Horizon implements LedgerApi {
         .hash(response.getHash())
         .sourceAccount(response.getSourceAccount())
         .envelopeXdr(response.getEnvelopeXdr())
-        .metaXdr(response.getResultMetaXdr())
         .sourceAccount(response.getSourceAccount())
         .memo(response.getMemo())
         .sequenceNumber(response.getSourceAccountSequence())

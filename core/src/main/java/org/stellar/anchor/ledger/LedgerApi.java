@@ -55,7 +55,6 @@ public interface LedgerApi {
     private Long sequenceNumber;
 
     private Thresholds thresholds;
-    private List<Balance> balances;
     private List<Signer> signers;
 
     @Override
