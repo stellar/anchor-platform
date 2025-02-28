@@ -5,7 +5,7 @@ import org.stellar.sdk.SorobanServer;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.exception.NetworkException;
 
-public class StellarRpc implements LedgerApi {
+public class StellarRpc implements LedgerClient {
   String rpcServerUrl;
   SorobanServer sorobanServer;
 

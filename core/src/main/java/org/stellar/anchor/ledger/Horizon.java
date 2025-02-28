@@ -17,7 +17,7 @@ import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.xdr.AssetType;
 
 /** The horizon-server. */
-public class Horizon implements LedgerApi {
+public class Horizon implements LedgerClient {
 
   @Getter private final String horizonUrl;
   @Getter private final String stellarNetworkPassphrase;
@@ -66,23 +66,11 @@ public class Horizon implements LedgerApi {
         .accountId(response.getAccountId())
         .sequenceNumber(response.getSequenceNumber())
         .thresholds(
-            LedgerApi.Thresholds.builder()
+            LedgerClient.Thresholds.builder()
                 .lowThreshold(thresholds.getLowThreshold())
                 .medThreshold(thresholds.getMedThreshold())
                 .highThreshold(thresholds.getHighThreshold())
                 .build())
-        .balances(
-            response.getBalances().stream()
-                .map(
-                    b ->
-                        Balance.builder()
-                            .assetType(b.getAssetType())
-                            .assetCode(b.getAssetCode())
-                            .assetIssuer(b.getAssetIssuer())
-                            .liquidityPoolId(b.getLiquidityPoolId())
-                            .limit(b.getLimit())
-                            .build())
-                .collect(Collectors.toList()))
         .signers(
             response.getSigners().stream()
                 .map(
@@ -104,7 +92,6 @@ public class Horizon implements LedgerApi {
         .hash(response.getHash())
         .sourceAccount(response.getSourceAccount())
         .envelopeXdr(response.getEnvelopeXdr())
-        .metaXdr(response.getResultMetaXdr())
         .sourceAccount(response.getSourceAccount())
         .memo(response.getMemo())
         .sequenceNumber(response.getSourceAccountSequence())

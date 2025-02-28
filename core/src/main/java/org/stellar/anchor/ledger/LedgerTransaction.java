@@ -12,7 +12,6 @@ import org.stellar.sdk.xdr.OperationType;
 public class LedgerTransaction {
   String hash;
   String envelopeXdr;
-  String metaXdr;
   String sourceAccount;
   Asset sourceAsset;
   Long fee;

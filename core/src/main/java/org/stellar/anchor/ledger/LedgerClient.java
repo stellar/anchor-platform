@@ -10,7 +10,7 @@ import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TransactionBuilderAccount;
 import org.stellar.sdk.exception.NetworkException;
 
-public interface LedgerApi {
+public interface LedgerClient {
   /**
    * Check if the account has a trustline for the given asset.
    *
@@ -55,7 +55,6 @@ public interface LedgerApi {
     private Long sequenceNumber;
 
     private Thresholds thresholds;
-    private List<Balance> balances;
     private List<Signer> signers;
 
     @Override
@@ -85,17 +84,6 @@ public interface LedgerApi {
     Integer lowThreshold;
     Integer medThreshold;
     Integer highThreshold;
-  }
-
-  @Builder
-  @Getter
-  class Balance {
-    String assetType;
-    String assetCode;
-    String assetIssuer;
-    String liquidityPoolId;
-    String limit;
-    String balance;
   }
 
   @Value

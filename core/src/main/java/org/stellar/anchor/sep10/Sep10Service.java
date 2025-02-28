@@ -31,7 +31,7 @@ import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep10Config;
-import org.stellar.anchor.ledger.LedgerApi;
+import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Sep10Challenge.ChallengeTransaction;
@@ -45,7 +45,7 @@ public class Sep10Service implements ISep10Service {
   final AppConfig appConfig;
   final SecretConfig secretConfig;
   final Sep10Config sep10Config;
-  final LedgerApi ledgerApi;
+  final LedgerClient ledgerClient;
   final JwtService jwtService;
   final ClientFinder clientFinder;
   final String serverAccountId;
@@ -56,7 +56,7 @@ public class Sep10Service implements ISep10Service {
       AppConfig appConfig,
       SecretConfig secretConfig,
       Sep10Config sep10Config,
-      LedgerApi ledgerApi,
+      LedgerClient ledgerClient,
       JwtService jwtService,
       ClientFinder clientFinder) {
     debug("appConfig:", appConfig);
@@ -64,7 +64,7 @@ public class Sep10Service implements ISep10Service {
     this.appConfig = appConfig;
     this.secretConfig = secretConfig;
     this.sep10Config = sep10Config;
-    this.ledgerApi = ledgerApi;
+    this.ledgerClient = ledgerClient;
     this.jwtService = jwtService;
     this.clientFinder = clientFinder;
     this.serverAccountId =
@@ -127,7 +127,7 @@ public class Sep10Service implements ISep10Service {
     // fetch the client domain from the transaction
     String clientDomain = fetchClientDomain(challenge);
     // fetch the account response from the ledgerApi
-    LedgerApi.Account account = fetchAccount(request, challenge, clientDomain);
+    LedgerClient.Account account = fetchAccount(request, challenge, clientDomain);
 
     if (account == null) {
       // The account does not exist from LedgerApi, using the client's master key to verify.
@@ -387,7 +387,7 @@ public class Sep10Service implements ISep10Service {
   }
 
   void validateChallengeRequest(
-      ValidationRequest request, LedgerApi.Account account, String clientDomain)
+      ValidationRequest request, LedgerClient.Account account, String clientDomain)
       throws SepValidationException {
     // fetch the signers from the transaction
     Set<Sep10Challenge.Signer> signers = fetchSigners(account);
@@ -413,7 +413,7 @@ public class Sep10Service implements ISep10Service {
             signers);
   }
 
-  Set<Sep10Challenge.Signer> fetchSigners(LedgerApi.Account account) {
+  Set<Sep10Challenge.Signer> fetchSigners(LedgerClient.Account account) {
     // Find the signers of the client account.
     return account.getSigners().stream()
         .filter(as -> as.getType().equals("ed25519_public_key"))
@@ -421,14 +421,14 @@ public class Sep10Service implements ISep10Service {
         .collect(Collectors.toSet());
   }
 
-  LedgerApi.Account fetchAccount(
+  LedgerClient.Account fetchAccount(
       ValidationRequest request, ChallengeTransaction challenge, String clientDomain)
       throws SepValidationException {
     // Check the client's account
-    LedgerApi.Account account;
+    LedgerClient.Account account;
     try {
       infoF("Checking if {} exists in the Stellar network", challenge.getClientAccountId());
-      account = ledgerApi.getAccount(challenge.getClientAccountId());
+      account = ledgerClient.getAccount(challenge.getClientAccountId());
       traceF("challenge account: {}", account);
       sep10ChallengeValidatedCounter.increment();
       return account;

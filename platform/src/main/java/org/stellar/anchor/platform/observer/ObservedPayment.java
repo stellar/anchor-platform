@@ -129,7 +129,7 @@ public class ObservedPayment {
         .build();
   }
 
-  // TODO: Replace this method when refactoring the observer
+  // TODO: Remove this method when refactoring the observer with mock unified event classes
   public static ObservedPayment fromPaymentOperationResponse(PaymentOperationResponse paymentOp)
       throws SepException {
     String assetCode = null, assetIssuer = null;
@@ -166,12 +166,11 @@ public class ObservedPayment {
         .build();
   }
 
-  // TODO: Replace this method when refactoring the observer
+  // TODO: Remove this method when refactoring the observer with mock unified event classes
   public static ObservedPayment fromPathPaymentOperationResponse(
       PathPaymentBaseOperationResponse pathPaymentOp) throws SepException {
     String assetCode = null, assetIssuer = null;
-    if (pathPaymentOp.getAsset() instanceof AssetTypeCreditAlphaNum) {
-      AssetTypeCreditAlphaNum issuedAsset = (AssetTypeCreditAlphaNum) pathPaymentOp.getAsset();
+    if (pathPaymentOp.getAsset() instanceof AssetTypeCreditAlphaNum issuedAsset) {
       assetCode = issuedAsset.getCode();
       assetIssuer = issuedAsset.getIssuer();
     } else if (pathPaymentOp.getAsset() instanceof AssetTypeNative) {
@@ -179,9 +178,7 @@ public class ObservedPayment {
     }
 
     String sourceAssetCode = null, sourceAssetIssuer = null;
-    if (pathPaymentOp.getSourceAsset() instanceof AssetTypeCreditAlphaNum) {
-      AssetTypeCreditAlphaNum sourceIssuedAsset =
-          (AssetTypeCreditAlphaNum) pathPaymentOp.getSourceAsset();
+    if (pathPaymentOp.getSourceAsset() instanceof AssetTypeCreditAlphaNum sourceIssuedAsset) {
       sourceAssetCode = sourceIssuedAsset.getCode();
       sourceAssetIssuer = sourceIssuedAsset.getIssuer();
     } else if (pathPaymentOp.getSourceAsset() instanceof AssetTypeNative) {

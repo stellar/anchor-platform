@@ -55,7 +55,7 @@ import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
 import org.stellar.anchor.ledger.Horizon
-import org.stellar.anchor.ledger.LedgerApi
+import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.FileUtil
 import org.stellar.anchor.util.GsonUtils
@@ -79,10 +79,10 @@ internal class TestSigner(
   @SerializedName("weight") val weight: Int,
   @SerializedName("sponsor") val sponsor: String
 ) {
-  fun toSigner(): LedgerApi.Signer {
+  fun toSigner(): LedgerClient.Signer {
     val gson = GsonUtils.getInstance()
     val json = gson.toJson(this)
-    return gson.fromJson(json, LedgerApi.Signer::class.java)
+    return gson.fromJson(json, LedgerClient.Signer::class.java)
   }
 }
 
@@ -119,7 +119,7 @@ internal class Sep10ServiceTest {
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
   @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) lateinit var sep10Config: Sep10Config
-  @MockK(relaxed = true) lateinit var ledgerApi: LedgerApi
+  @MockK(relaxed = true) lateinit var ledgerClient: LedgerClient
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
 
   private lateinit var jwtService: JwtService
@@ -142,7 +142,7 @@ internal class Sep10ServiceTest {
 
     this.jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
     this.sep10Service =
-      Sep10Service(appConfig, secretConfig, sep10Config, ledgerApi, jwtService, clientFinder)
+      Sep10Service(appConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder)
     this.httpClient = `create httpClient`()
   }
 
@@ -376,14 +376,14 @@ internal class Sep10ServiceTest {
     val mockSigners =
       listOf(TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner())
     val accountResponse =
-      mockk<LedgerApi.Account> {
+      mockk<LedgerClient.Account> {
         every { accountId } returns clientKeyPair.accountId
         every { sequenceNumber } returns 1
         every { signers } returns mockSigners
         every { thresholds.medThreshold } returns 1
       }
 
-    every { ledgerApi.getAccount(any()) } returns accountResponse
+    every { ledgerClient.getAccount(any()) } returns accountResponse
 
     val response = sep10Service.validateChallenge(vr)
     val jwt = jwtService.decode(response.token, Sep10Jwt::class.java)
@@ -400,14 +400,14 @@ internal class Sep10ServiceTest {
       )
 
     val accountResponse =
-      mockk<LedgerApi.Account> {
+      mockk<LedgerClient.Account> {
         every { accountId } returns clientKeyPair.accountId
         every { sequenceNumber } returns 1
         every { signers } returns mockSigners
         every { thresholds.medThreshold } returns 1
       }
 
-    every { ledgerApi.getAccount(any()) } returns accountResponse
+    every { ledgerClient.getAccount(any()) } returns accountResponse
 
     val vr = ValidationRequest()
     vr.transaction = createTestChallenge(TEST_CLIENT_DOMAIN, TEST_HOME_DOMAIN, true)
@@ -424,7 +424,7 @@ internal class Sep10ServiceTest {
 
     // Test when the transaction was not signed by the client domain and the client account not
     // exists
-    every { ledgerApi.getAccount(any()) } answers
+    every { ledgerClient.getAccount(any()) } answers
       {
         throw BadRequestException(400, "mock error", null, null)
       }
@@ -438,7 +438,7 @@ internal class Sep10ServiceTest {
     val vr = ValidationRequest()
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
 
-    every { ledgerApi.getAccount(any()) } answers
+    every { ledgerClient.getAccount(any()) } answers
       {
         throw BadRequestException(400, "mock error", null, null)
       }
