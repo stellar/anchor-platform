@@ -17,7 +17,7 @@ import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.xdr.AssetType;
 
 /** The horizon-server. */
-public class Horizon implements LedgerApi {
+public class Horizon implements LedgerClient {
 
   @Getter private final String horizonUrl;
   @Getter private final String stellarNetworkPassphrase;
@@ -66,7 +66,7 @@ public class Horizon implements LedgerApi {
         .accountId(response.getAccountId())
         .sequenceNumber(response.getSequenceNumber())
         .thresholds(
-            LedgerApi.Thresholds.builder()
+            LedgerClient.Thresholds.builder()
                 .lowThreshold(thresholds.getLowThreshold())
                 .medThreshold(thresholds.getMedThreshold())
                 .highThreshold(thresholds.getHighThreshold())

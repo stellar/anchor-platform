@@ -10,7 +10,7 @@ import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TransactionBuilderAccount;
 import org.stellar.sdk.exception.NetworkException;
 
-public interface LedgerApi {
+public interface LedgerClient {
   /**
    * Check if the account has a trustline for the given asset.
    *
