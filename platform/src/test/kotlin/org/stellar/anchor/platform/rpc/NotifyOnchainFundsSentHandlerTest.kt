@@ -34,7 +34,7 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
 import org.stellar.anchor.event.EventService.Session
-import org.stellar.anchor.horizon.Horizon
+import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.metrics.MetricsService
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep6Transaction

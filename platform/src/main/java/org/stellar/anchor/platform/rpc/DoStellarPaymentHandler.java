@@ -24,7 +24,7 @@ import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.*;
 import org.stellar.anchor.platform.validator.RequestValidator;
@@ -92,13 +92,12 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
       switch (Sep.from(txn.getProtocol())) {
         case SEP_6:
           JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
-          trustlineConfigured =
-              horizon.isTrustlineConfigured(txn6.getToAccount(), txn6.getAmountOutAsset());
+          trustlineConfigured = horizon.hasTrustline(txn6.getToAccount(), txn6.getAmountOutAsset());
           break;
         case SEP_24:
           JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
           trustlineConfigured =
-              horizon.isTrustlineConfigured(txn24.getToAccount(), txn24.getAmountOutAsset());
+              horizon.hasTrustline(txn24.getToAccount(), txn24.getAmountOutAsset());
           break;
         default:
           break;
@@ -148,8 +147,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
         JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
 
         try {
-          trustlineConfigured =
-              horizon.isTrustlineConfigured(txn6.getToAccount(), txn6.getAmountOutAsset());
+          trustlineConfigured = horizon.hasTrustline(txn6.getToAccount(), txn6.getAmountOutAsset());
         } catch (NetworkException ex) {
           trustlineConfigured = false;
         }
@@ -171,7 +169,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
 
         try {
           trustlineConfigured =
-              horizon.isTrustlineConfigured(txn24.getToAccount(), txn24.getAmountOutAsset());
+              horizon.hasTrustline(txn24.getToAccount(), txn24.getAmountOutAsset());
         } catch (NetworkException ex) {
           trustlineConfigured = false;
         }

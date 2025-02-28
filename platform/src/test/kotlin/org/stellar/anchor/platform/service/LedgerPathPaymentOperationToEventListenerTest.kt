@@ -24,7 +24,7 @@ import org.stellar.sdk.Asset
 import org.stellar.sdk.Asset.create
 import org.stellar.sdk.AssetTypeNative
 
-class PaymentOperationToEventListenerTest {
+class LedgerPathPaymentOperationToEventListenerTest {
   @MockK(relaxed = true) private lateinit var sep31TransactionStore: JdbcSep31TransactionStore
   @MockK(relaxed = true) private lateinit var sep24TransactionStore: JdbcSep24TransactionStore
   @MockK(relaxed = true) private lateinit var sep6TransactionStore: JdbcSep6TransactionStore

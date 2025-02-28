@@ -15,7 +15,7 @@ import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.*;
 import org.stellar.anchor.healthcheck.HealthCheckable;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.platform.config.*;
 import org.stellar.anchor.platform.service.HealthCheckService;
 import org.stellar.anchor.platform.service.Sep24MoreInfoUrlConstructor;
