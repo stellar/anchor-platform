@@ -86,17 +86,6 @@ public interface LedgerApi {
     Integer highThreshold;
   }
 
-  @Builder
-  @Getter
-  class Balance {
-    String assetType;
-    String assetCode;
-    String assetIssuer;
-    String liquidityPoolId;
-    String limit;
-    String balance;
-  }
-
   @Value
   @Builder
   @Getter
