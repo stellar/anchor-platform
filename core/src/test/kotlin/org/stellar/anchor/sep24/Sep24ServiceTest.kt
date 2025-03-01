@@ -258,8 +258,8 @@ internal class Sep24ServiceTest {
       slotTxn.captured.requestAssetIssuer,
       "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
     )
-    assertEquals(TEST_ACCOUNT, slotTxn.captured.sep10Account)
-    assertEquals(TEST_MEMO, slotTxn.captured.sep10AccountMemo)
+    assertEquals(TEST_ACCOUNT, slotTxn.captured.webAuthAccount)
+    assertEquals(TEST_MEMO, slotTxn.captured.webAuthAccountMemo)
     assertEquals(TEST_ACCOUNT, slotTxn.captured.fromAccount)
     assertEquals(TEST_CLIENT_DOMAIN, slotTxn.captured.clientDomain)
     assertEquals(TEST_CLIENT_NAME, slotTxn.captured.clientName)
@@ -413,8 +413,8 @@ internal class Sep24ServiceTest {
       slotTxn.captured.requestAssetIssuer,
       "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
     )
-    assertEquals(TEST_ACCOUNT, slotTxn.captured.sep10Account)
-    assertEquals(TEST_MEMO, slotTxn.captured.sep10AccountMemo)
+    assertEquals(TEST_ACCOUNT, slotTxn.captured.webAuthAccount)
+    assertEquals(TEST_MEMO, slotTxn.captured.webAuthAccountMemo)
     assertEquals(TEST_ACCOUNT, slotTxn.captured.toAccount)
     assertEquals(TEST_CLIENT_DOMAIN, slotTxn.captured.clientDomain)
     assertEquals(TEST_CLIENT_NAME, slotTxn.captured.clientName)

@@ -207,8 +207,8 @@ public class Sep24Service {
                 sep24Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep24Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .toAccount(asset.getDistributionAccount())
             .clientDomain(token.getClientDomain())
@@ -395,8 +395,8 @@ public class Sep24Service {
                 sep24Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep24Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
@@ -532,7 +532,7 @@ public class Sep24Service {
     }
 
     // We should not return the transaction that belongs to other accounts.
-    if (txn == null || !txn.getSep10Account().equals(token.getAccount())) {
+    if (txn == null || !txn.getWebAuthAccount().equals(token.getAccount())) {
       infoF("no transactions found with account:{}", token.getAccount());
       throw new SepNotFoundException("transaction not found");
     }
@@ -540,7 +540,7 @@ public class Sep24Service {
     // If the token has a memo, make sure the transaction belongs to the account
     // with the same memo.
     if (token.getAccountMemo() != null
-        && txn.getSep10Account().equals(token.getAccount() + ":" + token.getAccountMemo())) {
+        && txn.getWebAuthAccount().equals(token.getAccount() + ":" + token.getAccountMemo())) {
       infoF(
           "no transactions found with account:{} memo:{}",
           token.getAccount(),

@@ -57,7 +57,7 @@ class CustodyServiceTest {
     JSONAssert.assertEquals(
       sep6DepositRequest.replace("testKind", kind),
       gson.toJson(requestCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
   }
 
@@ -77,7 +77,7 @@ class CustodyServiceTest {
     JSONAssert.assertEquals(
       sep6WithdrawalRequest.replace("testKind", kind),
       gson.toJson(requestCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
   }
 
@@ -94,7 +94,7 @@ class CustodyServiceTest {
     JSONAssert.assertEquals(
       sep24DepositRequest,
       gson.toJson(requestCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
   }
 
@@ -110,7 +110,7 @@ class CustodyServiceTest {
     JSONAssert.assertEquals(
       sep24WithdrawalRequest,
       gson.toJson(requestCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
   }
 
@@ -126,7 +126,7 @@ class CustodyServiceTest {
     JSONAssert.assertEquals(
       sep31Request,
       gson.toJson(requestCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
   }
 
@@ -247,8 +247,8 @@ class CustodyServiceTest {
         "amount_fee": "testAmountFee",
         "amount_fee_asset": "testAmountFeeAsset", 
         "amount_expected": "testAmountExpected",
-        "sep10_account": "testSep10Account",
-        "sep10_account_memo": "testSep10AccountMemo",
+        "web_auth_account": "testWebAuthAccount",
+        "web_auth_account_memo": "testWebAuthAccountMemo",
         "from_account": "testFromAccount",
         "to_account": "testToAccount",
         "memo": "testMemo",
@@ -298,8 +298,8 @@ class CustodyServiceTest {
         "amount_fee": "testAmountFee",
         "amount_fee_asset": "testAmountFeeAsset",
         "amount_expected": "testAmountExpected",
-        "sep10_account": "testSep10Account",
-        "sep10_account_memo": "testSep10AccountMemo",
+        "web_auth_account": "testWebAuthAccount",
+        "web_auth_account_memo": "testWebAuthAccountMemo",
         "withdraw_anchor_account": "testWithdrawAnchorAccount",
         "from_account": "testFromAccount",
         "to_account": "testToAccount",
@@ -360,8 +360,8 @@ class CustodyServiceTest {
   "to_account": "testToAccount",
   "request_asset_code": "testRequestAssetCode",
   "request_asset_issuer": "testRequestAssetIssuer",
-  "sep10_account": "testSep10Account",
-  "sep10_account_memo": "testSep10AccountMemo",
+  "web_auth_account": "testWebAuthAccount",
+  "web_auth_account_memo": "testWebAuthAccountMemo",
   "client_domain": "testClientDomain",
   "claimable_balance_supported": "true",
   "amount_expected": "testAmountExpected",
@@ -415,8 +415,8 @@ class CustodyServiceTest {
   "to_account": "testToAccount",
   "request_asset_code": "testRequestAssetCode",
   "request_asset_issuer": "testRequestAssetIssuer",
-  "sep10_account": "testSep10Account",
-  "sep10_account_memo": "testSep10AccountMemo",
+  "web_auth_account": "testWebAuthAccount",
+  "web_auth_account_memo": "testWebAuthAccountMemo",
   "client_domain": "testClientDomain",
   "claimable_balance_supported": "true",
   "amount_expected": "testAmountExpected",
