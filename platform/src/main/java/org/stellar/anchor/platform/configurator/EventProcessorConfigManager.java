@@ -33,7 +33,10 @@ public class EventProcessorConfigManager extends ConfigManager {
         applicationContext,
         configMap,
         List.of(
-            new LogConfigAdapter(), new DataConfigAdapter(), new EventProcessorConfigAdapter()));
+            new SentryConfigManager(),
+            new LogConfigAdapter(),
+            new DataConfigAdapter(),
+            new EventProcessorConfigAdapter()));
   }
 }
 

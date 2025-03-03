@@ -31,7 +31,11 @@ public class SepConfigManager extends ConfigManager {
     sendToSpring(
         applicationContext,
         configMap,
-        List.of(new LogConfigAdapter(), new DataConfigAdapter(), new SepServerConfigAdapter()));
+        List.of(
+            new SentryConfigManager(),
+            new LogConfigAdapter(),
+            new DataConfigAdapter(),
+            new SepServerConfigAdapter()));
   }
 }
 

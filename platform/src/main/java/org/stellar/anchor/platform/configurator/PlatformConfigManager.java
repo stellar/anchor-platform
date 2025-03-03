@@ -32,7 +32,10 @@ public class PlatformConfigManager extends ConfigManager {
         applicationContext,
         configMap,
         List.of(
-            new LogConfigAdapter(), new DataConfigAdapter(), new PlatformServerConfigAdapter()));
+            new SentryConfigManager(),
+            new LogConfigAdapter(),
+            new DataConfigAdapter(),
+            new PlatformServerConfigAdapter()));
   }
 }
 

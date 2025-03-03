@@ -31,7 +31,11 @@ public class ObserverConfigManager extends ConfigManager {
     sendToSpring(
         applicationContext,
         configMap,
-        List.of(new LogConfigAdapter(), new DataConfigAdapter(), new ObserverConfigAdapter()));
+        List.of(
+            new SentryConfigManager(),
+            new LogConfigAdapter(),
+            new DataConfigAdapter(),
+            new ObserverConfigAdapter()));
   }
 }
 

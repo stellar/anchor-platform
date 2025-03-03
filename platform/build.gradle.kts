@@ -5,6 +5,7 @@ plugins {
   alias(libs.plugins.spring.boot)
   alias(libs.plugins.spring.dependency.management)
   alias(libs.plugins.kotlin.jvm)
+  id("io.sentry.jvm.gradle") version "5.3.0" // Sentry plugin
 }
 
 dependencies {
@@ -21,6 +22,8 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-actuator")
   implementation("org.springframework.boot:spring-boot-starter-aop")
   implementation("org.springframework.boot:spring-boot-starter-validation")
+
+  implementation("io.sentry:sentry-opentelemetry-agent:8.3.0")
 
   implementation(libs.aws.iam.auth)
   implementation(libs.aws.rds)
@@ -64,3 +67,15 @@ tasks.test {
 }
 
 tasks { bootJar { enabled = false } }
+
+
+sentry {
+  // Generates a JVM (Java, Kotlin, etc.) source bundle and uploads your source code to Sentry.
+  // This enables source context, allowing you to see your source
+  // code as part of your stack traces in Sentry.
+  includeSourceContext.set(true)
+
+  org.set("stellarorg")
+  projectName.set("anchor-platform")
+  authToken.set("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")
+}
