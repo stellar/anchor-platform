@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.TestConstants.Companion.TEST_CLIENT_NAME
 import org.stellar.anchor.TestConstants.Companion.TEST_HOME_DOMAIN
 import org.stellar.anchor.auth.JwtService.*
@@ -36,14 +38,34 @@ internal class JwtServiceTest {
     custodySecretConfig.setupMock()
   }
 
-  @Test
-  fun `test apply WebAuthJwt encoding and decoding and make sure the original values are not changed`() {
+  @ValueSource(classes = [Sep10Jwt::class, Sep45Jwt::class])
+  @ParameterizedTest
+  fun `test apply WebAuthJwt encoding and decoding and make sure the original values are not changed`(
+    clazz: Class<out WebAuthJwt>
+  ) {
     val jwtService = JwtService(secretConfig, custodySecretConfig)
+    val constructor =
+      clazz.getConstructor(
+        String::class.java,
+        String::class.java,
+        Long::class.java,
+        Long::class.java,
+        String::class.java,
+        String::class.java,
+        String::class.java,
+      )
     val token =
-      WebAuthJwt.of(TEST_ISS, TEST_SUB, TEST_IAT, TEST_EXP, TEST_JTI, TEST_CLIENT_DOMAIN)
-        as WebAuthJwt
+      constructor.newInstance(
+        TEST_ISS,
+        TEST_SUB,
+        TEST_IAT,
+        TEST_EXP,
+        TEST_JTI,
+        TEST_CLIENT_DOMAIN,
+        null,
+      ) as WebAuthJwt
     val cipher = jwtService.encode(token)
-    val webAuthJwt = jwtService.decode(cipher, WebAuthJwt::class.java)
+    val webAuthJwt = jwtService.decode(cipher, clazz)
 
     assertEquals(webAuthJwt.iss, token.iss)
     assertEquals(webAuthJwt.sub, token.sub)
@@ -101,7 +123,7 @@ internal class JwtServiceTest {
     val jwtService = JwtService(secretConfig, custodySecretConfig)
 
     assertThrows<MalformedJwtException> {
-      jwtService.decode("This is a bad cipher", WebAuthJwt::class.java)
+      jwtService.decode("This is a bad cipher", Sep10Jwt::class.java)
     }
   }
 }

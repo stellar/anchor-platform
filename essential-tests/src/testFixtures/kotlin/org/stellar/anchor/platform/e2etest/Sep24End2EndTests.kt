@@ -74,6 +74,7 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
     JwtService(
       config.env["secret.sep6.more_info_url.jwt_secret"],
       config.env["secret.sep10.jwt_secret"]!!,
+      config.env["secret.sep45.jwt_secret"]!!,
       config.env["secret.sep24.interactive_url.jwt_secret"]!!,
       config.env["secret.sep24.more_info_url.jwt_secret"]!!,
       config.env["secret.callback_api.auth_secret"]!!,

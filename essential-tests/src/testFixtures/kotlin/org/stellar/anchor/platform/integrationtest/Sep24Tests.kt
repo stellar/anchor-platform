@@ -41,11 +41,12 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
     JwtService(
       config.env["secret.sep6.more_info_url.jwt_secret"],
       config.env["secret.sep10.jwt_secret"]!!,
+      config.env["secret.sep45.jwt_secret"]!!,
       config.env["secret.sep24.interactive_url.jwt_secret"]!!,
       config.env["secret.sep24.more_info_url.jwt_secret"]!!,
       config.env["secret.callback_api.auth_secret"]!!,
       config.env["secret.platform_api.auth_secret"]!!,
-      null
+      null,
     )
 
   private val platformApiClient =
@@ -75,11 +76,11 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
           IssuedAssetId("USDC", "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"),
           token,
           withdrawRequest,
-          "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4"
+          "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
         )
     printResponse(
       "POST /transactions/withdraw/interactive response:",
-      Json.encodeToString(response)
+      Json.encodeToString(response),
     )
     savedWithdrawTxn =
       anchor.sep24().getTransaction(response.id, token) as IncompleteWithdrawalTransaction
@@ -88,7 +89,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
     assertEquals("INCOMPLETE", savedWithdrawTxn.status.name)
     assertEquals(
       "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-      savedWithdrawTxn.from?.address
+      savedWithdrawTxn.from?.address,
     )
 
     val requestLang = "es-AR"
@@ -97,7 +98,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
       jwtService
         .decode(
           UriComponentsBuilder.fromUriString(langTx.moreInfoUrl).build().queryParams["token"]!![0],
-          Sep24MoreInfoUrlJwt::class.java
+          Sep24MoreInfoUrlJwt::class.java,
         )
         .claims["data"]
     var lang = (claims as Map<String, String>)["lang"]
@@ -121,7 +122,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
         .deposit(
           IssuedAssetId(depositRequest["asset_code"]!!, depositRequest["asset_issuer"]!!),
           token,
-          depositRequest as HashMap<String, String>
+          depositRequest as HashMap<String, String>,
         )
     printResponse("POST /transactions/deposit/interactive response:", Json.encodeToString(response))
     savedDepositTxn =
@@ -132,7 +133,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
     assertEquals("INCOMPLETE", savedDepositTxn.status.name)
     assertEquals(
       "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
-      savedDepositTxn.to?.address
+      savedDepositTxn.to?.address,
     )
     // check the returning Sep24InteractiveUrlJwt
     val params = UriComponentsBuilder.fromUriString(response.url).build().queryParams
@@ -199,7 +200,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
         .getTransactionBy(
           token,
           savedDepositTxn.id,
-          "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+          "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
         )
 
     val params = UriComponentsBuilder.fromUriString(txn.moreInfoUrl).build().queryParams
@@ -216,7 +217,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedWithdrawTransactionResponse,
       json(actualWithdrawTxn),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
 
     val actualDepositTxn = platformApiClient.getTransaction(savedDepositTxn.id)
@@ -225,7 +226,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedDepositTransactionResponse,
       json(actualDepositTxn),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -244,7 +245,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedAfterPatchWithdraw,
       json(afterPatchWithdraw),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
 
     var afterPatchDeposit = platformApiClient.getTransaction(savedDepositTxn.id)
@@ -252,7 +253,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedAfterPatchDeposit,
       json(afterPatchDeposit),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
 
     // Test patch idempotency
@@ -261,7 +262,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedAfterPatchWithdraw,
       json(afterPatchWithdraw),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
 
     afterPatchDeposit = platformApiClient.getTransaction(savedDepositTxn.id)
@@ -269,7 +270,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedAfterPatchDeposit,
       json(afterPatchDeposit),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 

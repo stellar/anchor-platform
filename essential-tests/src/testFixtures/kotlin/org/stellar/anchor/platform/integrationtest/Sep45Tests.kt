@@ -8,7 +8,7 @@ import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest
 import org.stellar.anchor.api.sep.sep45.ValidationRequest
 import org.stellar.anchor.auth.JwtService
-import org.stellar.anchor.auth.WebAuthJwt
+import org.stellar.anchor.auth.Sep45Jwt
 import org.stellar.anchor.client.Sep45Client
 import org.stellar.anchor.platform.AbstractIntegrationTests
 import org.stellar.anchor.platform.CLIENT_SMART_WALLET_ACCOUNT
@@ -34,6 +34,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
     JwtService(
       config.env["secret.sep6.more_info_url.jwt_secret"],
       config.env["secret.sep10.jwt_secret"]!!,
+      config.env["secret.sep45.jwt_secret"]!!,
       config.env["secret.sep24.interactive_url.jwt_secret"]!!,
       config.env["secret.sep24.more_info_url.jwt_secret"]!!,
       config.env["secret.callback_api.auth_secret"]!!,
@@ -61,7 +62,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
     val validationResponse = sep45Client.validate(validationRequest)
     Log.info("Validation response: ${GsonUtils.getInstance().toJson(validationResponse)}")
 
-    val jwt = jwtService.decode(validationResponse.token, WebAuthJwt::class.java)
+    val jwt = jwtService.decode(validationResponse.token, Sep45Jwt::class.java)
 
     assertEquals(homeDomain, jwt.homeDomain)
     assertEquals(CLIENT_SMART_WALLET_ACCOUNT, jwt.account)
