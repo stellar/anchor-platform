@@ -4,8 +4,9 @@ import static org.stellar.anchor.util.Log.*;
 
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.NonNull;
 import org.stellar.anchor.auth.JwtService;
+import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.Sep45Jwt;
 import org.stellar.anchor.auth.WebAuthJwt;
 
 public class WebAuthJwtFilter extends AbstractJwtFilter {
@@ -17,9 +18,16 @@ public class WebAuthJwtFilter extends AbstractJwtFilter {
   @Override
   public void check(String jwtCipher, HttpServletRequest request, ServletResponse servletResponse)
       throws Exception {
-    @NonNull WebAuthJwt token = jwtService.decode(jwtCipher, WebAuthJwt.class);
-    infoF("token created. account={} url={}", shorter(token.getAccount()), request.getRequestURL());
-    debugF("storing token to request {}:", request.getRequestURL(), token);
-    request.setAttribute(JWT_TOKEN, token);
+    WebAuthJwt token = null;
+    try {
+      token = jwtService.decode(jwtCipher, Sep10Jwt.class);
+    } catch (Exception ignored) {
+      token = jwtService.decode(jwtCipher, Sep45Jwt.class);
+    } finally {
+      infoF(
+          "token created. account={} url={}", shorter(token.getAccount()), request.getRequestURL());
+      debugF("storing token to request {}:", request.getRequestURL(), token);
+      request.setAttribute(JWT_TOKEN, token);
+    }
   }
 }
