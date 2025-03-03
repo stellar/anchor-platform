@@ -77,5 +77,7 @@ sentry {
 
   org.set("stellarorg")
   projectName.set("anchor-platform")
-  authToken.set("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")
+  // Set auth token
+  authToken.set("sentry-auth-token")
+
 }
