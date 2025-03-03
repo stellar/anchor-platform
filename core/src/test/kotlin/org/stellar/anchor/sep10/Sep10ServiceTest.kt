@@ -48,7 +48,7 @@ import org.stellar.anchor.api.sep.sep10.ChallengeRequest
 import org.stellar.anchor.api.sep.sep10.ChallengeResponse
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.auth.JwtService
-import org.stellar.anchor.auth.WebAuthJwt
+import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.config.CustodySecretConfig
@@ -386,7 +386,7 @@ internal class Sep10ServiceTest {
     every { horizon.server.accounts().account(ofType(String::class)) } returns accountResponse
 
     val response = sep10Service.validateChallenge(vr)
-    val jwt = jwtService.decode(response.token, WebAuthJwt::class.java)
+    val jwt = jwtService.decode(response.token, Sep10Jwt::class.java)
     assertEquals("${clientKeyPair.accountId}:$TEST_MEMO", jwt.sub)
   }
 
@@ -414,7 +414,7 @@ internal class Sep10ServiceTest {
 
     val validationResponse = sep10Service.validateChallenge(vr)
 
-    val token = jwtService.decode(validationResponse.token, WebAuthJwt::class.java)
+    val token = jwtService.decode(validationResponse.token, Sep10Jwt::class.java)
     assertEquals(token.clientDomain, TEST_CLIENT_DOMAIN)
     assertEquals(token.homeDomain, TEST_HOME_DOMAIN)
 

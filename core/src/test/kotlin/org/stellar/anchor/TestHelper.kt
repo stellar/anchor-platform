@@ -2,6 +2,7 @@ package org.stellar.anchor
 
 import io.mockk.every
 import javax.crypto.SecretKey
+import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
@@ -21,7 +22,7 @@ class TestHelper {
       homeDomain: String = "test.stellar.org",
     ): WebAuthJwt {
       val issuedAt: Long = System.currentTimeMillis() / 1000L
-      return WebAuthJwt.of(
+      return Sep10Jwt.of(
         "$hostUrl/auth",
         if (accountMemo == null) account else "$account:$accountMemo",
         issuedAt,
@@ -48,6 +49,8 @@ fun SecretConfig.setupMock(block: (() -> Any)? = null) {
     "jwt_secret_sep_6_more_info_url_jwt_secret".also { KeyUtil.validateJWTSecret(it) }
   every { cfg.sep10JwtSecretKey } returns
     "jwt_secret_sep_10_secret_key_jwt_secret".also { KeyUtil.validateJWTSecret(it) }
+  every { cfg.sep45JwtSecretKey } returns
+    "jwt_secret_sep_45_secret_key_jwt_secret".also { KeyUtil.validateJWTSecret(it) }
   every { cfg.sep10SigningSeed } returns TEST_SIGNING_SEED.also { KeyUtil.validateJWTSecret(it) }
   every { cfg.sep24InteractiveUrlJwtSecret } returns
     "jwt_secret_sep_24_interactive_url_jwt_secret".also { KeyUtil.validateJWTSecret(it) }

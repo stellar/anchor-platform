@@ -31,6 +31,7 @@ import org.stellar.anchor.api.shared.StellarId
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
+import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.util.StringHelper.json
@@ -607,6 +608,6 @@ class Sep12ServiceTest {
   }
 
   private fun createJwtToken(subject: String): WebAuthJwt {
-    return WebAuthJwt.of("$TEST_HOST_URL/auth", subject, issuedAt, expiresAt, "", CLIENT_DOMAIN)
+    return Sep10Jwt.of("$TEST_HOST_URL/auth", subject, issuedAt, expiresAt, "", CLIENT_DOMAIN, null)
   }
 }
