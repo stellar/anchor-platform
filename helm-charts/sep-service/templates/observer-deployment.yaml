@@ -88,6 +88,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.fullName }}-secrets
                   key: SEP6_MORE_INFO_URL_JWT_SECRET
+            - name: SENTRY_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SENTRY_AUTH_TOKEN
           resources:
             requests:
               memory: {{ .Values.services.observer.deployment.resources.requests.memory }}

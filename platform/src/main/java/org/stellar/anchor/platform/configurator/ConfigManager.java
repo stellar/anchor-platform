@@ -228,6 +228,8 @@ class DefaultConfigManager extends ConfigManager {
 
     // Send values to Spring
     sendToSpring(
-        applicationContext, configMap, List.of(new LogConfigAdapter(), new DataConfigAdapter()));
+        applicationContext,
+        configMap,
+        List.of(new SentryConfigAdapter(), new LogConfigAdapter(), new DataConfigAdapter()));
   }
 }

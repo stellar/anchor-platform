@@ -1,14 +1,16 @@
 package org.stellar.anchor.platform.controller;
 
-import static org.stellar.anchor.util.Log.errorEx;
-import static org.stellar.anchor.util.Log.infoF;
+import static io.sentry.Sentry.*;
+import static org.stellar.anchor.util.Log.*;
 
+import io.sentry.SentryLevel;
 import jakarta.transaction.NotSupportedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.stellar.anchor.api.custody.CustodyExceptionResponse;
 import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.exception.custody.CustodyBadRequestException;
@@ -22,14 +24,16 @@ public abstract class AbstractControllerExceptionHandler {
   @ResponseStatus(HttpStatus.BAD_REQUEST)
   @ExceptionHandler({SepValidationException.class, BadRequestException.class})
   public SepExceptionResponse handleBadRequest(AnchorException ex) {
-    infoF("Bad request: {}", ex.getMessage());
+    debugF("Bad request: {}", ex.getMessage());
+    captureMessage("Bad request: " + ex.getMessage(), SentryLevel.DEBUG);
     return new SepExceptionResponse(ex.getMessage());
   }
 
   @ResponseStatus(HttpStatus.BAD_REQUEST)
   @ExceptionHandler(MissingServletRequestParameterException.class)
   public SepExceptionResponse handleMissingParams(MissingServletRequestParameterException ex) {
-    infoF("Missing server request parameters: {}", ex.getMessage());
+    debugF("Missing server request parameters: {}", ex.getMessage());
+    captureMessage("Missing server request parameters: " + ex.getMessage(), SentryLevel.DEBUG);
     String name = ex.getParameterName();
     return new SepExceptionResponse(String.format("The \"%s\" parameter is missing.", name));
   }
@@ -37,56 +41,56 @@ public abstract class AbstractControllerExceptionHandler {
   @ExceptionHandler(HttpMessageNotReadableException.class)
   @ResponseStatus(value = HttpStatus.BAD_REQUEST)
   public SepExceptionResponse handleRandomException(HttpMessageNotReadableException ex) {
-    infoF("Spring is unable to read HTTP message: {}", ex.getMessage());
+    debugF("Spring is unable to read HTTP message: {}", ex.getMessage());
+    captureMessage("Spring is unable to read HTTP message: " + ex.getMessage(), SentryLevel.DEBUG);
     return new SepExceptionResponse("Your request body is wrong in some way.");
   }
 
   @ResponseStatus(HttpStatus.FORBIDDEN)
   @ExceptionHandler({SepNotAuthorizedException.class, UnauthorizedException.class})
   public SepExceptionResponse handleAuthError(SepException ex) {
-    infoF("SEP-10 authorization failure: {}", ex.getMessage());
+    debugF("SEP-10 authorization failure: {}", ex.getMessage());
+    captureMessage("SEP-10 authorization failure: " + ex.getMessage(), SentryLevel.DEBUG);
     return new SepExceptionResponse(ex.getMessage());
   }
 
   @ExceptionHandler(SepCustomerInfoNeededException.class)
   @ResponseStatus(value = HttpStatus.FORBIDDEN)
   public CustomerInfoNeededResponse handle(SepCustomerInfoNeededException ex) {
-    infoF("Customer information is needed: {}", ex.getMessage());
+    debugF("Customer information is needed: {}", ex.getMessage());
+    captureMessage("Customer information is needed: " + ex.getMessage(), SentryLevel.DEBUG);
     return new CustomerInfoNeededResponse(ex.getFields());
-  }
-
-  @ExceptionHandler({SepNotFoundException.class, NotFoundException.class})
-  @ResponseStatus(value = HttpStatus.NOT_FOUND)
-  SepExceptionResponse handleNotFound(AnchorException ex) {
-    infoF("Not found: {}", ex.getMessage());
-    return new SepExceptionResponse(ex.getMessage());
   }
 
   @ResponseStatus(HttpStatus.NOT_IMPLEMENTED)
   @ExceptionHandler({NotSupportedException.class})
   public SepExceptionResponse handleNotImplementedError(Exception ex) {
-    infoF("Not implemented: {}", ex.getMessage());
+    errorF("Not implemented: {}", ex.getMessage());
+    captureException(ex);
     return new SepExceptionResponse(ex.getMessage());
   }
 
   @ResponseStatus(HttpStatus.BAD_REQUEST)
   @ExceptionHandler({CustodyBadRequestException.class})
   public CustodyExceptionResponse handleCustodyBadRequest(AnchorException ex) {
-    infoF("Bad request (custody server): {}", ex.getMessage());
+    debugF("Bad request (custody server): {}", ex.getMessage());
+    captureMessage("Bad request (custody server): " + ex.getMessage(), SentryLevel.DEBUG);
     return new CustodyExceptionResponse(ex.getMessage());
   }
 
   @ResponseStatus(value = HttpStatus.NOT_FOUND)
   @ExceptionHandler({CustodyNotFoundException.class})
   public CustodyExceptionResponse handleCustodyNotFound(AnchorException ex) {
-    infoF("Resource not found (custody server): {}", ex.getMessage());
+    errorF("Resource not found (custody server): {}", ex.getMessage());
+    captureException(ex);
     return new CustodyExceptionResponse(ex.getMessage());
   }
 
   @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
   @ExceptionHandler({CustodyTooManyRequestsException.class})
   public CustodyExceptionResponse handleCustodyTooManyRequestsError(AnchorException ex) {
-    infoF("Too many requests (custody server): {}", ex.getMessage());
+    errorF("Too many requests (custody server): {}", ex.getMessage());
+    captureException(ex);
     return new CustodyExceptionResponse(ex.getMessage());
   }
 
@@ -94,6 +98,7 @@ public abstract class AbstractControllerExceptionHandler {
   @ExceptionHandler({CustodyServiceUnavailableException.class})
   public CustodyExceptionResponse handleCustodyServiceUnavailableError(AnchorException ex) {
     errorEx(ex);
+    captureException(ex);
     return new CustodyExceptionResponse(ex.getMessage());
   }
 
@@ -102,7 +107,19 @@ public abstract class AbstractControllerExceptionHandler {
   @ResponseStatus(HttpStatus.BAD_GATEWAY)
   @ExceptionHandler({ServerErrorException.class})
   public SepExceptionResponse handleServerErrorException(Exception ex) {
-    infoF("An upstream server returns a invalid response: {}", ex);
+    errorF("An upstream server returns a invalid response: {}", ex);
+    captureException(ex);
+    return new SepExceptionResponse(ex.getMessage());
+  }
+
+  @ExceptionHandler({
+    SepNotFoundException.class,
+    NotFoundException.class,
+    NoResourceFoundException.class
+  })
+  @ResponseStatus(value = HttpStatus.NOT_FOUND)
+  SepExceptionResponse handleNotFound(AnchorException ex) {
+    traceF("Not found: {}", ex.getMessage());
     return new SepExceptionResponse(ex.getMessage());
   }
 
@@ -110,6 +127,7 @@ public abstract class AbstractControllerExceptionHandler {
   @ExceptionHandler({Exception.class})
   public SepExceptionResponse handleInternalError(Exception ex) {
     errorEx(ex);
+    captureException(ex);
     return new SepExceptionResponse(ex.getMessage());
   }
 }
