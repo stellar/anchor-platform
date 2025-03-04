@@ -154,7 +154,7 @@ sep1_toml: |
   issuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
   status = "test"
   is_asset_anchored = false
-  desc = "Circle USDC Token"
+  desc = "Anchor Issued USDC"
   anchor_asset_type = "crypto"
 
   [[CURRENCIES]]
