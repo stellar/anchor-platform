@@ -26,7 +26,7 @@ import org.stellar.anchor.api.sep.sep10.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep10.ValidationRequest;
 import org.stellar.anchor.api.sep.sep10.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
-import org.stellar.anchor.auth.WebAuthJwt;
+import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
@@ -531,8 +531,8 @@ public class Sep10Service implements ISep10Service {
       ChallengeTransaction challenge, String clientDomain, String homeDomain) {
     long issuedAt = challenge.getTransaction().getTimeBounds().getMinTime().longValue();
     Memo memo = challenge.getTransaction().getMemo();
-    WebAuthJwt webAuthJwt =
-        WebAuthJwt.of(
+    Sep10Jwt webAuthJwt =
+        Sep10Jwt.of(
             authUrl(),
             (memo == null || memo instanceof MemoNone)
                 ? challenge.getClientAccountId()

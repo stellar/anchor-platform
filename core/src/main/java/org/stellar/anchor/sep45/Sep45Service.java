@@ -18,7 +18,7 @@ import org.stellar.anchor.api.sep.sep45.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep45.ValidationRequest;
 import org.stellar.anchor.api.sep.sep45.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
-import org.stellar.anchor.auth.WebAuthJwt;
+import org.stellar.anchor.auth.Sep45Jwt;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
@@ -228,8 +228,8 @@ public class Sep45Service {
       throw new InternalServerErrorException("Unable to decode invocation");
     }
 
-    WebAuthJwt jwt =
-        WebAuthJwt.of(
+    Sep45Jwt jwt =
+        Sep45Jwt.of(
             homeDomain,
             account,
             issuedAt,

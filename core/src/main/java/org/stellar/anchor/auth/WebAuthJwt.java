@@ -14,7 +14,7 @@ import org.stellar.sdk.MuxedAccount;
 @Getter
 @Setter
 @NoArgsConstructor
-public class WebAuthJwt extends AbstractJwt {
+public abstract class WebAuthJwt extends AbstractJwt {
   @SerializedName(value = "client_domain")
   String clientDomain;
 
@@ -71,30 +71,6 @@ public class WebAuthJwt extends AbstractJwt {
     this.clientDomain = clientDomain;
     this.homeDomain = homeDomain;
     updateAccountAndMemo();
-  }
-
-  public static WebAuthJwt of(
-      String iss, String sub, long iat, long exp, String jti, String clientDomain) {
-    return new WebAuthJwt(iss, sub, iat, exp, jti, clientDomain, null);
-  }
-
-  public static WebAuthJwt of(
-      String iss,
-      String sub,
-      long iat,
-      long exp,
-      String jti,
-      String clientDomain,
-      String homeDomain) {
-    return new WebAuthJwt(iss, sub, iat, exp, jti, clientDomain, homeDomain);
-  }
-
-  public static WebAuthJwt of(String iss, long iat, long exp) {
-    WebAuthJwt token = new WebAuthJwt(iss, null, iat, 0, null, null, null);
-    token.iss = iss;
-    token.iat = iat;
-    token.exp = exp;
-    return token;
   }
 
   void updateAccountAndMemo() {

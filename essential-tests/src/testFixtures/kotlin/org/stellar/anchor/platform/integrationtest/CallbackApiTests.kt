@@ -53,6 +53,7 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
     JwtService(
       config.env["secret.sep6.more_info_url.jwt_secret"],
       config.env["secret.sep10.jwt_secret"]!!,
+      config.env["secret.sep45.jwt_secret"]!!,
       config.env["secret.sep24.interactive_url.jwt_secret"]!!,
       config.env["secret.sep24.more_info_url.jwt_secret"]!!,
       config.env["secret.callback_api.auth_secret"]!!,
@@ -65,7 +66,7 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
       "Authorization",
       platformToAnchorJwtService,
       JWT_EXPIRATION_MILLISECONDS,
-      CallbackAuthJwt::class.java
+      CallbackAuthJwt::class.java,
     )
 
   private val gson: Gson = GsonUtils.getInstance()
@@ -79,7 +80,7 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
       httpClient,
       authHelper,
       gson,
-      mockAssetService
+      mockAssetService,
     )
 
   @BeforeAll
@@ -89,7 +90,7 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
       listOf(
           AssetInfo.Schema.STELLAR,
           "USDC",
-          "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+          "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
         )
         .joinToString { ":" }
     usdc.significantDecimals = 4
