@@ -11,7 +11,6 @@ public class SentryConfigAdapter extends SpringConfigAdapter {
   void updateSpringEnv(ConfigMap config) throws InvalidConfigException {
     String dsn = config.getString("sentry.dsn");
     String sentryEnv = config.getString("sentry.environment");
-    Boolean sentryDebug = config.getBoolean("sentry.debug");
     if (isNotEmpty(dsn)) {
       info("Sentry DSN is set. Initializing Sentry...");
       Sentry.init(
@@ -20,7 +19,8 @@ public class SentryConfigAdapter extends SpringConfigAdapter {
             if (isNotEmpty(sentryEnv)) {
               options.setEnvironment(sentryEnv);
             }
-            options.setDebug(sentryDebug);
+            options.setRelease(config.getString("sentry.release"));
+            options.setDebug(config.getBoolean("sentry.debug"));
             options.setSendDefaultPii(true);
             options.setTracesSampleRate(1.0);
             options.setEnableUncaughtExceptionHandler(true);

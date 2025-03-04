@@ -68,16 +68,4 @@ tasks.test {
 
 tasks { bootJar { enabled = false } }
 
-
-sentry {
-  // Generates a JVM (Java, Kotlin, etc.) source bundle and uploads your source code to Sentry.
-  // This enables source context, allowing you to see your source
-  // code as part of your stack traces in Sentry.
-  includeSourceContext.set(true)
-
-  org.set("stellarorg")
-  projectName.set("anchor-platform")
-  // Set auth token
-  authToken.set("sentry-auth-token")
-
-}
+sentry { includeSourceContext.set(true) }
