@@ -23,8 +23,6 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-aop")
   implementation("org.springframework.boot:spring-boot-starter-validation")
 
-  implementation("io.sentry:sentry-opentelemetry-agent:8.3.0")
-
   implementation(libs.aws.iam.auth)
   implementation(libs.aws.rds)
   implementation(libs.aws.sqs)
@@ -44,6 +42,7 @@ dependencies {
   implementation(libs.log4j2.slf4j2)
   implementation(libs.okhttp3)
   implementation(libs.postgresql)
+  implementation(libs.sentry.agent)
   implementation(libs.servlet.api)
   implementation(libs.spring.kafka)
   implementation(libs.spring.retry)
