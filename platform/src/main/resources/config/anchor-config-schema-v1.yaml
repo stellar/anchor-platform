@@ -76,6 +76,7 @@ platform_server.management_server_port:
 platform_server.port:
 sentry.dsn:
 sentry.environment:
+sentry.debug:
 sep1.enabled:
 sep1.toml.type:
 sep1.toml.value:
