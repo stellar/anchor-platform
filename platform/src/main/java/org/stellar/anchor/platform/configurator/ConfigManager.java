@@ -230,6 +230,6 @@ class DefaultConfigManager extends ConfigManager {
     sendToSpring(
         applicationContext,
         configMap,
-        List.of(new SentryConfigManager(), new LogConfigAdapter(), new DataConfigAdapter()));
+        List.of(new SentryConfigAdapter(), new LogConfigAdapter(), new DataConfigAdapter()));
   }
 }

@@ -6,7 +6,7 @@ import static org.stellar.anchor.util.StringHelper.*;
 import io.sentry.Sentry;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 
-public class SentryConfigManager extends SpringConfigAdapter {
+public class SentryConfigAdapter extends SpringConfigAdapter {
   @Override
   void updateSpringEnv(ConfigMap config) throws InvalidConfigException {
     String dsn = get("sentry.dsn");
@@ -31,5 +31,13 @@ public class SentryConfigManager extends SpringConfigAdapter {
   }
 
   @Override
-  void validate(ConfigMap config) throws InvalidConfigException {}
+  void validate(ConfigMap config) throws InvalidConfigException {
+    String dsn = get("sentry.dsn");
+    if (isNotEmpty(dsn)) {
+      if (isEmpty(System.getenv("SENTRY_AUTH_TOKEN"))) {
+        throw new InvalidConfigException(
+            "Please set SENTRY_AUTH_TOKEN when [sentry.dsn] is defined.");
+      }
+    }
+  }
 }

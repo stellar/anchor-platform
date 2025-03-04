@@ -32,7 +32,7 @@ public class SepConfigManager extends ConfigManager {
         applicationContext,
         configMap,
         List.of(
-            new SentryConfigManager(),
+            new SentryConfigAdapter(),
             new LogConfigAdapter(),
             new DataConfigAdapter(),
             new SepServerConfigAdapter()));
