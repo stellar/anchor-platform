@@ -50,7 +50,10 @@ public class Sep1Controller {
     }
     HttpHeaders headers = new HttpHeaders();
     headers.set("content-type", "text/plain");
-    return ResponseEntity.ok().headers(headers).body(sep1Service.getToml());
+
+    throw new SepNotFoundException("Not Found");
+    //
+    //    return ResponseEntity.ok().headers(headers).body(sep1Service.getToml());
   }
 
   @ExceptionHandler({SepNotFoundException.class})

@@ -31,7 +31,11 @@ public class CustodyConfigManager extends ConfigManager {
     sendToSpring(
         applicationContext,
         configMap,
-        List.of(new LogConfigAdapter(), new DataConfigAdapter(), new CustodyServerConfigAdapter()));
+        List.of(
+            new SentryConfigAdapter(),
+            new LogConfigAdapter(),
+            new DataConfigAdapter(),
+            new CustodyServerConfigAdapter()));
   }
 }
 
