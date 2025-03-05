@@ -93,6 +93,10 @@ config:
   platform_api:
     base_url: http://anchor-platform-svc-platform:8085
 
+  event_processor:
+    callback_api_request:
+      enabled: true
+
   events:
     enabled: true
     queue:
