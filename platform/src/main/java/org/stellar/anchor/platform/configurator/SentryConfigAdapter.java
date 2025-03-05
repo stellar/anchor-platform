@@ -27,7 +27,6 @@ public class SentryConfigAdapter extends SpringConfigAdapter {
           }
           options.setRelease(config.getString("sentry.release"));
           options.setDebug(config.getBoolean("sentry.debug"));
-          options.setSendDefaultPii(true);
           options.setTracesSampleRate(1.0);
           options.setEnableUncaughtExceptionHandler(true);
         });

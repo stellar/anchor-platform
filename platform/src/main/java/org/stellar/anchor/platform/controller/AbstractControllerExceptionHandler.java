@@ -81,8 +81,7 @@ public abstract class AbstractControllerExceptionHandler {
   @ResponseStatus(value = HttpStatus.NOT_FOUND)
   @ExceptionHandler({CustodyNotFoundException.class})
   public CustodyExceptionResponse handleCustodyNotFound(AnchorException ex) {
-    errorF("Resource not found (custody server): {}", ex.getMessage());
-    captureException(ex);
+    traceF("Resource not found (custody server): {}", ex.getMessage());
     return new CustodyExceptionResponse(ex.getMessage());
   }
 

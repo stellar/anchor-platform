@@ -73,8 +73,6 @@ config:
     stellar_level: DEBUG
     request_logger_enabled: true
 
-  sentry:
-
   stellar_network:
     network: TESTNET
     network_passphrase: "Test SDF Network ; September 2015"

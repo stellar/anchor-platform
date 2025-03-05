@@ -9,7 +9,7 @@ import org.stellar.anchor.api.exception.InvalidConfigException
 
 class SentryConfigAdapterTest {
   @Test
-  fun `test invalid config`() {
+  fun `test valid config`() {
     val sentryConfigAdapter = spyk(SentryConfigAdapter())
     val config = populateValidConfig()
 
@@ -20,7 +20,7 @@ class SentryConfigAdapterTest {
   }
 
   @Test
-  fun `test missing SENTRY_AUTO_TOKEN`() {
+  fun `test missing SENTRY_AUTH_TOKEN`() {
     val sentryConfigAdapter = spyk(SentryConfigAdapter())
     val config = populateValidConfig()
     every { sentryConfigAdapter.authToken } returns ""
