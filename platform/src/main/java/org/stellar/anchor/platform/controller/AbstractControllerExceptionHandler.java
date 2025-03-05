@@ -117,7 +117,7 @@ public abstract class AbstractControllerExceptionHandler {
     NoResourceFoundException.class
   })
   @ResponseStatus(value = HttpStatus.NOT_FOUND)
-  SepExceptionResponse handleNotFound(AnchorException ex) {
+  SepExceptionResponse handleNotFound(Exception ex) {
     traceF("Not found: {}", ex.getMessage());
     return new SepExceptionResponse(ex.getMessage());
   }
