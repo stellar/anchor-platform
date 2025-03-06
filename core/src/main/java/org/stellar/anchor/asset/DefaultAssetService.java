@@ -78,8 +78,7 @@ public class DefaultAssetService implements AssetService {
                   String.format("%s is not a supported file format", filename));
           }
         } catch (Exception ex) {
-          throw new InvalidConfigException(
-              List.of(String.format("Cannot read from asset file: %s", filename)), ex);
+          throw new InvalidConfigException(ex.getMessage());
         }
       default:
         Log.infoF("assets type {} is not supported", assetsConfig.getType());
@@ -129,7 +128,7 @@ public class DefaultAssetService implements AssetService {
         FiatAssetInfo fiatAssetInfo = gson.fromJson(asset, FiatAssetInfo.class);
         das.fiatAssets.add(fiatAssetInfo);
       } else {
-        throw new InvalidConfigException(String.format("Invalid asset: " + id));
+        throw new InvalidConfigException(String.format("Invalid asset schema: " + id));
       }
     }
     if (validate) {

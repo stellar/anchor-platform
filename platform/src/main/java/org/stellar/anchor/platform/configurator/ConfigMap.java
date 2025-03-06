@@ -53,7 +53,6 @@ public class ConfigMap {
   }
 
   public Boolean getBoolean(String key) {
-
     return Boolean.parseBoolean(getString(key));
   }
 

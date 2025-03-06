@@ -50,7 +50,14 @@ class DepositService(private val cfg: Config) {
       } else {
         transactionWithRetry {
           // 5. Sign and send transaction
-          val txHash = sep24.sendStellarTransaction(account, asset, amount, memo, memoType)
+          val txHash =
+            sep24.sendStellarTransaction(
+              account,
+              asset,
+              transaction.amountOut!!.amount!!.toBigDecimal(),
+              memo,
+              memoType
+            )
 
           // 6. Finalize Stellar anchor transaction
           finalizeStellarTransaction(transactionId, txHash, asset, amount)

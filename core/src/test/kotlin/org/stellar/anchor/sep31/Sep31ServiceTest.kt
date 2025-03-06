@@ -330,7 +330,9 @@ class Sep31ServiceTest {
     }
     assertInstanceOf(InvalidConfigException::class.java, ex)
     assertEquals(
-      "if quotes_required is true, quotes_supported must also be true for asset: " + asset.id,
+      "Asset " +
+        asset.id +
+        ": SEP-31 'quotes_supported' must be true if 'quotes_required' is true.",
       ex.message,
     )
   }

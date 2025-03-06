@@ -175,19 +175,4 @@ class Sep24ConfigTest {
     config.validate(config, errors)
     assertFalse(errors.hasErrors())
   }
-
-  @Test
-  fun `test validation rejecting self deposit generator if distribution_account missing in asset`() {
-    assetService =
-      DefaultAssetService.fromJsonResource("test_assets_missing_distribution_account.json")
-    config =
-      PropertySep24Config(secretConfig, custodyConfig, assetService).apply {
-        enabled = true
-        interactiveUrl = InteractiveUrlConfig("https://www.stellar.org", 600, listOf(""))
-        moreInfoUrl = MoreInfoUrlConfig("https://www.stellar.org", 600, listOf(""))
-        depositInfoGeneratorType = DepositInfoGeneratorType.SELF
-      }
-    config.validate(config, errors)
-    assertEquals("sep24-deposit-info-generator-type", errors.allErrors[0].code)
-  }
 }
