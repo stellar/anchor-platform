@@ -90,7 +90,7 @@ class SepHelper(private val cfg: Config) {
     memo: String?,
     memoType: String?,
   ): String {
-    val keypair = KeyPair.fromSecretSeed(cfg.appSettings.secret)
+    val keypair = KeyPair.fromSecretSeed(cfg.appSettings.paymentSigningSeed)
     val myAccount = server.accounts().account(keypair.accountId)
     val asset = Asset.create(assetString.replace("stellar:", ""))
 

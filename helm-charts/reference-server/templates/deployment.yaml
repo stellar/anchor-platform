@@ -61,7 +61,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.fullName }}-secrets
                   key: POSTGRES_PASSWORD
-            - name: APP.SECRET
+            - name: APP.PAYMENT_SIGNING_SEED
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.fullName }}-secrets

@@ -25,7 +25,7 @@ data class AppSettings(
   val custodyEnabled: Boolean,
   val rpcEnabled: Boolean,
   val enableTest: Boolean,
-  val secret: String,
+  val paymentSigningSeed: String,
 )
 
 data class AuthSettings(

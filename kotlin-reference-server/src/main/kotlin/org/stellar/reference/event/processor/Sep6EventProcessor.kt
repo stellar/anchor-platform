@@ -92,7 +92,7 @@ class Sep6EventProcessor(
           requestKyc(event)
           return
         }
-        val keypair = KeyPair.fromSecretSeed(config.appSettings.secret)
+        val keypair = KeyPair.fromSecretSeed(config.appSettings.paymentSigningSeed)
         lateinit var stellarTxnId: String
         if (config.appSettings.custodyEnabled) {
           sepHelper.rpcAction(
@@ -450,7 +450,7 @@ class Sep6EventProcessor(
             .build()
         )
         .build()
-    transaction.sign(KeyPair.fromSecretSeed(config.appSettings.secret))
+    transaction.sign(KeyPair.fromSecretSeed(config.appSettings.paymentSigningSeed))
     val txnResponse: TransactionResponse
     try {
       txnResponse = server.submitTransaction(transaction)
