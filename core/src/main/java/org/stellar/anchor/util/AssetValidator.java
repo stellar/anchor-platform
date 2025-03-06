@@ -64,7 +64,7 @@ public class AssetValidator {
     if (stellarAssetInfo.getSignificantDecimals() == null) {
       errors.add(
           format(
-              "Asset %s: 'significant_decimals' is required for Stellar assets",
+              "Asset %s: 'significant_decimals' is required for Stellar assets.",
               stellarAssetInfo.getId()));
     }
 
@@ -72,7 +72,7 @@ public class AssetValidator {
     if (StringHelper.isEmpty(stellarAssetInfo.getDistributionAccount())) {
       errors.add(
           format(
-              "Asset %s: 'distribution_account' is required for Stellar assets",
+              "Asset %s: 'distribution_account' is required for Stellar assets.",
               stellarAssetInfo.getId()));
     }
 
@@ -155,7 +155,7 @@ public class AssetValidator {
     if (isQuotesRequired && !isQuotesSupported) {
       errors.add(
           format(
-              "Asset %s: If 'quotes_required' is true, 'quotes_supported' must also be true",
+              "Asset %s: SEP-31 'quotes_supported' must be true if 'quotes_required' is true.",
               assetId));
     }
 
@@ -165,25 +165,26 @@ public class AssetValidator {
       if (receiveInfo.getMinAmount() < 0) {
         errors.add(
             format(
-                "Asset %s: 'min_amount' must be non-negative (current value: %s)",
+                "Asset %s: SEP-31 receive 'min_amount' must be non-negative (current value: %s).",
                 assetId, receiveInfo.getMinAmount()));
       }
 
       if (receiveInfo.getMaxAmount() <= 0) {
         errors.add(
             format(
-                "Asset %s: 'max_amount' must be positive (current value: %s)",
+                "Asset %s: SEP-31 receive 'max_amount' must be positive (current value: %s).",
                 assetId, receiveInfo.getMaxAmount()));
       }
 
       // Check for empty and duplicate receive methods
       if (isEmpty(receiveInfo.getMethods())) {
-        errors.add(format("Asset %s: At least one receive method must be defined", assetId));
+        errors.add(format("Asset %s: SEP-31 requires at least one receive method.", assetId));
       } else {
         Set<String> existingReceiveMethods = new HashSet<>();
         for (String method : receiveInfo.getMethods()) {
           if (!existingReceiveMethods.add(method)) {
-            errors.add(format("Asset %s: Duplicate receive method found: %s", assetId, method));
+            errors.add(
+                format("Asset %s: SEP-31 duplicate receive method found: %s", assetId, method));
           }
         }
       }
@@ -206,7 +207,7 @@ public class AssetValidator {
         if (assetService.getAssetById(exchangeableAsset) == null) {
           errors.add(
               format(
-                  "Asset %s: Invalid exchangeable asset '%s'. The asset must be defined in the configuration.",
+                  "Asset %s: SEP-38 invalid exchangeable asset '%s'. The asset must be defined in the configuration.",
                   assetId, exchangeableAsset));
         }
       }
@@ -218,7 +219,7 @@ public class AssetValidator {
         if (!isCountryCodeValid(country)) {
           errors.add(
               format(
-                  "Asset %s: Invalid country code '%s'. Must be a valid 2-letter ISO country code.",
+                  "Asset %s: SEP-38 invalid country code '%s'. Must be a valid 2-letter ISO country code.",
                   assetId, country));
         }
       }
@@ -228,10 +229,11 @@ public class AssetValidator {
     if (sep38Info.getBuyDeliveryMethods() != null) {
       for (DeliveryMethod method : sep38Info.getBuyDeliveryMethods()) {
         if (StringHelper.isEmpty(method.getName())) {
-          errors.add(format("Asset %s: Buy delivery method name cannot be empty", assetId));
+          errors.add(format("Asset %s: SEP-38 buy delivery method name cannot be empty.", assetId));
         }
         if (StringHelper.isEmpty(method.getDescription())) {
-          errors.add(format("Asset %s: Buy delivery method description cannot be empty", assetId));
+          errors.add(
+              format("Asset %s: SEP-38 buy delivery method description cannot be empty.", assetId));
         }
       }
     }
@@ -240,10 +242,13 @@ public class AssetValidator {
       // Validate methods
       for (DeliveryMethod method : sep38Info.getSellDeliveryMethods()) {
         if (StringHelper.isEmpty(method.getName())) {
-          errors.add(format("Asset %s: Sell delivery method name cannot be empty", assetId));
+          errors.add(
+              format("Asset %s: SEP-38 sell delivery method name cannot be empty.", assetId));
         }
         if (StringHelper.isEmpty(method.getDescription())) {
-          errors.add(format("Asset %s: Sell delivery method description cannot be empty", assetId));
+          errors.add(
+              format(
+                  "Asset %s: SEP-38 sell delivery method description cannot be empty.", assetId));
         }
       }
     }
@@ -265,13 +270,14 @@ public class AssetValidator {
     if (AssetHelper.isWithdrawEnabled(dwInfo)) {
       if (isEmpty(dwInfo.getWithdraw().getMethods())) {
         errors.add(
-            format(
-                "Asset %s: At least one withdraw method must be defined for %s", assetId, sepType));
+            format("Asset %s: %s requires at least one withdrawal method.", assetId, sepType));
       } else {
         Set<String> existingWithdrawTypes = new HashSet<>();
-        for (String type : dwInfo.getWithdraw().getMethods()) {
-          if (!existingWithdrawTypes.add(type)) {
-            errors.add(format("Asset %s: Duplicate withdraw method found: %s", assetId, type));
+        for (String method : dwInfo.getWithdraw().getMethods()) {
+          if (!existingWithdrawTypes.add(method)) {
+            errors.add(
+                format(
+                    "Asset %s: %s duplicate withdraw method found: %s.", assetId, sepType, method));
           }
         }
       }
@@ -279,14 +285,14 @@ public class AssetValidator {
       if (dwInfo.getWithdraw().getMinAmount() != null && dwInfo.getWithdraw().getMinAmount() < 0) {
         errors.add(
             format(
-                "Asset %s: %s withdraw 'min_amount' must be non-negative (current value: %s)",
+                "Asset %s: %s withdraw 'min_amount' must be non-negative (current value: %s).",
                 assetId, sepType, dwInfo.getWithdraw().getMinAmount()));
       }
 
       if (dwInfo.getWithdraw().getMaxAmount() != null && dwInfo.getWithdraw().getMaxAmount() <= 0) {
         errors.add(
             format(
-                "Asset %s: %s withdraw 'max_amount' must be positive (current value: %s)",
+                "Asset %s: %s withdraw 'max_amount' must be positive (current value: %s).",
                 assetId, sepType, dwInfo.getWithdraw().getMaxAmount()));
       }
     }
@@ -294,27 +300,27 @@ public class AssetValidator {
     // Validate deposit fields
     if (AssetHelper.isDepositEnabled(dwInfo)) {
       if (isEmpty(dwInfo.getDeposit().getMethods())) {
-        errors.add(
-            format(
-                "Asset %s: At least one deposit method must be defined for %s", assetId, sepType));
+        errors.add(format("Asset %s: %s requires at least one deposit method.", assetId, sepType));
       } else {
         Set<String> existingDepositTypes = new HashSet<>();
         for (String method : dwInfo.getDeposit().getMethods()) {
           if (!existingDepositTypes.add(method)) {
-            errors.add(format("Asset %s: Duplicate deposit method found: %s", assetId, method));
+            errors.add(
+                format(
+                    "Asset %s: %s duplicate deposit method found: %s.", assetId, sepType, method));
           }
         }
       }
       if (dwInfo.getDeposit().getMinAmount() != null && dwInfo.getDeposit().getMinAmount() < 0) {
         throw new InvalidConfigException(
             format(
-                "Asset %s: %s deposit 'min_amount' must be non-negative (current value: %s)",
+                "Asset %s: %s deposit 'min_amount' must be non-negative (current value: %s).",
                 assetId, sepType, dwInfo.getDeposit().getMinAmount()));
       }
       if (dwInfo.getDeposit().getMaxAmount() != null && dwInfo.getDeposit().getMaxAmount() <= 0) {
         throw new InvalidConfigException(
             format(
-                "Asset %s: %s deposit 'max_amount' must be positive (current value: %s)",
+                "Asset %s: %s deposit 'max_amount' must be positive (current value: %s).",
                 assetId, sepType, dwInfo.getDeposit().getMaxAmount()));
       }
     }
