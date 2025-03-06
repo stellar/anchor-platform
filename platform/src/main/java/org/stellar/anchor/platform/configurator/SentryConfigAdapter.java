@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.configurator;
 
+import static io.sentry.Sentry.captureMessage;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.*;
 
@@ -30,6 +31,11 @@ public class SentryConfigAdapter extends SpringConfigAdapter {
           options.setTracesSampleRate(1.0);
           options.setEnableUncaughtExceptionHandler(true);
         });
+
+    captureMessage(
+        String.format(
+            "Sentry agent initialized. release:%s, environment: %s, debug: %s",
+            config.getString("sentry.release"), sentryEnv, config.getBoolean("sentry.debug")));
   }
 
   String getAuthToken() {
