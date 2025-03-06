@@ -111,7 +111,7 @@ class Sep6EventProcessor(
                 if (transaction.amountExpected.amount.equals("0")) {
                   "1"
                 } else {
-                  transaction.amountExpected.amount
+                  transaction.amountOut.amount
                 },
               )
           }
@@ -279,8 +279,8 @@ class Sep6EventProcessor(
                     ),
                   amountOut =
                     AmountAssetRequest(
-                      asset = transaction.amountExpected.asset,
-                      amount = transaction.amountExpected.amount,
+                      asset = transaction.amountOut.asset,
+                      amount = transaction.amountOut.amount,
                     ),
                   feeDetails = FeeDetails(total = "0", asset = sourceAsset),
                   instructions = instructions,
