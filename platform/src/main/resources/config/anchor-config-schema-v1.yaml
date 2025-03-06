@@ -102,6 +102,7 @@ sep31.enabled:
 sep31.payment_type:
 sep38.enabled:
 sep38.sep10_enforced:
+sep38.auth_enforced:
 sep45.enabled:
 sep45.web_auth_domain:
 sep45.web_auth_contract_id:

@@ -100,7 +100,7 @@ public class SepBeans {
     registrationBean.addUrlPatterns("/sep31/transactions/*");
     registrationBean.addUrlPatterns("/sep38/quote");
     registrationBean.addUrlPatterns("/sep38/quote/*");
-    if (sep38Config.isSep10Enforced()) {
+    if (sep38Config.isSep10Enforced() || sep38Config.isAuthEnforced()) {
       registrationBean.addUrlPatterns("/sep38/info");
       registrationBean.addUrlPatterns("/sep38/price");
       registrationBean.addUrlPatterns("/sep38/prices");

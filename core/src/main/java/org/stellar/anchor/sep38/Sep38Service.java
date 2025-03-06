@@ -366,7 +366,7 @@ public class Sep38Service {
   private Pair<String, Pair<String, String>> validateToken(WebAuthJwt token)
       throws BadRequestException {
     if (token == null) {
-      throw new BadRequestException("missing sep10 jwt token");
+      throw new BadRequestException("missing web auth token");
     }
     String account, memo = null, memoType = null;
     if (!Objects.toString(token.getMuxedAccount(), "").isEmpty()) {
@@ -378,7 +378,7 @@ public class Sep38Service {
         memoType = "id";
       }
     } else {
-      throw new BadRequestException("sep10 token is malformed");
+      throw new BadRequestException("web auth token is malformed");
     }
     return Pair.of(account, Pair.of(memo, memoType));
   }
