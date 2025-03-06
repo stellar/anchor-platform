@@ -65,7 +65,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.fullName }}-secrets
-                  key: SECRET
+                  key: PAYMENT_SIGNING_SEED
             - name: SEP24.INTERACTIVE_JWT_KEY
               valueFrom:
                 secretKeyRef:
