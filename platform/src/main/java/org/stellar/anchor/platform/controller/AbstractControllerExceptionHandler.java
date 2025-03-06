@@ -25,7 +25,6 @@ public abstract class AbstractControllerExceptionHandler {
   @ExceptionHandler({SepValidationException.class, BadRequestException.class})
   public SepExceptionResponse handleBadRequest(AnchorException ex) {
     debugF("Bad request: {}", ex.getMessage());
-    captureMessage("Bad request: " + ex.getMessage(), SentryLevel.DEBUG);
     return new SepExceptionResponse(ex.getMessage());
   }
 
@@ -33,7 +32,6 @@ public abstract class AbstractControllerExceptionHandler {
   @ExceptionHandler(MissingServletRequestParameterException.class)
   public SepExceptionResponse handleMissingParams(MissingServletRequestParameterException ex) {
     debugF("Missing server request parameters: {}", ex.getMessage());
-    captureMessage("Missing server request parameters: " + ex.getMessage(), SentryLevel.DEBUG);
     String name = ex.getParameterName();
     return new SepExceptionResponse(String.format("The \"%s\" parameter is missing.", name));
   }
@@ -42,7 +40,6 @@ public abstract class AbstractControllerExceptionHandler {
   @ResponseStatus(value = HttpStatus.BAD_REQUEST)
   public SepExceptionResponse handleRandomException(HttpMessageNotReadableException ex) {
     debugF("Spring is unable to read HTTP message: {}", ex.getMessage());
-    captureMessage("Spring is unable to read HTTP message: " + ex.getMessage(), SentryLevel.DEBUG);
     return new SepExceptionResponse("Your request body is wrong in some way.");
   }
 
@@ -74,7 +71,6 @@ public abstract class AbstractControllerExceptionHandler {
   @ExceptionHandler({CustodyBadRequestException.class})
   public CustodyExceptionResponse handleCustodyBadRequest(AnchorException ex) {
     debugF("Bad request (custody server): {}", ex.getMessage());
-    captureMessage("Bad request (custody server): " + ex.getMessage(), SentryLevel.DEBUG);
     return new CustodyExceptionResponse(ex.getMessage());
   }
 
