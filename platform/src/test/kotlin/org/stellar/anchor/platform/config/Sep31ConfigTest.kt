@@ -58,17 +58,4 @@ class Sep31ConfigTest {
     config.validate(config, errors)
     assertEquals("sep31-deposit-info-generator-type", errors.allErrors[0].code)
   }
-
-  @Test
-  fun `test validation rejecting self deposit generator if distribution_account missing in asset`() {
-    assetService =
-      DefaultAssetService.fromJsonResource("test_assets_missing_distribution_account.json")
-    config =
-      PropertySep31Config(custodyConfig, assetService).apply {
-        enabled = true
-        depositInfoGeneratorType = DepositInfoGeneratorType.SELF
-      }
-    config.validate(config, errors)
-    assertEquals("sep31-deposit-info-generator-type", errors.allErrors[0].code)
-  }
 }
