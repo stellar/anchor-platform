@@ -562,8 +562,8 @@ sentry:
   # The Sentry DSN (Data Source Name) for the Sentry project.
   # Leave empty if you do not want to use Sentry.
   dsn:
-  # The Sentry environment name for the Sentry project. ex: anchor-platform
-  release: anchor-platform
+  # The Sentry environment name for the project. ex: (your_project_name)
+  release:
   # The environment name for the Sentry project.
   environment:
   # The flag to enable or disable the Sentry integration.

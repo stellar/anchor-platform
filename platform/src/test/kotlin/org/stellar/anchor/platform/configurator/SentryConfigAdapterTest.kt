@@ -28,6 +28,24 @@ class SentryConfigAdapterTest {
     assertThrows<InvalidConfigException> { sentryConfigAdapter.validate(config) }
   }
 
+  @Test
+  fun `test missing sentry release`() {
+    val sentryConfigAdapter = spyk(SentryConfigAdapter())
+    val config = populateValidConfig()
+    every { config.getString("sentry.release") } returns ""
+
+    assertThrows<InvalidConfigException> { sentryConfigAdapter.validate(config) }
+  }
+
+  @Test
+  fun `test missing sentry environment`() {
+    val sentryConfigAdapter = spyk(SentryConfigAdapter())
+    val config = populateValidConfig()
+    every { config.getString("sentry.environment") } returns ""
+
+    assertThrows<InvalidConfigException> { sentryConfigAdapter.validate(config) }
+  }
+
   private fun populateValidConfig(): ConfigMap {
     val config: ConfigMap = mockk()
     every { config.getString("sentry.dsn") } returns

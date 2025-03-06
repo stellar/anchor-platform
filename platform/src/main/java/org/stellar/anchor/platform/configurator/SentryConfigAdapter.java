@@ -44,6 +44,14 @@ public class SentryConfigAdapter extends SpringConfigAdapter {
         throw new InvalidConfigException(
             "Please set SENTRY_AUTH_TOKEN when [sentry.dsn] is defined.");
       }
+      if (isEmpty(config.getString("sentry.release"))) {
+        throw new InvalidConfigException(
+            "Please set [sentry.release] when [sentry.dsn] is defined.");
+      }
+      if (isEmpty(config.getString("sentry.environment"))) {
+        throw new InvalidConfigException(
+            "Please set [sentry.environment] when [sentry.dsn] is defined.");
+      }
     }
   }
 }
