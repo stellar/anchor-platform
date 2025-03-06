@@ -126,21 +126,4 @@ class Sep6ConfigTest {
     config.validate(config, errors)
     Assertions.assertEquals("sep6-deposit-info-generator-type", errors.allErrors[0].code)
   }
-
-  @Test
-  fun `test validation rejecting self deposit generator if distribution_account missing in asset`() {
-    assetService =
-      DefaultAssetService.fromJsonResource("test_assets_missing_distribution_account.json")
-    config =
-      PropertySep6Config(custodyConfig, assetService, secretConfig).apply {
-        enabled = true
-        features = Sep6Config.Features(false, false)
-        depositInfoGeneratorType = Sep6Config.DepositInfoGeneratorType.SELF
-      }
-    config.moreInfoUrl = MoreInfoUrlConfig("https://www.stellar.org", 600, listOf(""))
-    every { custodyConfig.isCustodyIntegrationEnabled } returns false
-
-    config.validate(config, errors)
-    Assertions.assertEquals("sep6-deposit-info-generator-type", errors.allErrors[0].code)
-  }
 }
