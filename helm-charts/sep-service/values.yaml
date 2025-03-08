@@ -112,6 +112,8 @@ config:
 
   sep6:
     enabled: true
+    more_info_url:
+      base_url: http://localhost:3000/txn
 
   sep10:
     enabled: true
