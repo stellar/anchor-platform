@@ -10,10 +10,7 @@ import org.stellar.anchor.api.sep.sep45.ValidationRequest
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.Sep45Jwt
 import org.stellar.anchor.client.Sep45Client
-import org.stellar.anchor.platform.AbstractIntegrationTests
-import org.stellar.anchor.platform.CLIENT_SMART_WALLET_ACCOUNT
-import org.stellar.anchor.platform.CLIENT_WALLET_SECRET
-import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.*
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
 import org.stellar.anchor.xdr.SorobanAuthorizationEntryList
@@ -29,6 +26,7 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
       toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"),
       SorobanServer("https://soroban-testnet.stellar.org"),
       CLIENT_WALLET_SECRET,
+      CLIENT_DOMAIN_SECRET,
     )
   private val jwtService =
     JwtService(
@@ -149,5 +147,50 @@ class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
           .build()
       )
     }
+  }
+
+  @Test
+  fun testClientDomainVerification() {
+    val challenge =
+      sep45Client.getChallenge(
+        ChallengeRequest.builder()
+          .account(CLIENT_SMART_WALLET_ACCOUNT)
+          .homeDomain(homeDomain)
+          .clientDomain("wallet-server:8092")
+          .build()
+      )
+    Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")
+
+    val validationRequest = sep45Client.sign(challenge, signWithClientDomain = true)
+    Log.info("Validation request: ${GsonUtils.getInstance().toJson(validationRequest)}")
+
+    val validationResponse = sep45Client.validate(validationRequest)
+    Log.info("Validation response: ${GsonUtils.getInstance().toJson(validationResponse)}")
+
+    val jwt = jwtService.decode(validationResponse.token, Sep45Jwt::class.java)
+
+    assertEquals(homeDomain, jwt.homeDomain)
+    assertEquals(CLIENT_SMART_WALLET_ACCOUNT, jwt.account)
+    assertNotNull(jwt.jti)
+    assertEquals(homeDomain, jwt.iss)
+    assertNotNull(jwt.issuedAt)
+    assertNotNull(jwt.expiresAt)
+  }
+
+  @Test
+  fun testClientDomainVerificationWithMissingClientDomainSignature() {
+    val challenge =
+      sep45Client.getChallenge(
+        ChallengeRequest.builder()
+          .account(CLIENT_SMART_WALLET_ACCOUNT)
+          .homeDomain(homeDomain)
+          .clientDomain("wallet-server:8092")
+          .build()
+      )
+    Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")
+
+    val validationRequest = sep45Client.sign(challenge, signWithClientDomain = false)
+
+    assertThrows<RuntimeException> { sep45Client.validate(validationRequest) }
   }
 }

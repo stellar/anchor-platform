@@ -17,6 +17,7 @@ class Sep45Client(
   private val endpoint: String,
   private val rpc: SorobanServer,
   private val walletSigningKey: String,
+  private val clientDomainSigningKey: String? = null,
 ) : SepClient() {
 
   fun getChallenge(request: ChallengeRequest): ChallengeResponse {
@@ -34,7 +35,14 @@ class Sep45Client(
     return gson.fromJson(response, ChallengeResponse::class.java)
   }
 
-  fun sign(challengeResponse: ChallengeResponse): ValidationRequest {
+  fun sign(
+    challengeResponse: ChallengeResponse,
+    signWithClientDomain: Boolean = false
+  ): ValidationRequest {
+    if (signWithClientDomain && clientDomainSigningKey == null) {
+      throw RuntimeException("Client domain signing key is required to sign with client domain")
+    }
+
     val authEntries =
       SorobanAuthorizationEntryList.fromXdrBase64(challengeResponse.authorizationEntries)
         .authorizationEntryList
@@ -43,23 +51,41 @@ class Sep45Client(
         it.credentials.address.address.discriminant.equals(SCAddressType.SC_ADDRESS_TYPE_CONTRACT)
       }
         ?: throw RuntimeException("Contract auth entry not found in challenge response")
+    val clientDomainAuthEntry =
+      authEntries.find {
+        signWithClientDomain &&
+          it.credentials.address.address.discriminant.equals(
+            SCAddressType.SC_ADDRESS_TYPE_ACCOUNT
+          ) &&
+          KeyPair.fromXdrPublicKey(it.credentials.address.address.accountId.accountID).accountId ==
+            KeyPair.fromSecretSeed(clientDomainSigningKey).accountId
+      }
 
-    val walletKeyPair = KeyPair.fromSecretSeed(walletSigningKey)
+    if (signWithClientDomain && clientDomainAuthEntry == null) {
+      throw RuntimeException("Client domain auth entry not found in challenge response")
+    }
 
-    val validUntilLedgerSeq = rpc.latestLedger.sequence + 1.toLong()
-    val signedEntry =
-      Auth.authorizeEntry(
-        walletAuthEntry,
-        walletKeyPair,
-        validUntilLedgerSeq,
-        Network(rpc.network.passphrase),
-      )
-
-    // Replace auth entry in the list
+    // Replace auth entries in the list
+    val validUntilLedgerSeq = rpc.latestLedger.sequence + 10.toLong()
     val signedAuthEntries =
       authEntries.map {
         if (it.credentials.address.address == walletAuthEntry.credentials.address.address) {
-          signedEntry
+          Auth.authorizeEntry(
+            walletAuthEntry,
+            KeyPair.fromSecretSeed(walletSigningKey),
+            validUntilLedgerSeq,
+            Network(rpc.network.passphrase),
+          )
+        } else if (
+          signWithClientDomain &&
+            it.credentials.address.address == clientDomainAuthEntry!!.credentials.address.address
+        ) {
+          Auth.authorizeEntry(
+            clientDomainAuthEntry,
+            KeyPair.fromSecretSeed(clientDomainSigningKey),
+            validUntilLedgerSeq,
+            Network(rpc.network.passphrase),
+          )
         } else {
           it
         }
