@@ -302,6 +302,7 @@ val trailingCommaInAssets =
     "items": [
       {
         "id": "stellar:native",
+        "distribution_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
         "significant_decimals": 7
       },
     ]

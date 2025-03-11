@@ -91,6 +91,10 @@ config:
   platform_api:
     base_url: http://anchor-platform-svc-platform:8085
 
+  event_processor:
+    callback_api_request:
+      enabled: true
+
   events:
     enabled: true
     queue:
@@ -154,7 +158,7 @@ sep1_toml: |
   issuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
   status = "test"
   is_asset_anchored = false
-  desc = "Circle USDC Token"
+  desc = "Anchor Issued USDC"
   anchor_asset_type = "crypto"
 
   [[CURRENCIES]]
@@ -175,7 +179,7 @@ sep1_toml: |
   [DOCUMENTATION]
   ORG_NAME = "Stellar Development Foundation"
   ORG_URL = "https://stellar.org"
-  ORG_DESCRIPTION = "SEP 24 reference server."
+  ORG_DESCRIPTION = "The Stellar Development Foundation (SDF) is a non-profit organization whose mission is to create equitable access to the global financial system."
   ORG_KEYBASE = "stellar.public"
   ORG_TWITTER = "StellarOrg"
   ORG_GITHUB = "stellar"

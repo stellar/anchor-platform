@@ -61,21 +61,16 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.fullName }}-secrets
                   key: POSTGRES_PASSWORD
-            - name: APP.SECRET
+            - name: APP.PAYMENT_SIGNING_SEED
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.fullName }}-secrets
-                  key: SEP6_SECRET
+                  key: PAYMENT_SIGNING_SEED
             - name: SEP24.INTERACTIVE_JWT_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.fullName }}-secrets
                   key: SEP24_INTERACTIVE_JWT_KEY
-            - name: SEP24.SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.fullName }}-secrets
-                  key: SEP24_SECRET
             - name: AUTH.PLATFORM_TO_ANCHOR_SECRET
               valueFrom:
                 secretKeyRef:
