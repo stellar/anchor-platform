@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.component.sep;
 
 import jakarta.servlet.Filter;
+import java.time.Clock;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -12,6 +13,8 @@ import org.stellar.anchor.api.callback.RateIntegration;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
+import org.stellar.anchor.auth.NonceManager;
+import org.stellar.anchor.auth.NonceStore;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.*;
@@ -124,6 +127,13 @@ public class SepBeans {
   @OnAnySepsEnabled(seps = {"sep6", "sep24"})
   SepRequestValidator sepRequestValidator(AssetService assetService) {
     return new SepRequestValidator(assetService);
+  }
+
+  @Bean
+  @OnAnySepsEnabled(seps = {"sep45"})
+  NonceManager nonceService(NonceStore nonceStore) {
+    Clock clock = Clock.systemUTC();
+    return new NonceManager(nonceStore, clock);
   }
 
   @Bean
@@ -262,7 +272,9 @@ public class SepBeans {
       SecretConfig secretConfig,
       Sep45Config sep45Config,
       StellarRpc stellarRpc,
+      NonceManager nonceManager,
       JwtService jwtService) {
-    return new Sep45Service(appConfig, secretConfig, sep45Config, stellarRpc, jwtService);
+    return new Sep45Service(
+        appConfig, secretConfig, sep45Config, stellarRpc, nonceManager, jwtService);
   }
 }

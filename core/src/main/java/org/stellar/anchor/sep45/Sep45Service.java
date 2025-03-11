@@ -8,16 +8,15 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.*;
 import lombok.AllArgsConstructor;
-import org.stellar.anchor.api.exception.AnchorException;
-import org.stellar.anchor.api.exception.BadRequestException;
-import org.stellar.anchor.api.exception.InternalServerErrorException;
-import org.stellar.anchor.api.exception.SepException;
+import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException;
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest;
 import org.stellar.anchor.api.sep.sep45.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep45.ValidationRequest;
 import org.stellar.anchor.api.sep.sep45.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
+import org.stellar.anchor.auth.Nonce;
+import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep45Jwt;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
@@ -41,10 +40,12 @@ public class Sep45Service {
   private static final String KEY_CLIENT_DOMAIN = "client_domain";
   private static final String KEY_CLIENT_DOMAIN_ADDRESS = "client_domain_address";
   private static final String KEY_WEB_AUTH_DOMAIN = "web_auth_domain";
+  private static final String KEY_NONCE = "nonce";
   private final AppConfig appConfig;
   private final SecretConfig secretConfig;
   private final Sep45Config sep45Config;
   private final StellarRpc stellarRpc;
+  private final NonceManager nonceManager;
   private final JwtService jwtService;
 
   public ChallengeResponse getChallenge(ChallengeRequest request) throws AnchorException {
@@ -128,6 +129,9 @@ public class Sep45Service {
       argsMap.put(KEY_CLIENT_DOMAIN, request.getClientDomain());
       argsMap.put(KEY_CLIENT_DOMAIN_ADDRESS, clientDomainSigner);
     }
+
+    Nonce nonce = nonceManager.create(sep45Config.getAuthTimeout());
+    argsMap.put(KEY_NONCE, nonce.getId());
     return createArguments(argsMap);
   }
 
@@ -185,6 +189,14 @@ public class Sep45Service {
       }
     }
 
+    // Verify the nonce is valid and consume it
+    Map<String, String> argsMap = extractArgs(firstEntryArgs[0].getMap().getSCMap());
+    String nonceId = argsMap.get(KEY_NONCE);
+    if (!nonceManager.verify(nonceId)) {
+      throw new SepValidationException("Invalid nonce");
+    }
+    nonceManager.use(nonceId);
+
     // Simulate the transaction in enforcing mode to check the authorization entry credentials
     TransactionBuilderAccount source = stellarRpc.getAccount(simulatingKeypair.getAccountId());
 
@@ -211,8 +223,6 @@ public class Sep45Service {
     }
 
     // Construct the JWT token
-    Map<String, String> argsMap = extractArgs(firstEntryArgs[0].getMap().getSCMap());
-
     long issuedAt = Instant.now().getEpochSecond();
     String account = argsMap.get(KEY_ACCOUNT);
     String homeDomain = argsMap.get(KEY_HOME_DOMAIN);
