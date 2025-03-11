@@ -24,9 +24,10 @@ object ServiceContainer {
   val eventService = EventService()
   val horizon = Server(config.appSettings.horizonEndpoint)
   val rpc = SorobanServer(config.appSettings.rpcEndpoint)
-  val sep24PaymentClient = PaymentClient(horizon, rpc, KeyPair.fromSecretSeed(config.sep24.secret))
+  val paymentClient =
+    PaymentClient(horizon, rpc, KeyPair.fromSecretSeed(config.appSettings.paymentSigningSeed))
   val sepHelper = SepHelper(config)
-  val depositService = DepositService(config, sep24PaymentClient)
+  val depositService = DepositService(config, paymentClient)
   val withdrawalService = WithdrawalService(config)
   val receiveService = ReceiveService(config)
 

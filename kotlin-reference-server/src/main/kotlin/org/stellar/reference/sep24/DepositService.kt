@@ -61,7 +61,7 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
             paymentClient.send(
               account,
               Asset.create(asset.replace("stellar:", "")),
-              amount.toPlainString(),
+              transaction.amountOut!!.amount!!,
               memo,
               memoType,
             )

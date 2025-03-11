@@ -95,17 +95,20 @@ public class Sep12Service {
 
     if (StringUtils.isNotEmpty(request.getBirthDate())) {
       if (!isValidISO8601Date(request.getBirthDate())) {
-        throw new SepValidationException("Invalid 'birth_date'");
+        throw new SepValidationException(
+            "Invalid 'birth_date'. Expected format: YYYY-MM-DD (e.g., 1987-12-11)");
       }
     }
     if (StringUtils.isNotEmpty(request.getIdIssueDate())) {
       if (!isValidISO8601Date(request.getIdIssueDate())) {
-        throw new SepValidationException("Invalid 'id_issue_date'");
+        throw new SepValidationException(
+            "Invalid 'id_issue_date'. Expected format: YYYY-MM-DD (e.g., 1987-12-11)");
       }
     }
     if (StringUtils.isNotEmpty(request.getIdExpirationDate())) {
       if (!isValidISO8601Date(request.getIdExpirationDate())) {
-        throw new SepValidationException("Invalid 'id_expiration_date'");
+        throw new SepValidationException(
+            "Invalid 'id_expiration_date'. Expected format: YYYY-MM-DD (e.g., 1987-12-11)");
       }
     }
 
