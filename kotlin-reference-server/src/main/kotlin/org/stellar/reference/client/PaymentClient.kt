@@ -110,7 +110,7 @@ class PaymentClient(
           .build(),
         SCVal.builder()
           .discriminant(SCValType.SCV_I128)
-          .i128(Scv.toInt128(BigInteger.valueOf(amount.toLong() * 10000000)).i128)
+          .i128(Scv.toInt128(BigInteger.valueOf((amount.toFloat() * 10000000).toLong())).i128)
           .build(),
       )
     val operation =
