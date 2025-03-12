@@ -5,11 +5,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.gson
 
-class StellarObserverTests : AbstractIntegrationTests(TestConfig()) {
+class StellarObserverTests : IntegrationTestBase(TestConfig()) {
   companion object {
     const val OBSERVER_HEALTH_SERVER_PORT = 8083
   }

@@ -20,7 +20,7 @@ import org.stellar.sdk.Util
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.SCAddressType
 
-class Sep45Tests : AbstractIntegrationTests(TestConfig()) {
+class Sep45Tests : IntegrationTestBase(TestConfig()) {
   private var sep45Client: Sep45Client =
     Sep45Client(
       toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"),

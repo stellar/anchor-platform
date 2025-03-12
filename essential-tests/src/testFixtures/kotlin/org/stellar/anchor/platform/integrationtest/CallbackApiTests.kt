@@ -3,11 +3,9 @@ package org.stellar.anchor.platform.integrationtest
 import com.google.gson.Gson
 import io.mockk.every
 import io.mockk.mockk
-import java.util.*
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import org.junit.jupiter.api.*
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
 import org.skyscreamer.jsonassert.JSONAssert
@@ -22,7 +20,7 @@ import org.stellar.anchor.auth.ApiAuthJwt.CallbackAuthJwt
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.client.Sep12Client
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.callback.RestCustomerIntegration
 import org.stellar.anchor.platform.callback.RestRateIntegration
@@ -31,7 +29,7 @@ import org.stellar.anchor.util.GsonUtils
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Execution(ExecutionMode.SAME_THREAD)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
-class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
+class CallbackApiTests : IntegrationTestBase(TestConfig()) {
 
   companion object {
     private const val JWT_EXPIRATION_MILLISECONDS: Long = 10000
