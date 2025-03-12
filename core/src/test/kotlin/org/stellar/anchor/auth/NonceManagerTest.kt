@@ -25,6 +25,7 @@ class NonceManagerTest {
     clock = Clock.fixed(Instant.EPOCH, Clock.systemUTC().zone)
 
     every { nonceStore.newInstance() } answers { PojoNonce() }
+    every { nonceStore.findById(any()) } returns null
     val nonce = slot<Nonce>()
     every { nonceStore.save(capture(nonce)) } answers { nonce.captured }
 
@@ -48,6 +49,17 @@ class NonceManagerTest {
     val nonce2 = nonceManager.create(300)
 
     assertNotEquals(nonce1.id, nonce2.id)
+  }
+
+  @Test
+  fun testDuplicateNonceExists() {
+    val nonce = PojoNonce()
+    every { nonceStore.findById(any()) } returns nonce
+
+    assertThrows<RuntimeException> { nonceManager.create(300) }
+
+    verify(exactly = 1) { nonceStore.findById(any()) }
+    verify(exactly = 0) { nonceStore.save(any()) }
   }
 
   @Test

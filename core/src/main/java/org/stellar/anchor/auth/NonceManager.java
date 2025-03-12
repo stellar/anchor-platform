@@ -3,6 +3,7 @@ package org.stellar.anchor.auth;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -24,7 +25,10 @@ public class NonceManager {
    * @return the nonce
    */
   public Nonce create(int expiresIn) {
-    String id = String.valueOf(secureRandom.nextInt(Integer.MAX_VALUE));
+    String id = UUID.randomUUID().toString();
+    if (nonceStore.findById(id) != null) {
+      throw new RuntimeException("Duplicate nonce id");
+    }
 
     Nonce nonce =
         new NonceBuilder(nonceStore)
