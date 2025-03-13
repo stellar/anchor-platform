@@ -4,7 +4,6 @@ import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.http.*
-import java.net.URI
 import java.util.stream.Stream
 import kotlin.test.DefaultAsserter
 import kotlin.test.fail
@@ -27,15 +26,10 @@ import org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_CREATED
 import org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.sep24.Sep24GetTransactionResponse
-import org.stellar.anchor.api.sep.sep45.ChallengeRequest
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
 import org.stellar.anchor.client.Sep24Client
-import org.stellar.anchor.client.Sep45Client
-import org.stellar.anchor.platform.AbstractIntegrationTests
-import org.stellar.anchor.platform.CLIENT_SMART_WALLET_ACCOUNT
-import org.stellar.anchor.platform.CLIENT_WALLET_SECRET
-import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.*
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.Log.info
@@ -58,7 +52,7 @@ const val DEPOSIT_FUND_CLIENT_SECRET_1 = "SDNZAK6LCYNR4HYEFBZY3I2KLRDLSCE5RCF6HZ
 const val DEPOSIT_FUND_CLIENT_SECRET_2 = "SCW2SJEPTL4K7FFPFOFABFEFZJCG6LHULWVJX6JLIJ7TYIKTL6P473HM"
 
 @TestInstance(PER_CLASS)
-open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
+open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   private val client = HttpClient {
     install(HttpTimeout) {
       requestTimeoutMillis = 300000
@@ -124,20 +118,7 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
 
   @Test
   fun `test deposit to contract address end-to-end flow`() = runBlocking {
-    val webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
-    val homeDomain = "http://${URI.create(webAuthDomain).authority}"
-
-    val sep45Client =
-      Sep45Client(toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"), rpc, CLIENT_WALLET_SECRET)
-    val challenge =
-      sep45Client.getChallenge(
-        ChallengeRequest.builder()
-          .account(CLIENT_SMART_WALLET_ACCOUNT)
-          .homeDomain(homeDomain)
-          .build()
-      )
-    val token = sep45Client.validate(sep45Client.sign(challenge)).token
-    val sep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), token)
+    val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val request =
       mapOf(
@@ -145,7 +126,7 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
         "asset_issuer" to "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
         "amount" to "1",
       )
-    val response = sep24Client.deposit(request)
+    val response = wallet.sep24.deposit(request)
 
     // Assert the interactive URL JWT is valid
     val params = UriComponentsBuilder.fromUriString(response.url).build().queryParams
@@ -159,7 +140,7 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
     assertEquals(200, interactiveUrlRes.status.value)
 
     // Wait for the status to change to COMPLETED
-    waitForTxnStatusWithoutSDK(response.id, "USDC", SepTransactionStatus.COMPLETED, sep24Client)
+    waitForTxnStatusWithoutSDK(response.id, "USDC", SepTransactionStatus.COMPLETED, wallet.sep24)
   }
 
   open fun getExpectedDepositStatus(): List<Pair<AnchorEvent.Type, SepTransactionStatus>> {
@@ -314,20 +295,7 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
 
   @Test
   fun `test withdraw from contract address end-to-end flow`() = runBlocking {
-    val webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
-    val homeDomain = "http://${URI.create(webAuthDomain).authority}"
-
-    val sep45Client =
-      Sep45Client(toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT"), rpc, CLIENT_WALLET_SECRET)
-    val challenge =
-      sep45Client.getChallenge(
-        ChallengeRequest.builder()
-          .account(CLIENT_SMART_WALLET_ACCOUNT)
-          .homeDomain(homeDomain)
-          .build()
-      )
-    val token = sep45Client.validate(sep45Client.sign(challenge)).token
-    val sep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), token)
+    val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val request =
       mapOf(
@@ -336,7 +304,7 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
         "account" to CLIENT_SMART_WALLET_ACCOUNT,
         "amount" to "1",
       )
-    val response = sep24Client.withdraw(request)
+    val response = wallet.sep24.withdraw(request)
 
     // Start the withdrawal process
     val interactiveUrlRes = client.get(response.url)
@@ -347,21 +315,21 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
       response.id,
       "USDC",
       SepTransactionStatus.PENDING_USR_TRANSFER_START,
-      sep24Client,
+      wallet.sep24,
     )
 
     // Submit transfer transaction
-    val withdrawTxn = sep24Client.getTransaction(response.id, "USDC")
-    transferFunds(
-      CLIENT_SMART_WALLET_ACCOUNT,
-      withdrawTxn.transaction.to,
-      Asset.create(USDC.id),
-      "1",
-      walletKeyPair.keyPair,
-    )
+    val withdrawTxn = wallet.sep24.getTransaction(response.id, "USDC")
+    transactionWithRetry {
+      wallet.send(
+        withdrawTxn.transaction.to,
+        Asset.create(USDC.id),
+        "1",
+      )
+    }
 
     // Wait for the status to change to COMPLETED
-    waitForTxnStatusWithoutSDK(response.id, "USDC", SepTransactionStatus.COMPLETED, sep24Client)
+    waitForTxnStatusWithoutSDK(response.id, "USDC", SepTransactionStatus.COMPLETED, wallet.sep24)
   }
 
   private suspend fun waitForWalletServerCallbacks(

@@ -19,12 +19,12 @@ import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.client.Sep12Client
 import org.stellar.anchor.client.Sep24Client
 import org.stellar.anchor.client.Sep31Client
-import org.stellar.anchor.platform.AbstractIntegrationTests
 import org.stellar.anchor.platform.TestConfig
-import org.stellar.anchor.platform.inject
+import org.stellar.anchor.platform.integrationtest.PlatformAPITestBase
+import org.stellar.anchor.platform.integrationtest.inject
 import org.stellar.anchor.util.GsonUtils
 
-class PlatformApiCustodyTests : AbstractIntegrationTests(TestConfig("custody")) {
+class PlatformApiCustodyTests : PlatformAPITestBase(TestConfig("custody")) {
   companion object {
     private val custodyMockServer = MockWebServer()
 
