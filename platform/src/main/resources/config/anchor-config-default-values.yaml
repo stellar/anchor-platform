@@ -37,8 +37,18 @@ stellar_network:
   # Use TESTNET or PUBLIC
   network: TESTNET
 
+  # The rpc server endpoint.
+  # If the rpc_url is set, Anchor Platform will use the provided rpc_url to connect to the Stellar network except the
+  # observer server which requires the `horizon_url` to be set until the observer server is updated to use the rpc_url
+  # in the coming P23 release.
+  #
+  # If SEP-45 is enabled, the rpc_url must be set.
+  rpc_url: https://soroban-testnet.stellar.org
+
   # The horizon server endpoint.
   horizon_url: https://horizon-testnet.stellar.org
+
+
 
 ##############################
 # Callback API Configuration
