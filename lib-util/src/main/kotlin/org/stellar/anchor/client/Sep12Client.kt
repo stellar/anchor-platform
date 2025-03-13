@@ -22,11 +22,14 @@ val TYPE_MULTIPART_FORM_DATA = MULTIPART_FORM_DATA_CHARSET_UTF_8.toMediaType()
 
 class Sep12Client(private val endpoint: String, private val jwt: String) : SepClient() {
   fun getCustomer(
-    id: String,
+    id: String? = null,
     type: String? = null,
     transactionId: String? = null,
   ): Sep12GetCustomerResponse? {
-    var url = String.format(this.endpoint + "/customer?id=%s", id)
+    var url = this.endpoint + "/customer?"
+    if (id != null) {
+      url += "id=$id"
+    }
     if (type != null) {
       url += "&type=$type"
     }

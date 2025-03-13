@@ -7,7 +7,7 @@ import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.MethodOrderer.*
+import org.junit.jupiter.api.MethodOrderer.OrderAnnotation
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode.SAME_THREAD
 import org.skyscreamer.jsonassert.JSONAssert
@@ -20,11 +20,7 @@ import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
-import org.stellar.anchor.platform.AbstractIntegrationTests
-import org.stellar.anchor.platform.TestConfig
-import org.stellar.anchor.platform.gson
-import org.stellar.anchor.platform.printRequest
-import org.stellar.anchor.platform.printResponse
+import org.stellar.anchor.platform.*
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.StringHelper.json
 import org.stellar.walletsdk.anchor.IncompleteDepositTransaction
@@ -36,7 +32,7 @@ import org.stellar.walletsdk.asset.IssuedAssetId
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Execution(SAME_THREAD)
 @TestMethodOrder(OrderAnnotation::class)
-class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
+class Sep24Tests : IntegrationTestBase(TestConfig()) {
   private val jwtService: JwtService =
     JwtService(
       config.env["secret.sep6.more_info_url.jwt_secret"],
