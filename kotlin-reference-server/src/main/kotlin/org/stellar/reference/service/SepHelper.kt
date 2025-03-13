@@ -74,7 +74,7 @@ class SepHelper(private val cfg: Config) {
   internal suspend fun patchTransaction(
     transactionId: String,
     newStatus: String,
-    message: String? = null
+    message: String? = null,
   ) {
     patchTransaction(PatchTransactionTransaction(transactionId, newStatus, message))
   }
@@ -88,9 +88,10 @@ class SepHelper(private val cfg: Config) {
     assetString: String,
     amount: BigDecimal,
     memo: String?,
-    memoType: String?
+    memoType: String?,
   ): String {
-    val myAccount = server.accounts().account(cfg.sep24.keyPair!!.accountId)
+    val keypair = KeyPair.fromSecretSeed(cfg.appSettings.paymentSigningSeed)
+    val myAccount = server.accounts().account(keypair.accountId)
     val asset = Asset.create(assetString.replace("stellar:", ""))
 
     val transactionBuilder =
@@ -120,7 +121,7 @@ class SepHelper(private val cfg: Config) {
 
     val transaction = transactionBuilder.build()
 
-    transaction.sign(cfg.sep24.keyPair)
+    transaction.sign(keypair)
 
     val resp: TransactionResponse
     try {
