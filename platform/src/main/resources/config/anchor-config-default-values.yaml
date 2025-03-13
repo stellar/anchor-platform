@@ -43,8 +43,6 @@ stellar_network:
   # The horizon server endpoint.
   horizon_url: https://horizon-testnet.stellar.org
 
-
-
 ##############################
 # Callback API Configuration
 ##############################
