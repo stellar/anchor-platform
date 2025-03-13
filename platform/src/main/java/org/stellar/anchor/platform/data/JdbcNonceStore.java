@@ -1,6 +1,5 @@
 package org.stellar.anchor.platform.data;
 
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.stellar.anchor.auth.Nonce;
 import org.stellar.anchor.auth.NonceStore;
@@ -23,8 +22,8 @@ public class JdbcNonceStore implements NonceStore {
   }
 
   public void deleteExpiredNonces() {
-    List<JdbcNonce> expiredNonces = jdbcNonceRepo.findExpiredNonces();
-    Log.debug("Deleting " + expiredNonces.size() + " expired nonces");
-    jdbcNonceRepo.deleteAll(expiredNonces);
+    int expired = jdbcNonceRepo.countExpired();
+    jdbcNonceRepo.deleteAllExpired();
+    Log.debug("Deleted " + expired + " expired nonces");
   }
 }
