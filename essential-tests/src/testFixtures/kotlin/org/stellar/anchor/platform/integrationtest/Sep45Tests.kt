@@ -193,4 +193,24 @@ class Sep45Tests : IntegrationTestBase(TestConfig()) {
 
     assertThrows<RuntimeException> { sep45Client.validate(validationRequest) }
   }
+
+  @Test
+  fun testVerificationWithInvalidNonce() {
+    val challenge =
+      sep45Client.getChallenge(
+        ChallengeRequest.builder()
+          .account(CLIENT_SMART_WALLET_ACCOUNT)
+          .homeDomain(homeDomain)
+          .build()
+      )
+    Log.info("Challenge: ${GsonUtils.getInstance().toJson(challenge)}")
+
+    val validationRequest = sep45Client.sign(challenge)
+    Log.info("Validation request: ${GsonUtils.getInstance().toJson(validationRequest)}")
+
+    val validationResponse = sep45Client.validate(validationRequest)
+    Log.info("Validation response: ${GsonUtils.getInstance().toJson(validationResponse)}")
+
+    assertThrows<RuntimeException> { sep45Client.validate(validationRequest) }
+  }
 }

@@ -12,5 +12,7 @@ public interface Sep45Config {
 
   List<String> getHomeDomains();
 
+  Integer getAuthTimeout();
+
   Integer getJwtTimeout();
 }
