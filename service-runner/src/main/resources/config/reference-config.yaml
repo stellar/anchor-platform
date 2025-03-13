@@ -12,7 +12,7 @@ app:
   distributionWallet: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
   distributionWalletMemo:
   distributionWalletMemoType:
-  secret: SAJW2O2NH5QMMVWYAN352OEXS2RUY675A2HPK5HEG2FRR2NXPYA4OLYN
+  paymentSigningSeed: SAJW2O2NH5QMMVWYAN352OEXS2RUY675A2HPK5HEG2FRR2NXPYA4OLYN
   # When true, enables test endpoints
   enableTest: true
   # Indicates, that custody integration is enabled
@@ -41,9 +41,6 @@ auth:
   expirationMilliseconds: 30000
 
 sep24:
-  # Secret key used to send funds to user accounts.
-  # Public key: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
-  secret: "SAJ34AG5XC7BWGK3GGQGCXERSEP7LZYXBBDMD33NMBASZVNKACEMNEIY"
   # Encryption key for interactive JWT
   interactiveJwtKey: "secret_sep24_interactive_url_jwt_secret"
 

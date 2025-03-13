@@ -5,6 +5,7 @@ plugins {
   alias(libs.plugins.spring.boot)
   alias(libs.plugins.spring.dependency.management)
   alias(libs.plugins.kotlin.jvm)
+  id("io.sentry.jvm.gradle") version "5.3.0" // Sentry plugin
 }
 
 dependencies {
@@ -41,6 +42,7 @@ dependencies {
   implementation(libs.log4j2.slf4j2)
   implementation(libs.okhttp3)
   implementation(libs.postgresql)
+  implementation(libs.sentry.agent)
   implementation(libs.servlet.api)
   implementation(libs.spring.kafka)
   implementation(libs.spring.retry)
