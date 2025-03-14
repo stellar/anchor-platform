@@ -17,6 +17,9 @@ import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.client.Sep10Client
 import org.stellar.anchor.platform.*
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_EXTRA_SIGNER_1_SECRET
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_EXTRA_SIGNER_2_SECRET
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Transaction
 import org.stellar.walletsdk.auth.DefaultAuthHeaderSigner
@@ -41,7 +44,7 @@ class Sep10Tests : AbstractIntegrationTests(TestConfig()) {
         Sep10Client(
           toml.getString("WEB_AUTH_ENDPOINT"),
           toml.getString("SIGNING_KEY"),
-          CLIENT_WALLET_ACCOUNT,
+          KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId,
           CLIENT_WALLET_SECRET,
         )
     }
@@ -50,7 +53,7 @@ class Sep10Tests : AbstractIntegrationTests(TestConfig()) {
         Sep10Client(
           toml.getString("WEB_AUTH_ENDPOINT"),
           toml.getString("SIGNING_KEY"),
-          CLIENT_WALLET_ACCOUNT,
+          KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId,
           arrayOf(
             CLIENT_WALLET_SECRET,
             CLIENT_WALLET_EXTRA_SIGNER_1_SECRET,

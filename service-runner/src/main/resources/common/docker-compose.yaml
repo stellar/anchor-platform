@@ -5,6 +5,8 @@ services:
     command: -t
     volumes:
       - ../config:/config
+    env_file:
+      - ../../../../../.env
     ports:
       - "8080:8080" # SEP server
       - "8085:8085" # Platform server
@@ -15,6 +17,8 @@ services:
     command: --sep-server --platform-server --event-processor
     volumes:
       - ../config:/config
+    env_file:
+      - ../../../../../.env
     ports:
       - "8080:8080" # SEP server
       - "8085:8085" # Platform server
@@ -27,6 +31,8 @@ services:
     volumes:
       # add mounts for the new config directory
       - ../config:/config
+    env_file:
+      - ../../../../../.env
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -35,12 +41,16 @@ services:
     volumes:
       # add mounts for the new config directory
       - ../config:/config
+    env_file:
+      - ../../../../../.env
 
   reference-server:
     command: "--kotlin-reference-server"
     volumes:
       # add mounts for the new config directory
       - ../config:/config
+    env_file:
+      - ../../../../../.env
     environment:
       KT_REFERENCE_SERVER_CONFIG: /config/reference-config.yaml
     ports:

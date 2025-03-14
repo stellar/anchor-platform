@@ -31,6 +31,8 @@ dependencies {
   testFixturesImplementation(project(":lib-util"))
 
   testImplementation(libs.stellar.wallet.sdk)
+
+  implementation("io.github.cdimascio:dotenv-kotlin:6.5.1")
 }
 
 tasks { bootJar { enabled = false } }

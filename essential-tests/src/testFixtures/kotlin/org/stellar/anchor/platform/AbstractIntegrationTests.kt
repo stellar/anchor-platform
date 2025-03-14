@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.util.Sep1Helper.TomlContent
 import org.stellar.anchor.util.Sep1Helper.parse
 import org.stellar.sdk.Server
@@ -80,7 +81,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
                 Pair("%TESTPAYMENT_SRC_ACCOUNT%", payment.from),
                 Pair("%TESTPAYMENT_DEST_ACCOUNT%", payment.to),
                 Pair("%TESTPAYMENT_ASSET_CIRCLE_USDC%", TEST_PAYMENT_ASSET_CIRCLE_USDC),
-                Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT)
+                Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT),
               )
 
             return
@@ -107,7 +108,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
   var wallet =
     Wallet(
       StellarConfiguration.Testnet,
-      ApplicationConfiguration { defaultRequest { url { protocol = URLProtocol.HTTP } } }
+      ApplicationConfiguration { defaultRequest { url { protocol = URLProtocol.HTTP } } },
     )
   var walletKeyPair = SigningKeyPair.fromSecret(CLIENT_WALLET_SECRET)
   var anchor = wallet.anchor(config.env["anchor.domain"]!!)
@@ -118,7 +119,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
   suspend fun transactionWithRetry(
     maxAttempts: Int = 5,
     delay: Int = 5,
-    transactionLogic: suspend () -> Unit
+    transactionLogic: suspend () -> Unit,
   ) =
     flow<Unit> { submissionLock.withLock { transactionLogic() } }
       .retryWhen { _, attempt ->
