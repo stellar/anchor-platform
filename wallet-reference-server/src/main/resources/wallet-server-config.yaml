@@ -10,8 +10,5 @@ anchor:
   # The endpoint of the anchor server
   endpoint: "http://localhost:8080"
 
-secret:
-  key: "SD65QCQAT2V27SEIL3TJSA2PKGYQ5RWZ3IA5MYXJWY223VPYDBIJ4GEB"
-
 toml:
   path: "wallet-reference-server/src/main/resources/toml"

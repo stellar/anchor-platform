@@ -55,6 +55,17 @@ jobs:
           TEST_PROFILE_NAME: default
         run: docker compose -f /home/runner/anchor-platform/service-runner/src/main/resources/docker-compose-test.yaml up -d --build
 
+      - name: Check if SECRET_SEP10_SIGNING_SEED is defined
+        env:
+          SECRET_SEP10_SIGNING_SEED: ${{ vars.SECRET_SEP10_SIGNING_SEED }}
+        run: |
+          if [ -z "$SECRET_SEP10_SIGNING_SEED" ]; then
+            echo "SECRET_SEP10_SIGNING_SEED is not set"
+            exit 1
+          else
+            echo "SECRET_SEP10_SIGNING_SEED is set."
+          fi
+
       - name: Run sep server, platform server, observer, and reference servers for integration tests
         env:
           RUN_DOCKER: false
@@ -70,6 +81,10 @@ jobs:
           SEP10_WEB_AUTH_DOMAIN: host.docker.internal:8080
           SEP10_HOME_DOMAINS: host.docker.internal:8080,*.stellar.org
           TOML_PATH: /home/runner/anchor-platform/wallet-reference-server/src/main/resources/toml
+          SECRET_SEP10_SIGNING_SEED: ${{ vars.SECRET_SEP10_SIGNING_SEED }}
+          APP__DISTRIBUTION_WALLET: ${{ vars.APP__DISTRIBUTION_WALLET }}
+          APP__PAYMENT_SIGNING_SEED: ${{ vars.APP__PAYMENT_SIGNING_SEED }}
+          SECRET__KEY: ${{ vars.SECRET__KEY }}
         run: |
           cp /home/runner/anchor-platform/service-runner/build/libs/anchor-platform-runner-*.jar /home/runner/anchor-platform-runner.jar
           java -jar /home/runner/anchor-platform-runner.jar -t &
