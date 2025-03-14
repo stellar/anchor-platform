@@ -6,6 +6,7 @@ import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.stellar.anchor.Constants.Companion.TEST_JWT_SECRET
 import org.stellar.anchor.config.AppConfig
 
 internal class JwtServiceTest {
@@ -22,7 +23,7 @@ internal class JwtServiceTest {
   @Test
   fun testcodec() {
     val appConfig = mockk<AppConfig>()
-    every { appConfig.jwtSecretKey } returns "jwt_secret"
+    every { appConfig.jwtSecretKey } returns TEST_JWT_SECRET
 
     val jwtService = JwtService(appConfig)
     val token =
@@ -46,7 +47,7 @@ internal class JwtServiceTest {
   @Test
   fun testcodecRequestAccount() {
     val appConfig = mockk<AppConfig>()
-    every { appConfig.jwtSecretKey } returns "jwt_secret"
+    every { appConfig.jwtSecretKey } returns TEST_JWT_SECRET
 
     val jwtService = JwtService(appConfig)
     val token =
@@ -80,7 +81,7 @@ internal class JwtServiceTest {
   @Test
   fun testBadCipher() {
     val appConfig = mockk<AppConfig>()
-    every { appConfig.jwtSecretKey } returns "jwt_secret"
+    every { appConfig.jwtSecretKey } returns TEST_JWT_SECRET
 
     val jwtService = JwtService(appConfig)
 

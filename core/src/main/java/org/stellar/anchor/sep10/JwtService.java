@@ -44,21 +44,25 @@ public class JwtService {
       builder.addClaims(Map.of(REQUESTED_ACCOUNT, token.requestedAccount));
     }
 
-    return builder.signWith(SignatureAlgorithm.HS256, jwtKey).compact();
+    return builder.signWith(KeyUtil.toSecretKeySpecOrNull(jwtKey), Jwts.SIG.HS256).compact();
   }
 
   @SuppressWarnings("rawtypes")
   public JwtToken decode(String cipher) {
-    JwtParser jwtParser = Jwts.parser();
-    jwtParser.setSigningKey(jwtKey);
+
+    JwtParser jwtParser =
+        Jwts.parser()
+            .json(JwtsGsonDeserializer.newInstance())
+            .verifyWith(KeyUtil.toSecretKeySpecOrNull(jwtKey))
+            .build();
     Jwt jwt = jwtParser.parse(cipher);
     Claims claims = (Claims) jwt.getBody();
     Object requestedAccount = claims.get(REQUESTED_ACCOUNT);
     return JwtToken.of(
         (String) claims.get("iss"),
         (String) claims.get("sub"),
-        Long.valueOf((Integer) claims.get("iat")),
-        Long.valueOf((Integer) claims.get("exp")),
+        (Long) claims.get("iat"),
+        (Long) claims.get("exp"),
         (String) claims.get("jti"),
         (String) claims.get("client_domain"),
         requestedAccount == null ? null : (String) requestedAccount);

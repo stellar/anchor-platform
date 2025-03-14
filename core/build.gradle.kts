@@ -28,6 +28,8 @@ dependencies {
     implementation(libs.reactor.core)
     implementation(libs.jakarta.xml.bind.api)
     implementation(libs.java.stellar.sdk)
+    implementation(libs.jaxb.runtime)
+    implementation(libs.jackson.annotations)
 
     testImplementation(libs.servlet.api)
     testImplementation(libs.slf4j.api)

@@ -9,7 +9,7 @@ class Constants {
     const val TEST_CLIENT_DOMAIN = "test.client.stellar.org"
     const val TEST_NETWORK_PASS_PHRASE = "Test SDF Network ; September 2015"
     const val TEST_HOST_URL = "https://test.stellar.org"
-    const val TEST_JWT_SECRET = "jwt_secret"
+    const val TEST_JWT_SECRET = "secret_secret_secret_secret_secret_secret_secret_secret"
     const val TEST_ASSET = "USDC"
     const val TEST_ASSET_ISSUER_ACCOUNT_ID =
       "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"

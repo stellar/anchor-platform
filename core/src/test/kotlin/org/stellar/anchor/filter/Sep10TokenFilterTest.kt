@@ -12,6 +12,7 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.stellar.anchor.Constants.Companion.TEST_JWT_SECRET
 import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.config.Sep10Config
 import org.stellar.anchor.filter.BaseTokenFilter.APPLICATION_JSON_VALUE
@@ -37,7 +38,7 @@ internal class Sep10TokenFilterTest {
   @BeforeEach
   fun setup() {
     this.appConfig = mockk(relaxed = true)
-    every { appConfig.jwtSecretKey } returns "secret"
+    every { appConfig.jwtSecretKey } returns TEST_JWT_SECRET
     this.jwtService = JwtService(appConfig)
     this.sep10Config = mockk<Sep10Config>(relaxed = true)
     this.sep10TokenFilter = Sep10TokenFilter(sep10Config, jwtService)
