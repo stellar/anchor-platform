@@ -22,7 +22,7 @@ dependencyResolutionManagement {
       alias("okhttp3.mockserver").to("com.squareup.okhttp3:mockwebserver:4.9.3")
       alias("reactor.core").to("io.projectreactor:reactor-core:3.4.14")
       alias("reactor.netty").to("io.projectreactor.netty:reactor-netty:1.0.15")
-      alias("servlet.api").to("jakarta.servlet:jakarta.servlet-api:6.1.0")
+      alias("servlet.api").to("jakarta.servlet:jakarta.servlet-api:6.0.0")
       alias("sqlite.jdbc").to("org.xerial:sqlite-jdbc:3.16.1")
       alias("slf4j.api").to("org.slf4j:slf4j-api:1.7.35")
       alias("slf4j.log4j12").to("org.slf4j:slf4j-log4j12:1.7.33")
