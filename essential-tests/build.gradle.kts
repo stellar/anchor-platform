@@ -12,6 +12,7 @@ dependencies {
   testFixturesImplementation(libs.assertj.core)
   testFixturesImplementation(libs.httpclient)
   testFixturesImplementation(libs.kotlin.serialization.json)
+  testFixturesImplementation(libs.dotenv)
 
   // Stellar dependencies
   testFixturesImplementation(libs.stellar.wallet.sdk)
@@ -31,8 +32,6 @@ dependencies {
   testFixturesImplementation(project(":lib-util"))
 
   testImplementation(libs.stellar.wallet.sdk)
-
-  implementation("io.github.cdimascio:dotenv-kotlin:6.5.1")
 }
 
 tasks { bootJar { enabled = false } }

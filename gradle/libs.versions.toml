@@ -14,6 +14,7 @@ commons-io = "2.16.1"
 commons-text = "1.12.0"
 coroutines = "1.8.1"
 docker-compose-rule = "2.3.0"
+dotenv = "6.5.1"
 exposed = "0.52.0"
 flyway-core = "10.15.2"
 google-guava = "33.2.1-jre"
@@ -77,6 +78,7 @@ commons-io = { module = "commons-io:commons-io", version.ref = "commons-io" }
 commons-text = { module = "org.apache.commons:commons-text", version.ref = "commons-text" }
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 docker-compose-rule = { module = "com.palantir.docker.compose:docker-compose-junit-jupiter", version.ref = "docker-compose-rule" }
+dotenv = { module = "io.github.cdimascio:dotenv-kotlin", version.ref = "dotenv" }
 exposed = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
 flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway-core" }
