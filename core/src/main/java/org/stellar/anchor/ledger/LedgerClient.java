@@ -96,6 +96,6 @@ public interface LedgerClient {
   class Signer {
     String key;
     String type;
-    Integer weight;
+    Long weight;
   }
 }

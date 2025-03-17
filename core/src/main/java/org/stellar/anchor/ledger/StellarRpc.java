@@ -3,19 +3,23 @@ package org.stellar.anchor.ledger;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.SneakyThrows;
+import org.stellar.sdk.Asset;
 import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.SorobanServer;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.Transaction;
+import org.stellar.sdk.TrustLineAsset;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse;
 import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
+import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
 
 public class StellarRpc implements LedgerClient {
   String rpcServerUrl;
@@ -29,8 +33,7 @@ public class StellarRpc implements LedgerClient {
   @SneakyThrows
   @Override
   public boolean hasTrustline(String account, String asset) throws NetworkException {
-    // TODO: Implement this method
-    return false;
+    return (getTrustlineRpc(sorobanServer, account, asset) != null);
   }
 
   @Override
@@ -55,7 +58,7 @@ public class StellarRpc implements LedgerClient {
                             .key(
                                 StrKey.encodeEd25519PublicKey(s.getKey().getEd25519().getUint256()))
                             .type(s.getKey().getDiscriminant().name())
-                            .weight(Math.toIntExact(s.getWeight().getUint32().getNumber()))
+                            .weight(s.getWeight().getUint32().getNumber())
                             .build())
                 .collect(Collectors.toList()))
         .build();
@@ -71,6 +74,29 @@ public class StellarRpc implements LedgerClient {
       throws NetworkException {
     // TODO: Implement this method
     return null;
+  }
+
+  private TrustLineEntry getTrustlineRpc(SorobanServer stellarRpc, String accountId, String asset)
+      throws IOException {
+    KeyPair kp = KeyPair.fromAccountId(accountId);
+
+    // Create ledger keys for querying account and trustline
+    List<LedgerKey> ledgerKeys = new ArrayList<>();
+    ledgerKeys.add(
+        LedgerKey.builder()
+            .trustLine(
+                LedgerKeyTrustLine.builder()
+                    .accountID(kp.getXdrAccountId())
+                    .asset(new TrustLineAsset(Asset.create(asset)).toXdr())
+                    .build())
+            .discriminant(LedgerEntryType.TRUSTLINE)
+            .build());
+
+    // Assuming `stellarRpc` is defined elsewhere
+    var response = stellarRpc.getLedgerEntries(ledgerKeys);
+
+    return LedgerEntry.LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr())
+        .getTrustLine();
   }
 
   private AccountEntry getAccountRpc(SorobanServer stellarRpc, String accountId)

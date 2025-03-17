@@ -79,7 +79,7 @@ public class Horizon implements LedgerClient {
                         Signer.builder()
                             .key(s.getKey())
                             .type(s.getType())
-                            .weight(s.getWeight())
+                            .weight((long) s.getWeight())
                             .build())
                 .collect(Collectors.toList()))
         .build();
