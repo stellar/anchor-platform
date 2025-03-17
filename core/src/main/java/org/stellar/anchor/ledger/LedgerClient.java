@@ -2,6 +2,7 @@ package org.stellar.anchor.ledger;
 
 import java.io.IOException;
 import java.util.List;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Value;
@@ -28,7 +29,7 @@ public interface LedgerClient {
    * @return The account details.
    * @throws NetworkException If there was an error communicating with the network.
    */
-  Account getAccount(String account) throws NetworkException;
+  Account getAccount(String account) throws NetworkException, IOException;
 
   /**
    * Get the operations for the given Stellar transaction.
@@ -80,19 +81,21 @@ public interface LedgerClient {
 
   @Builder
   @Getter
+  @AllArgsConstructor
   class Thresholds {
-    Integer lowThreshold;
-    Integer medThreshold;
-    Integer highThreshold;
+    Integer master;
+    Integer low;
+    Integer medium;
+    Integer high;
   }
 
   @Value
   @Builder
   @Getter
+  @AllArgsConstructor
   class Signer {
     String key;
     String type;
     Integer weight;
-    String sponsor;
   }
 }

@@ -380,7 +380,7 @@ internal class Sep10ServiceTest {
         every { accountId } returns clientKeyPair.accountId
         every { sequenceNumber } returns 1
         every { signers } returns mockSigners
-        every { thresholds.medThreshold } returns 1
+        every { thresholds.medium } returns 1
       }
 
     every { ledgerClient.getAccount(any()) } returns accountResponse
@@ -404,7 +404,7 @@ internal class Sep10ServiceTest {
         every { accountId } returns clientKeyPair.accountId
         every { sequenceNumber } returns 1
         every { signers } returns mockSigners
-        every { thresholds.medThreshold } returns 1
+        every { thresholds.medium } returns 1
       }
 
     every { ledgerClient.getAccount(any()) } returns accountResponse

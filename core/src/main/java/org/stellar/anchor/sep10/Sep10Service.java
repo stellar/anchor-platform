@@ -11,6 +11,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
+import java.io.IOException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -115,7 +116,7 @@ public class Sep10Service implements ISep10Service {
   }
 
   public ValidationResponse validateChallenge(ValidationRequest request)
-      throws SepValidationException {
+      throws SepValidationException, IOException {
     info("Validating SEP-10 challenge.");
 
     ChallengeTransaction challenge = parseChallenge(request);
@@ -392,7 +393,7 @@ public class Sep10Service implements ISep10Service {
     // fetch the signers from the transaction
     Set<Sep10Challenge.Signer> signers = fetchSigners(account);
     // the signatures must be greater than the medium threshold of the account.
-    int threshold = account.getThresholds().getMedThreshold();
+    int threshold = account.getThresholds().getMedium();
     Network network = new Network(appConfig.getStellarNetworkPassphrase());
     String homeDomain = extractHomeDomainFromChallengeXdr(request.getTransaction(), network);
 
@@ -423,7 +424,7 @@ public class Sep10Service implements ISep10Service {
 
   LedgerClient.Account fetchAccount(
       ValidationRequest request, ChallengeTransaction challenge, String clientDomain)
-      throws SepValidationException {
+      throws SepValidationException, IOException {
     // Check the client's account
     LedgerClient.Account account;
     try {

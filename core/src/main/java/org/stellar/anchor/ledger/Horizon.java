@@ -68,9 +68,9 @@ public class Horizon implements LedgerClient {
         .sequenceNumber(response.getSequenceNumber())
         .thresholds(
             LedgerClient.Thresholds.builder()
-                .lowThreshold(thresholds.getLowThreshold())
-                .medThreshold(thresholds.getMedThreshold())
-                .highThreshold(thresholds.getHighThreshold())
+                .low(thresholds.getLowThreshold())
+                .medium(thresholds.getMedThreshold())
+                .high(thresholds.getHighThreshold())
                 .build())
         .signers(
             response.getSigners().stream()
@@ -80,7 +80,6 @@ public class Horizon implements LedgerClient {
                             .key(s.getKey())
                             .type(s.getType())
                             .weight(s.getWeight())
-                            .sponsor(s.getSponsor())
                             .build())
                 .collect(Collectors.toList()))
         .build();
