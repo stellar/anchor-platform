@@ -2,6 +2,7 @@ package org.stellar.anchor.ledger;
 
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.Getter;
@@ -86,16 +87,15 @@ public class Horizon implements LedgerClient {
   }
 
   @Override
-  public LedgerTransaction getTransaction(String transactionId) throws NetworkException {
-    TransactionResponse response = getServer().transactions().transaction(transactionId);
+  public LedgerTransaction getTransaction(String txnHash) throws NetworkException {
+    TransactionResponse response = getServer().transactions().transaction(txnHash);
     return LedgerTransaction.builder()
         .hash(response.getHash())
         .sourceAccount(response.getSourceAccount())
         .envelopeXdr(response.getEnvelopeXdr())
-        .sourceAccount(response.getSourceAccount())
         .memo(response.getMemo())
         .sequenceNumber(response.getSourceAccountSequence())
-        .createdAt(response.getCreatedAt())
+        .createdAt(Instant.parse(response.getCreatedAt()))
         .build();
   }
 

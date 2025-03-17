@@ -3,6 +3,7 @@ package org.stellar.anchor.ledger;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -17,6 +18,7 @@ import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TrustLineAsset;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse;
+import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse;
 import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
@@ -65,7 +67,36 @@ public class StellarRpc implements LedgerClient {
   }
 
   @Override
-  public LedgerTransaction getTransaction(String stellarTxnId) {
+  public LedgerTransaction getTransaction(String txnHash) throws IOException {
+    GetTransactionResponse txn = sorobanServer.getTransaction(txnHash);
+    TransactionEnvelope txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
+    if (txnEnv.getV0() != null) {
+      TransactionV0Envelope tenv = txnEnv.getV0();
+      return LedgerTransaction.builder()
+          .hash(txn.getTxHash())
+          .sourceAccount(
+              StrKey.encodeEd25519PublicKey(tenv.getTx().getSourceAccountEd25519().getUint256()))
+          .envelopeXdr(txn.getEnvelopeXdr())
+          .memo(org.stellar.sdk.Memo.fromXdr(tenv.getTx().getMemo()))
+          .sequenceNumber(tenv.getTx().getSeqNum().getSequenceNumber().getInt64())
+          .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
+          .build();
+
+    } else if (txnEnv.getV1() != null) {
+      TransactionV1Envelope tenv = txnEnv.getV1();
+      return LedgerTransaction.builder()
+          .hash(txn.getTxHash())
+          .sourceAccount(
+              StrKey.encodeEd25519PublicKey(
+                  tenv.getTx().getSourceAccount().getEd25519().getUint256()))
+          .envelopeXdr(txn.getEnvelopeXdr())
+          .memo(org.stellar.sdk.Memo.fromXdr(tenv.getTx().getMemo()))
+          .sequenceNumber(tenv.getTx().getSeqNum().getSequenceNumber().getInt64())
+          .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
+          .build();
+    }
+
+    // not found
     return null;
   }
 

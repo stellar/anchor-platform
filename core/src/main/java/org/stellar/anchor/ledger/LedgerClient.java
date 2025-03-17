@@ -34,10 +34,10 @@ public interface LedgerClient {
   /**
    * Get the operations for the given Stellar transaction.
    *
-   * @param stellarTxnId The Stellar transaction ID.
+   * @param txnHash The Stellar transaction ID.
    * @return The operations for the transaction.
    */
-  LedgerTransaction getTransaction(String stellarTxnId);
+  LedgerTransaction getTransaction(String txnHash) throws IOException;
 
   /**
    * Submit a transaction to the network.

@@ -1,5 +1,6 @@
 package org.stellar.anchor.ledger;
 
+import java.time.Instant;
 import java.util.List;
 import lombok.Builder;
 import lombok.Data;
@@ -17,7 +18,7 @@ public class LedgerTransaction {
   Long fee;
   Memo memo;
   Long sequenceNumber;
-  String createdAt;
+  Instant createdAt;
 
   List<LedgerOperation> operations;
 
