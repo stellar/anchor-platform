@@ -20,7 +20,7 @@ public interface LedgerClient {
    * @return True if the account has a trustline for the asset.
    * @throws NetworkException If there was an error communicating with the network.
    */
-  boolean hasTrustline(String account, String asset) throws NetworkException, IOException;
+  boolean hasTrustline(String account, String asset) throws NetworkException;
 
   /**
    * Get the account details for the given account.
@@ -29,7 +29,7 @@ public interface LedgerClient {
    * @return The account details.
    * @throws NetworkException If there was an error communicating with the network.
    */
-  Account getAccount(String account) throws NetworkException, IOException;
+  Account getAccount(String account) throws NetworkException;
 
   /**
    * Get the operations for the given Stellar transaction.
@@ -37,7 +37,7 @@ public interface LedgerClient {
    * @param txnHash The Stellar transaction ID.
    * @return The operations for the transaction.
    */
-  LedgerTransaction getTransaction(String txnHash) throws IOException;
+  LedgerTransaction getTransaction(String txnHash);
 
   /**
    * Submit a transaction to the network.
@@ -47,7 +47,7 @@ public interface LedgerClient {
    * @throws NetworkException If there was an error communicating with the network.
    */
   LedgerTransaction.LedgerTransactionResponse submitTransaction(Transaction transaction)
-      throws NetworkException;
+      throws NetworkException, IOException, InterruptedException;
 
   @Builder
   @Getter

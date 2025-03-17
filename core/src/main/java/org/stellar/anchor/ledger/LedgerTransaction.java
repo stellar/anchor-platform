@@ -60,11 +60,10 @@ public class LedgerTransaction {
   public static class LedgerTransactionResponse {
     String hash;
     String envelopXdr;
-    String metaXdr;
     String sourceAccount;
     String feeCharged;
     Memo memo;
     Long sequenceNumber;
-    String createdAt;
+    Instant createdAt;
   }
 }

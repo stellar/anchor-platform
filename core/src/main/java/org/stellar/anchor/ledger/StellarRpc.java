@@ -1,5 +1,7 @@
 package org.stellar.anchor.ledger;
 
+import static java.lang.Thread.sleep;
+import static org.stellar.anchor.util.Log.info;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
 
 import java.io.IOException;
@@ -10,6 +12,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.SneakyThrows;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.sdk.Asset;
 import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.SorobanServer;
@@ -19,6 +22,7 @@ import org.stellar.sdk.TrustLineAsset;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse;
+import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse;
 import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
@@ -26,6 +30,7 @@ import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
 public class StellarRpc implements LedgerClient {
   String rpcServerUrl;
   SorobanServer sorobanServer;
+  long maxTxnWait = 15;
 
   public StellarRpc(String rpcServerUrl) {
     this.rpcServerUrl = rpcServerUrl;
@@ -39,7 +44,8 @@ public class StellarRpc implements LedgerClient {
   }
 
   @Override
-  public Account getAccount(String account) throws NetworkException, IOException {
+  @SneakyThrows
+  public Account getAccount(String account) throws NetworkException {
     AccountEntry ae = getAccountRpc(sorobanServer, account);
     org.stellar.sdk.xdr.Thresholds txdr = ae.getThresholds();
     org.stellar.sdk.xdr.Signer[] signersXdr = ae.getSigners();
@@ -67,7 +73,8 @@ public class StellarRpc implements LedgerClient {
   }
 
   @Override
-  public LedgerTransaction getTransaction(String txnHash) throws IOException {
+  @SneakyThrows
+  public LedgerTransaction getTransaction(String txnHash) {
     GetTransactionResponse txn = sorobanServer.getTransaction(txnHash);
     TransactionEnvelope txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
     if (txnEnv.getV0() != null) {
@@ -101,10 +108,34 @@ public class StellarRpc implements LedgerClient {
   }
 
   @Override
-  public LedgerTransaction.LedgerTransactionResponse submitTransaction(Transaction transaction)
+  @SneakyThrows
+  public LedgerTransactionResponse submitTransaction(Transaction transaction)
       throws NetworkException {
-    // TODO: Implement this method
-    return null;
+    SendTransactionResponse txnR = sorobanServer.sendTransaction(transaction);
+    LedgerTransaction txn = null;
+    Instant startTime = Instant.now();
+    try {
+      do {
+        //noinspection BusyWait
+        sleep(1000);
+        if (java.time.Duration.between((Instant.now()), startTime).getSeconds() > maxTxnWait) {
+          throw new InterruptedException("Transaction took too long to complete");
+        }
+      } while ((txn = getTransaction(txnR.getHash())) == null);
+    } catch (InterruptedException e) {
+      info("Interrupted while waiting for transaction to complete");
+    }
+
+    if (txn != null) {
+      return LedgerTransactionResponse.builder()
+          .hash(txnR.getHash())
+          .envelopXdr(txn.getEnvelopeXdr())
+          .sourceAccount(txn.getSourceAccount())
+          .createdAt(txn.getCreatedAt())
+          .build();
+    } else {
+      return null;
+    }
   }
 
   private TrustLineEntry getTrustlineRpc(SorobanServer stellarRpc, String accountId, String asset)

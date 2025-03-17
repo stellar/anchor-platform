@@ -106,11 +106,10 @@ public class Horizon implements LedgerClient {
 
     return LedgerTransactionResponse.builder()
         .hash(txnR.getHash())
-        .metaXdr(txnR.getEnvelopeXdr())
         .envelopXdr(txnR.getEnvelopeXdr())
         .sourceAccount(txnR.getSourceAccount())
         .feeCharged(txnR.getFeeCharged().toString())
-        .createdAt(txnR.getCreatedAt())
+        .createdAt(Instant.parse(txnR.getCreatedAt()))
         .build();
   }
 
