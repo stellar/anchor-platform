@@ -33,6 +33,7 @@ public class Horizon implements LedgerClient {
     return this.horizonServer;
   }
 
+  @Override
   public boolean hasTrustline(String account, String asset) throws NetworkException {
     String assetCode = AssetHelper.getAssetCode(asset);
     if (NATIVE_ASSET_CODE.equals(assetCode)) {
