@@ -57,7 +57,8 @@ This should only be run one time.
 ## Install and check the secret store `fake-secret-store`
 
 ```bash
-helm upgrade --install fake-secret-store ./secret-store/
+source ../.env
+helm upgrade --install fake-secret-store ./secret-store/ --set sep10_signing_seed=$SECRET_SEP10_SIGNING_SEED --set sentry_auth_token=$SENTRY_AUTH_TOKEN --set payment_signing_seed=${APP__PAYMENT_SIGNING_SEED}
 ```
 
 To show if the secret store is running, run the following command:
