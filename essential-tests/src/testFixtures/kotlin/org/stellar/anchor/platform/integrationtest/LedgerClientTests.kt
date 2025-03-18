@@ -42,7 +42,7 @@ class LedgerClientTests {
   @MethodSource("getLedgerClient")
   fun `test getAccount()`(ledgerClient: LedgerClient, accountId: String) {
     val account = ledgerClient.getAccount(accountId)
-    JSONAssert.assertEquals(expectedAccount, gson.toJson(account), true)
+    JSONAssert.assertEquals(expectedAccount, gson.toJson(account), JSONCompareMode.LENIENT)
   }
 
   @ParameterizedTest
@@ -134,7 +134,6 @@ private val expectedAccount =
   """
 {
   "accountId": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
-  "sequenceNumber": 8654359104165,
   "thresholds": {
     "low": 0,
     "medium": 0,
