@@ -417,7 +417,7 @@ public class Sep10Service implements ISep10Service {
     // Find the signers of the client account.
     return account.getSigners().stream()
         .filter(as -> as.getType().equals("ed25519_public_key"))
-        .map(as -> new Sep10Challenge.Signer(as.getKey(), Math.toIntExact(as.getWeight())))
+        .map(as -> new Sep10Challenge.Signer(as.getKey(), as.getWeight().intValue()))
         .collect(Collectors.toSet());
   }
 
