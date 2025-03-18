@@ -374,7 +374,7 @@ internal class Sep10ServiceTest {
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
 
     val mockSigners =
-      listOf(TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner())
+      listOf(TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner())
     val accountResponse =
       mockk<LedgerClient.Account> {
         every { accountId } returns clientKeyPair.accountId
@@ -395,8 +395,8 @@ internal class Sep10ServiceTest {
   fun `test validate challenge with client domain`() {
     val mockSigners =
       listOf(
-        TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner(),
-        TestSigner(clientDomainKeyPair.accountId, "ed25519_public_key", 1, "").toSigner()
+        TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner(),
+        TestSigner(clientDomainKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner()
       )
 
     val accountResponse =
