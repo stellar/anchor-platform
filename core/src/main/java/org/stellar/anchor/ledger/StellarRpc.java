@@ -3,6 +3,7 @@ package org.stellar.anchor.ledger;
 import static java.lang.Thread.sleep;
 import static org.stellar.anchor.util.Log.info;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
+import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -10,8 +11,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 import lombok.SneakyThrows;
+import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.sdk.Asset;
 import org.stellar.sdk.KeyPair;
@@ -32,8 +33,8 @@ public class StellarRpc implements LedgerClient {
   SorobanServer sorobanServer;
   long maxTxnWait = 15;
 
-  public StellarRpc(String rpcServerUrl) {
-    this.rpcServerUrl = rpcServerUrl;
+  public StellarRpc(AppConfig appConfig) {
+    this.rpcServerUrl = appConfig.getRpcUrl();
     sorobanServer = new SorobanServer(rpcServerUrl);
   }
 
@@ -49,16 +50,8 @@ public class StellarRpc implements LedgerClient {
     AccountEntry ae = getAccountRpc(sorobanServer, account);
     org.stellar.sdk.xdr.Thresholds txdr = ae.getThresholds();
     org.stellar.sdk.xdr.Signer[] signersXdr = ae.getSigners();
-    return Account.builder()
-        .accountId(StrKey.encodeEd25519PublicKey(ae.getAccountID()))
-        .sequenceNumber(ae.getSeqNum().getSequenceNumber().getInt64())
-        .thresholds(
-            new Thresholds(
-                (int) txdr.getThresholds()[0],
-                (int) txdr.getThresholds()[1],
-                (int) txdr.getThresholds()[2],
-                (int) txdr.getThresholds()[3]))
-        .signers(
+    List<Signer> signers =
+        new ArrayList<>(
             Arrays.stream(signersXdr)
                 .map(
                     s ->
@@ -68,7 +61,25 @@ public class StellarRpc implements LedgerClient {
                             .type(s.getKey().getDiscriminant().name())
                             .weight(s.getWeight().getUint32().getNumber())
                             .build())
-                .collect(Collectors.toList()))
+                .toList());
+    // Add master key
+    signers.add(
+        Signer.builder()
+            .key(account)
+            .type(SIGNER_KEY_TYPE_ED25519.name())
+            .weight((long) txdr.getThresholds()[0])
+            .build());
+
+    return Account.builder()
+        .accountId(StrKey.encodeEd25519PublicKey(ae.getAccountID()))
+        .sequenceNumber(ae.getSeqNum().getSequenceNumber().getInt64())
+        .thresholds(
+            new Thresholds(
+                // master threshold txdr.getThresholds()[0] has no use in the context of the anchor
+                (int) txdr.getThresholds()[1],
+                (int) txdr.getThresholds()[2],
+                (int) txdr.getThresholds()[3]))
+        .signers(signers)
         .build();
   }
 
@@ -76,6 +87,10 @@ public class StellarRpc implements LedgerClient {
   @SneakyThrows
   public LedgerTransaction getTransaction(String txnHash) {
     GetTransactionResponse txn = sorobanServer.getTransaction(txnHash);
+    if (txn == null || txn.getEnvelopeXdr() == null) {
+      // not found or not yet available
+      return null;
+    }
     TransactionEnvelope txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
     if (txnEnv.getV0() != null) {
       TransactionV0Envelope tenv = txnEnv.getV0();
@@ -157,8 +172,11 @@ public class StellarRpc implements LedgerClient {
     // Assuming `stellarRpc` is defined elsewhere
     var response = stellarRpc.getLedgerEntries(ledgerKeys);
 
-    return LedgerEntry.LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr())
-        .getTrustLine();
+    if (response.getEntries().isEmpty()) {
+      return null;
+    }
+
+    return LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr()).getTrustLine();
   }
 
   private AccountEntry getAccountRpc(SorobanServer stellarRpc, String accountId)

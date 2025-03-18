@@ -83,7 +83,6 @@ public interface LedgerClient {
   @Getter
   @AllArgsConstructor
   class Thresholds {
-    Integer master;
     Integer low;
     Integer medium;
     Integer high;

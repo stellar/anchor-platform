@@ -1,6 +1,7 @@
 package org.stellar.anchor.ledger;
 
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
+import static org.stellar.sdk.xdr.SignerKeyType.*;
 
 import java.time.Instant;
 import java.util.List;
@@ -16,10 +17,10 @@ import org.stellar.sdk.responses.AccountResponse;
 import org.stellar.sdk.responses.TransactionResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.xdr.AssetType;
+import org.stellar.sdk.xdr.SignerKeyType;
 
 /** The horizon-server. */
 public class Horizon implements LedgerClient {
-
   @Getter private final String horizonUrl;
   @Getter private final String stellarNetworkPassphrase;
   private final Server horizonServer;
@@ -79,7 +80,7 @@ public class Horizon implements LedgerClient {
                     s ->
                         Signer.builder()
                             .key(s.getKey())
-                            .type(s.getType())
+                            .type(getKeyTypeDiscriminant(s.getType()).name())
                             .weight((long) s.getWeight())
                             .build())
                 .collect(Collectors.toList()))
@@ -127,5 +128,15 @@ public class Horizon implements LedgerClient {
         .forTransaction(stellarTxnId)
         .execute()
         .getRecords();
+  }
+
+  public SignerKeyType getKeyTypeDiscriminant(String type) {
+    return switch (type) {
+      case "ed25519_public_key" -> SIGNER_KEY_TYPE_ED25519;
+      case "preauth_tx" -> SIGNER_KEY_TYPE_PRE_AUTH_TX;
+      case "sha256_hash" -> SIGNER_KEY_TYPE_HASH_X;
+      case "ed25519_signed_payload" -> SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
+      default -> throw new IllegalArgumentException("Invalid signer key type: " + type);
+    };
   }
 }

@@ -60,7 +60,11 @@ public class AssetHelper {
    * @return The asset code
    */
   public static String getAssetCode(String asset) {
-    return asset.split(":")[1];
+    if (asset.startsWith("stellar:")) {
+      return asset.split(":")[1];
+    } else {
+      return asset.split(":")[0];
+    }
   }
 
   /**
@@ -70,7 +74,11 @@ public class AssetHelper {
    * @return The asset issuer. If issuer is absent, then returns NULL
    */
   public static String getAssetIssuer(String asset) {
-    return asset.split(":").length >= 3 ? asset.split(":")[2] : null;
+    if (asset.startsWith("stellar:")) {
+      return asset.split(":").length >= 3 ? asset.split(":")[2] : null;
+    } else {
+      return asset.split(":")[1];
+    }
   }
 
   /**
