@@ -6,7 +6,7 @@ services:
     volumes:
       - ../config:/config
     env_file:
-      - ../../../../../.env
+      - ../../../../../.env # Relative to docker-compose.yml
     ports:
       - "8080:8080" # SEP server
       - "8085:8085" # Platform server
@@ -18,7 +18,7 @@ services:
     volumes:
       - ../config:/config
     env_file:
-      - ../../../../../.env
+      - ../../../../../.env # Relative to docker-compose.yml
     ports:
       - "8080:8080" # SEP server
       - "8085:8085" # Platform server
@@ -32,7 +32,7 @@ services:
       # add mounts for the new config directory
       - ../config:/config
     env_file:
-      - ../../../../../.env
+      - ../../../../../.env # Relative to docker-compose.yml
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -50,7 +50,7 @@ services:
       # add mounts for the new config directory
       - ../config:/config
     env_file:
-      - ../../../../../.env
+      - ../../../../../.env # Relative to docker-compose.yml
     environment:
       KT_REFERENCE_SERVER_CONFIG: /config/reference-config.yaml
     ports:
