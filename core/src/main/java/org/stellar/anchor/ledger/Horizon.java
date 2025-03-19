@@ -11,8 +11,6 @@ import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.sdk.*;
-import org.stellar.sdk.exception.NetworkException;
-import org.stellar.sdk.requests.PaymentsRequestBuilder;
 import org.stellar.sdk.responses.AccountResponse;
 import org.stellar.sdk.responses.TransactionResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
@@ -36,7 +34,7 @@ public class Horizon implements LedgerClient {
   }
 
   @Override
-  public boolean hasTrustline(String account, String asset) throws NetworkException {
+  public boolean hasTrustline(String account, String asset) {
     String assetCode = AssetHelper.getAssetCode(asset);
     if (NATIVE_ASSET_CODE.equals(assetCode)) {
       return true;
@@ -61,7 +59,7 @@ public class Horizon implements LedgerClient {
   }
 
   @Override
-  public Account getAccount(String account) throws NetworkException {
+  public Account getAccount(String account) {
     AccountResponse response = getServer().accounts().account(account);
     AccountResponse.Thresholds thresholds = response.getThresholds();
 
@@ -88,7 +86,7 @@ public class Horizon implements LedgerClient {
   }
 
   @Override
-  public LedgerTransaction getTransaction(String txnHash) throws NetworkException {
+  public LedgerTransaction getTransaction(String txnHash) {
     TransactionResponse response = getServer().transactions().transaction(txnHash);
     return LedgerTransaction.builder()
         .hash(response.getHash())
@@ -101,8 +99,7 @@ public class Horizon implements LedgerClient {
   }
 
   @Override
-  public LedgerTransactionResponse submitTransaction(Transaction transaction)
-      throws NetworkException {
+  public LedgerTransactionResponse submitTransaction(Transaction transaction) {
     TransactionResponse txnR = getServer().submitTransaction(transaction, false);
 
     return LedgerTransactionResponse.builder()
@@ -119,7 +116,6 @@ public class Horizon implements LedgerClient {
    *
    * @param stellarTxnId the transaction id
    * @return the operations
-   * @throws NetworkException request failed, see {@link PaymentsRequestBuilder#execute()}
    */
   public List<OperationResponse> getStellarTxnOperations(String stellarTxnId) {
     return getServer()

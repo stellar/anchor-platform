@@ -70,6 +70,8 @@ class LedgerClientTests {
     accountId: String
   ) {
     val paymentTxn = buildPaymentTransaction(ledgerClient)
+    println(GsonUtils.getInstance().toJson(paymentTxn))
+
     val result = ledgerClient.submitTransaction(paymentTxn)
 
     val txn = ledgerClient.getTransaction(result.hash)

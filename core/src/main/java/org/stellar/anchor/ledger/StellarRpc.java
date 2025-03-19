@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import lombok.SneakyThrows;
+import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.sdk.Asset;
@@ -20,9 +21,9 @@ import org.stellar.sdk.SorobanServer;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TrustLineAsset;
-import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse;
+import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse.GetTransactionStatus;
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse;
 import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
@@ -31,7 +32,8 @@ import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
 public class StellarRpc implements LedgerClient {
   String rpcServerUrl;
   SorobanServer sorobanServer;
-  long maxTxnWait = 15;
+  int maxTimeout = 10;
+  int maxPollCount = 10;
 
   public StellarRpc(AppConfig appConfig) {
     this.rpcServerUrl = appConfig.getRpcUrl();
@@ -40,13 +42,13 @@ public class StellarRpc implements LedgerClient {
 
   @SneakyThrows
   @Override
-  public boolean hasTrustline(String account, String asset) throws NetworkException {
+  public boolean hasTrustline(String account, String asset) {
     return (getTrustlineRpc(sorobanServer, account, asset) != null);
   }
 
   @Override
   @SneakyThrows
-  public Account getAccount(String account) throws NetworkException {
+  public Account getAccount(String account) {
     AccountEntry ae = getAccountRpc(sorobanServer, account);
     org.stellar.sdk.xdr.Thresholds txdr = ae.getThresholds();
     org.stellar.sdk.xdr.Signer[] signersXdr = ae.getSigners();
@@ -87,8 +89,10 @@ public class StellarRpc implements LedgerClient {
   @SneakyThrows
   public LedgerTransaction getTransaction(String txnHash) {
     GetTransactionResponse txn = sorobanServer.getTransaction(txnHash);
-    if (txn == null || txn.getEnvelopeXdr() == null) {
-      // not found or not yet available
+    if (txn == null
+        || txn.getStatus() != GetTransactionStatus.SUCCESS
+        || txn.getEnvelopeXdr() == null) {
+      // not found or not yet available or failure
       return null;
     }
     TransactionEnvelope txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
@@ -124,17 +128,19 @@ public class StellarRpc implements LedgerClient {
 
   @Override
   @SneakyThrows
-  public LedgerTransactionResponse submitTransaction(Transaction transaction)
-      throws NetworkException {
+  public LedgerTransactionResponse submitTransaction(Transaction transaction) {
     SendTransactionResponse txnR = sorobanServer.sendTransaction(transaction);
     LedgerTransaction txn = null;
     Instant startTime = Instant.now();
+    int pollCount = 0;
     try {
       do {
-        sleep(1000);
-        if (java.time.Duration.between((Instant.now()), startTime).getSeconds() > maxTxnWait)
+        delay();
+        if (java.time.Duration.between(startTime, Instant.now()).getSeconds() > maxTimeout
+            || pollCount >= maxPollCount)
           throw new InterruptedException("Transaction took too long to complete");
         txn = getTransaction(txnR.getHash());
+        pollCount++;
       } while (txn == null);
     } catch (InterruptedException e) {
       info("Interrupted while waiting for transaction to complete");
@@ -152,8 +158,12 @@ public class StellarRpc implements LedgerClient {
     }
   }
 
+  void delay() throws InterruptedException {
+    sleep(1000);
+  }
+
   private TrustLineEntry getTrustlineRpc(SorobanServer stellarRpc, String accountId, String asset)
-      throws IOException {
+      throws LedgerException {
     KeyPair kp = KeyPair.fromAccountId(accountId);
 
     // Create ledger keys for querying account and trustline
@@ -171,11 +181,13 @@ public class StellarRpc implements LedgerClient {
     // Assuming `stellarRpc` is defined elsewhere
     var response = stellarRpc.getLedgerEntries(ledgerKeys);
 
-    if (response.getEntries().isEmpty()) {
-      return null;
-    }
+    if (response.getEntries().isEmpty()) return null;
 
-    return LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr()).getTrustLine();
+    try {
+      return LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr()).getTrustLine();
+    } catch (IOException e) {
+      throw new LedgerException("Error parsing trustline data", e);
+    }
   }
 
   private AccountEntry getAccountRpc(SorobanServer stellarRpc, String accountId)

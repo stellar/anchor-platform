@@ -37,7 +37,6 @@ import org.stellar.anchor.util.Log;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Sep10Challenge.ChallengeTransaction;
 import org.stellar.sdk.exception.InvalidSep10ChallengeException;
-import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.operations.ManageDataOperation;
 import org.stellar.sdk.operations.Operation;
 
@@ -433,7 +432,7 @@ public class Sep10Service implements ISep10Service {
       traceF("challenge account: {}", account);
       sep10ChallengeValidatedCounter.increment();
       return account;
-    } catch (NetworkException ex) {
+    } catch (LedgerException ex) {
       infoF("Account {} does not exist in the Stellar Network");
       // account not found
       // The client account does not exist, using the client's master key to verify.
