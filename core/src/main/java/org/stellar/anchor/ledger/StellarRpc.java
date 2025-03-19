@@ -131,12 +131,11 @@ public class StellarRpc implements LedgerClient {
     Instant startTime = Instant.now();
     try {
       do {
-        //noinspection BusyWait
         sleep(1000);
-        if (java.time.Duration.between((Instant.now()), startTime).getSeconds() > maxTxnWait) {
+        if (java.time.Duration.between((Instant.now()), startTime).getSeconds() > maxTxnWait)
           throw new InterruptedException("Transaction took too long to complete");
-        }
-      } while ((txn = getTransaction(txnR.getHash())) == null);
+        txn = getTransaction(txnR.getHash());
+      } while (txn == null);
     } catch (InterruptedException e) {
       info("Interrupted while waiting for transaction to complete");
     }
