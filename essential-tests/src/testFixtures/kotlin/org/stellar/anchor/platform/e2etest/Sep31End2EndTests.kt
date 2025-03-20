@@ -21,9 +21,6 @@ import org.stellar.anchor.api.sep.sep31.Sep31GetTransactionResponse
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
-import org.stellar.anchor.client.Sep12Client
-import org.stellar.anchor.client.Sep31Client
-import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.platform.*
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET

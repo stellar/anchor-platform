@@ -16,10 +16,13 @@ import org.stellar.anchor.api.sep.sep6.GetTransactionResponse
 import org.stellar.anchor.api.shared.InstructionField
 import org.stellar.anchor.client.Sep6Client
 import org.stellar.anchor.platform.*
+import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
+import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.anchor.customer
 import org.stellar.walletsdk.asset.IssuedAssetId
 
@@ -28,6 +31,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   private val maxTries = 30
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
   private val gson = GsonUtils.getInstance()
+  private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
 
   companion object {
     private val USDC =
@@ -55,7 +59,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test typical deposit end-to-end flow`() = runBlocking {
     val memo = (10000..20000).random().toULong()
-    val wallet = WalletClient(CLIENT_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, memo.toString(), toml)
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
     // Create a customer before starting the transaction
     val customerRequest =
@@ -74,7 +78,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
       wallet.sep6.deposit(
         mapOf(
           "asset_code" to USDC.code,
-          "account" to CLIENT_WALLET_ACCOUNT,
+          "account" to clientWalletAccount,
           "amount" to "1",
           "type" to "SWIFT",
         )
@@ -198,7 +202,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test typical deposit-exchange without quote end-to-end flow`() = runBlocking {
     val memo = (20000..30000).random().toULong()
-    val wallet = WalletClient(CLIENT_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, memo.toString(), toml)
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
     // Create a customer before starting the transaction
     val customer =
@@ -220,7 +224,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           "destination_asset" to USDC.code,
           "source_asset" to "iso4217:CAD",
           "amount" to "1",
-          "account" to CLIENT_WALLET_ACCOUNT,
+          "account" to clientWalletAccount,
           "type" to "SWIFT",
         ),
         exchange = true,
@@ -345,7 +349,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test typical withdraw end-to-end flow`() = runBlocking {
     val memo = (40000..50000).random().toULong()
-    val wallet = WalletClient(CLIENT_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, memo.toString(), toml)
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
     // Create a customer before starting the transaction
     val customer =
@@ -488,7 +492,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test typical withdraw-exchange without quote end-to-end flow`() = runBlocking {
     val memo = (50000..60000).random().toULong()
-    val wallet = WalletClient(CLIENT_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, memo.toString(), toml)
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
     // Create a customer before starting the transaction
     val customer =

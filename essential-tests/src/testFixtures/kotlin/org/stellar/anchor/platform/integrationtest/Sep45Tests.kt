@@ -11,6 +11,9 @@ import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.Sep45Jwt
 import org.stellar.anchor.client.Sep45Client
 import org.stellar.anchor.platform.*
+import org.stellar.anchor.platform.TestSecrets.CLIENT_DOMAIN_SECRET
+import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
 import org.stellar.anchor.xdr.SorobanAuthorizationEntryList

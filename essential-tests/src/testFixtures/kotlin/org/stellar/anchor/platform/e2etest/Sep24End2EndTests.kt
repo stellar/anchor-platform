@@ -4,6 +4,10 @@ import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.http.*
+import java.util.stream.Stream
+import kotlin.test.DefaultAsserter
+import kotlin.test.fail
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.assertj.core.api.Assertions.assertThat
@@ -49,10 +53,6 @@ import org.stellar.walletsdk.asset.XLM
 import org.stellar.walletsdk.auth.AuthToken
 import org.stellar.walletsdk.horizon.SigningKeyPair
 import org.stellar.walletsdk.horizon.sign
-import java.util.stream.Stream
-import kotlin.test.DefaultAsserter
-import kotlin.test.fail
-import kotlin.time.Duration.Companion.seconds
 
 @TestInstance(PER_CLASS)
 open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {

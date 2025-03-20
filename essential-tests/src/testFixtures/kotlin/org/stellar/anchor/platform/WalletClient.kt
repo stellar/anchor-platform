@@ -7,6 +7,8 @@ import java.util.Base64
 import org.apache.commons.codec.binary.Hex
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest
 import org.stellar.anchor.client.*
+import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.util.Sep1Helper.TomlContent
 import org.stellar.sdk.*
 import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
