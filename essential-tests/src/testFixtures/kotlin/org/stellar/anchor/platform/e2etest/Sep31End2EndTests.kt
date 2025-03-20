@@ -21,7 +21,12 @@ import org.stellar.anchor.api.sep.sep31.Sep31GetTransactionResponse
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
+import org.stellar.anchor.client.Sep12Client
+import org.stellar.anchor.client.Sep31Client
+import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.platform.*
+import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.integrationtest.Sep12Tests.Companion.testCustomer1Json
 import org.stellar.anchor.platform.integrationtest.Sep12Tests.Companion.testCustomer2Json
 import org.stellar.anchor.util.GsonUtils
@@ -29,6 +34,7 @@ import org.stellar.anchor.util.Log.info
 import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
+import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.asset.IssuedAssetId
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -41,6 +47,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
   private val platformApiClient =
     PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
+  private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
 
   private fun assertEvents(
     actualEvents: List<SendEventRequest>?,
@@ -85,7 +92,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     val amount = "5"
 
     walletServerClient.clearCallbacks()
-    val wallet = WalletClient(CLIENT_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, null, toml)
 
     val senderCustomerRequest =
       gson.fromJson(testCustomer1Json, Sep12PutCustomerRequest::class.java)
