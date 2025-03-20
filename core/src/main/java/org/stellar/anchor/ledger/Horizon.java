@@ -1,6 +1,7 @@
 package org.stellar.anchor.ledger;
 
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
+import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 import static org.stellar.sdk.xdr.SignerKeyType.*;
 
 import java.time.Instant;
@@ -8,13 +9,19 @@ import java.util.List;
 import java.util.stream.Collectors;
 import lombok.Getter;
 import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.anchor.util.AssetHelper;
+import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.*;
 import org.stellar.sdk.responses.AccountResponse;
 import org.stellar.sdk.responses.TransactionResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
+import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
+import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 import org.stellar.sdk.xdr.AssetType;
+import org.stellar.sdk.xdr.OperationType;
 import org.stellar.sdk.xdr.SignerKeyType;
 
 /** The horizon-server. */
@@ -92,7 +99,7 @@ public class Horizon implements LedgerClient {
         .hash(response.getHash())
         .sourceAccount(response.getSourceAccount())
         .envelopeXdr(response.getEnvelopeXdr())
-        .memo(response.getMemo())
+        .memo(MemoHelper.toXdr(response.getMemo()))
         .sequenceNumber(response.getSourceAccountSequence())
         .createdAt(Instant.parse(response.getCreatedAt()))
         .build();
@@ -111,13 +118,7 @@ public class Horizon implements LedgerClient {
         .build();
   }
 
-  /**
-   * Get payment operations for a transaction.
-   *
-   * @param stellarTxnId the transaction id
-   * @return the operations
-   */
-  public List<OperationResponse> getStellarTxnOperations(String stellarTxnId) {
+  List<OperationResponse> getStellarTxnOperations(String stellarTxnId) {
     return getServer()
         .payments()
         .includeTransactions(true)
@@ -126,6 +127,66 @@ public class Horizon implements LedgerClient {
         .getRecords();
   }
 
+  /**
+   * Get the ledger operations for a given transaction.
+   *
+   * @param txnHash the transaction hash
+   * @return the ledger operations
+   */
+  List<LedgerOperation> getLedgerOperations(String txnHash) {
+    List<OperationResponse> ops = getStellarTxnOperations(txnHash);
+    return ops.stream().map(Horizon::toLedgerOperation).collect(Collectors.toList());
+  }
+
+  public static LedgerTransaction toLedgerTransaction(TransactionResponse txnResponse) {
+    return LedgerTransaction.builder()
+        .hash(txnResponse.getHash())
+        .sourceAccount(txnResponse.getSourceAccount())
+        .envelopeXdr(txnResponse.getEnvelopeXdr())
+        .memo(MemoHelper.toXdr(txnResponse.getMemo()))
+        .sequenceNumber(txnResponse.getSourceAccountSequence())
+        .createdAt(Instant.parse(txnResponse.getCreatedAt()))
+        .build();
+  }
+
+  public static LedgerOperation toLedgerOperation(OperationResponse op) {
+    LedgerOperation.LedgerOperationBuilder builder = LedgerOperation.builder();
+    if (op instanceof PaymentOperationResponse paymentOp) {
+      builder.type(PAYMENT);
+      builder.paymentOperation(
+          LedgerPaymentOperation.builder()
+              .assetType(paymentOp.getAssetType())
+              .sourceAccount(paymentOp.getSourceAccount())
+              .from(paymentOp.getFrom())
+              .to(paymentOp.getTo())
+              .amount(paymentOp.getAmount())
+              .asset(paymentOp.getAsset().toXdr())
+              .build());
+    } else if (op instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
+      builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE);
+      builder.pathPaymentOperation(
+          LedgerTransaction.LedgerPathPaymentOperation.builder()
+              .assetType(pathPaymentOp.getAssetType())
+              .sourceAccount(pathPaymentOp.getSourceAccount())
+              .sourceAmount(pathPaymentOp.getSourceAmount())
+              .sourceAsset(pathPaymentOp.getSourceAsset().toXdr())
+              .from(pathPaymentOp.getFrom())
+              .to(pathPaymentOp.getTo())
+              .amount(pathPaymentOp.getAmount())
+              .asset(pathPaymentOp.getAsset().toXdr())
+              .build());
+    } else {
+      throw new IllegalArgumentException("Unsupported operation type: " + op.getType());
+    }
+    return builder.build();
+  }
+
+  /**
+   * Convert from Horizon signer key type to XDR signer key type.
+   *
+   * @param type the Horizon signer key type
+   * @return the XDR signer key type
+   */
   public SignerKeyType getKeyTypeDiscriminant(String type) {
     return switch (type) {
       case "ed25519_public_key" -> SIGNER_KEY_TYPE_ED25519;

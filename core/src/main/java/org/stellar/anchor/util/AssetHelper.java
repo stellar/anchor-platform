@@ -1,12 +1,14 @@
 package org.stellar.anchor.util;
 
 import static org.stellar.anchor.util.StringHelper.isEmpty;
+import static org.stellar.sdk.xdr.AssetType.ASSET_TYPE_NATIVE;
 
 import java.util.Currency;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawOperation;
 import org.stellar.sdk.KeyPair;
+import org.stellar.sdk.xdr.Asset;
 
 public class AssetHelper {
   public static boolean isISO4217(String assetCode, String assetIssuer) {
@@ -106,6 +108,25 @@ public class AssetHelper {
     } else {
       return assetCode;
     }
+  }
+
+  public static String getSep11AssetName(Asset asset) {
+    if (asset == null) {
+      return null;
+    }
+    return switch (asset.getDiscriminant()) {
+      case ASSET_TYPE_NATIVE -> AssetInfo.NATIVE_ASSET_CODE;
+      case ASSET_TYPE_CREDIT_ALPHANUM4 ->
+          asset.getAlphaNum4().getAssetCode().toString()
+              + ":"
+              + asset.getAlphaNum4().getIssuer().toString();
+      case ASSET_TYPE_CREDIT_ALPHANUM12 ->
+          asset.getAlphaNum12().getAssetCode().toString()
+              + ":"
+              + asset.getAlphaNum12().getIssuer().toString();
+      default ->
+          throw new IllegalArgumentException("Unsupported asset type: " + asset.getDiscriminant());
+    };
   }
 
   // Check if deposit is enabled for the asset

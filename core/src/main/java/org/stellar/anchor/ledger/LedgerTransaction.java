@@ -4,8 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import lombok.Builder;
 import lombok.Data;
-import org.stellar.sdk.Asset;
-import org.stellar.sdk.Memo;
+import org.stellar.sdk.xdr.Asset;
+import org.stellar.sdk.xdr.Memo;
 import org.stellar.sdk.xdr.OperationType;
 
 @Builder
@@ -47,8 +47,7 @@ public class LedgerTransaction {
     String assetType;
     String sourceAccount;
     String sourceAmount;
-    String sourceAsset;
-    String sourceAssetType;
+    Asset sourceAsset;
     String from;
     String to;
     String amount;

@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 import org.stellar.anchor.api.custody.fireblocks.TransactionDetails;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.config.CustodySecretConfig;
-import org.stellar.anchor.ledger.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.platform.config.FireblocksConfig;
 import org.stellar.anchor.platform.custody.*;
 import org.stellar.anchor.platform.custody.fireblocks.FireblocksApiClient;
@@ -51,7 +51,7 @@ public class FireblocksBeans {
       Sep6CustodyPaymentHandler sep6CustodyPaymentHandler,
       Sep24CustodyPaymentHandler sep24CustodyPaymentHandler,
       Sep31CustodyPaymentHandler sep31CustodyPaymentHandler,
-      Horizon horizon,
+      LedgerClient horizon,
       FireblocksConfig fireblocksConfig)
       throws InvalidConfigException {
     return new FireblocksEventService(

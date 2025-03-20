@@ -103,7 +103,7 @@ public class StellarRpc implements LedgerClient {
           .sourceAccount(
               StrKey.encodeEd25519PublicKey(tenv.getTx().getSourceAccountEd25519().getUint256()))
           .envelopeXdr(txn.getEnvelopeXdr())
-          .memo(org.stellar.sdk.Memo.fromXdr(tenv.getTx().getMemo()))
+          .memo(tenv.getTx().getMemo())
           .sequenceNumber(tenv.getTx().getSeqNum().getSequenceNumber().getInt64())
           .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
           .build();
@@ -116,7 +116,7 @@ public class StellarRpc implements LedgerClient {
               StrKey.encodeEd25519PublicKey(
                   tenv.getTx().getSourceAccount().getEd25519().getUint256()))
           .envelopeXdr(txn.getEnvelopeXdr())
-          .memo(org.stellar.sdk.Memo.fromXdr(tenv.getTx().getMemo()))
+          .memo(tenv.getTx().getMemo())
           .sequenceNumber(tenv.getTx().getSeqNum().getSequenceNumber().getInt64())
           .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
           .build();
