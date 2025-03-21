@@ -31,6 +31,7 @@ import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
 import org.stellar.anchor.client.Sep24Client
 import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.TestSecrets.DEPOSIT_FUND_CLIENT_SECRET_1
 import org.stellar.anchor.platform.TestSecrets.DEPOSIT_FUND_CLIENT_SECRET_2
@@ -122,7 +123,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @Test
   fun `test deposit to contract address end-to-end flow`() = runBlocking {
-    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, null, toml)
+    val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val request =
       mapOf(
@@ -136,7 +137,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
     val params = UriComponentsBuilder.fromUriString(response.url).build().queryParams
     val cipher = params["token"]!![0]
     val interactiveJwt = jwtService.decode(cipher, Sep24InteractiveUrlJwt::class.java)
-    assertEquals(clientWalletAccount, interactiveJwt.sub)
+    assertEquals(CLIENT_SMART_WALLET_ACCOUNT, interactiveJwt.sub)
     assertEquals("1", (interactiveJwt.claims["data"] as Map<*, *>)["amount"], "1")
 
     // Start the deposit process
@@ -299,13 +300,13 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @Test
   fun `test withdraw from contract address end-to-end flow`() = runBlocking {
-    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, null, toml)
+    val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val request =
       mapOf(
         "asset_code" to "USDC",
         "asset_issuer" to "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-        "account" to clientWalletAccount,
+        "account" to CLIENT_SMART_WALLET_ACCOUNT,
         "amount" to "1",
       )
     val response = wallet.sep24.withdraw(request)
