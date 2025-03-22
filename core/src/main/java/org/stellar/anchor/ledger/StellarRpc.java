@@ -14,6 +14,9 @@ import java.util.List;
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation.LedgerOperationBuilder;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.sdk.Asset;
 import org.stellar.sdk.KeyPair;
@@ -96,10 +99,13 @@ public class StellarRpc implements LedgerClient {
       return null;
     }
     TransactionEnvelope txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
+    Operation[] operations;
     if (txnEnv.getV0() != null) {
       TransactionV0Envelope tenv = txnEnv.getV0();
+      operations = tenv.getTx().getOperations();
       return LedgerTransaction.builder()
           .hash(txn.getTxHash())
+          .applicationOrder(txn.getApplicationOrder())
           .sourceAccount(
               StrKey.encodeEd25519PublicKey(tenv.getTx().getSourceAccountEd25519().getUint256()))
           .envelopeXdr(txn.getEnvelopeXdr())
@@ -110,8 +116,10 @@ public class StellarRpc implements LedgerClient {
 
     } else if (txnEnv.getV1() != null) {
       TransactionV1Envelope tenv = txnEnv.getV1();
+      operations = tenv.getTx().getOperations();
       return LedgerTransaction.builder()
           .hash(txn.getTxHash())
+          .applicationOrder(txn.getApplicationOrder())
           .sourceAccount(
               StrKey.encodeEd25519PublicKey(
                   tenv.getTx().getSourceAccount().getEd25519().getUint256()))
@@ -124,6 +132,35 @@ public class StellarRpc implements LedgerClient {
 
     // not found
     return null;
+  }
+
+  public LedgerOperation from(LedgerTransaction ledgerTxn, Operation op) {
+    if (op == null) {
+      return null;
+    }
+    if (op.getBody() == null) {
+      return null;
+    }
+    LedgerOperationBuilder builder = LedgerOperation.builder();
+    switch (op.getBody().getDiscriminant()) {
+      case PAYMENT:
+        PaymentOp payment = op.getBody().getPaymentOp();
+        LedgerOperationBuilder ledgerOperationBuilder =
+            builder.paymentOperation(
+                LedgerPaymentOperation.builder()
+                    .asset(payment.getAsset())
+                    .amount(payment.getAmount().getInt64())
+                    .from(ledgerTxn.sourceAccount)
+                    .to(
+                        StrKey.encodeEd25519PublicKey(
+                            payment.getDestination().getEd25519().getUint256()))
+                    .build());
+      case PATH_PAYMENT_STRICT_RECEIVE:
+
+      case PATH_PAYMENT_STRICT_SEND:
+      default:
+        break;
+    }
   }
 
   @Override

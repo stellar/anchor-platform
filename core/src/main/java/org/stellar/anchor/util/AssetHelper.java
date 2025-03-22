@@ -1,7 +1,6 @@
 package org.stellar.anchor.util;
 
 import static org.stellar.anchor.util.StringHelper.isEmpty;
-import static org.stellar.sdk.xdr.AssetType.ASSET_TYPE_NATIVE;
 
 import java.util.Currency;
 import org.stellar.anchor.api.asset.AssetInfo;
@@ -76,7 +75,9 @@ public class AssetHelper {
    * @return The asset issuer. If issuer is absent, then returns NULL
    */
   public static String getAssetIssuer(String asset) {
-    if (asset.startsWith("stellar:")) {
+    if (asset.equals("native")) {
+      return null;
+    } else if (asset.startsWith("stellar:")) {
       return asset.split(":").length >= 3 ? asset.split(":")[2] : null;
     } else {
       return asset.split(":")[1];

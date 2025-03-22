@@ -12,6 +12,7 @@ import org.stellar.sdk.xdr.OperationType;
 @Data
 public class LedgerTransaction {
   String hash;
+  Integer applicationOrder;
   String envelopeXdr;
   String sourceAccount;
   Asset sourceAsset;
@@ -33,24 +34,23 @@ public class LedgerTransaction {
   @Builder
   @Data
   public static class LedgerPaymentOperation {
-    String assetType;
-    String sourceAccount;
+    String id;
     String from;
     String to;
-    String amount;
+    Long amount;
     Asset asset;
   }
 
   @Builder
   @Data
   public static class LedgerPathPaymentOperation {
-    String assetType;
+    String id;
     String sourceAccount;
     String sourceAmount;
     Asset sourceAsset;
     String from;
     String to;
-    String amount;
+    Long amount;
     Asset asset;
   }
 

@@ -58,7 +58,6 @@ import org.stellar.sdk.responses.operations.PaymentOperationResponse
 class NotifyOnchainFundsReceivedHandlerTest {
 
   companion object {
-
     private const val TX_ID = "testId"
     private const val FIAT_USD = "iso4217:USD"
     private const val STELLAR_USDC =
@@ -81,7 +80,7 @@ class NotifyOnchainFundsReceivedHandlerTest {
       )
     private val testLedgerTxn =
       LedgerTransaction.builder()
-        .hash("testTxHash")
+        .hash("stellarTxId")
         .memo(MemoHelper.toXdr(Memo.id(12345)))
         .sourceAccount("testSourceAccount")
         .createdAt(Instant.parse("2023-05-10T10:18:20Z"))

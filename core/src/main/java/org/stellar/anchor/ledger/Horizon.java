@@ -95,8 +95,11 @@ public class Horizon implements LedgerClient {
   @Override
   public LedgerTransaction getTransaction(String txnHash) {
     TransactionResponse response = getServer().transactions().transaction(txnHash);
+
     return LedgerTransaction.builder()
         .hash(response.getHash())
+        // The page token is the TOID of a transaction
+        .applicationOrder(TOID.decode(Long.parseLong(response.getPagingToken())).transactionOrder)
         .sourceAccount(response.getSourceAccount())
         .envelopeXdr(response.getEnvelopeXdr())
         .memo(MemoHelper.toXdr(response.getMemo()))
