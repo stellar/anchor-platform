@@ -7,7 +7,7 @@ import java.time.temporal.ChronoUnit;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.rpc.method.NotifyTrustSetRequest;
-import org.stellar.anchor.ledger.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.platform.config.PropertyCustodyConfig;
 import org.stellar.anchor.platform.data.JdbcTransactionPendingTrust;
 import org.stellar.anchor.platform.data.JdbcTransactionPendingTrustRepo;
@@ -16,17 +16,17 @@ import org.stellar.sdk.exception.NetworkException;
 
 public class TrustlineCheckJob {
 
-  private final Horizon horizon;
+  private final LedgerClient horizon;
   private final JdbcTransactionPendingTrustRepo transactionPendingTrustRepo;
   private final PropertyCustodyConfig custodyConfig;
   private final NotifyTrustSetHandler notifyTrustSetHandler;
 
   public TrustlineCheckJob(
-      Horizon horizon,
+      LedgerClient ledgerClient,
       JdbcTransactionPendingTrustRepo transactionPendingTrustRepo,
       PropertyCustodyConfig custodyConfig,
       NotifyTrustSetHandler notifyTrustSetHandler) {
-    this.horizon = horizon;
+    this.horizon = ledgerClient;
     this.transactionPendingTrustRepo = transactionPendingTrustRepo;
     this.custodyConfig = custodyConfig;
     this.notifyTrustSetHandler = notifyTrustSetHandler;

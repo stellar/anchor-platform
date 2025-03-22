@@ -7,6 +7,7 @@ import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawOperation;
 import org.stellar.sdk.KeyPair;
+import org.stellar.sdk.xdr.Asset;
 
 public class AssetHelper {
   public static boolean isISO4217(String assetCode, String assetIssuer) {
@@ -60,7 +61,11 @@ public class AssetHelper {
    * @return The asset code
    */
   public static String getAssetCode(String asset) {
-    return asset.split(":")[1];
+    if (asset.startsWith("stellar:")) {
+      return asset.split(":")[1];
+    } else {
+      return asset.split(":")[0];
+    }
   }
 
   /**
@@ -70,7 +75,13 @@ public class AssetHelper {
    * @return The asset issuer. If issuer is absent, then returns NULL
    */
   public static String getAssetIssuer(String asset) {
-    return asset.split(":").length >= 3 ? asset.split(":")[2] : null;
+    if (asset.equals("native")) {
+      return null;
+    } else if (asset.startsWith("stellar:")) {
+      return asset.split(":").length >= 3 ? asset.split(":")[2] : null;
+    } else {
+      return asset.split(":")[1];
+    }
   }
 
   /**
@@ -98,6 +109,25 @@ public class AssetHelper {
     } else {
       return assetCode;
     }
+  }
+
+  public static String getSep11AssetName(Asset asset) {
+    if (asset == null) {
+      return null;
+    }
+    return switch (asset.getDiscriminant()) {
+      case ASSET_TYPE_NATIVE -> AssetInfo.NATIVE_ASSET_CODE;
+      case ASSET_TYPE_CREDIT_ALPHANUM4 ->
+          asset.getAlphaNum4().getAssetCode().toString()
+              + ":"
+              + asset.getAlphaNum4().getIssuer().toString();
+      case ASSET_TYPE_CREDIT_ALPHANUM12 ->
+          asset.getAlphaNum12().getAssetCode().toString()
+              + ":"
+              + asset.getAlphaNum12().getIssuer().toString();
+      default ->
+          throw new IllegalArgumentException("Unsupported asset type: " + asset.getDiscriminant());
+    };
   }
 
   // Check if deposit is enabled for the asset

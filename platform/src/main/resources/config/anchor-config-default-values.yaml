@@ -41,6 +41,7 @@ stellar_network:
   rpc_url: https://soroban-testnet.stellar.org
 
   # The horizon server endpoint.
+  # If the rpcURL is set, the horizonURL is not used other than the observer.
   horizon_url: https://horizon-testnet.stellar.org
 
 ##############################

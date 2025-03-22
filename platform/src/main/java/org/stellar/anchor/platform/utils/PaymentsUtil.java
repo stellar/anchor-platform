@@ -2,7 +2,6 @@ package org.stellar.anchor.platform.utils;
 
 import static java.util.Comparator.comparing;
 import static java.util.stream.Collectors.toList;
-import static org.stellar.anchor.util.Log.error;
 
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
@@ -10,26 +9,22 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep;
 import org.stellar.anchor.api.shared.Amount;
 import org.stellar.anchor.api.shared.StellarPayment;
 import org.stellar.anchor.api.shared.StellarTransaction;
+import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep31Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
 import org.stellar.anchor.platform.observer.ObservedPayment;
 import org.stellar.anchor.util.Log;
-import org.stellar.sdk.responses.operations.OperationResponse;
-import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
-import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 
 public class PaymentsUtil {
 
-  public static void addStellarTransaction(
-      JdbcSepTransaction txn, String stellarTransactionId, List<OperationResponse> operations) {
+  public static void addStellarTransaction(JdbcSepTransaction txn, LedgerTransaction ledgerTxn) {
 
-    List<ObservedPayment> payments = getObservedPayments(operations);
+    List<ObservedPayment> payments = getObservedPayments(ledgerTxn);
 
     if (!payments.isEmpty()) {
       ObservedPayment firstPayment = payments.get(0);
@@ -53,7 +48,7 @@ public class PaymentsUtil {
 
       StellarTransaction stellarTransaction =
           StellarTransaction.builder()
-              .id(stellarTransactionId)
+              .id(ledgerTxn.getHash())
               .createdAt(
                   Optional.ofNullable(parsePaymentTime(firstPayment.getCreatedAt()))
                       .orElse(Instant.now()))
@@ -85,27 +80,20 @@ public class PaymentsUtil {
 
       txn.setTransferReceivedAt(
           Optional.ofNullable(parsePaymentTime(lastPayment.getCreatedAt())).orElse(Instant.now()));
-      txn.setStellarTransactionId(stellarTransactionId);
+      txn.setStellarTransactionId(ledgerTxn.getHash());
     }
   }
 
-  private static List<ObservedPayment> getObservedPayments(List<OperationResponse> payments) {
-    return payments.stream()
+  private static List<ObservedPayment> getObservedPayments(LedgerTransaction ledgerTxn) {
+    return ledgerTxn.getOperations().stream()
         .map(
-            operation -> {
-              try {
-                if (operation instanceof PaymentOperationResponse) {
-                  return ObservedPayment.fromPaymentOperationResponse(
-                      (PaymentOperationResponse) operation);
-                } else if (operation instanceof PathPaymentBaseOperationResponse) {
-                  return ObservedPayment.fromPathPaymentOperationResponse(
-                      (PathPaymentBaseOperationResponse) operation);
-                }
-              } catch (SepException e) {
-                error("Failed to parse operation response", e);
-              }
-              return null;
-            })
+            operation ->
+                switch (operation.getType()) {
+                  case PAYMENT -> ObservedPayment.from(ledgerTxn, operation.getPaymentOperation());
+                  case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND ->
+                      ObservedPayment.from(ledgerTxn, operation.getPathPaymentOperation());
+                  default -> null;
+                })
         .filter(Objects::nonNull)
         .sorted(comparing(ObservedPayment::getCreatedAt))
         .collect(toList());
@@ -116,7 +104,6 @@ public class PaymentsUtil {
       return DateTimeFormatter.ISO_INSTANT.parse(paymentTimeStr, Instant::from);
     } catch (DateTimeParseException | NullPointerException ex) {
       Log.errorF("Error parsing paymentTimeStr {}.", paymentTimeStr);
-      ex.printStackTrace();
       return null;
     }
   }

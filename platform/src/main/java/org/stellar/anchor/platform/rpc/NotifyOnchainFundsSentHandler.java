@@ -12,8 +12,8 @@ import static org.stellar.anchor.util.Log.errorEx;
 import com.google.common.collect.ImmutableSet;
 import java.time.Instant;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
+import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.exception.rpc.InternalErrorException;
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind;
@@ -23,7 +23,8 @@ import org.stellar.anchor.api.rpc.method.RpcMethod;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.ledger.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
+import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep6Transaction;
@@ -32,20 +33,18 @@ import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
-import org.stellar.sdk.exception.NetworkException;
-import org.stellar.sdk.responses.operations.OperationResponse;
 
 public class NotifyOnchainFundsSentHandler
     extends RpcTransactionStatusHandler<NotifyOnchainFundsSentRequest> {
 
-  private final Horizon horizon;
+  private final LedgerClient ledgerClient;
 
   public NotifyOnchainFundsSentHandler(
       Sep6TransactionStore txn6Store,
       Sep24TransactionStore txn24Store,
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       AssetService assetService,
       EventService eventService,
       MetricsService metricsService) {
@@ -58,7 +57,7 @@ public class NotifyOnchainFundsSentHandler
         eventService,
         metricsService,
         NotifyOnchainFundsSentRequest.class);
-    this.horizon = horizon;
+    this.ledgerClient = ledgerClient;
   }
 
   @Override
@@ -108,9 +107,9 @@ public class NotifyOnchainFundsSentHandler
 
     String stellarTxnId = request.getStellarTransactionId();
     try {
-      List<OperationResponse> txnOperations = horizon.getStellarTxnOperations(stellarTxnId);
-      addStellarTransaction(txn, stellarTxnId, txnOperations);
-    } catch (NetworkException ex) {
+      LedgerTransaction ledgerTxn = ledgerClient.getTransaction(stellarTxnId);
+      addStellarTransaction(txn, ledgerTxn);
+    } catch (LedgerException ex) {
       errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
       throw new InternalErrorException(
           String.format("Failed to retrieve Stellar transaction by ID[%s]", stellarTxnId), ex);

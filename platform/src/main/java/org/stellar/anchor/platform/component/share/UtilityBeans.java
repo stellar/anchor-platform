@@ -1,8 +1,11 @@
 package org.stellar.anchor.platform.component.share;
 
+import static org.stellar.anchor.util.StringHelper.isNotEmpty;
+
 import com.google.gson.Gson;
 import jakarta.validation.Validator;
 import java.util.List;
+import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -16,6 +19,8 @@ import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.*;
 import org.stellar.anchor.healthcheck.HealthCheckable;
 import org.stellar.anchor.ledger.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
+import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.platform.config.*;
 import org.stellar.anchor.platform.service.HealthCheckService;
 import org.stellar.anchor.platform.service.Sep24MoreInfoUrlConstructor;
@@ -99,8 +104,11 @@ public class UtilityBeans {
   }
 
   @Bean
-  public Horizon horizon(AppConfig appConfig) {
-    return new Horizon(appConfig);
+  @SneakyThrows
+  public LedgerClient horizon(AppConfig appConfig) {
+    if (isNotEmpty(appConfig.getRpcUrl())) return new StellarRpc(appConfig);
+    else if (isNotEmpty(appConfig.getHorizonUrl())) return new Horizon(appConfig);
+    throw new NotSupportedException("No horizon_url or rpc_url is defined.");
   }
 
   @Bean

@@ -374,13 +374,13 @@ internal class Sep10ServiceTest {
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
 
     val mockSigners =
-      listOf(TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner())
+      listOf(TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner())
     val accountResponse =
       mockk<LedgerClient.Account> {
         every { accountId } returns clientKeyPair.accountId
         every { sequenceNumber } returns 1
         every { signers } returns mockSigners
-        every { thresholds.medThreshold } returns 1
+        every { thresholds.medium } returns 1
       }
 
     every { ledgerClient.getAccount(any()) } returns accountResponse
@@ -395,8 +395,8 @@ internal class Sep10ServiceTest {
   fun `test validate challenge with client domain`() {
     val mockSigners =
       listOf(
-        TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner(),
-        TestSigner(clientDomainKeyPair.accountId, "ed25519_public_key", 1, "").toSigner()
+        TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner(),
+        TestSigner(clientDomainKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner()
       )
 
     val accountResponse =
@@ -404,7 +404,7 @@ internal class Sep10ServiceTest {
         every { accountId } returns clientKeyPair.accountId
         every { sequenceNumber } returns 1
         every { signers } returns mockSigners
-        every { thresholds.medThreshold } returns 1
+        every { thresholds.medium } returns 1
       }
 
     every { ledgerClient.getAccount(any()) } returns accountResponse
