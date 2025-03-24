@@ -5,6 +5,7 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.*;
 
 import io.sentry.Sentry;
+import io.sentry.SentryLevel;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 
 public class SentryConfigAdapter extends SpringConfigAdapter {
@@ -35,7 +36,8 @@ public class SentryConfigAdapter extends SpringConfigAdapter {
     captureMessage(
         String.format(
             "Sentry agent initialized. release:%s, environment: %s, debug: %s",
-            config.getString("sentry.release"), sentryEnv, config.getBoolean("sentry.debug")));
+            config.getString("sentry.release"), sentryEnv, config.getBoolean("sentry.debug")),
+        SentryLevel.DEBUG);
   }
 
   String getAuthToken() {

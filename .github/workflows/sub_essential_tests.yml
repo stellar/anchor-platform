@@ -8,6 +8,22 @@ jobs:
   essential_tests:
     name: Run Essential Tests (Integration Tests, Faster End-2-End Tests, Unit Tests, and Stellar Validation Tools)
     runs-on: ubuntu-latest-8-cores
+    env:
+      # Anchor Platform secrets
+      SECRET_SEP10_SIGNING_SEED: ${{ vars.SECRET_SEP10_SIGNING_SEED }}
+      SECRET_SEP45_SIMULATING_SIGNING_SEED: ${{ vars.SECRET_SEP45_SIMULATING_SIGNING_SEED }}
+      APP__PAYMENT_SIGNING_SEED: ${{ vars.APP__PAYMENT_SIGNING_SEED }}
+      SECRET__KEY: ${{ vars.SECRET__KEY }}
+
+      # Test secrets
+      TEST_CLIENT_WALLET_SECRET: ${{ vars.TEST_CLIENT_WALLET_SECRET }}
+      TEST_CLIENT_SMART_WALLET_ACCOUNT: ${{ vars.TEST_CLIENT_SMART_WALLET_ACCOUNT }}
+      TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET: ${{ vars.TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET }}
+      TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET: ${{ vars.TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET }}
+      TEST_WITHDRAW_FUND_CLIENT_SECRET_1: ${{ vars.TEST_WITHDRAW_FUND_CLIENT_SECRET_1 }}
+      TEST_WITHDRAW_FUND_CLIENT_SECRET_2: ${{ vars.TEST_WITHDRAW_FUND_CLIENT_SECRET_2 }}
+      TEST_DEPOSIT_FUND_CLIENT_SECRET_1: ${{ vars.TEST_DEPOSIT_FUND_CLIENT_SECRET_1 }}
+      TEST_DEPOSIT_FUND_CLIENT_SECRET_2: ${{ vars.TEST_DEPOSIT_FUND_CLIENT_SECRET_2 }}
     steps:
       #############################################
       # Setup JDK 17

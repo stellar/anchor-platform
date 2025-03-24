@@ -29,13 +29,22 @@ import org.stellar.anchor.api.sep.sep24.Sep24GetTransactionResponse
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
 import org.stellar.anchor.client.Sep24Client
-import org.stellar.anchor.platform.*
+import org.stellar.anchor.platform.IntegrationTestBase
+import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
+import org.stellar.anchor.platform.TestSecrets.DEPOSIT_FUND_CLIENT_SECRET_1
+import org.stellar.anchor.platform.TestSecrets.DEPOSIT_FUND_CLIENT_SECRET_2
+import org.stellar.anchor.platform.TestSecrets.WITHDRAW_FUND_CLIENT_SECRET_1
+import org.stellar.anchor.platform.TestSecrets.WITHDRAW_FUND_CLIENT_SECRET_2
+import org.stellar.anchor.platform.WalletClient
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.Log.info
 import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
+import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.InteractiveFlowResponse
 import org.stellar.walletsdk.anchor.*
 import org.stellar.walletsdk.anchor.TransactionStatus.*
@@ -45,11 +54,6 @@ import org.stellar.walletsdk.asset.XLM
 import org.stellar.walletsdk.auth.AuthToken
 import org.stellar.walletsdk.horizon.SigningKeyPair
 import org.stellar.walletsdk.horizon.sign
-
-const val WITHDRAW_FUND_CLIENT_SECRET_1 = "SCGHF6KF6CBQ6Z4ZZUMU4DGRM6LR2PS7XOUN5VOETMPTPLD5BQE2FKL3"
-const val WITHDRAW_FUND_CLIENT_SECRET_2 = "SBSO7FVRDHCETSGPYETIFNVK64LS4KH325GOAENGV5Z7L6FAP7YS2BPK"
-const val DEPOSIT_FUND_CLIENT_SECRET_1 = "SDNZAK6LCYNR4HYEFBZY3I2KLRDLSCE5RCF6HZ2KBBC7JLCFNZAHJCBQ"
-const val DEPOSIT_FUND_CLIENT_SECRET_2 = "SCW2SJEPTL4K7FFPFOFABFEFZJCG6LHULWVJX6JLIJ7TYIKTL6P473HM"
 
 @TestInstance(PER_CLASS)
 open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
@@ -75,6 +79,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       config.env["secret.platform_api.auth_secret"]!!,
       config.env["secret.custody_server.auth_secret"]!!,
     )
+  private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
 
   @ParameterizedTest
   @MethodSource("depositAssetsAndAmounts")
