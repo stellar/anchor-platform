@@ -59,12 +59,6 @@ public class PropertySep45Config implements Sep45Config, Validator {
           "The stellar_network.rpc_url is not defined. It is required for SEP-45.");
     }
 
-    if (isEmpty(secretConfig.getSep45SimulatingSigningSeed())) {
-      errors.reject(
-          "sep45-simulating-seed-empty",
-          "Please set the secret.sep45.simulating_signing_seed or SECRET_SEP45_SIMULATING_SIGNING_SEED environment variable");
-    }
-
     if (isEmpty(secretConfig.getSep45JwtSecretKey())) {
       errors.reject(
           "sep45-jwt-secret-empty",
