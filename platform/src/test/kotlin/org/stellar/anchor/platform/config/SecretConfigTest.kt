@@ -48,20 +48,4 @@ class SecretConfigTest {
     config.validate(config, errors)
     assertFalse(errors.hasErrors())
   }
-
-  @Test
-  fun `test bad sep45 simulating seed`() {
-    every { secretManager.get(PropertySecretConfig.SECRET_SEP_45_SIMULATING_SIGNING_SEED) } returns
-      "GBAD"
-    config.validate(config, errors)
-    assertEquals("sep45-simulating-seed-invalid", errors.allErrors[0].code)
-  }
-
-  @Test
-  fun `test valid sep45 simulating seed`() {
-    every { secretManager.get(PropertySecretConfig.SECRET_SEP_45_SIMULATING_SIGNING_SEED) } returns
-      "SDRNY2YXLOGYNN5Z4QNUUH325KVOXOT2HV2XUVIK24AKNBTODZC26C3G"
-    config.validate(config, errors)
-    assertFalse(errors.hasErrors())
-  }
 }

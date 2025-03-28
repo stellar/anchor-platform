@@ -27,7 +27,6 @@ class Sep45ConfigTest {
 
     every { appConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
     every { secretConfig.sep45JwtSecretKey } returns "some_jwt_secret"
-    every { secretConfig.sep45SimulatingSigningSeed } returns "some_signing_seed"
 
     config = PropertySep45Config(appConfig, secretConfig)
     config.enabled = true
@@ -60,13 +59,6 @@ class Sep45ConfigTest {
     every { appConfig.rpcUrl } returns null
     config.validate(config, errors)
     assertEquals("stellar-network-rpc-url-empty", errors.allErrors[0].code)
-  }
-
-  @Test
-  fun `test missing sep45 simulating seed`() {
-    every { secretConfig.sep45SimulatingSigningSeed } returns null
-    config.validate(config, errors)
-    assertEquals("sep45-simulating-seed-empty", errors.allErrors[0].code)
   }
 
   @Test

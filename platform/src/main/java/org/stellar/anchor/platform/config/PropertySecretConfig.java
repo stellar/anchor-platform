@@ -8,7 +8,6 @@ import org.springframework.validation.Validator;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.platform.configurator.SecretManager;
 import org.stellar.anchor.util.KeyUtil;
-import org.stellar.sdk.KeyPair;
 
 public class PropertySecretConfig implements SecretConfig, Validator {
 
@@ -21,8 +20,6 @@ public class PropertySecretConfig implements SecretConfig, Validator {
   public static final String SECRET_SEP_24_MORE_INFO_URL_JWT_SECRET =
       "secret.sep24.more_info_url.jwt_secret";
   public static final String SECRET_SEP_45_JWT_SECRET = "secret.sep45.jwt_secret";
-  public static final String SECRET_SEP_45_SIMULATING_SIGNING_SEED =
-      "secret.sep45.simulating_signing_seed";
   public static final String SECRET_CALLBACK_API_AUTH_SECRET = "secret.callback_api.auth_secret";
   public static final String SECRET_PLATFORM_API_AUTH_SECRET = "secret.platform_api.auth_secret";
   public static final String SECRET_DATA_USERNAME = "secret.data.username";
@@ -49,10 +46,6 @@ public class PropertySecretConfig implements SecretConfig, Validator {
 
   public String getSep10SigningSeed() {
     return SecretManager.getInstance().get(SECRET_SEP_10_SIGNING_SEED);
-  }
-
-  public String getSep45SimulatingSigningSeed() {
-    return SecretManager.getInstance().get(SECRET_SEP_45_SIMULATING_SIGNING_SEED);
   }
 
   @Override
@@ -106,15 +99,6 @@ public class PropertySecretConfig implements SecretConfig, Validator {
 
     if (!isEmpty(config.getSep45JwtSecretKey())) {
       KeyUtil.rejectWeakJWTSecret(config.getSep45JwtSecretKey(), errors, "secret.sep45.jwt_secret");
-    }
-
-    if (!isEmpty(config.getSep45SimulatingSigningSeed())) {
-      try {
-        KeyPair.fromSecretSeed(config.getSep45SimulatingSigningSeed());
-      } catch (Throwable ex) {
-        errors.reject(
-            "sep45-simulating-seed-invalid", "The secret.sep45.simulating_seed is not valid.");
-      }
     }
   }
 }

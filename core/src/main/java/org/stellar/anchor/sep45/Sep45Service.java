@@ -50,25 +50,25 @@ public class Sep45Service {
 
   public ChallengeResponse getChallenge(ChallengeRequest request) throws AnchorException {
     KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
-    KeyPair simulatingKeypair =
-        KeyPair.fromSecretSeed(secretConfig.getSep45SimulatingSigningSeed());
+    // Transaction simulation does not require a real account, but it does need to be different from
+    // the SEP-10 account to generate the correct auth entries
+    KeyPair simulatingKeypair = KeyPair.random();
     Network network = new Network(appConfig.getStellarNetworkPassphrase());
 
     SCVal[] args = createArgsFromRequest(request);
 
     // Simulate the transaction in recording mode to get the authorization entries
-    TransactionBuilderAccount source = stellarRpc.getAccount(simulatingKeypair.getAccountId());
     InvokeHostFunctionOperation operation =
         InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
                 sep45Config.getWebAuthContractId(), WEB_AUTH_VERIFY_FN, Arrays.asList(args))
-            .sourceAccount(source.getAccountId())
+            .sourceAccount(simulatingKeypair.getAccountId())
             .build();
 
     Transaction transaction =
-        new TransactionBuilder(source, network)
-            .setBaseFee(Transaction.MIN_BASE_FEE)
+        new TransactionBuilder(new Account(simulatingKeypair.getAccountId(), 0L), network)
             .addOperation(operation)
             .setTimeout(300)
+            .setBaseFee(Transaction.MIN_BASE_FEE)
             .build();
 
     SimulateTransactionResponse simulateTransactionResponse =
@@ -159,8 +159,7 @@ public class Sep45Service {
 
   public ValidationResponse validate(ValidationRequest request) throws AnchorException {
     KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
-    KeyPair simulatingKeypair =
-        KeyPair.fromSecretSeed(secretConfig.getSep45SimulatingSigningSeed());
+    KeyPair simulatingKeypair = KeyPair.random();
     Network network = new Network(appConfig.getStellarNetworkPassphrase());
 
     SorobanAuthorizationEntryList authEntries;
@@ -197,20 +196,17 @@ public class Sep45Service {
     }
     nonceManager.use(nonceId);
 
-    // Simulate the transaction in enforcing mode to check the authorization entry credentials
-    TransactionBuilderAccount source = stellarRpc.getAccount(simulatingKeypair.getAccountId());
-
     InvokeHostFunctionOperation operation =
         InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
                 sep45Config.getWebAuthContractId(),
                 WEB_AUTH_VERIFY_FN,
                 Arrays.asList(firstEntryArgs))
-            .sourceAccount(source.getAccountId())
+            .sourceAccount(simulatingKeypair.getAccountId())
             .auth(Arrays.asList(authEntries.getAuthorizationEntryList()))
             .build();
 
     Transaction transaction =
-        new TransactionBuilder(source, network)
+        new TransactionBuilder(new Account(simulatingKeypair.getAccountId(), 0L), network)
             .setBaseFee(Transaction.MIN_BASE_FEE)
             .addOperation(operation)
             .setTimeout(300)
