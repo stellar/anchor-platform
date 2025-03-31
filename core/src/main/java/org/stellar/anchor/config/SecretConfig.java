@@ -11,8 +11,6 @@ public interface SecretConfig {
 
   String getSep10SigningSeed();
 
-  String getSep45SimulatingSigningSeed();
-
   String getSep24InteractiveUrlJwtSecret();
 
   String getSep24MoreInfoUrlJwtSecret();

@@ -426,7 +426,6 @@ sep45:
   # If `enabled` is set to True, the following two secrets must be set via the environment
   # variables and `stellar_network.rpc_url` must be set.
   # `secret.sep45_jwt_secret`: The JWT encryption key.
-  # `secret.sep45_simulating_signing_seed`: The private key for signing transactions for simulation.
   #
   enabled: false
   # The `web_auth_domain` property of SEP-45. https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0045.md
