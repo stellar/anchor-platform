@@ -555,6 +555,19 @@ metrics:
   # If set, all metrics will be prefixed with the specified prefix.
   prefix:
 
+##########################
+# Sentry Configuration (sentry.io)
+##########################
+sentry:
+  # The Sentry DSN (Data Source Name) for the Sentry project.
+  # Leave empty if you do not want to use Sentry.
+  dsn:
+  # The Sentry environment name for the project. ex: (your_project_name)
+  release:
+  # The environment name for the Sentry project.
+  environment:
+  # The flag to enable or disable the Sentry integration.
+  debug: false
 
 #########################
 # Events Configuration.

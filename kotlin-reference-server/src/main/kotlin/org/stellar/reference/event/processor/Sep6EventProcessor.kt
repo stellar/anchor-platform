@@ -46,6 +46,21 @@ class Sep6EventProcessor(
     val depositRequiredKyc = listOf("address")
     val withdrawRequiredKyc =
       listOf("bank_account_number", "bank_account_type", "bank_number", "bank_branch_number")
+
+    val usdDepositInstructions =
+      mapOf(
+        "organization.bank_number" to
+          InstructionField(value = "121122676", description = "US Bank routing number"),
+        "organization.bank_account_number" to
+          InstructionField(value = "13719713158835300", description = "US Bank account number"),
+      )
+    val cadDepositInstructions =
+      mapOf(
+        "organization.bank_number" to
+          InstructionField(value = "121122676", description = "CA Bank routing number"),
+        "organization.bank_account_number" to
+          InstructionField(value = "13719713158835300", description = "CA Bank account number"),
+      )
   }
 
   override suspend fun onQuoteCreated(event: SendEventRequest) {
@@ -92,7 +107,7 @@ class Sep6EventProcessor(
           requestKyc(event)
           return
         }
-        val keypair = KeyPair.fromSecretSeed(config.appSettings.secret)
+        val keypair = KeyPair.fromSecretSeed(config.appSettings.paymentSigningSeed)
         lateinit var stellarTxnId: String
         if (config.appSettings.custodyEnabled) {
           sepHelper.rpcAction(
@@ -111,7 +126,7 @@ class Sep6EventProcessor(
                 if (transaction.amountExpected.amount.equals("0")) {
                   "1"
                 } else {
-                  transaction.amountExpected.amount
+                  transaction.amountOut.amount
                 },
               )
           }
@@ -230,121 +245,141 @@ class Sep6EventProcessor(
   private fun requestCustomerFunds(transaction: GetTransactionResponse) {
     val customer = transaction.customers.sender
     when (transaction.kind) {
-      Kind.DEPOSIT,
-      Kind.DEPOSIT_EXCHANGE -> {
-        val usdDepositInstructions =
-          mapOf(
-            "organization.bank_number" to
-              InstructionField(value = "121122676", description = "US Bank routing number"),
-            "organization.bank_account_number" to
-              InstructionField(value = "13719713158835300", description = "US Bank account number"),
-          )
-        val cadDepositInstructions =
-          mapOf(
-            "organization.bank_number" to
-              InstructionField(value = "121122676", description = "CA Bank routing number"),
-            "organization.bank_account_number" to
-              InstructionField(value = "13719713158835300", description = "CA Bank account number"),
-          )
-        val sourceAsset =
-          when (transaction.kind) {
-            Kind.DEPOSIT -> "iso4217:USD"
-            Kind.DEPOSIT_EXCHANGE -> transaction.amountIn.asset
-            else -> throw RuntimeException("Unsupported kind: ${transaction.kind}")
-          }
-        val isDepositExchange = transaction.kind == Kind.DEPOSIT_EXCHANGE
-        val isUsdOrCadAsset = sourceAsset == "iso4217:USD" || sourceAsset == "iso4217:CAD"
-
-        val instructions =
-          when {
-            isDepositExchange && isUsdOrCadAsset ->
-              if (sourceAsset == "iso4217:USD") usdDepositInstructions else cadDepositInstructions
-            isDepositExchange -> throw RuntimeException("Unsupported asset: $sourceAsset")
-            else -> usdDepositInstructions
-          }
-
+      Kind.DEPOSIT -> {
+        val sourceAsset = "iso4217:USD"
         if (verifyKyc(customer.account, customer.memo, transaction.kind).isEmpty()) {
           runBlocking {
-            if (transaction.amountExpected.amount != null) {
-              // The amount was specified at transaction initialization
-              sepHelper.rpcAction(
-                RpcMethod.REQUEST_OFFCHAIN_FUNDS.toString(),
-                RequestOffchainFundsRequest(
-                  transactionId = transaction.id,
-                  message = "Please deposit the amount to the following bank account",
-                  amountIn =
+            // In deposit flow, If amount is specified, anchor can request that amount;
+            // amount is either provided at transaction initialization or updated during KYC.
+            sepHelper.rpcAction(
+              RpcMethod.REQUEST_OFFCHAIN_FUNDS.toString(),
+              RequestOffchainFundsRequest(
+                transactionId = transaction.id,
+                message = "Please deposit the amount to the following bank account",
+                // amc
+                amountIn =
+                  transaction.amountExpected.amount?.let {
                     AmountAssetRequest(
                       asset = sourceAsset,
-                      amount = transaction.amountExpected.amount,
-                    ),
-                  amountOut =
+                      amount = transaction.amountExpected.amount ?: "0",
+                    )
+                  },
+                amountOut =
+                  transaction.amountExpected.amount?.let {
                     AmountAssetRequest(
                       asset = transaction.amountExpected.asset,
-                      amount = transaction.amountExpected.amount,
-                    ),
-                  feeDetails = FeeDetails(total = "0", asset = sourceAsset),
-                  instructions = instructions,
-                ),
-              )
-            } else {
-              sepHelper.rpcAction(
-                RpcMethod.REQUEST_OFFCHAIN_FUNDS.toString(),
-                RequestOffchainFundsRequest(
-                  transactionId = transaction.id,
-                  message = "Please deposit to the following bank account",
-                  amountIn = AmountAssetRequest(asset = sourceAsset, amount = "0"),
-                  amountOut =
-                    AmountAssetRequest(asset = transaction.amountExpected.asset, amount = "0"),
-                  feeDetails = FeeDetails(total = "0", asset = sourceAsset),
-                  instructions = instructions,
-                ),
-              )
-            }
+                      amount = transaction.amountExpected.amount ?: "0",
+                    )
+                  },
+                feeDetails = FeeDetails(total = "0", asset = sourceAsset),
+                instructions = usdDepositInstructions,
+              ),
+            )
           }
         }
       }
-      Kind.WITHDRAWAL,
-      Kind.WITHDRAWAL_EXCHANGE -> {
-        val destinationAsset =
-          when (transaction.kind) {
-            Kind.WITHDRAWAL -> "iso4217:USD"
-            Kind.WITHDRAWAL_EXCHANGE -> transaction.amountOut.asset
-            else -> throw RuntimeException("Unsupported kind: ${transaction.kind}")
-          }
+      Kind.DEPOSIT_EXCHANGE -> {
+        val sourceAsset = transaction.amountIn.asset
+        val instructions =
+          mapOf("iso4217:USD" to usdDepositInstructions, "iso4217:CAD" to cadDepositInstructions)[
+            sourceAsset]
+            ?: throw RuntimeException("Unsupported asset: $sourceAsset")
+
         if (verifyKyc(customer.account, customer.memo, transaction.kind).isEmpty()) {
           runBlocking {
-            if (transaction.amountExpected.amount != null) {
-              // The amount was specified at transaction initialization
-              sepHelper.rpcAction(
-                RpcMethod.REQUEST_ONCHAIN_FUNDS.toString(),
-                RequestOnchainFundsRequest(
-                  transactionId = transaction.id,
-                  message = "Please deposit the amount to the following address",
-                  amountIn =
-                    AmountAssetRequest(
-                      asset = transaction.amountExpected.asset,
-                      amount = transaction.amountExpected.amount,
-                    ),
-                  amountOut =
-                    AmountAssetRequest(
-                      asset = destinationAsset,
-                      amount = transaction.amountExpected.amount,
-                    ),
-                  feeDetails = FeeDetails(total = "0", asset = transaction.amountExpected.asset),
-                ),
-              )
-            } else {
-              sepHelper.rpcAction(
-                RpcMethod.REQUEST_ONCHAIN_FUNDS.toString(),
-                RequestOnchainFundsRequest(
-                  transactionId = transaction.id,
-                  message = "Please deposit to the following address",
-                  amountIn = AmountAssetRequest(transaction.amountExpected.asset, "0"),
-                  amountOut = AmountAssetRequest(destinationAsset, "0"),
-                  feeDetails = FeeDetails("0", transaction.amountExpected.asset),
-                ),
-              )
-            }
+            // In deposit-exchange flow, amount, sourceAsset and destinationAsset are always
+            // specified.
+            sepHelper.rpcAction(
+              RpcMethod.REQUEST_OFFCHAIN_FUNDS.toString(),
+              RequestOffchainFundsRequest(
+                transactionId = transaction.id,
+                message = "Please deposit the amount to the following bank account",
+                amountIn =
+                  AmountAssetRequest(
+                    asset = transaction.amountIn.asset,
+                    // amountIn is always specified equal to amountExpected
+                    amount = transaction.amountIn.amount,
+                  ),
+                amountOut =
+                  AmountAssetRequest(
+                    asset = transaction.amountOut.asset,
+                    // amountOut.amount == "0" means no firm quote was provided, thus changing the
+                    // amountOut to amountExpected
+                    amount =
+                      if (transaction.amountOut.amount == "0") {
+                        transaction.amountExpected.amount
+                      } else {
+                        transaction.amountOut.amount
+                      }
+                  ),
+                feeDetails =
+                  FeeDetails(
+                    total = transaction.feeDetails.total ?: "0",
+                    asset = transaction.amountIn.asset
+                  ),
+                instructions = instructions,
+              ),
+            )
+          }
+        }
+      }
+      Kind.WITHDRAWAL -> {
+        val destinationAsset = "iso4217:USD"
+        if (verifyKyc(customer.account, customer.memo, transaction.kind).isEmpty()) {
+          runBlocking {
+            sepHelper.rpcAction(
+              RpcMethod.REQUEST_ONCHAIN_FUNDS.toString(),
+              RequestOnchainFundsRequest(
+                transactionId = transaction.id,
+                message = "Please deposit the amount to the following address",
+                amountIn =
+                  AmountAssetRequest(
+                    asset = transaction.amountExpected.asset,
+                    amount = transaction.amountExpected.amount,
+                  ),
+                amountOut =
+                  AmountAssetRequest(
+                    asset = destinationAsset,
+                    amount = transaction.amountExpected.amount,
+                  ),
+                feeDetails = FeeDetails(total = "0", asset = transaction.amountExpected.asset),
+              ),
+            )
+          }
+        }
+      }
+      Kind.WITHDRAWAL_EXCHANGE -> {
+        val destinationAsset = transaction.amountOut.asset
+        if (verifyKyc(customer.account, customer.memo, transaction.kind).isEmpty()) {
+          runBlocking {
+            // The amount was specified at transaction initialization
+            sepHelper.rpcAction(
+              RpcMethod.REQUEST_ONCHAIN_FUNDS.toString(),
+              RequestOnchainFundsRequest(
+                transactionId = transaction.id,
+                message = "Please deposit the amount to the following address",
+                amountIn =
+                  AmountAssetRequest(
+                    asset = transaction.amountIn.asset,
+                    amount = transaction.amountIn.amount,
+                  ),
+                amountOut =
+                  AmountAssetRequest(
+                    asset = destinationAsset,
+                    amount =
+                      if (transaction.amountOut.amount == "0") {
+                        transaction.amountExpected.amount
+                      } else {
+                        transaction.amountOut.amount
+                      }
+                  ),
+                feeDetails =
+                  FeeDetails(
+                    total = transaction.feeDetails.total ?: "0",
+                    asset = transaction.amountIn.asset
+                  ),
+              ),
+            )
           }
         }
       }
@@ -450,7 +485,7 @@ class Sep6EventProcessor(
             .build()
         )
         .build()
-    transaction.sign(KeyPair.fromSecretSeed(config.appSettings.secret))
+    transaction.sign(KeyPair.fromSecretSeed(config.appSettings.paymentSigningSeed))
     val txnResponse: TransactionResponse
     try {
       txnResponse = server.submitTransaction(transaction)

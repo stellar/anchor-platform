@@ -108,6 +108,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.fullName }}-secrets
                   key: EVENTS_QUEUE_KAFKA_PASSWORD
+            - name: SENTRY_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SENTRY_AUTH_TOKEN
           resources:
             requests:
               memory: {{ .Values.services.sep.deployment.resources.requests.memory }}
