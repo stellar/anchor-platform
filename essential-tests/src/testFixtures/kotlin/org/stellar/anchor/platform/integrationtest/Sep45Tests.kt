@@ -153,7 +153,7 @@ class Sep45Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun testCliegikntDomainVerification() {
+  fun testClientDomainVerification() {
     val challenge =
       sep45Client.getChallenge(
         ChallengeRequest.builder()
