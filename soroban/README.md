@@ -50,7 +50,7 @@ stellar contract deploy \
 
 ```bash
 # Install the account wasm on the network
-stellar contract install \
+stellar contract upload \
 --source ${MY_ACCOUNT} \
 --wasm target/wasm32-unknown-unknown/release/account.wasm \
 --network testnet
@@ -69,7 +69,7 @@ stellar contract invoke \
 
 ```bash
 # Install the account wasm on the network
-stellar contract install \
+stellar contract upload \
 --source ${MY_ACCOUNT} \
 --wasm target/wasm32-unknown-unknown/release/web_auth.wasm \
 --network testnet
@@ -77,7 +77,7 @@ stellar contract install \
 # Update the account contract with the new Wasm
 stellar contract invoke \
   --id ${CONTRACT_ID} \
-  --source alice \
+  --source ${MY_ACCOUNT} \
   --network testnet \
   -- \
   upgrade \

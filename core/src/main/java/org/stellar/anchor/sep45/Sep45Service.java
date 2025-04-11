@@ -36,10 +36,10 @@ public class Sep45Service {
   private static final String WEB_AUTH_VERIFY_FN = "web_auth_verify";
   private static final String KEY_ACCOUNT = "account";
   private static final String KEY_HOME_DOMAIN = "home_domain";
-  private static final String KEY_HOME_DOMAIN_ADDRESS = "home_domain_address";
   private static final String KEY_CLIENT_DOMAIN = "client_domain";
-  private static final String KEY_CLIENT_DOMAIN_ADDRESS = "client_domain_address";
+  private static final String KEY_CLIENT_DOMAIN_ACCOUNT = "client_domain_account";
   private static final String KEY_WEB_AUTH_DOMAIN = "web_auth_domain";
+  private static final String KEY_WEB_AUTH_DOMAIN_ACCOUNT = "web_auth_domain_account";
   private static final String KEY_NONCE = "nonce";
   private final AppConfig appConfig;
   private final SecretConfig secretConfig;
@@ -120,14 +120,14 @@ public class Sep45Service {
     argsMap.put(KEY_ACCOUNT, request.getAccount());
     argsMap.put(KEY_HOME_DOMAIN, request.getHomeDomain());
     argsMap.put(
-        KEY_HOME_DOMAIN_ADDRESS,
+        KEY_WEB_AUTH_DOMAIN_ACCOUNT,
         KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed()).getAccountId());
     argsMap.put(KEY_WEB_AUTH_DOMAIN, sep45Config.getWebAuthDomain());
     if (!isEmpty(request.getClientDomain())) {
       String clientDomainSigner =
           ClientDomainHelper.fetchSigningKeyFromClientDomain(request.getClientDomain(), false);
       argsMap.put(KEY_CLIENT_DOMAIN, request.getClientDomain());
-      argsMap.put(KEY_CLIENT_DOMAIN_ADDRESS, clientDomainSigner);
+      argsMap.put(KEY_CLIENT_DOMAIN_ACCOUNT, clientDomainSigner);
     }
 
     Nonce nonce = nonceManager.create(sep45Config.getAuthTimeout());
@@ -356,7 +356,7 @@ public class Sep45Service {
     }
 
     KeyPair keyPair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
-    if (!keyPair.getAccountId().equals(argsMap.get(KEY_HOME_DOMAIN_ADDRESS))) {
+    if (!keyPair.getAccountId().equals(argsMap.get(KEY_WEB_AUTH_DOMAIN_ACCOUNT))) {
       throw new BadRequestException("Invalid home domain address");
     }
 
@@ -367,7 +367,7 @@ public class Sep45Service {
     if (argsMap.containsKey(KEY_CLIENT_DOMAIN)) {
       String clientDomainSigner =
           ClientDomainHelper.fetchSigningKeyFromClientDomain(argsMap.get(KEY_CLIENT_DOMAIN), false);
-      if (!clientDomainSigner.equals(argsMap.get(KEY_CLIENT_DOMAIN_ADDRESS))) {
+      if (!clientDomainSigner.equals(argsMap.get(KEY_CLIENT_DOMAIN_ACCOUNT))) {
         throw new BadRequestException("Invalid client domain address");
       }
     }
