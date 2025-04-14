@@ -66,16 +66,13 @@ public class CustodyPayment {
     if (paymentOperation != null) {
       id = transactionHash;
       to = paymentOperation.getTo();
-      amount = paymentOperation.getAmount();
-      assetType = paymentOperation.getAssetType();
+      amount = String.valueOf(paymentOperation.getAmount());
+      //      assetType = paymentOperation.getAssetType();
       assetName = AssetHelper.getSep11AssetName(paymentOperation.getAsset());
       assetCode = AssetHelper.getAssetCode(assetName);
       assetIssuer = AssetHelper.getAssetIssuer(assetName);
 
-      String sourceAccount =
-          paymentOperation.getSourceAccount() != null
-              ? paymentOperation.getSourceAccount()
-              : ledgerTxn.getSourceAccount();
+      String sourceAccount = ledgerTxn.getSourceAccount();
       from = paymentOperation.getFrom() != null ? paymentOperation.getFrom() : sourceAccount;
       Memo memo = Memo.fromXdr(ledgerTxn.getMemo());
 
@@ -129,8 +126,8 @@ public class CustodyPayment {
     if (operation != null) {
       id = transactionHash;
       to = operation.getTo();
-      amount = operation.getAmount();
-      assetType = operation.getAssetType();
+      amount = String.valueOf(operation.getAmount());
+      //      assetType = operation.getAssetType();
       assetName = AssetHelper.getSep11AssetName(operation.getAsset());
       assetCode = AssetHelper.getAssetCode(assetName);
       assetIssuer = AssetHelper.getAssetIssuer(assetName);

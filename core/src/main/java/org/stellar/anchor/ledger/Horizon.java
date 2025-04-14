@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.Getter;
+import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation;
@@ -30,10 +31,14 @@ public class Horizon implements LedgerClient {
   @Getter private final String stellarNetworkPassphrase;
   private final Server horizonServer;
 
+  public Horizon(String horizonUrl, String stellarNetworkPassphrase) {
+    this.horizonUrl = horizonUrl;
+    this.stellarNetworkPassphrase = stellarNetworkPassphrase;
+    this.horizonServer = new Server(horizonUrl);
+  }
+
   public Horizon(AppConfig appConfig) {
-    this.horizonUrl = appConfig.getHorizonUrl();
-    this.stellarNetworkPassphrase = appConfig.getStellarNetworkPassphrase();
-    this.horizonServer = new Server(appConfig.getHorizonUrl());
+    this(appConfig.getHorizonUrl(), appConfig.getStellarNetworkPassphrase());
   }
 
   public Server getServer() {
@@ -66,7 +71,15 @@ public class Horizon implements LedgerClient {
   }
 
   @Override
-  public Account getAccount(String account) {
+  public Account getAccount(String account) throws LedgerException {
+    try {
+      return getAccountInternal(account);
+    } catch (Exception e) {
+      throw new LedgerException("Error getting account: " + account, e);
+    }
+  }
+
+  Account getAccountInternal(String account) {
     AccountResponse response = getServer().accounts().account(account);
     AccountResponse.Thresholds thresholds = response.getThresholds();
 
@@ -99,7 +112,8 @@ public class Horizon implements LedgerClient {
     return LedgerTransaction.builder()
         .hash(response.getHash())
         // The page token is the TOID of a transaction
-        .applicationOrder(TOID.decode(Long.parseLong(response.getPagingToken())).transactionOrder)
+        .applicationOrder(
+            TOID.fromInt64(Long.parseLong(response.getPagingToken())).getTransactionOrder())
         .sourceAccount(response.getSourceAccount())
         .envelopeXdr(response.getEnvelopeXdr())
         .memo(MemoHelper.toXdr(response.getMemo()))
@@ -121,13 +135,17 @@ public class Horizon implements LedgerClient {
         .build();
   }
 
-  List<OperationResponse> getStellarTxnOperations(String stellarTxnId) {
-    return getServer()
-        .payments()
-        .includeTransactions(true)
-        .forTransaction(stellarTxnId)
-        .execute()
-        .getRecords();
+  public static LedgerTransaction toLedgerTransaction(
+      Server server, TransactionResponse txnResponse) {
+    return LedgerTransaction.builder()
+        .hash(txnResponse.getHash())
+        .sourceAccount(txnResponse.getSourceAccount())
+        .envelopeXdr(txnResponse.getEnvelopeXdr())
+        .memo(MemoHelper.toXdr(txnResponse.getMemo()))
+        .sequenceNumber(txnResponse.getSourceAccountSequence())
+        .createdAt(Instant.parse(txnResponse.getCreatedAt()))
+        .operations(getLedgerOperations(server, txnResponse.getHash()))
+        .build();
   }
 
   /**
@@ -136,20 +154,16 @@ public class Horizon implements LedgerClient {
    * @param txnHash the transaction hash
    * @return the ledger operations
    */
-  List<LedgerOperation> getLedgerOperations(String txnHash) {
-    List<OperationResponse> ops = getStellarTxnOperations(txnHash);
-    return ops.stream().map(Horizon::toLedgerOperation).collect(Collectors.toList());
-  }
-
-  public static LedgerTransaction toLedgerTransaction(TransactionResponse txnResponse) {
-    return LedgerTransaction.builder()
-        .hash(txnResponse.getHash())
-        .sourceAccount(txnResponse.getSourceAccount())
-        .envelopeXdr(txnResponse.getEnvelopeXdr())
-        .memo(MemoHelper.toXdr(txnResponse.getMemo()))
-        .sequenceNumber(txnResponse.getSourceAccountSequence())
-        .createdAt(Instant.parse(txnResponse.getCreatedAt()))
-        .build();
+  public static List<LedgerOperation> getLedgerOperations(Server server, String txnHash) {
+    return server
+        .payments()
+        .includeTransactions(true)
+        .forTransaction(txnHash)
+        .execute()
+        .getRecords()
+        .stream()
+        .map(Horizon::toLedgerOperation)
+        .collect(Collectors.toList());
   }
 
   public static LedgerOperation toLedgerOperation(OperationResponse op) {
@@ -158,24 +172,21 @@ public class Horizon implements LedgerClient {
       builder.type(PAYMENT);
       builder.paymentOperation(
           LedgerPaymentOperation.builder()
-              .assetType(paymentOp.getAssetType())
-              .sourceAccount(paymentOp.getSourceAccount())
               .from(paymentOp.getFrom())
               .to(paymentOp.getTo())
-              .amount(paymentOp.getAmount())
+              .amount(Long.parseLong(paymentOp.getAmount()))
               .asset(paymentOp.getAsset().toXdr())
               .build());
     } else if (op instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
       builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE);
       builder.pathPaymentOperation(
           LedgerTransaction.LedgerPathPaymentOperation.builder()
-              .assetType(pathPaymentOp.getAssetType())
               .sourceAccount(pathPaymentOp.getSourceAccount())
               .sourceAmount(pathPaymentOp.getSourceAmount())
               .sourceAsset(pathPaymentOp.getSourceAsset().toXdr())
               .from(pathPaymentOp.getFrom())
               .to(pathPaymentOp.getTo())
-              .amount(pathPaymentOp.getAmount())
+              .amount(Long.parseLong(pathPaymentOp.getAmount()))
               .asset(pathPaymentOp.getAsset().toXdr())
               .build());
     } else {

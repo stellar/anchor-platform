@@ -45,10 +45,7 @@ public class ObservedPayment {
   @SneakyThrows
   public static ObservedPayment from(LedgerTransaction txn, LedgerPaymentOperation paymentOp) {
     String assetName = AssetHelper.getSep11AssetName(paymentOp.getAsset());
-    String sourceAccount =
-        paymentOp.getSourceAccount() != null
-            ? paymentOp.getSourceAccount()
-            : txn.getSourceAccount();
+    String sourceAccount = txn.getSourceAccount();
     String from = paymentOp.getFrom() != null ? paymentOp.getFrom() : sourceAccount;
     Memo memo = txn.getMemo();
 
@@ -57,8 +54,7 @@ public class ObservedPayment {
         .type(Type.PAYMENT)
         .from(from)
         .to(paymentOp.getTo())
-        .amount(paymentOp.getAmount())
-        .assetType(paymentOp.getAssetType())
+        .amount(String.valueOf(paymentOp.getAmount()))
         .assetCode(AssetHelper.getAssetCode(assetName))
         .assetIssuer(AssetHelper.getAssetIssuer(assetName))
         .assetName(assetName)
@@ -88,8 +84,7 @@ public class ObservedPayment {
         .type(Type.PATH_PAYMENT)
         .from(from)
         .to(pathPaymentOp.getTo())
-        .amount(pathPaymentOp.getAmount())
-        .assetType(pathPaymentOp.getAssetType())
+        .amount(String.valueOf(pathPaymentOp.getAmount()))
         .assetCode(AssetHelper.getAssetCode(assetName))
         .assetIssuer(AssetHelper.getAssetIssuer(assetName))
         .assetName(pathPaymentOp.getAsset().toString())

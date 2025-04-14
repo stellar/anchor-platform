@@ -105,10 +105,7 @@ public class StellarPaymentObserver implements HealthCheckable {
 
     infoF("Starting the observer silence watcher");
     silenceWatcher.scheduleAtFixedRate(
-        this::checkSilence,
-        1,
-        config.getSilenceCheckInterval(),
-        TimeUnit.SECONDS); // TODO: The period should be made configurable in version 2.x
+        this::checkSilence, 1, config.getSilenceCheckInterval(), TimeUnit.SECONDS);
 
     infoF("Starting the status watcher");
     statusWatcher.scheduleWithFixedDelay(this::checkStatus, 1, 1, TimeUnit.SECONDS);
@@ -358,7 +355,8 @@ public class StellarPaymentObserver implements HealthCheckable {
     }
 
     LedgerOperation ledgerOperation = Horizon.toLedgerOperation(operationResponse);
-    LedgerTransaction ledgerTxn = Horizon.toLedgerTransaction(operationResponse.getTransaction());
+    LedgerTransaction ledgerTxn =
+        Horizon.toLedgerTransaction(server, operationResponse.getTransaction());
     ObservedPayment observedPayment =
         switch (ledgerOperation.getType()) {
           case PAYMENT -> ObservedPayment.from(ledgerTxn, ledgerOperation.getPaymentOperation());
