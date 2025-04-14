@@ -9,7 +9,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.util.GsonUtils
-import org.stellar.sdk.MemoText
 import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.Transaction
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse
@@ -94,7 +93,7 @@ class StellarRpcTest {
 
     assertEquals("4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5", result.hash)
     assertEquals("GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP", result.sourceAccount)
-    assertEquals("Hello Stellar!", (result.memo as MemoText).text)
+    assertEquals("Hello Stellar!", result.memo.text.toString())
     assertEquals(8632884266970, result.sequenceNumber)
 
     verify(exactly = 1) { sorobanServer.getTransaction(any()) }
