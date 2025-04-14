@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.observer;
 
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
+import static org.stellar.anchor.util.AssetHelper.*;
 import static org.stellar.sdk.Memo.fromXdr;
 
 import com.google.gson.annotations.SerializedName;
@@ -44,17 +45,17 @@ public class ObservedPayment {
 
   @SneakyThrows
   public static ObservedPayment from(LedgerTransaction txn, LedgerPaymentOperation paymentOp) {
-    String assetName = AssetHelper.getSep11AssetName(paymentOp.getAsset());
+    String assetName = getSep11AssetName(paymentOp.getAsset());
     String sourceAccount = txn.getSourceAccount();
     String from = paymentOp.getFrom() != null ? paymentOp.getFrom() : sourceAccount;
     Memo memo = txn.getMemo();
 
     return ObservedPayment.builder()
-        .id(txn.getHash())
+        .id(paymentOp.getId())
         .type(Type.PAYMENT)
         .from(from)
         .to(paymentOp.getTo())
-        .amount(String.valueOf(paymentOp.getAmount()))
+        .amount(fromXdrAmount(paymentOp.getAmount()))
         .assetCode(AssetHelper.getAssetCode(assetName))
         .assetIssuer(AssetHelper.getAssetIssuer(assetName))
         .assetName(assetName)
@@ -70,8 +71,8 @@ public class ObservedPayment {
   @SneakyThrows
   public static ObservedPayment from(
       LedgerTransaction ledgerTxn, LedgerPathPaymentOperation pathPaymentOp) {
-    String assetName = AssetHelper.getSep11AssetName(pathPaymentOp.getAsset());
-    String sourceAssetName = AssetHelper.getSep11AssetName(pathPaymentOp.getSourceAsset());
+    String assetName = getSep11AssetName(pathPaymentOp.getAsset());
+    String sourceAssetName = getSep11AssetName(pathPaymentOp.getSourceAsset());
     String sourceAccount =
         pathPaymentOp.getSourceAccount() != null
             ? pathPaymentOp.getSourceAccount()
@@ -80,11 +81,11 @@ public class ObservedPayment {
     Memo memo = ledgerTxn.getMemo();
 
     return ObservedPayment.builder()
-        .id(ledgerTxn.getHash())
+        .id(pathPaymentOp.getId())
         .type(Type.PATH_PAYMENT)
         .from(from)
         .to(pathPaymentOp.getTo())
-        .amount(String.valueOf(pathPaymentOp.getAmount()))
+        .amount(AssetHelper.fromXdrAmount(pathPaymentOp.getAmount()))
         .assetCode(AssetHelper.getAssetCode(assetName))
         .assetIssuer(AssetHelper.getAssetIssuer(assetName))
         .assetName(pathPaymentOp.getAsset().toString())

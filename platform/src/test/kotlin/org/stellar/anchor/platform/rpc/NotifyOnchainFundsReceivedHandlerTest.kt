@@ -5,7 +5,6 @@ import io.micrometer.core.instrument.Counter
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import java.time.Instant
-import java.util.stream.Collectors
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -18,6 +17,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED
 import org.stellar.anchor.api.exception.BadRequestException
+import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.api.exception.rpc.InternalErrorException
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException
@@ -34,10 +34,10 @@ import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
 import org.stellar.anchor.event.EventService.Session
-import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation
 import org.stellar.anchor.metrics.MetricsService
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep31Transaction
@@ -51,9 +51,9 @@ import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.MemoHelper
 import org.stellar.sdk.Memo
-import org.stellar.sdk.exception.NetworkException
-import org.stellar.sdk.responses.operations.OperationResponse
-import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.sdk.xdr.Asset
+import org.stellar.sdk.xdr.AssetType
+import org.stellar.sdk.xdr.OperationType
 
 class NotifyOnchainFundsReceivedHandlerTest {
 
@@ -68,11 +68,6 @@ class NotifyOnchainFundsReceivedHandlerTest {
     private const val STELLAR_PAYMENT_DATE = "2023-05-10T10:18:20Z"
 
     private val gson = GsonUtils.getInstance()
-    private val operationRecords: ArrayList<LedgerOperation> =
-      gson.fromJson(
-        paymentOperationRecord,
-        object : TypeToken<ArrayList<LedgerOperation>>() {}.type
-      )
     val stellarTransactions: List<StellarTransaction> =
       gson.fromJson(
         stellarTransactionRecord,
@@ -85,7 +80,23 @@ class NotifyOnchainFundsReceivedHandlerTest {
         .sourceAccount("testSourceAccount")
         .createdAt(Instant.parse("2023-05-10T10:18:20Z"))
         .fee(100)
-        .operations(operationRecords)
+        .envelopeXdr("testEnvelopeXdr")
+        .operations(
+          listOf(
+            LedgerOperation.builder()
+              .type(OperationType.PAYMENT)
+              .paymentOperation(
+                LedgerPaymentOperation.builder()
+                  .id("12345")
+                  .amount(150000000)
+                  .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
+                  .from("testFrom")
+                  .to("testTo")
+                  .build()
+              )
+              .build()
+          )
+        )
         .build()
   }
 
@@ -576,7 +587,7 @@ class NotifyOnchainFundsReceivedHandlerTest {
     every { txn31Store.findByTransactionId(any()) } returns null
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
     every { ledgerClient.getTransaction(any()) } throws
-      NetworkException(400, "Invalid stellar transaction")
+      LedgerException("Invalid stellar transaction")
 
     val ex = assertThrows<InternalErrorException> { handler.handle(request) }
     assertEquals("Failed to retrieve Stellar transaction by ID[stellarTxId]", ex.message)
@@ -1000,7 +1011,7 @@ class NotifyOnchainFundsReceivedHandlerTest {
     every { txn31Store.findByTransactionId(any()) } returns null
     every { txn6Store.save(capture(sep6TxnCapture)) } returns null
     every { ledgerClient.getTransaction(any()) } throws
-      NetworkException(400, "Invalid stellar transaction")
+      LedgerException("Invalid stellar transaction")
 
     val ex = assertThrows<InternalErrorException> { handler.handle(request) }
     assertEquals("Failed to retrieve Stellar transaction by ID[stellarTxId]", ex.message)
@@ -1035,31 +1046,3 @@ private const val stellarTransactionRecord =
   }
 ]  
 """
-
-private const val paymentOperationRecord =
-  """
-[
-  {
-    "type": "PAYMENT",
-    "paymentOperation": {
-      "assetType": "native",
-      "sourceAccount": "testSourceAccount",
-      "from": "testFrom",
-      "to": "testTo",
-      "amount": "15.0000000",
-      "asset": {
-        "discriminant": "ASSET_TYPE_NATIVE"
-      }
-    }
-  }
-]  
-"""
-
-fun main() {
-  val gson = GsonUtils.getInstance()
-  val operationRecordsTypeToken = object : TypeToken<ArrayList<PaymentOperationResponse>>() {}.type
-  val operationRecords: ArrayList<OperationResponse> =
-    gson.fromJson(paymentOperationRecord, operationRecordsTypeToken)
-  val ops = operationRecords.stream().map(Horizon::toLedgerOperation).collect(Collectors.toList())
-  println(gson.toJson(ops))
-}
