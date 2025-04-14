@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.custody;
 
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
+import static org.stellar.anchor.util.AssetHelper.fromXdrAmount;
 
 import com.google.gson.annotations.SerializedName;
 import java.time.Instant;
@@ -64,10 +65,10 @@ public class CustodyPayment {
     String transactionEnvelope = null;
 
     if (paymentOperation != null) {
-      id = transactionHash;
+      id = paymentOperation.getId();
       to = paymentOperation.getTo();
-      amount = String.valueOf(paymentOperation.getAmount());
-      //      assetType = paymentOperation.getAssetType();
+      amount = fromXdrAmount(paymentOperation.getAmount());
+      assetType = AssetHelper.getAssetType(paymentOperation.getAsset());
       assetName = AssetHelper.getSep11AssetName(paymentOperation.getAsset());
       assetCode = AssetHelper.getAssetCode(assetName);
       assetIssuer = AssetHelper.getAssetIssuer(assetName);
@@ -124,10 +125,10 @@ public class CustodyPayment {
     String transactionEnvelope = null;
 
     if (operation != null) {
-      id = transactionHash;
+      id = operation.getId();
       to = operation.getTo();
-      amount = String.valueOf(operation.getAmount());
-      //      assetType = operation.getAssetType();
+      amount = fromXdrAmount(operation.getAmount());
+      assetType = AssetHelper.getAssetType(operation.getAsset());
       assetName = AssetHelper.getSep11AssetName(operation.getAsset());
       assetCode = AssetHelper.getAssetCode(assetName);
       assetIssuer = AssetHelper.getAssetIssuer(assetName);

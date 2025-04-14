@@ -1,10 +1,6 @@
 package org.stellar.anchor.platform.custody.fireblocks;
 
-import static org.stellar.anchor.util.Log.debugF;
-import static org.stellar.anchor.util.Log.error;
-import static org.stellar.anchor.util.Log.errorEx;
-import static org.stellar.anchor.util.Log.warnEx;
-import static org.stellar.anchor.util.Log.warnF;
+import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.xdr.OperationType.*;
 
@@ -137,6 +133,9 @@ public class FireblocksEventService extends CustodyEventService {
               .findFirst();
       if (op.isPresent()) {
         ledgerOperation = op.get();
+      } else {
+        // The type is unknown or there is no operation
+        return Optional.empty();
       }
     } catch (Exception e) {
       warnF(
@@ -180,7 +179,9 @@ public class FireblocksEventService extends CustodyEventService {
                 message,
                 td.getTxHash());
       } else {
-        warnF("Unknown Stellar transaction operation type[{}]", ledgerOperation.getType());
+        errorF(
+            "Unknown Stellar transaction operation type[{}]. This should never happen.",
+            ledgerOperation.getType());
       }
     } catch (SepException ex) {
       warnF("Fireblocks event with id[{}] contains unsupported memo", td.getId());

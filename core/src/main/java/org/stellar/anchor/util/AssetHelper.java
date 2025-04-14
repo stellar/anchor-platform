@@ -1,7 +1,9 @@
 package org.stellar.anchor.util;
 
+import static java.math.RoundingMode.HALF_UP;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
+import java.math.BigDecimal;
 import java.util.Currency;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawInfo;
@@ -146,5 +148,31 @@ public class AssetHelper {
     }
     DepositWithdrawOperation operation = info.getWithdraw();
     return operation != null && operation.getEnabled();
+  }
+
+  // Get AssetType String from XDR Asset object
+  public static String getAssetType(Asset asset) {
+    if (asset == null) {
+      return null;
+    }
+    return switch (asset.getDiscriminant()) {
+      case ASSET_TYPE_NATIVE -> "native";
+      case ASSET_TYPE_CREDIT_ALPHANUM4 -> "credit_alphanum4";
+      case ASSET_TYPE_CREDIT_ALPHANUM12 -> "credit_alphanum12";
+      default ->
+          throw new IllegalArgumentException("Unsupported asset type: " + asset.getDiscriminant());
+    };
+  }
+
+  /**
+   * Converts an amount in XDR format to a string representation.
+   *
+   * @param amount the amount in XDR format
+   * @return the string representation of the amount
+   */
+  public static String fromXdrAmount(Long amount) {
+    return BigDecimal.valueOf(amount)
+        .divide(BigDecimal.valueOf(10000000), 7, HALF_UP)
+        .toPlainString();
   }
 }
