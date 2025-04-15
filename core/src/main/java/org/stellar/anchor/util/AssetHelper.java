@@ -68,11 +68,11 @@ public class AssetHelper {
   public static String getAssetCode(String asset) {
     if (asset.equalsIgnoreCase("native")) {
       return "native";
+    } else if (asset.startsWith("stellar:") || asset.startsWith("iso4217:")) {
+      return asset.split(":")[1];
+    } else {
+      return asset.split(":")[0];
     }
-    if (asset.startsWith("stellar:")) {
-      return asset.split(":").length >= 3 ? asset.split(":")[1] : null;
-    }
-    return asset.split(":")[0];
   }
 
   /**
@@ -85,7 +85,9 @@ public class AssetHelper {
     if (asset.equals("native")) {
       return null;
     } else if (asset.startsWith("stellar:")) {
-      return asset.split(":").length >= 3 ? asset.split(":")[2] : null;
+      return asset.split(":")[2];
+    } else if (asset.startsWith("iso4217:")) {
+      return null; // fiat has no issuer
     } else {
       return asset.split(":")[1];
     }

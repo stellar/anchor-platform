@@ -58,10 +58,12 @@ class AssetHelperTest {
     value =
       [
         "USDC:GDJJES5JOST5VTBLDVVQRAW26LZ5IIJJFVN5IJOMICM73HLGGB3G74SS,USDC,GDJJES5JOST5VTBLDVVQRAW26LZ5IIJJFVN5IJOMICM73HLGGB3G74SS",
-        "stellar:USDC:GDJJES5JOST5VTBLDVVQRAW26LZ5IIJJFVN5IJOMICM73HLGGB3G74SS,USDC,GDJJES5JOST5VTBLDVVQRAW26LZ5IIJJFVN5IJOMICM73HLGGB3G74SS"
+        "stellar:USDC:GDJJES5JOST5VTBLDVVQRAW26LZ5IIJJFVN5IJOMICM73HLGGB3G74SS,USDC,GDJJES5JOST5VTBLDVVQRAW26LZ5IIJJFVN5IJOMICM73HLGGB3G74SS",
+        "iso4217:USD,USD,",
+        "native,native,"
       ]
   )
-  fun `test getAssetCode()`(asset: String, assetCode: String, assetIssuer: String) {
+  fun `test getAssetCode()`(asset: String, assetCode: String, assetIssuer: String?) {
     assertEquals(AssetHelper.getAssetCode(asset), assetCode)
     assertEquals(AssetHelper.getAssetIssuer(asset), assetIssuer)
   }
