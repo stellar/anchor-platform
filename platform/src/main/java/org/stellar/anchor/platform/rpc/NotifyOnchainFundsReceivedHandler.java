@@ -159,7 +159,7 @@ public class NotifyOnchainFundsReceivedHandler
     try {
       LedgerTransaction ledgerTxn = ledgerClient.getTransaction(stellarTxnId);
       if (ledgerTxn == null) {
-        throw new NotFoundException(String.format("Transaction (id=%s) not found"));
+        throw new NotFoundException(String.format("Transaction (hash=%s) not found", stellarTxnId));
       }
 
       addStellarTransaction(txn, ledgerTxn);

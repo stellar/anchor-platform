@@ -1,6 +1,7 @@
 package org.stellar.anchor.ledger;
 
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
+import static org.stellar.anchor.util.AssetHelper.toXdrAmount;
 import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 import static org.stellar.sdk.xdr.SignerKeyType.*;
 
@@ -107,18 +108,32 @@ public class Horizon implements LedgerClient {
 
   @Override
   public LedgerTransaction getTransaction(String txnHash) {
-    TransactionResponse response = getServer().transactions().transaction(txnHash);
+    List<OperationResponse> operations =
+        getServer()
+            .payments()
+            .includeTransactions(true)
+            .forTransaction(txnHash)
+            .execute()
+            .getRecords();
+
+    if (operations.isEmpty()) {
+      return null;
+    }
+
+    TransactionResponse txnResponse = operations.get(0).getTransaction();
 
     return LedgerTransaction.builder()
-        .hash(response.getHash())
+        .hash(txnResponse.getHash())
         // The page token is the TOID of a transaction
         .applicationOrder(
-            TOID.fromInt64(Long.parseLong(response.getPagingToken())).getTransactionOrder())
-        .sourceAccount(response.getSourceAccount())
-        .envelopeXdr(response.getEnvelopeXdr())
-        .memo(MemoHelper.toXdr(response.getMemo()))
-        .sequenceNumber(response.getSourceAccountSequence())
-        .createdAt(Instant.parse(response.getCreatedAt()))
+            TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder())
+        .sourceAccount(txnResponse.getSourceAccount())
+        .envelopeXdr(txnResponse.getEnvelopeXdr())
+        .memo(MemoHelper.toXdr(txnResponse.getMemo()))
+        .sequenceNumber(txnResponse.getSourceAccountSequence())
+        .createdAt(Instant.parse(txnResponse.getCreatedAt()))
+        .operations(
+            operations.stream().map(Horizon::toLedgerOperation).collect(Collectors.toList()))
         .build();
   }
 
@@ -172,25 +187,27 @@ public class Horizon implements LedgerClient {
       builder.type(PAYMENT);
       builder.paymentOperation(
           LedgerPaymentOperation.builder()
+              .id(String.valueOf(paymentOp.getId()))
               .from(paymentOp.getFrom())
               .to(paymentOp.getTo())
-              .amount(Long.parseLong(paymentOp.getAmount()))
+              .amount(toXdrAmount(paymentOp.getAmount()))
               .asset(paymentOp.getAsset().toXdr())
               .build());
     } else if (op instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
       builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE);
       builder.pathPaymentOperation(
           LedgerTransaction.LedgerPathPaymentOperation.builder()
+              .id(String.valueOf(pathPaymentOp.getId()))
+              .from(pathPaymentOp.getFrom())
+              .to(pathPaymentOp.getTo())
+              .amount(toXdrAmount(pathPaymentOp.getAmount()))
+              .asset(pathPaymentOp.getAsset().toXdr())
               .sourceAccount(pathPaymentOp.getSourceAccount())
               .sourceAmount(pathPaymentOp.getSourceAmount())
               .sourceAsset(pathPaymentOp.getSourceAsset().toXdr())
-              .from(pathPaymentOp.getFrom())
-              .to(pathPaymentOp.getTo())
-              .amount(Long.parseLong(pathPaymentOp.getAmount()))
-              .asset(pathPaymentOp.getAsset().toXdr())
               .build());
     } else {
-      throw new IllegalArgumentException("Unsupported operation type: " + op.getType());
+      return null;
     }
     return builder.build();
   }

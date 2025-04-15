@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.stellar.anchor.util.Log
+import org.stellar.anchor.util.Log.*
 import org.stellar.anchor.util.Sep1Helper.TomlContent
 import org.stellar.anchor.util.Sep1Helper.parse
 import org.stellar.sdk.Server
@@ -70,7 +72,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
       for (payment in payments) {
         if (payment is PaymentOperationResponse) {
           if (payment.transaction.memo.toString() == TEST_PAYMENT_MEMO) {
-            println("Found test payment")
+            info("Found test payment: ${payment.id}")
             // initialize the test payment value pairs for injection
             testPaymentValues =
               listOf(

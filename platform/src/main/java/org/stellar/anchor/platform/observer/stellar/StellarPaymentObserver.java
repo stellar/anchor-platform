@@ -353,8 +353,11 @@ public class StellarPaymentObserver implements HealthCheckable {
       savePagingToken(operationResponse.getPagingToken());
       return;
     }
-
     LedgerOperation ledgerOperation = Horizon.toLedgerOperation(operationResponse);
+    if (ledgerOperation == null) {
+      // The operation is not a payment operation. Ignore it.
+      return;
+    }
     LedgerTransaction ledgerTxn =
         Horizon.toLedgerTransaction(server, operationResponse.getTransaction());
     ObservedPayment observedPayment =

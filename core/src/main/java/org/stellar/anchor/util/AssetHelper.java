@@ -2,9 +2,12 @@ package org.stellar.anchor.util;
 
 import static java.math.RoundingMode.HALF_UP;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
+import static org.stellar.sdk.Util.bytesToHex;
 
 import java.math.BigDecimal;
 import java.util.Currency;
+
+import lombok.SneakyThrows;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawOperation;
@@ -12,6 +15,8 @@ import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.xdr.Asset;
 
 public class AssetHelper {
+  public static BigDecimal XDR_SCALE_FACTOR = BigDecimal.valueOf(10000000);
+
   public static boolean isISO4217(String assetCode, String assetIssuer) {
     // assetIssuer must be empty to be a valid Fiat
     if (!isEmpty(assetIssuer)) {
@@ -63,11 +68,10 @@ public class AssetHelper {
    * @return The asset code
    */
   public static String getAssetCode(String asset) {
-    if (asset.startsWith("stellar:")) {
-      return asset.split(":")[1];
-    } else {
-      return asset.split(":")[0];
+    if (asset.equalsIgnoreCase("native")) {
+      return "native";
     }
+    return asset.split(":")[1];
   }
 
   /**
@@ -113,23 +117,12 @@ public class AssetHelper {
     }
   }
 
-  public static String getSep11AssetName(Asset asset) {
-    if (asset == null) {
+  @SneakyThrows
+  public static String getSep11AssetName(Asset xdrAsset) {
+    if (xdrAsset == null) {
       return null;
     }
-    return switch (asset.getDiscriminant()) {
-      case ASSET_TYPE_NATIVE -> AssetInfo.NATIVE_ASSET_CODE;
-      case ASSET_TYPE_CREDIT_ALPHANUM4 ->
-          asset.getAlphaNum4().getAssetCode().toString()
-              + ":"
-              + asset.getAlphaNum4().getIssuer().toString();
-      case ASSET_TYPE_CREDIT_ALPHANUM12 ->
-          asset.getAlphaNum12().getAssetCode().toString()
-              + ":"
-              + asset.getAlphaNum12().getIssuer().toString();
-      default ->
-          throw new IllegalArgumentException("Unsupported asset type: " + asset.getDiscriminant());
-    };
+    return org.stellar.sdk.Asset.fromXdr(xdrAsset).toString();
   }
 
   // Check if deposit is enabled for the asset
@@ -171,8 +164,19 @@ public class AssetHelper {
    * @return the string representation of the amount
    */
   public static String fromXdrAmount(Long amount) {
-    return BigDecimal.valueOf(amount)
-        .divide(BigDecimal.valueOf(10000000), 7, HALF_UP)
-        .toPlainString();
+    return BigDecimal.valueOf(amount).divide(XDR_SCALE_FACTOR, 7, HALF_UP).toPlainString();
+  }
+
+  /**
+   * Converts a string representation of an amount to XDR format.
+   *
+   * @param amount the string representation of the amount
+   * @return the amount in XDR format
+   */
+  public static Long toXdrAmount(String amount) {
+    if (amount == null || amount.isEmpty()) {
+      return null;
+    }
+    return new BigDecimal(amount).multiply(XDR_SCALE_FACTOR).setScale(0, HALF_UP).longValue();
   }
 }
