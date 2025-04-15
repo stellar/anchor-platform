@@ -47,7 +47,7 @@ internal class HorizonTest {
     val horizon = Horizon(appConfig)
 
     val account = "testAccount"
-    val asset = "stellar:native"
+    val asset = "native"
 
     assertTrue(horizon.hasTrustline(account, asset))
   }

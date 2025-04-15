@@ -69,6 +69,9 @@ public class AssetHelper {
     if (asset.equalsIgnoreCase("native")) {
       return "native";
     }
+    if (asset.startsWith("stellar:")) {
+      return asset.split(":").length >= 3 ? asset.split(":")[1] : null;
+    }
     return asset.split(":")[0];
   }
 
