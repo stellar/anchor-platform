@@ -2,11 +2,9 @@ package org.stellar.anchor.util;
 
 import static java.math.RoundingMode.HALF_UP;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
-import static org.stellar.sdk.Util.bytesToHex;
 
 import java.math.BigDecimal;
 import java.util.Currency;
-
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawInfo;
@@ -71,7 +69,7 @@ public class AssetHelper {
     if (asset.equalsIgnoreCase("native")) {
       return "native";
     }
-    return asset.split(":")[1];
+    return asset.split(":")[0];
   }
 
   /**

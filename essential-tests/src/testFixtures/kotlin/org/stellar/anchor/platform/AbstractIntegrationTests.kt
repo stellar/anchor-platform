@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.stellar.anchor.util.Log
 import org.stellar.anchor.util.Log.*
 import org.stellar.anchor.util.Sep1Helper.TomlContent
 import org.stellar.anchor.util.Sep1Helper.parse
