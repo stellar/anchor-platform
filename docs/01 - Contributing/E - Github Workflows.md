@@ -5,7 +5,6 @@
 The following workflows are triggered according to the Github events:
 
 - `on_pull_request.yml`: triggered when a pull request is created or updated
-- `on_pull_request_comments.yml`: triggered callable workflows when a pull request is commented
 - `on_push_to_develop.yml`: triggered when a pull request is merged or a commit is pushed.
 - `on_release_created_or_updated.yml`: triggered when a release is created or updated.
 
