@@ -16,16 +16,6 @@ Here are the callable workflows:
 - `sub_essential_tests.yml`: Run essential tests.
 - `sub_extended_tests.yml`: Run extended tests.
 - `sub_codeql_analysis.yml`: Run the CodeQL.
-- `sub_jacoco_report.yml`: Generate the Jacoco reports.
-
-## How to run the workflows from the pull request comments
-
-The following callable workflows can be called by typing the following commands in the pull request comments:
-
-- `/run-extended-tests`: Run the extended tests
-- `/run-essential-tests`: Run the essential tests
-- `/run-codeql-analysis`: Run the CodeQL analysis
-- `/run-jacoco-report`: Generate the Jacoco reports
 
 Please note that when triggered from comments, these callable workflow are running from the `develop` branch instead of
 the pull request branch. 
