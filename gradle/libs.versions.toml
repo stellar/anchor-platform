@@ -61,7 +61,6 @@ stellar-wallet-sdk = "2.0.0"
 spotless = "6.25.0"
 spring-boot = "3.2.4"
 spring-dependency-management = "1.1.0"
-jacoco = "0.8.10"
 
 [libraries]
 apache-commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "apache-commons-lang3" }
@@ -160,4 +159,3 @@ spring-dependency-management = { id = "io.spring.dependency-management", version
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
-jacoco = { id = "jacoco", version.ref = "jacoco" }
