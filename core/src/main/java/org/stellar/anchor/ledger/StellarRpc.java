@@ -29,6 +29,7 @@ import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
 
+/** The Stellar RPC server that implements LedgerClient. */
 public class StellarRpc implements LedgerClient {
   String rpcServerUrl;
   SorobanServer sorobanServer;
@@ -53,47 +54,45 @@ public class StellarRpc implements LedgerClient {
   @Override
   public Account getAccount(String account) throws LedgerException {
     try {
-      return getAccountInternal(account);
+      AccountEntry ae = getAccountRpc(sorobanServer, account);
+      org.stellar.sdk.xdr.Thresholds txdr = ae.getThresholds();
+      org.stellar.sdk.xdr.Signer[] signersXdr = ae.getSigners();
+      List<Signer> signers =
+          new ArrayList<>(
+              Arrays.stream(signersXdr)
+                  .map(
+                      s ->
+                          Signer.builder()
+                              .key(
+                                  StrKey.encodeEd25519PublicKey(
+                                      s.getKey().getEd25519().getUint256()))
+                              .type(s.getKey().getDiscriminant().name())
+                              .weight(s.getWeight().getUint32().getNumber())
+                              .build())
+                  .toList());
+      // Add master key
+      signers.add(
+          Signer.builder()
+              .key(account)
+              .type(SIGNER_KEY_TYPE_ED25519.name())
+              .weight((long) txdr.getThresholds()[0])
+              .build());
+
+      return Account.builder()
+          .accountId(StrKey.encodeEd25519PublicKey(ae.getAccountID()))
+          .sequenceNumber(ae.getSeqNum().getSequenceNumber().getInt64())
+          .thresholds(
+              new Thresholds(
+                  // master threshold txdr.getThresholds()[0] has no use in the context of the
+                  // anchor
+                  (int) txdr.getThresholds()[1],
+                  (int) txdr.getThresholds()[2],
+                  (int) txdr.getThresholds()[3]))
+          .signers(signers)
+          .build();
     } catch (Exception e) {
       throw new LedgerException("Error getting account: " + account, e);
     }
-  }
-
-  Account getAccountInternal(String account) throws IOException {
-    AccountEntry ae = getAccountRpc(sorobanServer, account);
-    org.stellar.sdk.xdr.Thresholds txdr = ae.getThresholds();
-    org.stellar.sdk.xdr.Signer[] signersXdr = ae.getSigners();
-    List<Signer> signers =
-        new ArrayList<>(
-            Arrays.stream(signersXdr)
-                .map(
-                    s ->
-                        Signer.builder()
-                            .key(
-                                StrKey.encodeEd25519PublicKey(s.getKey().getEd25519().getUint256()))
-                            .type(s.getKey().getDiscriminant().name())
-                            .weight(s.getWeight().getUint32().getNumber())
-                            .build())
-                .toList());
-    // Add master key
-    signers.add(
-        Signer.builder()
-            .key(account)
-            .type(SIGNER_KEY_TYPE_ED25519.name())
-            .weight((long) txdr.getThresholds()[0])
-            .build());
-
-    return Account.builder()
-        .accountId(StrKey.encodeEd25519PublicKey(ae.getAccountID()))
-        .sequenceNumber(ae.getSeqNum().getSequenceNumber().getInt64())
-        .thresholds(
-            new Thresholds(
-                // master threshold txdr.getThresholds()[0] has no use in the context of the anchor
-                (int) txdr.getThresholds()[1],
-                (int) txdr.getThresholds()[2],
-                (int) txdr.getThresholds()[3]))
-        .signers(signers)
-        .build();
   }
 
   @Override
@@ -145,7 +144,7 @@ public class StellarRpc implements LedgerClient {
         .build();
   }
 
-  public LedgerOperation from(String sourceAccount, Operation op) {
+  LedgerOperation from(String sourceAccount, Operation op) {
     if (op == null) {
       return null;
     }

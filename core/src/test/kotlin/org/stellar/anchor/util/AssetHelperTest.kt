@@ -63,7 +63,11 @@ class AssetHelperTest {
         "native,native,"
       ]
   )
-  fun `test getAssetCode()`(asset: String, assetCode: String, assetIssuer: String?) {
+  fun `test getAssetCode() and testAssetIssuer()`(
+    asset: String,
+    assetCode: String,
+    assetIssuer: String?
+  ) {
     assertEquals(AssetHelper.getAssetCode(asset), assetCode)
     assertEquals(AssetHelper.getAssetIssuer(asset), assetIssuer)
   }

@@ -26,7 +26,7 @@ import org.stellar.sdk.xdr.AssetType;
 import org.stellar.sdk.xdr.OperationType;
 import org.stellar.sdk.xdr.SignerKeyType;
 
-/** The horizon-server. */
+/** The horizon-server that implements LedgerClient. */
 public class Horizon implements LedgerClient {
   @Getter private final String horizonUrl;
   @Getter private final String stellarNetworkPassphrase;
@@ -74,36 +74,32 @@ public class Horizon implements LedgerClient {
   @Override
   public Account getAccount(String account) throws LedgerException {
     try {
-      return getAccountInternal(account);
+      AccountResponse response = getServer().accounts().account(account);
+      AccountResponse.Thresholds thresholds = response.getThresholds();
+
+      return Account.builder()
+          .accountId(response.getAccountId())
+          .sequenceNumber(response.getSequenceNumber())
+          .thresholds(
+              LedgerClient.Thresholds.builder()
+                  .low(thresholds.getLowThreshold())
+                  .medium(thresholds.getMedThreshold())
+                  .high(thresholds.getHighThreshold())
+                  .build())
+          .signers(
+              response.getSigners().stream()
+                  .map(
+                      s ->
+                          Signer.builder()
+                              .key(s.getKey())
+                              .type(getKeyTypeDiscriminant(s.getType()).name())
+                              .weight((long) s.getWeight())
+                              .build())
+                  .collect(Collectors.toList()))
+          .build();
     } catch (Exception e) {
       throw new LedgerException("Error getting account: " + account, e);
     }
-  }
-
-  Account getAccountInternal(String account) {
-    AccountResponse response = getServer().accounts().account(account);
-    AccountResponse.Thresholds thresholds = response.getThresholds();
-
-    return Account.builder()
-        .accountId(response.getAccountId())
-        .sequenceNumber(response.getSequenceNumber())
-        .thresholds(
-            LedgerClient.Thresholds.builder()
-                .low(thresholds.getLowThreshold())
-                .medium(thresholds.getMedThreshold())
-                .high(thresholds.getHighThreshold())
-                .build())
-        .signers(
-            response.getSigners().stream()
-                .map(
-                    s ->
-                        Signer.builder()
-                            .key(s.getKey())
-                            .type(getKeyTypeDiscriminant(s.getType()).name())
-                            .weight((long) s.getWeight())
-                            .build())
-                .collect(Collectors.toList()))
-        .build();
   }
 
   @Override
@@ -124,7 +120,6 @@ public class Horizon implements LedgerClient {
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())
-        // The page token is the TOID of a transaction
         .applicationOrder(
             TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder())
         .sourceAccount(txnResponse.getSourceAccount())
@@ -218,7 +213,7 @@ public class Horizon implements LedgerClient {
    * @param type the Horizon signer key type
    * @return the XDR signer key type
    */
-  public SignerKeyType getKeyTypeDiscriminant(String type) {
+  SignerKeyType getKeyTypeDiscriminant(String type) {
     return switch (type) {
       case "ed25519_public_key" -> SIGNER_KEY_TYPE_ED25519;
       case "preauth_tx" -> SIGNER_KEY_TYPE_PRE_AUTH_TX;

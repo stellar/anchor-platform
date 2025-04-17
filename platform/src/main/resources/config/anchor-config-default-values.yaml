@@ -38,7 +38,9 @@ stellar_network:
   network: TESTNET
 
   # The rpc server endpoint.
-  #  rpc_url: https://soroban-testnet.stellar.org
+  # TODO: Take care of authentication
+  # example:
+  #   rpc_url: https://soroban-testnet.stellar.org
   rpc_url:
 
   # The horizon server endpoint.

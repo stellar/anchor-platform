@@ -126,11 +126,11 @@ public class Sep10Service implements ISep10Service {
 
     // fetch the client domain from the transaction
     String clientDomain = fetchClientDomain(challenge);
-    // fetch the account response from the ledgerApi
+    // fetch the account response from the ledger
     LedgerClient.Account account = fetchAccount(request, challenge, clientDomain);
 
     if (account == null) {
-      // The account does not exist from LedgerApi, using the client's master key to verify.
+      // The account does not exist from ledger, using the client's master key to verify.
       return ValidationResponse.of(generateSep10Jwt(challenge, clientDomain, homeDomain));
     }
     // Since the account exists, we should check the signers and the client domain
