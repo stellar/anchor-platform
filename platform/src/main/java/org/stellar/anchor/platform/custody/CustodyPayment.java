@@ -1,17 +1,17 @@
 package org.stellar.anchor.platform.custody;
 
+import static org.stellar.anchor.ledger.LedgerTransaction.*;
+import static org.stellar.anchor.util.AssetHelper.fromXdrAmount;
+
 import com.google.gson.annotations.SerializedName;
 import java.time.Instant;
-import java.util.Optional;
 import lombok.Builder;
 import lombok.Data;
 import org.stellar.anchor.api.exception.SepException;
+import org.stellar.anchor.ledger.LedgerTransaction;
+import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.MemoHelper;
-import org.stellar.sdk.AssetTypeCreditAlphaNum;
-import org.stellar.sdk.AssetTypeNative;
 import org.stellar.sdk.Memo;
-import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
-import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 
 /**
  * A class, that contains payment (inbound/outbound) information for custody transaction. It is an
@@ -44,7 +44,8 @@ public class CustodyPayment {
   String transactionEnvelope;
 
   public static CustodyPayment fromPayment(
-      Optional<PaymentOperationResponse> paymentOperation,
+      LedgerTransaction ledgerTxn,
+      LedgerPaymentOperation paymentOperation,
       String externalTxId,
       Instant updatedAt,
       CustodyPaymentStatus status,
@@ -63,35 +64,22 @@ public class CustodyPayment {
     String transactionMemoType = null;
     String transactionEnvelope = null;
 
-    if (paymentOperation.isPresent()) {
-      id = paymentOperation.get().getId().toString();
-      to = paymentOperation.get().getTo();
-      amount = paymentOperation.get().getAmount();
-      assetType = paymentOperation.get().getAssetType();
-      assetName = paymentOperation.get().getAsset().toString();
+    if (paymentOperation != null) {
+      id = paymentOperation.getId();
+      to = paymentOperation.getTo();
+      amount = fromXdrAmount(paymentOperation.getAmount());
+      assetType = AssetHelper.getAssetType(paymentOperation.getAsset());
+      assetName = AssetHelper.getSep11AssetName(paymentOperation.getAsset());
+      assetCode = AssetHelper.getAssetCode(assetName);
+      assetIssuer = AssetHelper.getAssetIssuer(assetName);
 
-      if (paymentOperation.get().getAsset() instanceof AssetTypeCreditAlphaNum) {
-        AssetTypeCreditAlphaNum issuedAsset =
-            (AssetTypeCreditAlphaNum) paymentOperation.get().getAsset();
-        assetCode = issuedAsset.getCode();
-        assetIssuer = issuedAsset.getIssuer();
-      } else if (paymentOperation.get().getAsset() instanceof AssetTypeNative) {
-        assetCode = paymentOperation.get().getAssetType(); // "native"
-      }
-
-      String sourceAccount =
-          paymentOperation.get().getSourceAccount() != null
-              ? paymentOperation.get().getSourceAccount()
-              : paymentOperation.get().getTransaction().getSourceAccount();
-      from =
-          paymentOperation.get().getFrom() != null
-              ? paymentOperation.get().getFrom()
-              : sourceAccount;
-      Memo memo = paymentOperation.get().getTransaction().getMemo();
+      String sourceAccount = ledgerTxn.getSourceAccount();
+      from = paymentOperation.getFrom() != null ? paymentOperation.getFrom() : sourceAccount;
+      Memo memo = Memo.fromXdr(ledgerTxn.getMemo());
 
       transactionMemo = MemoHelper.memoAsString(memo);
       transactionMemoType = MemoHelper.memoTypeAsString(memo);
-      transactionEnvelope = paymentOperation.get().getTransaction().getEnvelopeXdr();
+      transactionEnvelope = ledgerTxn.getEnvelopeXdr();
     }
 
     return CustodyPayment.builder()
@@ -116,7 +104,8 @@ public class CustodyPayment {
   }
 
   public static CustodyPayment fromPathPayment(
-      Optional<PathPaymentBaseOperationResponse> pathPaymentOperation,
+      LedgerTransaction ledgerTxn,
+      LedgerPathPaymentOperation operation,
       String externalTxId,
       Instant updatedAt,
       CustodyPaymentStatus status,
@@ -135,35 +124,25 @@ public class CustodyPayment {
     String transactionMemoType = null;
     String transactionEnvelope = null;
 
-    if (pathPaymentOperation.isPresent()) {
-      id = pathPaymentOperation.get().getId().toString();
-      to = pathPaymentOperation.get().getTo();
-      amount = pathPaymentOperation.get().getAmount();
-      assetType = pathPaymentOperation.get().getAssetType();
-      assetName = pathPaymentOperation.get().getAsset().toString();
-
-      if (pathPaymentOperation.get().getAsset() instanceof AssetTypeCreditAlphaNum) {
-        AssetTypeCreditAlphaNum issuedAsset =
-            (AssetTypeCreditAlphaNum) pathPaymentOperation.get().getAsset();
-        assetCode = issuedAsset.getCode();
-        assetIssuer = issuedAsset.getIssuer();
-      } else if (pathPaymentOperation.get().getAsset() instanceof AssetTypeNative) {
-        assetCode = pathPaymentOperation.get().getAssetType(); // "native"
-      }
+    if (operation != null) {
+      id = operation.getId();
+      to = operation.getTo();
+      amount = fromXdrAmount(operation.getAmount());
+      assetType = AssetHelper.getAssetType(operation.getAsset());
+      assetName = AssetHelper.getSep11AssetName(operation.getAsset());
+      assetCode = AssetHelper.getAssetCode(assetName);
+      assetIssuer = AssetHelper.getAssetIssuer(assetName);
 
       String sourceAccount =
-          pathPaymentOperation.get().getSourceAccount() != null
-              ? pathPaymentOperation.get().getSourceAccount()
-              : pathPaymentOperation.get().getTransaction().getSourceAccount();
-      from =
-          pathPaymentOperation.get().getFrom() != null
-              ? pathPaymentOperation.get().getFrom()
-              : sourceAccount;
-      Memo memo = pathPaymentOperation.get().getTransaction().getMemo();
+          operation.getSourceAccount() != null
+              ? operation.getSourceAccount()
+              : ledgerTxn.getSourceAccount();
+      from = operation.getFrom() != null ? operation.getFrom() : sourceAccount;
+      Memo memo = Memo.fromXdr(ledgerTxn.getMemo());
 
       transactionMemo = MemoHelper.memoAsString(memo);
       transactionMemoType = MemoHelper.memoTypeAsString(memo);
-      transactionEnvelope = pathPaymentOperation.get().getTransaction().getEnvelopeXdr();
+      transactionEnvelope = ledgerTxn.getEnvelopeXdr();
     }
 
     return CustodyPayment.builder()

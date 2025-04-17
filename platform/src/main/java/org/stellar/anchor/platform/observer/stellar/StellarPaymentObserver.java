@@ -25,10 +25,12 @@ import lombok.Data;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.exception.EventPublishException;
-import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.healthcheck.HealthCheckable;
+import org.stellar.anchor.ledger.Horizon;
+import org.stellar.anchor.ledger.LedgerTransaction;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.platform.config.PaymentObserverConfig;
 import org.stellar.anchor.platform.observer.ObservedPayment;
 import org.stellar.anchor.platform.observer.PaymentListener;
@@ -43,8 +45,6 @@ import org.stellar.sdk.requests.RequestBuilder;
 import org.stellar.sdk.requests.SSEStream;
 import org.stellar.sdk.responses.Page;
 import org.stellar.sdk.responses.operations.OperationResponse;
-import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
-import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 
 public class StellarPaymentObserver implements HealthCheckable {
   /** The maximum number of results the Stellar Blockchain can return. */
@@ -105,10 +105,7 @@ public class StellarPaymentObserver implements HealthCheckable {
 
     infoF("Starting the observer silence watcher");
     silenceWatcher.scheduleAtFixedRate(
-        this::checkSilence,
-        1,
-        config.getSilenceCheckInterval(),
-        TimeUnit.SECONDS); // TODO: The period should be made configurable in version 2.x
+        this::checkSilence, 1, config.getSilenceCheckInterval(), TimeUnit.SECONDS);
 
     infoF("Starting the status watcher");
     statusWatcher.scheduleWithFixedDelay(this::checkStatus, 1, 1, TimeUnit.SECONDS);
@@ -356,31 +353,23 @@ public class StellarPaymentObserver implements HealthCheckable {
       savePagingToken(operationResponse.getPagingToken());
       return;
     }
-
-    ObservedPayment observedPayment = null;
-    try {
-      if (operationResponse instanceof PaymentOperationResponse) {
-        PaymentOperationResponse payment = (PaymentOperationResponse) operationResponse;
-        observedPayment = ObservedPayment.fromPaymentOperationResponse(payment);
-      } else if (operationResponse instanceof PathPaymentBaseOperationResponse) {
-        PathPaymentBaseOperationResponse pathPayment =
-            (PathPaymentBaseOperationResponse) operationResponse;
-        observedPayment = ObservedPayment.fromPathPaymentOperationResponse(pathPayment);
-      }
-    } catch (SepException ex) {
-      if (operationResponse.getTransaction() != null) {
-        warn(
-            String.format(
-                "Payment of id %s contains unsupported memo %s.",
-                operationResponse.getId(), operationResponse.getTransaction().getMemo()));
-      }
-      warnEx(ex);
+    LedgerOperation ledgerOperation = Horizon.toLedgerOperation(operationResponse);
+    if (ledgerOperation == null) {
+      // The operation is not a payment operation. Ignore it.
+      return;
     }
-
-    if (observedPayment == null) {
-      savePagingToken(operationResponse.getPagingToken());
-    } else {
-      try {
+    LedgerTransaction ledgerTxn =
+        Horizon.toLedgerTransaction(server, operationResponse.getTransaction());
+    ObservedPayment observedPayment =
+        switch (ledgerOperation.getType()) {
+          case PAYMENT -> ObservedPayment.from(ledgerTxn, ledgerOperation.getPaymentOperation());
+          case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND ->
+              ObservedPayment.from(ledgerTxn, ledgerOperation.getPathPaymentOperation());
+          default ->
+              throw new IllegalStateException("Unexpected value: " + ledgerOperation.getType());
+        };
+    try {
+      if (observedPayment != null) {
         if (paymentObservingAccountsManager.lookupAndUpdate(observedPayment.getTo())) {
           for (PaymentListener listener : paymentListeners) {
             listener.onReceived(observedPayment);
@@ -393,21 +382,22 @@ public class StellarPaymentObserver implements HealthCheckable {
             listener.onSent(observedPayment);
           }
         }
-
         publishingBackoffTimer.reset();
         paymentStreamerCursorStore.save(operationResponse.getPagingToken());
-      } catch (EventPublishException ex) {
-        // restart the observer from where it stopped, in case the queue fails to
-        // publish the message.
-        errorEx("Failed to send event to payment listeners.", ex);
-        setStatus(PUBLISHER_ERROR);
-      } catch (TransactionException tex) {
-        errorEx("Cannot save the cursor to database", tex);
-        setStatus(DATABASE_ERROR);
-      } catch (Throwable t) {
-        errorEx("Something went wrong in the observer while sending the event", t);
-        setStatus(PUBLISHER_ERROR);
       }
+    } catch (EventPublishException ex) {
+      // restart the observer from where it stopped, in case the queue fails to
+      // publish the message.
+      errorEx("Failed to send event to payment listeners.", ex);
+      setStatus(PUBLISHER_ERROR);
+    } catch (TransactionException tex) {
+      errorEx("Cannot save the cursor to database", tex);
+      setStatus(DATABASE_ERROR);
+    } catch (Throwable t) {
+      errorEx("Something went wrong in the observer while sending the event", t);
+      setStatus(PUBLISHER_ERROR);
+    } finally {
+      savePagingToken(operationResponse.getPagingToken());
     }
   }
 
@@ -471,23 +461,12 @@ public class StellarPaymentObserver implements HealthCheckable {
   public HealthCheckResult check() {
     List<StreamHealth> results = new ArrayList<>();
 
-    HealthCheckStatus status;
-    switch (this.status) {
-      case STREAM_ERROR:
-      case SILENCE_ERROR:
-      case PUBLISHER_ERROR:
-      case DATABASE_ERROR:
-        status = YELLOW;
-        break;
-      case NEEDS_SHUTDOWN:
-      case SHUTDOWN:
-        status = RED;
-        break;
-      case RUNNING:
-      default:
-        status = GREEN;
-        break;
-    }
+    HealthCheckStatus status =
+        switch (this.status) {
+          case STREAM_ERROR, SILENCE_ERROR, PUBLISHER_ERROR, DATABASE_ERROR -> YELLOW;
+          case NEEDS_SHUTDOWN, SHUTDOWN -> RED;
+          default -> GREEN;
+        };
     StreamHealth.StreamHealthBuilder healthBuilder = StreamHealth.builder();
     healthBuilder.account(mapStreamToAccount.get(stream));
     // populate executorService information

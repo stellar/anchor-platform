@@ -9,7 +9,8 @@ import org.apache.commons.codec.binary.Hex;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.sdk.*;
-import org.stellar.sdk.xdr.MemoType;
+import org.stellar.sdk.Memo;
+import org.stellar.sdk.xdr.*;
 
 public class MemoHelper {
   public static String memoTypeAsString(MemoType memoType) {
@@ -123,6 +124,31 @@ public class MemoHelper {
       default:
         String memoTypeStr = memoTypeAsString(memo);
         throw new SepException("Unsupported value: " + memoTypeStr);
+    }
+  }
+
+  public static org.stellar.sdk.xdr.Memo toXdr(Memo memo) {
+    org.stellar.sdk.xdr.Memo memoXdr = new org.stellar.sdk.xdr.Memo();
+    if (memo == null || memo instanceof MemoNone) {
+      memoXdr.setDiscriminant(MemoType.MEMO_NONE);
+      return memoXdr;
+    } else if (memo instanceof MemoId) {
+      memoXdr.setDiscriminant(MemoType.MEMO_ID);
+      Uint64 idXdr = new Uint64(new XdrUnsignedHyperInteger(((MemoId) memo).getId()));
+      memoXdr.setId(idXdr);
+      return memoXdr;
+    } else if (memo instanceof MemoText) {
+      memoXdr.setDiscriminant(MemoType.MEMO_TEXT);
+      memoXdr.setText(new XdrString(((MemoText) memo).getText()));
+      return memoXdr;
+    } else if (memo instanceof MemoHash) {
+      memoXdr.setDiscriminant(MemoType.MEMO_HASH);
+      Hash hash = new Hash();
+      hash.setHash(((MemoHash) memo).getBytes());
+      memoXdr.setHash(hash);
+      return memoXdr;
+    } else {
+      throw new IllegalArgumentException(memo.toString());
     }
   }
 }
