@@ -26,7 +26,6 @@ import org.stellar.anchor.client.*
 import org.stellar.anchor.platform.AbstractIntegrationTests
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
-import org.stellar.anchor.platform.inject
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.StringHelper.json
 import org.stellar.sdk.KeyPair
@@ -371,7 +370,7 @@ class PlatformApiTests : AbstractIntegrationTests(TestConfig()) {
 
     val rpcTxn = platformApiClient.getTransactionByRpc(txId)
     JSONAssert.assertEquals(
-      EXPECTED_GET_TRANSACTION_BY_RPC_RESPONSE.inject(TX_ID_KEY, txId).trimIndent(),
+      inject(EXPECTED_GET_TRANSACTION_BY_RPC_RESPONSE, TX_ID_KEY to txId).trimIndent(),
       gson.toJson(rpcTxn),
       CustomComparator(
         JSONCompareMode.STRICT,
@@ -446,7 +445,7 @@ class PlatformApiTests : AbstractIntegrationTests(TestConfig()) {
     val response = platformApiClient.sendRpcRequest(listOf(rpcRequest))
     assertEquals(SC_OK, response.code)
     JSONAssert.assertEquals(
-      EXPECTED_RPC_RESPONSE.inject(TX_ID_KEY, txId),
+      inject(EXPECTED_RPC_RESPONSE, TX_ID_KEY to txId),
       response.body?.string()?.trimIndent(),
       CustomComparator(
         JSONCompareMode.STRICT,
@@ -494,7 +493,7 @@ class PlatformApiTests : AbstractIntegrationTests(TestConfig()) {
     assertEquals(SC_OK, response.code)
 
     JSONAssert.assertEquals(
-      EXPECTED_RPC_BATCH_RESPONSE.inject(TX_ID_KEY, txId),
+      inject(EXPECTED_RPC_BATCH_RESPONSE, TX_ID_KEY to txId),
       response.body?.string()?.trimIndent(),
       CustomComparator(
         JSONCompareMode.STRICT,
@@ -631,11 +630,11 @@ class PlatformApiTests : AbstractIntegrationTests(TestConfig()) {
   private fun `test flow`(txId: String, actionRequests: String, actionResponses: String) {
     val rpcActionRequestsType = object : TypeToken<List<RpcRequest>>() {}.type
     val rpcActionRequests: List<RpcRequest> =
-      gson.fromJson(actionRequests.inject(TX_ID_KEY, txId), rpcActionRequestsType)
+      gson.fromJson(inject(actionRequests, TX_ID_KEY to txId), rpcActionRequestsType)
 
     val rpcActionResponses = platformApiClient.sendRpcRequest(rpcActionRequests)
 
-    val expectedResult = actionResponses.inject(TX_ID_KEY, txId)
+    val expectedResult = inject(actionResponses, TX_ID_KEY to txId)
     val actualResult = rpcActionResponses.body?.string()?.trimIndent()
     JSONAssert.assertEquals(
       expectedResult,

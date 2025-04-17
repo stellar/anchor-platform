@@ -23,7 +23,6 @@ import org.stellar.anchor.client.Sep24Client
 import org.stellar.anchor.platform.AbstractIntegrationTests
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.gson
-import org.stellar.anchor.platform.inject
 import org.stellar.anchor.util.RSAUtil
 
 class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
@@ -49,7 +48,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
               return MockResponse()
                 .setResponseCode(200)
                 .setBody(
-                  CUSTODY_TRANSACTION_PAYMENT_RESPONSE.inject(CUSTODY_TX_ID_KEY, custodyTxnId)
+                  CUSTODY_TRANSACTION_PAYMENT_RESPONSE.replace(CUSTODY_TX_ID_KEY, custodyTxnId)
                 )
             }
             return MockResponse().setResponseCode(404)
@@ -69,7 +68,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
     CustodyApiClient(
       config.env["custody.server.url"]!!,
       token.token,
-      RSAUtil.generatePrivateKey(config.env["secret.custody.fireblocks.secret_key"])
+      RSAUtil.generatePrivateKey(config.env["secret.custody.fireblocks.secret_key"]),
     )
   private val sep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), token.token)
   private val platformApiClient =
@@ -80,7 +79,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
     val ex: SepException = assertThrows { custodyApiClient.generateDepositAddress("invalidAsset") }
     Assertions.assertEquals(
       "{\"error\":\"Unable to find Fireblocks asset code by Stellar asset code [invalidAsset]\"}",
-      ex.message
+      ex.message,
     )
 
     val depositAddressResponse =
@@ -90,7 +89,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
     JSONAssert.assertEquals(
       EXPECTED_DEPOSIT_ADDRESS,
       gson.toJson(depositAddressResponse),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     for (count in 1..custodyMockServer.requestCount) {
@@ -101,12 +100,12 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
       ) {
         Assertions.assertEquals(
           "//v1/vault/accounts/1/XLM_USDC_T_CEKS/addresses",
-          recordedRequest.path.toString()
+          recordedRequest.path.toString(),
         )
         JSONAssert.assertEquals(
           CUSTODY_DEPOSIT_ADDRESS_REQUEST,
           recordedRequest.body.readUtf8(),
-          JSONCompareMode.STRICT
+          JSONCompareMode.STRICT,
         )
       }
     }
@@ -122,8 +121,8 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
 
     custodyApiClient.createTransaction(
       gson.fromJson(
-        CUSTODY_TRANSACTION_REQUEST.inject(TX_ID_KEY, txId),
-        CreateCustodyTransactionRequest::class.java
+        inject(CUSTODY_TRANSACTION_REQUEST, TX_ID_KEY to txId),
+        CreateCustodyTransactionRequest::class.java,
       )
     )
 
@@ -132,7 +131,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
     requestOffchainFundsParams.transactionId = txId
     platformApiClient.sendRpcNotification(
       RpcMethod.REQUEST_OFFCHAIN_FUNDS,
-      requestOffchainFundsParams
+      requestOffchainFundsParams,
     )
 
     var txResponse = platformApiClient.getTransaction(txId)
@@ -141,12 +140,12 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
     val notifyOffchainFundsReceivedParams =
       gson.fromJson(
         NOTIFY_OFFCHAIN_FUNDS_RECEIVED_REQUEST,
-        NotifyOffchainFundsReceivedRequest::class.java
+        NotifyOffchainFundsReceivedRequest::class.java,
       )
     notifyOffchainFundsReceivedParams.transactionId = txId
     platformApiClient.sendRpcNotification(
       RpcMethod.NOTIFY_OFFCHAIN_FUNDS_RECEIVED,
-      notifyOffchainFundsReceivedParams
+      notifyOffchainFundsReceivedParams,
     )
 
     txResponse = platformApiClient.getTransaction(txId)
@@ -167,10 +166,10 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
         JSONAssert.assertEquals(
           CUSTODY_TRANSACTION_PAYMENT_REQUEST,
           recordedRequest.body.readUtf8(),
-          JSONCompareMode.STRICT
+          JSONCompareMode.STRICT,
         )
 
-        val webhookRequest = WEBHOOK_REQUEST.inject(CUSTODY_TX_ID_KEY, custodyTxnId)
+        val webhookRequest = inject(WEBHOOK_REQUEST, CUSTODY_TX_ID_KEY to custodyTxnId)
         custodyApiClient.sendWebhook(webhookRequest)
 
         txResponse = platformApiClient.getTransaction(txId)
@@ -178,13 +177,13 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
         txResponse.updatedAt = null
 
         JSONAssert.assertEquals(
-          EXPECTED_TRANSACTION_RESPONSE.inject(TX_ID_KEY, txId),
+          inject(EXPECTED_TRANSACTION_RESPONSE, TX_ID_KEY to txId),
           gson.toJson(txResponse),
           CustomComparator(
             JSONCompareMode.LENIENT,
             Customization("completed_at") { _, _ -> true },
-            Customization("stellar_transactions[0].created_at") { _, _ -> true }
-          )
+            Customization("stellar_transactions[0].created_at") { _, _ -> true },
+          ),
         )
         found = true
       }
@@ -213,7 +212,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
             return MockResponse()
               .setResponseCode(200)
               .setBody(
-                CUSTODY_TRANSACTION_REFUND_RESPONSE.inject(CUSTODY_TX_ID_KEY, refundCustodyTxnId)
+                inject(CUSTODY_TRANSACTION_REFUND_RESPONSE, CUSTODY_TX_ID_KEY to refundCustodyTxnId)
               )
           }
           return MockResponse().setResponseCode(404)
@@ -224,12 +223,12 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
 
     val requestOnchainFundsParams =
       gson.fromJson(
-        REQUEST_ONCHAIN_FUNDS_REQUEST.inject(TX_ID_KEY, txId),
-        RequestOnchainFundsRequest::class.java
+        inject(REQUEST_ONCHAIN_FUNDS_REQUEST, TX_ID_KEY to txId),
+        RequestOnchainFundsRequest::class.java,
       )
     platformApiClient.sendRpcNotification(
       RpcMethod.REQUEST_ONCHAIN_FUNDS,
-      requestOnchainFundsParams
+      requestOnchainFundsParams,
     )
 
     var txResponse = platformApiClient.getTransaction(txId)
@@ -237,12 +236,12 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
 
     val notifyOnchainFundsReceivedRequest =
       gson.fromJson(
-        NOTIFY_ONCHAIN_FUNDS_RECEIVED_REQUEST.inject(TX_ID_KEY, txId),
-        NotifyOnchainFundsReceivedRequest::class.java
+        inject(NOTIFY_ONCHAIN_FUNDS_RECEIVED_REQUEST, TX_ID_KEY to txId),
+        NotifyOnchainFundsReceivedRequest::class.java,
       )
     platformApiClient.sendRpcNotification(
       RpcMethod.NOTIFY_ONCHAIN_FUNDS_RECEIVED,
-      notifyOnchainFundsReceivedRequest
+      notifyOnchainFundsReceivedRequest,
     )
 
     txResponse = platformApiClient.getTransaction(txId)
@@ -250,15 +249,15 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
 
     val doStellarRefundParams =
       gson.fromJson(
-        DO_STELLAR_REFUND_REQUEST.inject(TX_ID_KEY, txId),
-        DoStellarRefundRequest::class.java
+        inject(DO_STELLAR_REFUND_REQUEST, TX_ID_KEY to txId),
+        DoStellarRefundRequest::class.java,
       )
     platformApiClient.sendRpcNotification(RpcMethod.DO_STELLAR_REFUND, doStellarRefundParams)
     txResponse = platformApiClient.getTransaction(txId)
     Assertions.assertEquals(SepTransactionStatus.PENDING_STELLAR, txResponse.status)
 
     custodyApiClient.sendWebhook(
-      REFUND_WEBHOOK_REQUEST.inject(CUSTODY_TX_ID_KEY, refundCustodyTxnId)
+      inject(REFUND_WEBHOOK_REQUEST, CUSTODY_TX_ID_KEY to refundCustodyTxnId)
     )
 
     txResponse = platformApiClient.getTransaction(txId)
@@ -266,13 +265,13 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
     txResponse.updatedAt = null
 
     JSONAssert.assertEquals(
-      EXPECTED_TXN_REFUND_RESPONSE.inject(TX_ID_KEY, txId),
+      inject(EXPECTED_TXN_REFUND_RESPONSE, TX_ID_KEY to txId),
       gson.toJson(txResponse),
       CustomComparator(
         JSONCompareMode.LENIENT,
         Customization("completed_at") { _, _ -> true },
-        Customization("stellar_transactions[0].created_at") { _, _ -> true }
-      )
+        Customization("stellar_transactions[0].created_at") { _, _ -> true },
+      ),
     )
   }
 }
