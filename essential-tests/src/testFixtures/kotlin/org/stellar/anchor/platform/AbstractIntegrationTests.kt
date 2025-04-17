@@ -32,15 +32,17 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
     const val SENDER_ID_KEY = "%SENDER_ID%"
 
     // the test payment values
-    const val TEST_PAYMENT_MEMO = "22bf7341574e4b1082516a2e84a8"
-    const val TEST_PAYMENT_DEST_ACCOUNT = "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
-    const val TEST_PAYMENT_ASSET_CIRCLE_USDC =
+    private const val TEST_PAYMENT_MEMO = "22bf7341574e4b1082516a2e84a8"
+    private const val TEST_PAYMENT_DEST_ACCOUNT =
+      "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
+    private const val TEST_PAYMENT_ASSET_CIRCLE_USDC =
       "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
 
     // custody deposit address
-    const val CUSTODY_DEST_ACCOUNT = "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
+    private const val CUSTODY_DEST_ACCOUNT =
+      "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
 
-    lateinit var testPaymentValues: List<Pair<String, String>>
+    private lateinit var testPaymentValues: List<Pair<String, String>>
 
     fun inject(target: String, vararg replacements: Pair<String, String>): String {
       var result = target
@@ -81,7 +83,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
                 Pair("%TESTPAYMENT_SRC_ACCOUNT%", payment.from),
                 Pair("%TESTPAYMENT_DEST_ACCOUNT%", payment.to),
                 Pair("%TESTPAYMENT_ASSET_CIRCLE_USDC%", TEST_PAYMENT_ASSET_CIRCLE_USDC),
-                Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT),
+                Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT)
               )
 
             return
@@ -108,7 +110,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
   var wallet =
     Wallet(
       StellarConfiguration.Testnet,
-      ApplicationConfiguration { defaultRequest { url { protocol = URLProtocol.HTTP } } },
+      ApplicationConfiguration { defaultRequest { url { protocol = URLProtocol.HTTP } } }
     )
   var walletKeyPair = SigningKeyPair.fromSecret(CLIENT_WALLET_SECRET)
   var anchor = wallet.anchor(config.env["anchor.domain"]!!)
@@ -119,7 +121,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
   suspend fun transactionWithRetry(
     maxAttempts: Int = 5,
     delay: Int = 5,
-    transactionLogic: suspend () -> Unit,
+    transactionLogic: suspend () -> Unit
   ) =
     flow<Unit> { submissionLock.withLock { transactionLogic() } }
       .retryWhen { _, attempt ->
