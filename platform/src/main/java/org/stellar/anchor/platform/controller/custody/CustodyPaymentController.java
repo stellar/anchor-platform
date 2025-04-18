@@ -28,7 +28,8 @@ public class CustodyPaymentController {
       value = "/assets/{assetId}/addresses",
       produces = {MediaType.APPLICATION_JSON_VALUE},
       method = {RequestMethod.POST})
-  public GenerateDepositAddressResponse generateDepositAddress(@PathVariable String assetId)
+  public GenerateDepositAddressResponse generateDepositAddress(
+      @PathVariable(name = "assetId") String assetId)
       throws CustodyException, InvalidConfigException {
     return custodyPaymentService.generateDepositAddress(assetId);
   }

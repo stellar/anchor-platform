@@ -10,3 +10,4 @@ target/
 */generated/*
 *.tgz
 .vscode
+.env

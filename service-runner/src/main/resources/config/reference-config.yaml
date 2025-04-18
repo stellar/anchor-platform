@@ -12,7 +12,6 @@ app:
   distributionWallet: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
   distributionWalletMemo:
   distributionWalletMemoType:
-  paymentSigningSeed: SAJW2O2NH5QMMVWYAN352OEXS2RUY675A2HPK5HEG2FRR2NXPYA4OLYN
   # When true, enables test endpoints
   enableTest: true
   # Indicates, that custody integration is enabled

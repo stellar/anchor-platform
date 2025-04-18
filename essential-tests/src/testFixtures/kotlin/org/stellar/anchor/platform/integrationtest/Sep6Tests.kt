@@ -8,14 +8,16 @@ import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
 import org.stellar.anchor.platform.AbstractIntegrationTests
-import org.stellar.anchor.platform.CLIENT_WALLET_ACCOUNT
 import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.gson
 import org.stellar.anchor.util.Log
+import org.stellar.sdk.KeyPair
 
 class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
   private val sep6Client = Sep6Client(toml.getString("TRANSFER_SERVER"), token.token)
   private val sep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
+  private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
 
   @Test
   fun `test Sep6 info endpoint`() {
@@ -28,9 +30,9 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
     val request =
       mapOf(
         "asset_code" to "USDC",
-        "account" to CLIENT_WALLET_ACCOUNT,
+        "account" to clientWalletAccount,
         "amount" to "1",
-        "type" to "SWIFT"
+        "type" to "SWIFT",
       )
     val response = sep6Client.deposit(request)
     Log.info("GET /deposit response: $response")
@@ -40,7 +42,7 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedSep6DepositResponse,
       gson.toJson(savedDepositTxn),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     Assertions.assertNotNull(savedDepositTxn.transaction.moreInfoUrl)
   }
@@ -52,8 +54,8 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
         "destination_asset" to "USDC",
         "source_asset" to "iso4217:USD",
         "amount" to "1",
-        "account" to CLIENT_WALLET_ACCOUNT,
-        "type" to "SWIFT"
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
       )
 
     val response = sep6Client.deposit(request, exchange = true)
@@ -64,7 +66,7 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedSep6DepositExchangeResponse,
       gson.toJson(savedDepositTxn),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -74,16 +76,16 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
       postQuote(
         "iso4217:USD",
         "10",
-        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       )
     val request =
       mapOf(
         "destination_asset" to "USDC",
         "source_asset" to "iso4217:USD",
         "amount" to "10",
-        "account" to CLIENT_WALLET_ACCOUNT,
+        "account" to clientWalletAccount,
         "type" to "SWIFT",
-        "quote_id" to quoteId
+        "quote_id" to quoteId,
       )
 
     val response = sep6Client.deposit(request, exchange = true)
@@ -94,7 +96,7 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedSep6DepositExchangeWithQuoteResponse,
       gson.toJson(savedDepositTxn),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     Assertions.assertNotNull(savedDepositTxn.transaction.moreInfoUrl)
   }
@@ -110,7 +112,7 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedSep6WithdrawResponse,
       gson.toJson(savedWithdrawTxn),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     Assertions.assertNotNull(savedWithdrawTxn.transaction.moreInfoUrl)
   }
@@ -122,7 +124,7 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
         "destination_asset" to "iso4217:USD",
         "source_asset" to "USDC",
         "amount" to "1",
-        "type" to "bank_account"
+        "type" to "bank_account",
       )
 
     val response = sep6Client.withdraw(request, exchange = true)
@@ -133,7 +135,7 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedSep6WithdrawExchangeResponse,
       gson.toJson(savedDepositTxn),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
   }
 
@@ -143,7 +145,7 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
       postQuote(
         "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
         "10",
-        "iso4217:USD"
+        "iso4217:USD",
       )
     val request =
       mapOf(
@@ -151,7 +153,7 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
         "source_asset" to "USDC",
         "amount" to "10",
         "type" to "bank_account",
-        "quote_id" to quoteId
+        "quote_id" to quoteId,
       )
 
     val response = sep6Client.withdraw(request, exchange = true)
@@ -162,7 +164,7 @@ class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
     JSONAssert.assertEquals(
       expectedSep6WithdrawExchangeWithQuoteResponse,
       gson.toJson(savedWithdrawTxn),
-      JSONCompareMode.LENIENT
+      JSONCompareMode.LENIENT,
     )
     Assertions.assertNotNull(savedWithdrawTxn.transaction.moreInfoUrl)
   }
