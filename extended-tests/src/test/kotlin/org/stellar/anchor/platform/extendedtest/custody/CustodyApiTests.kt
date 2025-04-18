@@ -577,7 +577,7 @@ private const val EXPECTED_TXN_REFUND_RESPONSE =
   "message": "test message",
   "refunds": {
     "amount_refunded": {
-      "amount": "1",
+      "amount": "0.0001",
       "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
     },
     "amount_fee": {
