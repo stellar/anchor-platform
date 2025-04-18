@@ -2739,7 +2739,7 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
           "payments": [
             {
               "amount": {
-                "amount": "0.0001000",
+                "amount": "0.0002000",
                 "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
               },
               "payment_type": "payment",
