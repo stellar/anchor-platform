@@ -562,7 +562,7 @@ private const val EXPECTED_TXN_REFUND_RESPONSE =
     "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
   },
   "amount_in": {
-    "amount": "1",
+    "amount": "0.0001",
     "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
   },
   "amount_out": {
