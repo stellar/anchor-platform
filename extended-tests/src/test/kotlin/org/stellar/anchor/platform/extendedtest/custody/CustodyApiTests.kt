@@ -558,26 +558,26 @@ private const val EXPECTED_TXN_REFUND_RESPONSE =
   "kind": "withdrawal",
   "status": "refunded",
   "amount_expected": {
-    "amount": "1",
+    "amount": "0.0002",
     "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
   },
   "amount_in": {
-    "amount": "1",
+    "amount": "0.0002",
     "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
   },
   "amount_out": {
-    "amount": "99.5",
+    "amount": "0.0001",
     "asset": "iso4217:USD"
   },
   "fee_details": {
-    "total": "0.5",
+    "total": "0.0001",
     "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
   },
   "completed_at": "2023-08-08T14:07:28.799297Z",
   "message": "test message",
   "refunds": {
     "amount_refunded": {
-      "amount": "0.0001",
+      "amount": "0.0002",
       "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
     },
     "amount_fee": {
@@ -673,19 +673,19 @@ private const val REQUEST_ONCHAIN_FUNDS_REQUEST =
     "transaction_id": "%TX_ID%",
     "message": "test message 1",
     "amount_in": {
-      "amount": "1",
+      "amount": "0.0002",
       "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
     },
     "amount_out": {
-      "amount": "99.5",
+      "amount": "0.0001",
       "asset": "iso4217:USD"
     },
     "fee_details": {
-      "total": "0.5",
+      "total": "0.0001",
       "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
     },
     "amount_expected": {
-      "amount": "1"
+      "amount": "0.0002"
     }
   }
 """
@@ -706,7 +706,7 @@ private const val DO_STELLAR_REFUND_REQUEST =
     "message": "test message",
     "refund": {
         "amount": {
-            "amount": 1,
+            "amount": 0.0001,
             "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
         },
         "amount_fee": {

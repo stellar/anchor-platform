@@ -155,7 +155,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
             .sourceAccount(sourceKey.accountId)
             .destination(TEST_PAYMENT_DEST_ACCOUNT)
             .asset(usdcAsset)
-            .amount(BigDecimal("0.0001"))
+            .amount(BigDecimal("0.0002"))
             .build()
         )
         .addMemo(Memo.text(TEST_PAYMENT_MEMO)) // Add memo
