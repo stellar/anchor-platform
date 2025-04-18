@@ -25,8 +25,8 @@ import org.stellar.anchor.client.Sep12Client
 import org.stellar.anchor.client.Sep31Client
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.platform.AbstractIntegrationTests
-import org.stellar.anchor.platform.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.integrationtest.Sep12Tests.Companion.testCustomer1Json
 import org.stellar.anchor.platform.integrationtest.Sep12Tests.Companion.testCustomer2Json
 import org.stellar.anchor.util.GsonUtils

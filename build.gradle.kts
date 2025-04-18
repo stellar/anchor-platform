@@ -8,7 +8,6 @@ plugins {
   `java-test-fixtures`
   alias(libs.plugins.spotless)
   alias(libs.plugins.kotlin.jvm) apply false
-  jacoco
 }
 
 // *******************************************************************************
@@ -39,11 +38,11 @@ fun isPortActive(host: String = "localhost", port: Int): Boolean {
 }
 
 // The build task executed at GitHub Actions. This task is used to build the project and run the
-// unit tests. The task is also used to generate the Jacoco test report.
+// unit tests.
 tasks.register("runBuild") {
   group = "github"
-  description = "Build the project, run jacocoTestReport, and skip specific tasks."
-  dependsOn("clean", "build", "jacocoTestReport")
+  description = "Build the project, and skip specific tasks."
+  dependsOn("clean", "build")
   subprojects {
     if (name == "essential-tests" || name == "extended-tests") {
       tasks.named("test") { enabled = false }
@@ -99,7 +98,6 @@ tasks { build { dependsOn("updateGitHook") } }
 subprojects {
   apply(plugin = "java")
   apply(plugin = "com.diffplug.spotless")
-  apply(plugin = "jacoco")
   apply(plugin = "java-test-fixtures")
 
   repositories {
@@ -121,15 +119,6 @@ subprojects {
     }
 
     kotlin { ktfmt("0.42").googleStyle() }
-
-    tasks.jacocoTestReport {
-      dependsOn(tasks.test) // tests are required to run before generating the report
-      reports {
-        xml.required.set(true)
-        csv.required.set(false)
-        html.required.set(false)
-      }
-    }
   }
 
   dependencies {
@@ -216,7 +205,7 @@ subprojects {
 
 allprojects {
   group = "org.stellar.anchor-sdk"
-  version = "3.0.2"
+  version = "3.1.0"
 
   tasks.jar {
     manifest {

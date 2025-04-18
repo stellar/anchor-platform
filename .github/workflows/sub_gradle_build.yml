@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest-16-cores
     permissions:
       contents: read
-      # write to PR  permission is required for jacocoTestReport Action to update comment
       pull-requests: write
     steps:
       - name: Checkout the repository

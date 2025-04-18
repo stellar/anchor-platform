@@ -57,4 +57,8 @@ class TestConfig {
     }
     return env
   }
+
+  fun get(key: String): String? {
+    return env[key]
+  }
 }

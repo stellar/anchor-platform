@@ -21,13 +21,24 @@ public class Sep24Helper {
 
   static void setSharedTransactionResponseFields(TransactionResponse txnR, Sep24Transaction txn) {
     txnR.setId(txn.getTransactionId());
+    if (txn.getAmountIn() != null) txnR.setAmountIn(txn.getAmountIn());
+    if (txn.getAmountInAsset() != null) txnR.setAmountInAsset(txn.getAmountInAsset());
+    if (txn.getAmountOut() != null) txnR.setAmountOut(txn.getAmountOut());
+    if (txn.getAmountOutAsset() != null) txnR.setAmountOutAsset(txn.getAmountOutAsset());
     if (txn.getFromAccount() != null) txnR.setFrom(txn.getFromAccount());
     if (txn.getToAccount() != null) txnR.setTo(txn.getToAccount());
     if (txn.getStartedAt() != null) txnR.setStartedAt(txn.getStartedAt());
     if (txn.getCompletedAt() != null) txnR.setCompletedAt(txn.getCompletedAt());
+    if (txn.getFeeDetails() != null) txnR.setFeeDetails(txn.getFeeDetails());
     if (txn.getQuoteId() != null) txnR.setQuoteId(txn.getQuoteId());
     if (txn.getUserActionRequiredBy() != null)
       txnR.setUserActionRequiredBy(txn.getUserActionRequiredBy());
+    if (txn.getStellarTransactionId() != null)
+      txnR.setStellarTransactionId(txn.getStellarTransactionId());
+    if (txn.getExternalTransactionId() != null)
+      txnR.setExternalTransactionId(txn.getExternalTransactionId());
+    if (txn.getMessage() != null) txnR.setMessage(txn.getMessage());
+    if (txn.getRefunded() != null) txnR.setRefunded(txn.getRefunded());
   }
 
   static TransactionResponse updateRefundInfo(

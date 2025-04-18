@@ -7,6 +7,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_ASSET
 import org.stellar.anchor.TestConstants.Companion.TEST_ASSET_ISSUER_ACCOUNT_ID
 import org.stellar.anchor.TestConstants.Companion.TEST_OFFCHAIN_ASSET
 import org.stellar.anchor.TestConstants.Companion.TEST_QUOTE_ID
+import org.stellar.anchor.api.shared.FeeDescription
 
 fun createTestTransactionRequest(quoteID: String? = null): MutableMap<String, String> {
   val request =
@@ -44,7 +45,12 @@ fun createTestTransaction(kind: String): Sep24Transaction {
   txn.clientDomain = TestConstants.TEST_CLIENT_DOMAIN
   txn.protocol = "sep24"
   txn.amountIn = "321.4"
-  txn.amountOut = "321.4"
+  txn.amountInAsset = TEST_OFFCHAIN_ASSET
+  txn.amountOut = "320.4"
+  txn.amountOutAsset = TEST_ASSET
+  txn.amountFee = "1"
+  txn.amountFeeAsset = TEST_OFFCHAIN_ASSET
+  txn.feeDetailsList = listOf(FeeDescription("service_fee", "1"))
 
   return txn
 }
@@ -67,7 +73,9 @@ fun createTestTransactions(kind: String): MutableList<Sep24Transaction> {
   txn.clientDomain = TestConstants.TEST_CLIENT_DOMAIN
   txn.protocol = "sep24"
   txn.amountIn = "321.4"
-  txn.amountOut = "321.4"
+  txn.amountOut = "320.4"
+  txn.amountFee = "1"
+  txn.feeDetailsList = listOf(FeeDescription("service_fee", "1"))
   txn.quoteId = TEST_QUOTE_ID
   txns.add(txn)
 
@@ -86,7 +94,9 @@ fun createTestTransactions(kind: String): MutableList<Sep24Transaction> {
   txn.clientDomain = TestConstants.TEST_CLIENT_DOMAIN
   txn.protocol = "sep24"
   txn.amountIn = "456.7"
-  txn.amountOut = "456.7"
+  txn.amountOut = "455.7"
+  txn.amountFee = "1"
+  txn.feeDetailsList = listOf(FeeDescription("service_fee", "1"))
   txn.quoteId = TEST_QUOTE_ID
   txns.add(txn)
 

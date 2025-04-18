@@ -89,6 +89,15 @@ communicate with each other.
 127.0.0.1 host.docker.internal
 ```
 
+## Set up your .env file
+
+Create a `.env` using the `.env.example` file as a template. The `.env` file should be placed in the root directory of
+the project. This file contains the secrets and configurations needed to run the Anchor Platform locally.
+
+```shell
+cp .env.example .env
+```
+
 ## Build the Project with Gradle
 
 This project is wrapped with Gradle version `8.2.1`. You can use the Gradle wrapper to build the project.
@@ -158,26 +167,27 @@ The project is mostly developed with IntelliJ, therefore we will only cover the 
     git clone git@github.com:stellar/anchor-platform.git
     ```
 2. Install IntelliJ
-3. Install and configure `google-java-format`
+3. Install and configure [`google-java-format`](https://plugins.jetbrains.com/plugin/8527-google-java-format)
     1. File -> Settings -> Plugins -> Marketplace -> Search for `google-java-format` -> Install
     2. File -> Settings -> google-java-format -> Check `Enable google-java-format` and
        choose `Default Google Java Style` -> Apply
-4. Install and configure `ktfmt`
+4. Install and configure [`ktfmt`](https://plugins.jetbrains.com/plugin/14912-ktfmt)
     1. File -> Settings -> Plugins -> Marketplace -> Search for `ktfmt` -> Install
     2. File -> Settings -> Editor -> ktfmt -> Check `Enable ktfmt` and choose `Google (internal)` -> Apply
-5. Use IntelliJ to open as a Gradle project:
+5. Instant and configure [`EnvFile`](https://plugins.jetbrains.com/plugin/7861-envfile)
+6. Use IntelliJ to open as a Gradle project:
     1. Launch IntelliJ
     2. File -> Open, choose the folder `anchor-platform` where you cloned the repository.
     3. When asked, choose `Open as Project`.
     4. IntelliJ will parse Gradle buildscript `build.gradle.kts` file and configure the project accordingly.
-6. Configure Gradle to build & run using IntelliJ IDEA:
+7. Configure Gradle to build & run using IntelliJ IDEA:
     1. Go to `Preferences -> Build, Execution, Deployment -> Build Tools -> Gradle`.
     2. Configure `Build and run using` to IntellliJ IDEA.
     3. Configure `Run tests using` to IntellliJ IDEA.
 
    ![configure-intellij-gradle.png](/docs/resources/img/configure-intellij-gradle.png)
 
-7. Refresh the project using Gradle's new configuration:
+8. Refresh the project using Gradle's new configuration:
     1. Open Gradle tool window: `View -> Tool Windows -> Gradle`
     2. Click the `Reload All Gradle Projects` button.
 

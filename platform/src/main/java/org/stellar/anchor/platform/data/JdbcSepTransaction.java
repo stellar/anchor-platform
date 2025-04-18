@@ -55,8 +55,8 @@ public abstract class JdbcSepTransaction {
   @Column(name = "amount_fee_asset")
   String amountFeeAsset;
 
-  @SerializedName("fee_details")
-  @Column(name = "fee_details")
+  @SerializedName("fee_details_list")
+  @Column(name = "fee_details_list")
   @JdbcTypeCode(SqlTypes.JSON)
   List<FeeDescription> feeDetailsList;
 

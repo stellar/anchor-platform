@@ -26,6 +26,11 @@ the [How to set up the development environment](A%20-%20Development%20Environmen
 
 Check out the [Git Guidelines](B%20-%20Git%20Guidelines.md) guide.
 
+## Secret Management
+
+Do not check in secrets into the repository. This includes passwords, API keys or Stellar private keys. If you need
+to add any secrets, update your local `.env` file and the `.env.example` describing the new secret.
+
 ## Logging Guidelines
 
 When contributing code, think twice about a given log message because not every bit of information is equally important.

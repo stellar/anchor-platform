@@ -32,6 +32,8 @@ import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.exception.*
 import org.stellar.anchor.api.sep.sep24.GetTransactionRequest
 import org.stellar.anchor.api.sep.sep24.GetTransactionsRequest
+import org.stellar.anchor.api.shared.FeeDescription
+import org.stellar.anchor.api.shared.FeeDetails
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.JwtService
@@ -57,6 +59,7 @@ internal class Sep24ServiceTest {
     const val TEST_SEP24_MORE_INFO_URL = "https://test-anchor.stellar.org/more_info_url"
     val TEST_STARTED_AT: Instant = Instant.now()
     val TEST_COMPLETED_AT: Instant = Instant.now().plusSeconds(100)
+    val TEST_FEE_DETAILS = FeeDetails("1", null, listOf(FeeDescription("service_fee", "1")))
     val DEPOSIT_QUOTE_JSON =
       """
        {
@@ -576,6 +579,7 @@ internal class Sep24ServiceTest {
     assertEquals(response.transactions[0].startedAt, TEST_STARTED_AT)
     assertEquals(response.transactions[0].completedAt, TEST_COMPLETED_AT)
     assertEquals(response.transactions[0].quoteId, TEST_QUOTE_ID)
+    assertEquals(response.transactions[0].feeDetails, TEST_FEE_DETAILS)
 
     assertEquals(response.transactions[1].id, TEST_TRANSACTION_ID_1)
     assertEquals(response.transactions[1].status, "completed")
@@ -583,6 +587,7 @@ internal class Sep24ServiceTest {
     assertEquals(response.transactions[1].startedAt, TEST_STARTED_AT)
     assertEquals(response.transactions[1].completedAt, TEST_COMPLETED_AT)
     assertEquals(response.transactions[1].quoteId, TEST_QUOTE_ID)
+    assertEquals(response.transactions[0].feeDetails, TEST_FEE_DETAILS)
   }
 
   @ParameterizedTest
@@ -626,16 +631,25 @@ internal class Sep24ServiceTest {
   @ParameterizedTest
   @ValueSource(strings = ["deposit", "withdrawal"])
   fun `test find one transaction`(kind: String) {
-    every { txnStore.findByTransactionId(any()) } returns createTestTransaction(kind)
+    val testTxn = createTestTransaction(kind)
+    every { txnStore.findByTransactionId(any()) } returns testTxn
 
     var gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
     val response = sep24Service.findTransaction(createTestSep10JwtToken(), gtr)
 
-    assertEquals(TEST_TRANSACTION_ID_0, response.transaction.id)
+    assertEquals(testTxn.transactionId, response.transaction.id)
     assertEquals("incomplete", response.transaction.status)
-    assertEquals(kind, response.transaction.kind)
-    assertEquals(TEST_STARTED_AT, response.transaction.startedAt)
-    assertEquals(TEST_COMPLETED_AT, response.transaction.completedAt)
+    assertEquals(testTxn.kind, response.transaction.kind)
+    assertEquals(testTxn.amountIn, response.transaction.amountIn)
+    assertEquals(testTxn.amountInAsset, response.transaction.amountInAsset)
+    assertEquals(testTxn.amountOut, response.transaction.amountOut)
+    assertEquals(testTxn.amountOutAsset, response.transaction.amountOutAsset)
+    assertEquals(testTxn.fromAccount, response.transaction.from)
+    assertEquals(testTxn.toAccount, response.transaction.to)
+    assertEquals(testTxn.feeDetails, response.transaction.feeDetails)
+    assertEquals(testTxn.startedAt, response.transaction.startedAt)
+    assertEquals(testTxn.completedAt, response.transaction.completedAt)
+
     verify(exactly = 1) { txnStore.findByTransactionId(TEST_TRANSACTION_ID_0) }
 
     // test with stellar transaction_id

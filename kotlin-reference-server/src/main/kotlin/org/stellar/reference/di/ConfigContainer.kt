@@ -1,12 +1,16 @@
 package org.stellar.reference.di
 
-import com.sksamuel.hoplite.*
+import com.sksamuel.hoplite.ConfigLoaderBuilder
+import com.sksamuel.hoplite.PropertySource
+import com.sksamuel.hoplite.addFileSource
+import com.sksamuel.hoplite.addMapSource
 import org.stellar.reference.data.Config
 import org.stellar.reference.data.LocationConfig
 import org.stellar.reference.dotToCamelCase
 
 class ConfigContainer(envMap: Map<String, String>?) {
   var config: Config = readCfg(envMap)
+
   companion object {
     const val KT_REFERENCE_SERVER_CONFIG = "kt.reference.server.config"
 

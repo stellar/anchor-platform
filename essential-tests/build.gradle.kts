@@ -12,6 +12,7 @@ dependencies {
   testFixturesImplementation(libs.assertj.core)
   testFixturesImplementation(libs.httpclient)
   testFixturesImplementation(libs.kotlin.serialization.json)
+  testFixturesImplementation(libs.dotenv)
 
   // Stellar dependencies
   testFixturesImplementation(libs.stellar.wallet.sdk)
