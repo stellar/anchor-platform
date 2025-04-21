@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestMethodOrder
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest
-import org.stellar.anchor.platform.inject
 import org.stellar.anchor.util.GsonUtils
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
@@ -54,11 +53,17 @@ class Sep31PlatformApiTests : PlatformApiTests() {
     val senderCustomer = sep12Client.putCustomer(senderCustomerRequest)
 
     val receiveRequestJson =
-      SEP_31_RECEIVE_FLOW_REQUEST.inject(RECEIVER_ID_KEY, receiverCustomer!!.id)
-        .inject(SENDER_ID_KEY, senderCustomer!!.id)
+      inject(
+        SEP_31_RECEIVE_FLOW_REQUEST,
+        RECEIVER_ID_KEY to receiverCustomer!!.id,
+        SENDER_ID_KEY to senderCustomer!!.id,
+      )
 
-    SEP_31_RECEIVE_FLOW_REQUEST.inject(RECEIVER_ID_KEY, receiverCustomer.id)
-      .inject(SENDER_ID_KEY, senderCustomer.id)
+    inject(
+      SEP_31_RECEIVE_FLOW_REQUEST,
+      RECEIVER_ID_KEY to receiverCustomer.id,
+      SENDER_ID_KEY to senderCustomer.id,
+    )
     val receiveRequest = gson.fromJson(receiveRequestJson, Sep31PostTransactionRequest::class.java)
     val receiveResponse = sep31Client.postTransaction(receiveRequest)
 
@@ -73,13 +78,17 @@ class Sep31PlatformApiTests : PlatformApiTests() {
     }
 
     val updatedActionRequests =
-      actionRequests
-        .inject(RECEIVER_ID_KEY, receiverCustomer.id)
-        .inject(SENDER_ID_KEY, senderCustomer.id)
+      inject(
+        actionRequests,
+        RECEIVER_ID_KEY to receiverCustomer.id,
+        SENDER_ID_KEY to senderCustomer.id,
+      )
     val updatedActionResponses =
-      actionResponses
-        .inject(RECEIVER_ID_KEY, receiverCustomer.id)
-        .inject(SENDER_ID_KEY, senderCustomer.id)
+      inject(
+        actionResponses,
+        RECEIVER_ID_KEY to receiverCustomer.id,
+        SENDER_ID_KEY to senderCustomer.id,
+      )
 
     `test flow`(receiveResponse.id, updatedActionRequests, updatedActionResponses)
   }
