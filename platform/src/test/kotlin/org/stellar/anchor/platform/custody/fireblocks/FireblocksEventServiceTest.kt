@@ -18,6 +18,7 @@ import org.stellar.anchor.api.custody.fireblocks.TransactionDetails
 import org.stellar.anchor.api.custody.fireblocks.TransactionStatus
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.InvalidConfigException
+import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.*
 import org.stellar.anchor.platform.config.FireblocksConfig
@@ -40,6 +41,8 @@ import org.stellar.sdk.responses.Page
 import org.stellar.sdk.responses.operations.OperationResponse
 import org.stellar.sdk.responses.operations.PathPaymentStrictReceiveOperationResponse
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.sdk.xdr.*
+import org.stellar.sdk.xdr.MemoType.MEMO_ID
 
 class FireblocksEventServiceTest {
 
@@ -50,7 +53,8 @@ class FireblocksEventServiceTest {
   private lateinit var sep6CustodyPaymentHandler: Sep6CustodyPaymentHandler
   private lateinit var sep24CustodyPaymentHandler: Sep24CustodyPaymentHandler
   private lateinit var sep31CustodyPaymentHandler: Sep31CustodyPaymentHandler
-  private lateinit var horizon: Horizon
+  //  private lateinit var horizon: Horizon
+  private lateinit var ledgerClient: LedgerClient
   private lateinit var server: Server
   private lateinit var paymentsRequestBuilder: PaymentsRequestBuilder
   private lateinit var page: Page<OperationResponse>
@@ -62,7 +66,8 @@ class FireblocksEventServiceTest {
     sep6CustodyPaymentHandler = mockk()
     sep24CustodyPaymentHandler = mockk()
     sep31CustodyPaymentHandler = mockk()
-    horizon = mockk()
+    //    horizon = mockk()
+    ledgerClient = mockk()
     server = mockk()
     paymentsRequestBuilder = mockk()
     page = mockk()
@@ -78,7 +83,7 @@ class FireblocksEventServiceTest {
         sep6CustodyPaymentHandler,
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
-        horizon,
+        ledgerClient,
         config
       )
 
@@ -310,7 +315,7 @@ class FireblocksEventServiceTest {
         sep6CustodyPaymentHandler,
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
-        horizon,
+        ledgerClient,
         config
       )
 
@@ -341,7 +346,7 @@ class FireblocksEventServiceTest {
           sep6CustodyPaymentHandler,
           sep24CustodyPaymentHandler,
           sep31CustodyPaymentHandler,
-          horizon,
+          ledgerClient,
           config
         )
       }
@@ -358,7 +363,7 @@ class FireblocksEventServiceTest {
         sep6CustodyPaymentHandler,
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
-        horizon,
+        ledgerClient,
         config
       )
 
@@ -380,7 +385,7 @@ class FireblocksEventServiceTest {
         sep6CustodyPaymentHandler,
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
-        horizon,
+        ledgerClient,
         config
       )
 
@@ -402,7 +407,7 @@ class FireblocksEventServiceTest {
         sep6CustodyPaymentHandler,
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
-        horizon,
+        ledgerClient,
         config
       )
 
@@ -425,7 +430,7 @@ class FireblocksEventServiceTest {
         sep6CustodyPaymentHandler,
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
-        horizon,
+        ledgerClient,
         config
       )
 

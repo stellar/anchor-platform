@@ -25,6 +25,7 @@ import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
+import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.*;
 import org.stellar.anchor.platform.validator.RequestValidator;
@@ -38,7 +39,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
   private final CustodyService custodyService;
   private final CustodyConfig custodyConfig;
   private final JdbcTransactionPendingTrustRepo transactionPendingTrustRepo;
-  private final Horizon horizon;
+  private final LedgerClient ledgerClient;
 
   public DoStellarPaymentHandler(
       Sep6TransactionStore txn6Store,
@@ -46,7 +47,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
       CustodyConfig custodyConfig,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       AssetService assetService,
       CustodyService custodyService,
       EventService eventService,
@@ -63,7 +64,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
         DoStellarPaymentRequest.class);
     this.custodyService = custodyService;
     this.custodyConfig = custodyConfig;
-    this.horizon = horizon;
+    this.ledgerClient = ledgerClient;
     this.transactionPendingTrustRepo = transactionPendingTrustRepo;
   }
 

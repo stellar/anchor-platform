@@ -20,6 +20,8 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.exception.SepException;
+import org.stellar.anchor.ledger.LedgerClient;
+import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.platform.config.FireblocksConfig;
 import org.stellar.anchor.platform.custody.*;
 import org.stellar.anchor.platform.data.JdbcCustodyTransactionRepo;
@@ -109,7 +111,7 @@ public class FireblocksEventService extends CustodyEventService {
   }
 
   public Optional<CustodyPayment> convert(TransactionDetails td) throws IOException {
-    LedgerOperation ledgerOperation = null;
+    LedgerTransaction.LedgerOperation ledgerOperation = null;
     CustodyPayment.CustodyPaymentStatus status =
         td.getStatus().isCompleted()
             ? CustodyPayment.CustodyPaymentStatus.SUCCESS
@@ -124,7 +126,7 @@ public class FireblocksEventService extends CustodyEventService {
 
     try {
       ledgerTxn = ledgerClient.getTransaction(td.getTxHash());
-      Optional<LedgerOperation> op =
+      Optional<LedgerTransaction.LedgerOperation> op =
           ledgerTxn.getOperations().stream()
               .filter(it -> PAYMENT_TRANSACTION_OPERATION_TYPES.contains(it.getType()))
               .findFirst();
