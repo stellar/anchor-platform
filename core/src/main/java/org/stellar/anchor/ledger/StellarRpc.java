@@ -3,11 +3,13 @@ package org.stellar.anchor.ledger;
 import static java.lang.Thread.sleep;
 import static org.stellar.anchor.util.Log.info;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
+import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.IntStream;
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
@@ -15,10 +17,8 @@ import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
+import org.stellar.sdk.*;
 import org.stellar.sdk.Asset;
-import org.stellar.sdk.KeyPair;
-import org.stellar.sdk.SorobanServer;
-import org.stellar.sdk.StrKey;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TrustLineAsset;
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse;
@@ -28,6 +28,7 @@ import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse;
 import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
+import org.stellar.sdk.xdr.Memo;
 
 /** The Stellar RPC server that implements LedgerClient. */
 public class StellarRpc implements LedgerClient {
@@ -106,6 +107,7 @@ public class StellarRpc implements LedgerClient {
       return null;
     }
     TransactionEnvelope txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
+    Integer applicationOrder = txn.getApplicationOrder();
     Operation[] operations;
     Memo memo;
     Long sequenceNumber;
@@ -128,6 +130,7 @@ public class StellarRpc implements LedgerClient {
     } else {
       return null;
     }
+
     return LedgerTransaction.builder()
         .hash(txn.getTxHash())
         .applicationOrder(txn.getApplicationOrder())
@@ -137,26 +140,42 @@ public class StellarRpc implements LedgerClient {
         .sequenceNumber(sequenceNumber)
         .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
         .operations(
-            Arrays.stream(operations)
-                .map(op -> from(sourceAccount, op))
+            IntStream.range(0, operations.length)
+                .mapToObj(
+                    opIndex ->
+                        from(
+                            sourceAccount,
+                            sequenceNumber,
+                            applicationOrder,
+                            opIndex,
+                            operations[opIndex]))
                 .filter(Objects::nonNull)
                 .toList())
         .build();
   }
 
-  LedgerOperation from(String sourceAccount, Operation op) {
+  LedgerOperation from(
+      String sourceAccount,
+      Long sequenceNumber,
+      Integer applicationOrder,
+      int opIndex,
+      Operation op) {
     if (op == null) {
       return null;
     }
     if (op.getBody() == null) {
       return null;
     }
+    String operationId =
+        String.valueOf(new TOID(sequenceNumber.intValue(), applicationOrder, opIndex).toInt64());
     PaymentOp payment = op.getBody().getPaymentOp();
     return switch (op.getBody().getDiscriminant()) {
       case PAYMENT ->
           LedgerOperation.builder()
+              .type(PAYMENT)
               .paymentOperation(
                   LedgerPaymentOperation.builder()
+                      .id(operationId)
                       .asset(payment.getAsset())
                       .amount(payment.getAmount().getInt64())
                       .from(sourceAccount)
@@ -167,8 +186,15 @@ public class StellarRpc implements LedgerClient {
               .build();
       case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND ->
           LedgerOperation.builder()
+              .type(
+                  switch (op.getBody().getDiscriminant()) {
+                    case PATH_PAYMENT_STRICT_RECEIVE -> OperationType.PATH_PAYMENT_STRICT_RECEIVE;
+                    case PATH_PAYMENT_STRICT_SEND -> OperationType.PATH_PAYMENT_STRICT_SEND;
+                    default -> null;
+                  })
               .pathPaymentOperation(
                   LedgerPathPaymentOperation.builder()
+                      .id(operationId)
                       .asset(payment.getAsset())
                       .amount(payment.getAmount().getInt64())
                       .from(sourceAccount)

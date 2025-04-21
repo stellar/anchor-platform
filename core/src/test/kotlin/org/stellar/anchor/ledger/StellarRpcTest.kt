@@ -14,6 +14,7 @@ import org.stellar.sdk.Transaction
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse
+import org.stellar.sdk.xdr.OperationType
 
 class StellarRpcTest {
 
@@ -88,13 +89,16 @@ class StellarRpcTest {
     every { sorobanServer.getTransaction(any()) } returns
       gson.fromJson(txnTestResponse, GetTransactionResponse::class.java)
 
-    val result =
+    val txn =
       stellarRpc.getTransaction("4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5")
 
-    assertEquals("4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5", result.hash)
-    assertEquals("GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP", result.sourceAccount)
-    assertEquals("Hello Stellar!", result.memo.text.toString())
-    assertEquals(8632884266970, result.sequenceNumber)
+    assertEquals("4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5", txn.hash)
+    assertEquals("GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP", txn.sourceAccount)
+    assertEquals("Hello Stellar!", txn.memo.text.toString())
+    assertEquals(8632884266970, txn.sequenceNumber)
+    assertEquals(1, txn.operations.size)
+    assertEquals(OperationType.PAYMENT, txn.operations[0].type)
+    assertEquals("8632884285440", txn.operations[0].paymentOperation.id)
 
     verify(exactly = 1) { sorobanServer.getTransaction(any()) }
   }
