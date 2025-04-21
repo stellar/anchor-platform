@@ -52,14 +52,14 @@ class LedgerClientTests {
     assertTrue(
       ledgerClient.hasTrustline(
         accountId,
-        "USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+        "USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       )
     )
 
     assertFalse(
       ledgerClient.hasTrustline(
         accountId,
-        "JPY:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+        "JPY:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       )
     )
   }
@@ -68,23 +68,26 @@ class LedgerClientTests {
   @MethodSource("getLedgerClient")
   fun `test submitTransaction() then getTransaction()`(
     ledgerClient: LedgerClient,
-    accountId: String
+    accountId: String,
   ) {
     val paymentTxn = buildPaymentTransaction(ledgerClient)
     val result = ledgerClient.submitTransaction(paymentTxn)
 
-    lateinit var txn: LedgerTransaction
-    repeat(10) {
+    var txn: LedgerTransaction? = null
+    for (i in 1..10) {
       try {
         txn = ledgerClient.getTransaction(result.hash)
+        break
       } catch (e: Exception) {
+        println(e.message)
         // wait and retry
         Thread.sleep(1000)
       }
     }
+
     JSONAssert.assertEquals(expectedTxn, gson.toJson(txn), JSONCompareMode.LENIENT)
 
-    TransactionEnvelope.fromXdrBase64(txn.envelopeXdr).let {
+    TransactionEnvelope.fromXdrBase64(txn!!.envelopeXdr).let {
       assertNotNull(it.v1)
       assertNotNull(it.v1.tx)
       assertNotNull(it.v1.tx.operations)
@@ -117,7 +120,7 @@ class LedgerClientTests {
     val transaction =
       TransactionBuilder(
           Account(sourceKeypair.accountId, sourceAccount.sequenceNumber),
-          TESTNET
+          TESTNET,
         ) // we are going to submit the transaction to the test network
         .setBaseFee(AbstractTransaction.MIN_BASE_FEE) // set base fee, see
         .addMemo(Memo.text("Hello Stellar!")) // Add a text memo
@@ -134,7 +137,7 @@ class LedgerClientTests {
 
     return listOf(
       arrayOf(stellarRpc, "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"),
-      arrayOf(horizon, "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG")
+      arrayOf(horizon, "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"),
     )
   }
 }
