@@ -237,6 +237,38 @@ public class StellarRpc implements LedgerClient {
     }
   }
 
+  @SneakyThrows
+  public static AccountEntry getAccountEntry(SorobanServer sorobanServer, String accountId) {
+    KeyPair kp = KeyPair.fromAccountId(accountId);
+    List<LedgerKey> ledgerKeys =
+        Collections.singletonList(
+            LedgerKey.builder()
+                .account(LedgerKeyAccount.builder().accountID(kp.getXdrAccountId()).build())
+                .discriminant(LedgerEntryType.ACCOUNT)
+                .build());
+    GetLedgerEntriesResponse response = sorobanServer.getLedgerEntries(ledgerKeys);
+    return LedgerEntry.LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr())
+        .getAccount();
+  }
+
+  //  fun getAccountRpc(stellarRpc: SorobanServer, accountId: String): AccountEntry? {
+  //    val kp = KeyPair.fromAccountId(accountId)
+  //
+  //    //     Create ledger keys for querying account and trustline
+  //    val ledgerKeys =
+  //            listOf<LedgerKey>(
+  //                    LedgerKey.builder()
+  //
+  // .account(LedgerKey.LedgerKeyAccount.builder().accountID(kp.xdrAccountId).build())
+  //                            .discriminant(LedgerEntryType.ACCOUNT)
+  //                            .build())
+  //
+  //    val response = stellarRpc.getLedgerEntries(ledgerKeys)
+  //
+  //    val ledgerEntryData = LedgerEntry.LedgerEntryData.fromXdrBase64(response.entries[0].xdr)
+  //    return ledgerEntryData.account
+  //  }
+  //
   void delay() throws InterruptedException {
     sleep(1000);
   }

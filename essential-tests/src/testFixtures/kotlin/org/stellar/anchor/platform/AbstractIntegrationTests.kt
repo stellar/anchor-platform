@@ -10,19 +10,27 @@ import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.util.Sep1Helper.TomlContent
 import org.stellar.anchor.util.Sep1Helper.parse
 import org.stellar.sdk.*
+import org.stellar.sdk.operations.Operation.fromXdrAmount
 import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.requests.RequestBuilder
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
+import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse
+import org.stellar.sdk.xdr.TransactionEnvelope
+import org.stellar.sdk.xdr.TransactionResult
 import org.stellar.walletsdk.ApplicationConfiguration
 import org.stellar.walletsdk.StellarConfiguration
 import org.stellar.walletsdk.Wallet
 import org.stellar.walletsdk.anchor.auth
 import org.stellar.walletsdk.auth.AuthToken
 import org.stellar.walletsdk.horizon.SigningKeyPair
+
+private lateinit var testPaymentValues: List<Pair<String, String>>
 
 abstract class AbstractIntegrationTests(val config: TestConfig) {
   companion object {
@@ -56,7 +64,6 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
   private val submissionLock = Mutex()
   private val testPaymentKey: KeyPair =
     KeyPair.fromSecretSeed(config.get("secret.sep10.signing.seed"))
-  private lateinit var testPaymentValues: List<Pair<String, String>>
 
   fun inject(target: String, vararg replacements: Pair<String, String>): String {
     var result = target
@@ -71,18 +78,102 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
     return result.trimIndent()
   }
 
-  fun getTestPaymentValues(): List<Pair<String, String>> {
+  private fun getTestPaymentValues(): List<Pair<String, String>> {
     if (!::testPaymentValues.isInitialized || testPaymentValues.isEmpty()) {
-      fetchTestPayment()
+      if (config.get("stellar_network.rpc_url") != null) {
+        fetchTestPaymentFromStellarRpc()
+      } else {
+        fetchTestPaymentFromHorizon()
+      }
     }
     return testPaymentValues
   }
 
-  // fetch the test payment from the testnet
-  private fun fetchTestPayment() {
+  private fun fetchTestPaymentFromStellarRpc() {
+    val sorobanServer = SorobanServer(config.get("stellar_network.rpc_url")!!)
     val destAccount = TEST_PAYMENT_DEST_ACCOUNT
-    val horizonServer = Server("https://horizon-testnet.stellar.org")
 
+    // send test payment of 1 USDC from distribution account to the test receiver account
+    val usdcAsset =
+      Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+        as AssetTypeCreditAlphaNum
+    val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
+    println(
+      "Create test payment transaction: 1 USDC from distribution account to the test receiver account"
+    )
+    val accountId = sourceKey.accountId
+    val accountEntry = StellarRpc.getAccountEntry(sorobanServer, accountId)
+    val txn =
+      TransactionBuilder(
+          Account(accountId, accountEntry.seqNum.sequenceNumber.int64),
+          Network.TESTNET,
+        )
+        .addOperation(
+          PaymentOperation.builder()
+            .sourceAccount(sourceKey.accountId)
+            .destination(destAccount)
+            .asset(usdcAsset)
+            .amount(BigDecimal("0.0002"))
+            .build()
+        )
+        .addMemo(Memo.text(TEST_PAYMENT_MEMO)) // Add memo
+        .addPreconditions(
+          TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(180)).build()
+        )
+        .setBaseFee(Transaction.MIN_BASE_FEE)
+        .build()
+    // Sign the transaction
+    txn.sign(sourceKey)
+
+    val response = sorobanServer.sendTransaction(txn)
+
+    if (response.status == SendTransactionResponse.SendTransactionStatus.PENDING) {
+      println("Payment transaction successful. Transaction hash: ${response.hash}")
+    } else {
+      println("Payment failed. ${response.status}")
+      TransactionResult.fromXdrBase64(response.errorResultXdr)
+      throw Exception("Payment failed. ${response.status}")
+    }
+
+    for (i in 1..5) {
+      val result = sorobanServer.getTransaction(response.hash)
+      if (result.status == GetTransactionResponse.GetTransactionStatus.SUCCESS) {
+        val txnEnv = TransactionEnvelope.fromXdrBase64(result.envelopeXdr)
+
+        val paymentOp = txnEnv.v1.tx.operations[0].body.paymentOp
+        if (paymentOp != null) {
+          println("Found test payment")
+          // initialize the test payment value pairs for injection
+          testPaymentValues =
+            listOf(
+              Pair(
+                "%TESTPAYMENT_ID%",
+                TOID(result.ledger.toInt(), result.applicationOrder, 1).toInt64().toString(),
+              ),
+              Pair("%TESTPAYMENT_AMOUNT%", fromXdrAmount(paymentOp.amount.int64).toString()),
+              Pair("%TESTPAYMENT_TXN_HASH%", response.hash),
+              Pair("%TESTPAYMENT_SRC_ACCOUNT%", sourceKey.accountId),
+              Pair(
+                "%TESTPAYMENT_DEST_ACCOUNT%",
+                StrKey.encodeEd25519PublicKey(paymentOp.destination.ed25519.uint256),
+              ),
+              Pair("%TESTPAYMENT_ASSET_CIRCLE_USDC%", TEST_PAYMENT_ASSET_CIRCLE_USDC),
+              Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT),
+            )
+          break
+        }
+        Thread.sleep(2000)
+      }
+    }
+  }
+
+  private fun fetchTestPaymentFromHorizon() {
+    if (config.get("stellar_network.horizon_url") == null) {
+      throw Exception("stellar_network.horizon_url is not set")
+    }
+
+    val horizonServer = Server(config.get("stellar_network.horizon_url")!!)
+    val destAccount = TEST_PAYMENT_DEST_ACCOUNT
     val payments =
       horizonServer
         .payments()
@@ -94,7 +185,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
         .records
 
     if (payments.isEmpty()) {
-      sendTestPayment(horizonServer)
+      sendTestPaymentToHorizon(horizonServer)
     }
 
     for (payment in payments) {
@@ -126,15 +217,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
     throw Exception("Cannot find test payment")
   }
 
-  private fun horizon(): Server {
-    if (config.get("stellar_network.horizon_url") == null) {
-      throw Exception("stellar_network.horizon_url is not set")
-    }
-
-    return Server(config.get("stellar_network.horizon_url")!!)
-  }
-
-  private fun sendTestPayment(server: Server) {
+  private fun sendTestPaymentToHorizon(server: Server) {
     // send test payment of 1 USDC from distribution account to the test receiver account
     val usdcAsset =
       Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
