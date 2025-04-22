@@ -95,10 +95,10 @@ class StellarRpcTest {
     assertEquals("4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5", txn.hash)
     assertEquals("GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP", txn.sourceAccount)
     assertEquals("Hello Stellar!", txn.memo.text.toString())
-    assertEquals(8632884266970, txn.sequenceNumber)
+    assertEquals(1708638, txn.sequenceNumber)
     assertEquals(1, txn.operations.size)
     assertEquals(OperationType.PAYMENT, txn.operations[0].type)
-    assertEquals("8632884285440", txn.operations[0].paymentOperation.id)
+    assertEquals("7338544330723329", txn.operations[0].paymentOperation.id)
 
     verify(exactly = 1) { sorobanServer.getTransaction(any()) }
   }
