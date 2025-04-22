@@ -39,13 +39,13 @@ public class Sep12Controller {
       method = {RequestMethod.GET})
   public Sep12GetCustomerResponse getCustomer(
       HttpServletRequest request,
-      @RequestParam(required = false) String type,
-      @RequestParam(required = false) String id,
-      @RequestParam(required = false) String account,
-      @RequestParam(required = false) String memo,
+      @RequestParam(required = false, name = "type") String type,
+      @RequestParam(required = false, name = "id") String id,
+      @RequestParam(required = false, name = "account") String account,
+      @RequestParam(required = false, name = "memo") String memo,
       @RequestParam(required = false, name = "memo_type") String memoType,
       @RequestParam(required = false, name = "transaction_id") String transactionId,
-      @RequestParam(required = false) String lang) {
+      @RequestParam(required = false, name = "lang") String lang) {
     debugF(
         "GET /customer type={} id={} account={} memo={}, memoType={}, transactionId={}, lang={}",
         type,
