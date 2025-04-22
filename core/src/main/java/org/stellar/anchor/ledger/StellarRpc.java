@@ -110,7 +110,7 @@ public class StellarRpc implements LedgerClient {
     Integer applicationOrder = txn.getApplicationOrder();
     Operation[] operations;
     Memo memo;
-    Long sequenceNumber;
+    Long sequenceNumber = txn.getLedger();
     String sourceAccount;
 
     if (txnEnv.getV0() != null) {
@@ -119,14 +119,12 @@ public class StellarRpc implements LedgerClient {
       sourceAccount =
           StrKey.encodeEd25519PublicKey(tenv.getTx().getSourceAccountEd25519().getUint256());
       memo = tenv.getTx().getMemo();
-      sequenceNumber = tenv.getTx().getSeqNum().getSequenceNumber().getInt64();
     } else if (txnEnv.getV1() != null) {
       TransactionV1Envelope tenv = txnEnv.getV1();
       operations = tenv.getTx().getOperations();
       sourceAccount =
           StrKey.encodeEd25519PublicKey(tenv.getTx().getSourceAccount().getEd25519().getUint256());
       memo = tenv.getTx().getMemo();
-      sequenceNumber = tenv.getTx().getSeqNum().getSequenceNumber().getInt64();
     } else {
       return null;
     }
@@ -147,7 +145,7 @@ public class StellarRpc implements LedgerClient {
                             sourceAccount,
                             sequenceNumber,
                             applicationOrder,
-                            opIndex,
+                            opIndex + 1, // operation index is 1-based
                             operations[opIndex]))
                 .filter(Objects::nonNull)
                 .toList())
