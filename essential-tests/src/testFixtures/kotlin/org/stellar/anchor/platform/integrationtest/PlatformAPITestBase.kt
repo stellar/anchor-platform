@@ -1,11 +1,8 @@
 package org.stellar.anchor.platform.integrationtest
 
+import java.math.BigDecimal
 import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
-import org.stellar.sdk.Server
-import io.ktor.client.plugins.*
-import io.ktor.http.*
-import java.math.BigDecimal
 import org.stellar.sdk.*
 import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.requests.RequestBuilder
@@ -29,7 +26,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     const val CUSTODY_DEST_ACCOUNT = "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
   }
 
-    lateinit var testPaymentValues: List<Pair<String, String>>
+  private lateinit var testPaymentValues: List<Pair<String, String>>
 
   fun inject(target: String, vararg replacements: Pair<String, String>): String {
     var result = target
@@ -151,8 +148,4 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
       println("Payment failed. ${response.resultXdr}")
     }
   }
-}
-
-fun String.inject(search: String, replace: String): String {
-  return PlatformAPITestBase.inject(this, search to replace)
 }

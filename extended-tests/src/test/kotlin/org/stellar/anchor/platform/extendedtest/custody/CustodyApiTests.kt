@@ -23,7 +23,6 @@ import org.stellar.anchor.client.Sep24Client
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.gson
 import org.stellar.anchor.platform.integrationtest.PlatformAPITestBase
-import org.stellar.anchor.platform.integrationtest.inject
 import org.stellar.anchor.util.RSAUtil
 
 class CustodyApiTests : PlatformAPITestBase(TestConfig("custody")) {
