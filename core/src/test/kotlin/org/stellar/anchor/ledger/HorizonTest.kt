@@ -21,13 +21,13 @@ import org.stellar.sdk.xdr.SignerKeyType.*
 
 internal class HorizonTest {
   companion object {
-    const val TEST_HORIZON_URI = "https://horizon-testnet.stellar.org/"
-    const val TEST_HORIZON_PASSPHRASE = "Test SDF Network ; September 2015"
+    private const val TEST_HORIZON_URI = "https://horizon-testnet.stellar.org/"
+    private const val TEST_HORIZON_PASSPHRASE = "Test SDF Network ; September 2015"
     val appConfig = mockk<AppConfig>()
 
     @JvmStatic
     @BeforeAll
-    fun setup(): Unit {
+    fun setup() {
       every { appConfig.horizonUrl } returns TEST_HORIZON_URI
       every { appConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
     }
@@ -38,8 +38,6 @@ internal class HorizonTest {
     val horizon = Horizon(appConfig)
 
     assertNotNull(horizon.server)
-    assertEquals(TEST_HORIZON_URI, horizon.horizonUrl)
-    assertEquals(TEST_HORIZON_PASSPHRASE, horizon.stellarNetworkPassphrase)
   }
 
   @Test

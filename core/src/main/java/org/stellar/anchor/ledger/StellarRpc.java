@@ -3,7 +3,6 @@ package org.stellar.anchor.ledger;
 import static java.lang.Thread.sleep;
 import static org.stellar.anchor.util.Log.info;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
-import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 
 import java.io.IOException;
@@ -13,9 +12,6 @@ import java.util.stream.IntStream;
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
-import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
-import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation;
-import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Asset;
@@ -113,20 +109,26 @@ public class StellarRpc implements LedgerClient {
     Long sequenceNumber = txn.getLedger();
     String sourceAccount;
 
-    if (txnEnv.getV0() != null) {
-      TransactionV0Envelope tenv = txnEnv.getV0();
-      operations = tenv.getTx().getOperations();
-      sourceAccount =
-          StrKey.encodeEd25519PublicKey(tenv.getTx().getSourceAccountEd25519().getUint256());
-      memo = tenv.getTx().getMemo();
-    } else if (txnEnv.getV1() != null) {
-      TransactionV1Envelope tenv = txnEnv.getV1();
-      operations = tenv.getTx().getOperations();
-      sourceAccount =
-          StrKey.encodeEd25519PublicKey(tenv.getTx().getSourceAccount().getEd25519().getUint256());
-      memo = tenv.getTx().getMemo();
-    } else {
-      return null;
+    switch (txnEnv.getDiscriminant()) {
+      case ENVELOPE_TYPE_TX_V0:
+        operations = txnEnv.getV0().getTx().getOperations();
+        sourceAccount =
+            StrKey.encodeEd25519PublicKey(
+                txnEnv.getV0().getTx().getSourceAccountEd25519().getUint256());
+        memo = txnEnv.getV0().getTx().getMemo();
+        break;
+      case ENVELOPE_TYPE_TX:
+        operations = txnEnv.getV1().getTx().getOperations();
+        sourceAccount =
+            StrKey.encodeEd25519PublicKey(
+                txnEnv.getV1().getTx().getSourceAccount().getEd25519().getUint256());
+        memo = txnEnv.getV0().getTx().getMemo();
+        break;
+      default:
+        throw new LedgerException(
+            String.format(
+                "Malformed transaction detected. The transaction(hash=%s) has unknown envelope type.",
+                txnHash));
     }
 
     return LedgerTransaction.builder()
@@ -141,7 +143,7 @@ public class StellarRpc implements LedgerClient {
             IntStream.range(0, operations.length)
                 .mapToObj(
                     opIndex ->
-                        from(
+                        LedgerClientHelper.convert(
                             sourceAccount,
                             sequenceNumber,
                             applicationOrder,
@@ -150,59 +152,6 @@ public class StellarRpc implements LedgerClient {
                 .filter(Objects::nonNull)
                 .toList())
         .build();
-  }
-
-  LedgerOperation from(
-      String sourceAccount,
-      Long sequenceNumber,
-      Integer applicationOrder,
-      int opIndex,
-      Operation op) {
-    if (op == null) {
-      return null;
-    }
-    if (op.getBody() == null) {
-      return null;
-    }
-    String operationId =
-        String.valueOf(new TOID(sequenceNumber.intValue(), applicationOrder, opIndex).toInt64());
-    PaymentOp payment = op.getBody().getPaymentOp();
-    return switch (op.getBody().getDiscriminant()) {
-      case PAYMENT ->
-          LedgerOperation.builder()
-              .type(PAYMENT)
-              .paymentOperation(
-                  LedgerPaymentOperation.builder()
-                      .id(operationId)
-                      .asset(payment.getAsset())
-                      .amount(payment.getAmount().getInt64())
-                      .from(sourceAccount)
-                      .to(
-                          StrKey.encodeEd25519PublicKey(
-                              payment.getDestination().getEd25519().getUint256()))
-                      .build())
-              .build();
-      case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND ->
-          LedgerOperation.builder()
-              .type(
-                  switch (op.getBody().getDiscriminant()) {
-                    case PATH_PAYMENT_STRICT_RECEIVE -> OperationType.PATH_PAYMENT_STRICT_RECEIVE;
-                    case PATH_PAYMENT_STRICT_SEND -> OperationType.PATH_PAYMENT_STRICT_SEND;
-                    default -> null;
-                  })
-              .pathPaymentOperation(
-                  LedgerPathPaymentOperation.builder()
-                      .id(operationId)
-                      .asset(payment.getAsset())
-                      .amount(payment.getAmount().getInt64())
-                      .from(sourceAccount)
-                      .to(
-                          StrKey.encodeEd25519PublicKey(
-                              payment.getDestination().getEd25519().getUint256()))
-                      .build())
-              .build();
-      default -> null;
-    };
   }
 
   @Override
