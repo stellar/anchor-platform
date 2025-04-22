@@ -9,19 +9,10 @@ jobs:
   gradle_build:
     uses: ./.github/workflows/sub_gradle_build.yml
 
-#  essential_tests:
-#    needs: [ gradle_build ]
-#    uses: ./.github/workflows/sub_essential_tests.yml
-#
-#  extended_tests:
-#    needs: [ gradle_build ]
-#    uses: ./.github/workflows/sub_extended_tests.yml
-#
   codeql_analysis:
     uses: ./.github/workflows/sub_codeql_analysis.yml
 
   build_and_push_docker_image:
-    #    needs: [ gradle_build, essential_tests, extended_tests, codeql_analysis ]
     needs: [ gradle_build, codeql_analysis ]
     name: Push to DockerHub (tag=stellar/anchor-platform:${{ github.event.release.tag_name }})
     runs-on: ubuntu-latest
@@ -63,7 +54,6 @@ jobs:
 
   complete:
     if: always()
-    #    needs: [ essential_tests, extended_tests, build_and_push_docker_image ]
     needs: [ build_and_push_docker_image ]
     runs-on: ubuntu-latest
     steps:
