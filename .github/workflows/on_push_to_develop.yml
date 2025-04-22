@@ -17,10 +17,6 @@ jobs:
   rust_build:
     uses: ./.github/workflows/sub_rust_build.yml
 
-  jacoco_report:
-    needs: [ gradle_build ]
-    uses: ./.github/workflows/sub_jacoco_report.yml
-
   essential_tests:
     needs: [ gradle_build ]
     uses: ./.github/workflows/sub_essential_tests.yml
@@ -76,7 +72,7 @@ jobs:
 
   complete:
     if: always()
-    needs: [ essential_tests, extended_tests, build_and_push_docker_image ]
+    needs: [ essential_tests, extended_tests, rust_build, build_and_push_docker_image ]
     runs-on: ubuntu-latest
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
