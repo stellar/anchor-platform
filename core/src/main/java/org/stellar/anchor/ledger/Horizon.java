@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.ledger.LedgerClientHelper.ParsedTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
@@ -27,7 +28,6 @@ import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
 import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 import org.stellar.sdk.xdr.*;
-import org.stellar.sdk.xdr.Memo;
 
 /** The horizon-server that implements LedgerClient. */
 public class Horizon implements LedgerClient {
@@ -113,53 +113,27 @@ public class Horizon implements LedgerClient {
 
     int applicationOrder =
         TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder();
-
-    Operation[] operations;
-    String sourceAccount;
     Long sequenceNumber = txnResponse.getLedger();
-    Memo memo;
 
-    switch (txnEnv.getDiscriminant()) {
-      case ENVELOPE_TYPE_TX_V0:
-        operations = txnEnv.getV0().getTx().getOperations();
-        sourceAccount =
-            StrKey.encodeEd25519PublicKey(
-                txnEnv.getV0().getTx().getSourceAccountEd25519().getUint256());
-        memo = txnEnv.getV0().getTx().getMemo();
-        break;
-      case ENVELOPE_TYPE_TX:
-        operations = txnEnv.getV1().getTx().getOperations();
-        sourceAccount =
-            StrKey.encodeEd25519PublicKey(
-                txnEnv.getV1().getTx().getSourceAccount().getEd25519().getUint256());
-        memo = txnEnv.getV0().getTx().getMemo();
-        break;
-      default:
-        throw new LedgerException(
-            String.format(
-                "Malformed transaction detected. The transaction(hash=%s) has unknown envelope type.",
-                txnHash));
-    }
+    ParsedTransaction osm = LedgerClientHelper.parseTransaction(txnEnv, txnHash);
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())
-        .applicationOrder(
-            TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder())
         .sourceAccount(txnResponse.getSourceAccount())
         .envelopeXdr(txnResponse.getEnvelopeXdr())
-        .memo(memo)
+        .memo(osm.memo)
         .sequenceNumber(txnResponse.getSourceAccountSequence())
         .createdAt(Instant.parse(txnResponse.getCreatedAt()))
         .operations(
-            IntStream.range(0, operations.length)
+            IntStream.range(0, osm.operations.length)
                 .mapToObj(
                     opIndex ->
                         LedgerClientHelper.convert(
-                            sourceAccount,
+                            osm.sourceAccount,
                             sequenceNumber,
                             applicationOrder,
                             opIndex + 1, // operation index is 1-based
-                            operations[opIndex]))
+                            osm.operations[opIndex]))
                 .filter(Objects::nonNull)
                 .toList())
         .build();

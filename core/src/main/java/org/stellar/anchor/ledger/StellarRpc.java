@@ -24,7 +24,6 @@ import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse;
 import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
-import org.stellar.sdk.xdr.Memo;
 
 /** The Stellar RPC server that implements LedgerClient. */
 public class StellarRpc implements LedgerClient {
@@ -104,51 +103,27 @@ public class StellarRpc implements LedgerClient {
     }
     TransactionEnvelope txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
     Integer applicationOrder = txn.getApplicationOrder();
-    Operation[] operations;
-    Memo memo;
     Long sequenceNumber = txn.getLedger();
-    String sourceAccount;
 
-    switch (txnEnv.getDiscriminant()) {
-      case ENVELOPE_TYPE_TX_V0:
-        operations = txnEnv.getV0().getTx().getOperations();
-        sourceAccount =
-            StrKey.encodeEd25519PublicKey(
-                txnEnv.getV0().getTx().getSourceAccountEd25519().getUint256());
-        memo = txnEnv.getV0().getTx().getMemo();
-        break;
-      case ENVELOPE_TYPE_TX:
-        operations = txnEnv.getV1().getTx().getOperations();
-        sourceAccount =
-            StrKey.encodeEd25519PublicKey(
-                txnEnv.getV1().getTx().getSourceAccount().getEd25519().getUint256());
-        memo = txnEnv.getV0().getTx().getMemo();
-        break;
-      default:
-        throw new LedgerException(
-            String.format(
-                "Malformed transaction detected. The transaction(hash=%s) has unknown envelope type.",
-                txnHash));
-    }
+    LedgerClientHelper.ParsedTransaction osm = LedgerClientHelper.parseTransaction(txnEnv, txnHash);
 
     return LedgerTransaction.builder()
         .hash(txn.getTxHash())
-        .applicationOrder(txn.getApplicationOrder())
-        .sourceAccount(sourceAccount)
+        .sourceAccount(osm.sourceAccount)
         .envelopeXdr(txn.getEnvelopeXdr())
-        .memo(memo)
+        .memo(osm.memo)
         .sequenceNumber(sequenceNumber)
         .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
         .operations(
-            IntStream.range(0, operations.length)
+            IntStream.range(0, osm.operations.length)
                 .mapToObj(
                     opIndex ->
                         LedgerClientHelper.convert(
-                            sourceAccount,
+                            osm.sourceAccount,
                             sequenceNumber,
                             applicationOrder,
                             opIndex + 1, // operation index is 1-based
-                            operations[opIndex]))
+                            osm.operations[opIndex]))
                 .filter(Objects::nonNull)
                 .toList())
         .build();

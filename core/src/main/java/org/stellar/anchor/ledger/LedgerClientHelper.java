@@ -3,11 +3,10 @@ package org.stellar.anchor.ledger;
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
 import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 
+import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.TOID;
-import org.stellar.sdk.xdr.Operation;
-import org.stellar.sdk.xdr.OperationType;
-import org.stellar.sdk.xdr.PaymentOp;
+import org.stellar.sdk.xdr.*;
 
 public class LedgerClientHelper {
 
@@ -62,5 +61,48 @@ public class LedgerClientHelper {
               .build();
       default -> null;
     };
+  }
+
+  public static ParsedTransaction parseTransaction(TransactionEnvelope txnEnv, String txnHash)
+      throws LedgerException {
+    Operation[] operations;
+    String sourceAccount;
+    Memo memo;
+
+    switch (txnEnv.getDiscriminant()) {
+      case ENVELOPE_TYPE_TX_V0:
+        operations = txnEnv.getV0().getTx().getOperations();
+        sourceAccount =
+            StrKey.encodeEd25519PublicKey(
+                txnEnv.getV0().getTx().getSourceAccountEd25519().getUint256());
+        memo = txnEnv.getV0().getTx().getMemo();
+        break;
+      case ENVELOPE_TYPE_TX:
+        operations = txnEnv.getV1().getTx().getOperations();
+        sourceAccount =
+            StrKey.encodeEd25519PublicKey(
+                txnEnv.getV1().getTx().getSourceAccount().getEd25519().getUint256());
+        memo = txnEnv.getV1().getTx().getMemo(); // Fixed: was incorrectly using V0 memo
+        break;
+      default:
+        throw new LedgerException(
+            String.format(
+                "Malformed transaction detected. The transaction(hash=%s) has unknown envelope type.",
+                txnHash));
+    }
+
+    return new ParsedTransaction(operations, sourceAccount, memo);
+  }
+
+  public static class ParsedTransaction {
+    public final Operation[] operations;
+    public final String sourceAccount;
+    public final Memo memo;
+
+    public ParsedTransaction(Operation[] operations, String sourceAccount, Memo memo) {
+      this.operations = operations;
+      this.sourceAccount = sourceAccount;
+      this.memo = memo;
+    }
   }
 }

@@ -1,6 +1,5 @@
 package org.stellar.anchor.platform.custody.fireblocks
 
-import com.google.gson.reflect.TypeToken
 import io.mockk.*
 import java.security.Signature
 import java.util.*
@@ -39,8 +38,6 @@ import org.stellar.sdk.Server
 import org.stellar.sdk.requests.PaymentsRequestBuilder
 import org.stellar.sdk.responses.Page
 import org.stellar.sdk.responses.operations.OperationResponse
-import org.stellar.sdk.responses.operations.PathPaymentStrictReceiveOperationResponse
-import org.stellar.sdk.responses.operations.PaymentOperationResponse
 import org.stellar.sdk.xdr.*
 import org.stellar.sdk.xdr.MemoType.MEMO_ID
 
@@ -66,7 +63,6 @@ class FireblocksEventServiceTest {
     sep6CustodyPaymentHandler = mockk()
     sep24CustodyPaymentHandler = mockk()
     sep31CustodyPaymentHandler = mockk()
-    //    horizon = mockk()
     ledgerClient = mockk()
     server = mockk()
     paymentsRequestBuilder = mockk()
@@ -84,7 +80,7 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
 
     val signature: String =
@@ -107,7 +103,7 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
     val custodyTxn = gson.fromJson(custodyTransaction, JdbcCustodyTransaction::class.java)
 
@@ -128,7 +124,7 @@ class FireblocksEventServiceTest {
     JSONAssert.assertEquals(
       completedEventNotStellarTxnPayment,
       gson.toJson(paymentCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
   }
 
@@ -143,7 +139,7 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
     val custodyTxn = gson.fromJson(custodyTransaction, JdbcCustodyTransaction::class.java)
 
@@ -164,7 +160,7 @@ class FireblocksEventServiceTest {
     JSONAssert.assertEquals(
       failedEventNoStellarTxnPayment,
       gson.toJson(paymentCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
   }
 
@@ -179,7 +175,7 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
     val custodyTxn = gson.fromJson(custodyTransaction, JdbcCustodyTransaction::class.java)
 
@@ -214,14 +210,9 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
     val custodyTxn = gson.fromJson(custodyTransaction, JdbcCustodyTransaction::class.java)
-    val operationRecordsTypeToken =
-      object : TypeToken<ArrayList<PaymentOperationResponse>>() {}.type
-    val operationRecords: ArrayList<OperationResponse> =
-      gson.fromJson(paymentOperationRecord, operationRecordsTypeToken)
-
     val eventObject: String = confirmingEventRequest.trimIndent()
     val signature: String = generateSignature(eventObject)
     val httpHeaders: Map<String, String> = mutableMapOf(FIREBLOCKS_SIGNATURE_HEADER to signature)
@@ -241,7 +232,7 @@ class FireblocksEventServiceTest {
     JSONAssert.assertEquals(
       stellarTxnPayment,
       gson.toJson(paymentCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
   }
 
@@ -256,14 +247,9 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
     val custodyTxn = gson.fromJson(custodyTransaction, JdbcCustodyTransaction::class.java)
-    val operationRecordsTypeToken =
-      object : TypeToken<ArrayList<PathPaymentStrictReceiveOperationResponse>>() {}.type
-    val operationRecords: ArrayList<OperationResponse> =
-      gson.fromJson(pathPaymentOperationRecord, operationRecordsTypeToken)
-
     val eventObject: String = confirmingEventRequest.trimIndent()
     val signature: String = generateSignature(eventObject)
     val httpHeaders: Map<String, String> = mutableMapOf(FIREBLOCKS_SIGNATURE_HEADER to signature)
@@ -284,7 +270,7 @@ class FireblocksEventServiceTest {
     JSONAssert.assertEquals(
       stellarTxnPathPayment,
       gson.toJson(paymentCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
   }
 
@@ -303,8 +289,8 @@ class FireblocksEventServiceTest {
         "COMPLETED",
         "PARTIALLY_COMPLETED",
         "PENDING_AML_SCREENING",
-        "REJECTED"
-      ]
+        "REJECTED",
+      ],
   )
   fun `test handleEvent() for ignored event object statuses`(status: TransactionStatus) {
     val config =
@@ -316,7 +302,7 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
 
     val eventObject = FireblocksEventObject()
@@ -347,7 +333,7 @@ class FireblocksEventServiceTest {
           sep24CustodyPaymentHandler,
           sep31CustodyPaymentHandler,
           ledgerClient,
-          config
+          config,
         )
       }
     assertEquals("Failed to generate Fireblocks public key", ex.message)
@@ -364,7 +350,7 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
 
     val eventObject = StringUtils.EMPTY
@@ -386,7 +372,7 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
 
     val eventObject = StringUtils.EMPTY
@@ -408,7 +394,7 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
 
     val invalidSignature: String =
@@ -431,7 +417,7 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
 
     val invalidSignature = "test"
@@ -453,7 +439,7 @@ class FireblocksEventServiceTest {
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler,
         ledgerClient,
-        config
+        config,
       )
     val custodyTxn = gson.fromJson(custodyTransaction, JdbcCustodyTransaction::class.java)
 
@@ -505,6 +491,9 @@ class FireblocksEventServiceTest {
             .id("12345")
             .from("testFrom")
             .to("testTo")
+            .sourceAsset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
+            .sourceAmount("150000000")
+            .sourceAccount("testSourceAccount")
             .amount(150000000)
             .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
             .build()
@@ -519,7 +508,7 @@ class FireblocksEventServiceTest {
     val memoId = Uint64()
     memoId.uint64 = XdrUnsignedHyperInteger(12345L)
 
-    return LedgerTransaction.builder()
+    return builder()
       .hash("testTxHash")
       .sourceAccount("testSourceAccount")
       .memo(Memo.builder().discriminant(MEMO_ID).id(memoId).build())
@@ -538,7 +527,7 @@ class FireblocksEventServiceTest {
     val privateKey =
       RSAUtil.generatePrivateKey(
         getResourceFileAsString("custody/fireblocks/webhook/private_key.txt"),
-        RSA_ALGORITHM
+        RSA_ALGORITHM,
       )
 
     val data = requestBody.toByteArray()
@@ -724,218 +713,6 @@ class FireblocksEventServiceTest {
 
   private val failedEventSignature =
     "WgGX+S1rfljuehHaFmHMhkCs/OxURLSOwDvrCl3IhpqilJclx/hLwDxu7fB49WD+5Reh8DSk+DREbCgjJE4OyPQWyLeiqGfk1W1PuKmn23ZnUq98CYhPn3rlZoggC9op4JR5F5dC8xVf2QrP7lRS5V32pKaoFGQPAqY/mQxRFbA="
-
-  private val pathPaymentOperationRecord =
-    """
-[
-  {
-    "amount": "15.0000000",
-    "asset_type": "native",
-    "from": "testFrom",
-    "to": "testTo",
-    "id": 12345,
-    "source_account": "testSourceAccount",
-    "paging_token": "testPagingToken",
-    "created_at": "2023-05-10T10:18:20Z",
-    "transaction_hash": "testTxHash",
-    "transaction_successful": true,
-    "type": "path_payment",
-    "links": {
-      "effects": {
-        "href": "https://horizon-testnet.stellar.org/operations/12345/effects",
-        "templated": false
-      },
-      "precedes": {
-        "href": "https://horizon-testnet.stellar.org/effects?order\u003dasc\u0026cursor\u003d12345",
-        "templated": false
-      },
-      "self": {
-        "href": "https://horizon-testnet.stellar.org/operations/12345",
-        "templated": false
-      },
-      "succeeds": {
-        "href": "https://horizon-testnet.stellar.org/effects?order\u003ddesc\u0026cursor\u003d12345",
-        "templated": false
-      },
-      "transaction": {
-        "href": "https://horizon-testnet.stellar.org/transactions/testTxHash",
-        "templated": false
-      }
-    },
-    "transaction": {
-      "hash": "testTxHash",
-      "memo": "12345",
-      "memo_type": "id",
-      "ledger": 1234,
-      "created_at": "2023-05-10T10:18:20Z",
-      "source_account": "testSourceAccount",
-      "fee_account": "testFeeAccount",
-      "successful": true,
-      "paging_token": "1234",
-      "source_account_sequence": 12345,
-      "max_fee": 100,
-      "fee_charged": 100,
-      "operation_count": 1,
-      "envelope_xdr": "testEnvelopeXdr",
-      "result_xdr": "testResultXdr",
-      "result_meta_xdr": "resultMetaXdr",
-      "signatures": [
-        "testSignature1"
-      ],
-      "preconditions": {
-        "time_bounds": {
-          "min_time": 0,
-          "max_time": 1683713997
-        },
-        "min_account_sequence_age": 0,
-        "min_account_sequence_ledger_gap": 0
-      },
-      "links": {
-        "account": {
-          "href": "https://horizon-testnet.stellar.org/accounts/testAccount",
-          "templated": false
-        },
-        "effects": {
-          "href": "https://horizon-testnet.stellar.org/transactions/testTxHash/effects{?cursor,limit,order}",
-          "templated": true
-        },
-        "ledger": {
-          "href": "https://horizon-testnet.stellar.org/ledgers/1234",
-          "templated": false
-        },
-        "operations": {
-          "href": "https://horizon-testnet.stellar.org/transactions/testTxHash/operations{?cursor,limit,order}",
-          "templated": true
-        },
-        "precedes": {
-          "href": "https://horizon-testnet.stellar.org/transactions?order\u003dasc\u0026cursor\u003d12345",
-          "templated": false
-        },
-        "self": {
-          "href": "https://horizon-testnet.stellar.org/transactions/testTxHash",
-          "templated": false
-        },
-        "succeeds": {
-          "href": "https://horizon-testnet.stellar.org/transactions?order\u003ddesc\u0026cursor\u003d12345",
-          "templated": false
-        }
-      },
-      "rate_limit_limit": 0,
-      "rate_limit_remaining": 0,
-      "rate_limit_reset": 0
-    },
-    "rate_limit_limit": 0,
-    "rate_limit_remaining": 0,
-    "rate_limit_reset": 0
-  }
-]  
-"""
-
-  private val paymentOperationRecord =
-    """
-[
-  {
-    "amount": "15.0000000",
-    "asset_type": "native",
-    "from": "testFrom",
-    "to": "testTo",
-    "id": 12345,
-    "source_account": "testSourceAccount",
-    "paging_token": "testPagingToken",
-    "created_at": "2023-05-10T10:18:20Z",
-    "transaction_hash": "testTxHash",
-    "transaction_successful": true,
-    "type": "payment",
-    "links": {
-      "effects": {
-        "href": "https://horizon-testnet.stellar.org/operations/12345/effects",
-        "templated": false
-      },
-      "precedes": {
-        "href": "https://horizon-testnet.stellar.org/effects?order\u003dasc\u0026cursor\u003d12345",
-        "templated": false
-      },
-      "self": {
-        "href": "https://horizon-testnet.stellar.org/operations/12345",
-        "templated": false
-      },
-      "succeeds": {
-        "href": "https://horizon-testnet.stellar.org/effects?order\u003ddesc\u0026cursor\u003d12345",
-        "templated": false
-      },
-      "transaction": {
-        "href": "https://horizon-testnet.stellar.org/transactions/testTxHash",
-        "templated": false
-      }
-    },
-    "transaction": {
-      "hash": "testTxHash",
-      "memo": "12345",
-      "memo_type": "id",
-      "ledger": 1234,
-      "created_at": "2023-05-10T10:18:20Z",
-      "source_account": "testSourceAccount",
-      "fee_account": "testFeeAccount",
-      "successful": true,
-      "paging_token": "1234",
-      "source_account_sequence": 12345,
-      "max_fee": 100,
-      "fee_charged": 100,
-      "operation_count": 1,
-      "envelope_xdr": "testEnvelopeXdr",
-      "result_xdr": "testResultXdr",
-      "result_meta_xdr": "resultMetaXdr",
-      "signatures": [
-        "testSignature1"
-      ],
-      "preconditions": {
-        "time_bounds": {
-          "min_time": 0,
-          "max_time": 1683713997
-        },
-        "min_account_sequence_age": 0,
-        "min_account_sequence_ledger_gap": 0
-      },
-      "links": {
-        "account": {
-          "href": "https://horizon-testnet.stellar.org/accounts/testAccount",
-          "templated": false
-        },
-        "effects": {
-          "href": "https://horizon-testnet.stellar.org/transactions/testTxHash/effects{?cursor,limit,order}",
-          "templated": true
-        },
-        "ledger": {
-          "href": "https://horizon-testnet.stellar.org/ledgers/1234",
-          "templated": false
-        },
-        "operations": {
-          "href": "https://horizon-testnet.stellar.org/transactions/testTxHash/operations{?cursor,limit,order}",
-          "templated": true
-        },
-        "precedes": {
-          "href": "https://horizon-testnet.stellar.org/transactions?order\u003dasc\u0026cursor\u003d12345",
-          "templated": false
-        },
-        "self": {
-          "href": "https://horizon-testnet.stellar.org/transactions/testTxHash",
-          "templated": false
-        },
-        "succeeds": {
-          "href": "https://horizon-testnet.stellar.org/transactions?order\u003ddesc\u0026cursor\u003d12345",
-          "templated": false
-        }
-      },
-      "rate_limit_limit": 0,
-      "rate_limit_remaining": 0,
-      "rate_limit_reset": 0
-    },
-    "rate_limit_limit": 0,
-    "rate_limit_remaining": 0,
-    "rate_limit_reset": 0
-  }
-]  
-"""
 
   private val stellarTxnPathPayment =
     """

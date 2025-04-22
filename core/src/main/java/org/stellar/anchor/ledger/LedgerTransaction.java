@@ -12,7 +12,6 @@ import org.stellar.sdk.xdr.OperationType;
 @Data
 public class LedgerTransaction {
   String hash;
-  Integer applicationOrder;
   String envelopeXdr;
   String sourceAccount;
   Asset sourceAsset;

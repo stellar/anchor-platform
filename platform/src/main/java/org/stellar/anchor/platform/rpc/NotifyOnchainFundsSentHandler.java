@@ -108,6 +108,10 @@ public class NotifyOnchainFundsSentHandler
     String stellarTxnId = request.getStellarTransactionId();
     try {
       LedgerTransaction ledgerTxn = ledgerClient.getTransaction(stellarTxnId);
+      if (ledgerTxn == null) {
+        throw new InternalErrorException(
+            String.format("Failed to retrieve Stellar transaction by ID[%s]", stellarTxnId));
+      }
       addStellarTransaction(txn, ledgerTxn);
     } catch (LedgerException ex) {
       errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
