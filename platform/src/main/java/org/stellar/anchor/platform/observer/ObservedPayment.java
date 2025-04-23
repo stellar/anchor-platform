@@ -92,7 +92,7 @@ public class ObservedPayment {
         .assetCode(AssetHelper.getAssetCode(assetName))
         .assetIssuer(AssetHelper.getAssetIssuer(assetName))
         .assetName(pathPaymentOp.getAsset().toString())
-        .sourceAmount(pathPaymentOp.getSourceAmount())
+        .sourceAmount(String.valueOf(pathPaymentOp.getSourceAmount()))
         .sourceAssetType(pathPaymentOp.getSourceAsset().getDiscriminant().name())
         .sourceAssetName(sourceAssetName)
         .sourceAssetCode(AssetHelper.getAssetCode(sourceAssetName))

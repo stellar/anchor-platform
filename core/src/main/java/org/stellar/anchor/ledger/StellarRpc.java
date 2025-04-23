@@ -51,7 +51,7 @@ public class StellarRpc implements LedgerClient {
   public Account getAccount(String account) throws LedgerException {
     try {
       AccountEntry ae = getAccountRpc(sorobanServer, account);
-      org.stellar.sdk.xdr.Thresholds txdr = ae.getThresholds();
+      org.stellar.sdk.xdr.Thresholds thresholdsXdr = ae.getThresholds();
       org.stellar.sdk.xdr.Signer[] signersXdr = ae.getSigners();
       List<Signer> signers =
           new ArrayList<>(
@@ -66,12 +66,12 @@ public class StellarRpc implements LedgerClient {
                               .weight(s.getWeight().getUint32().getNumber())
                               .build())
                   .toList());
-      // Add master key
+      // Add master key which is not included in the signersXdr
       signers.add(
           Signer.builder()
               .key(account)
               .type(SIGNER_KEY_TYPE_ED25519.name())
-              .weight((long) txdr.getThresholds()[0])
+              .weight((long) thresholdsXdr.getThresholds()[0])
               .build());
 
       return Account.builder()
@@ -81,9 +81,9 @@ public class StellarRpc implements LedgerClient {
               new Thresholds(
                   // master threshold txdr.getThresholds()[0] has no use in the context of the
                   // anchor
-                  (int) txdr.getThresholds()[1],
-                  (int) txdr.getThresholds()[2],
-                  (int) txdr.getThresholds()[3]))
+                  (int) thresholdsXdr.getThresholds()[1],
+                  (int) thresholdsXdr.getThresholds()[2],
+                  (int) thresholdsXdr.getThresholds()[3]))
           .signers(signers)
           .build();
     } catch (Exception e) {
@@ -175,24 +175,6 @@ public class StellarRpc implements LedgerClient {
         .getAccount();
   }
 
-  //  fun getAccountRpc(stellarRpc: SorobanServer, accountId: String): AccountEntry? {
-  //    val kp = KeyPair.fromAccountId(accountId)
-  //
-  //    //     Create ledger keys for querying account and trustline
-  //    val ledgerKeys =
-  //            listOf<LedgerKey>(
-  //                    LedgerKey.builder()
-  //
-  // .account(LedgerKey.LedgerKeyAccount.builder().accountID(kp.xdrAccountId).build())
-  //                            .discriminant(LedgerEntryType.ACCOUNT)
-  //                            .build())
-  //
-  //    val response = stellarRpc.getLedgerEntries(ledgerKeys)
-  //
-  //    val ledgerEntryData = LedgerEntry.LedgerEntryData.fromXdrBase64(response.entries[0].xdr)
-  //    return ledgerEntryData.account
-  //  }
-  //
   void delay() throws InterruptedException {
     sleep(1000);
   }

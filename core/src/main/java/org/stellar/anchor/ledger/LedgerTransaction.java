@@ -45,7 +45,7 @@ public class LedgerTransaction {
   public static class LedgerPathPaymentOperation {
     String id;
     String sourceAccount;
-    String sourceAmount;
+    Long sourceAmount;
     Asset sourceAsset;
     String from;
     String to;
@@ -59,7 +59,7 @@ public class LedgerTransaction {
     String hash;
     String envelopXdr;
     String sourceAccount;
-    String feeCharged;
+    Long feeCharged;
     Memo memo;
     Long sequenceNumber;
     Instant createdAt;

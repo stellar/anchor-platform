@@ -492,7 +492,7 @@ class FireblocksEventServiceTest {
             .from("testFrom")
             .to("testTo")
             .sourceAsset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
-            .sourceAmount("150000000")
+            .sourceAmount(150000000L)
             .sourceAccount("testSourceAccount")
             .amount(150000000)
             .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())

@@ -147,7 +147,7 @@ public class Horizon implements LedgerClient {
         .hash(txnR.getHash())
         .envelopXdr(txnR.getEnvelopeXdr())
         .sourceAccount(txnR.getSourceAccount())
-        .feeCharged(txnR.getFeeCharged().toString())
+        .feeCharged(Long.parseLong(txnR.getFeeCharged().toString()))
         .createdAt(Instant.parse(txnR.getCreatedAt()))
         .build();
   }
@@ -205,7 +205,7 @@ public class Horizon implements LedgerClient {
               .amount(toXdrAmount(pathPaymentOp.getAmount()))
               .asset(pathPaymentOp.getAsset().toXdr())
               .sourceAccount(pathPaymentOp.getSourceAccount())
-              .sourceAmount(pathPaymentOp.getSourceAmount())
+              .sourceAmount(Long.parseLong(pathPaymentOp.getSourceAmount()))
               .sourceAsset(pathPaymentOp.getSourceAsset().toXdr())
               .build());
     } else {

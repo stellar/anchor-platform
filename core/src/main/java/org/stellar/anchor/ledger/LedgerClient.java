@@ -15,7 +15,8 @@ public interface LedgerClient {
    * Check if the account has a trustline for the given asset.
    *
    * @param account The account to check.
-   * @param asset The asset to check.
+   * @param asset The asset in SEP-11 format. Canonical string representation of an Alpha4 or
+   *     Alpha12 asset
    * @return True if the account has a trustline for the asset.
    * @throws LedgerException If there was an error communicating with the network.
    */
@@ -40,9 +41,8 @@ public interface LedgerClient {
   LedgerTransaction getTransaction(String txnHash) throws LedgerException;
 
   /**
-   * Submit a transaction to the network. It is not guaranteed that the transaction will be
-   * committed to the network before returning from the function. The caller may check the status of
-   * the transaction by calling getTransaction().
+   * Submit a transaction to the network. The function blocks until the transaction is committed.
+   * Otherwise, it throws an exception.
    *
    * @param transaction The transaction to submit.
    * @return The transaction response.
