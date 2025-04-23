@@ -38,19 +38,20 @@ public class LedgerTransaction {
     String to;
     Long amount;
     Asset asset;
+    String sourceAccount;
   }
 
   @Builder
   @Data
   public static class LedgerPathPaymentOperation {
     String id;
-    String sourceAccount;
-    Long sourceAmount;
-    Asset sourceAsset;
     String from;
     String to;
     Long amount;
     Asset asset;
+    String sourceAccount;
+    Long sourceAmount;
+    Asset sourceAsset;
   }
 
   @Builder

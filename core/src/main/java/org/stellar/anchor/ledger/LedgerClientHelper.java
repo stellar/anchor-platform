@@ -35,6 +35,7 @@ public class LedgerClientHelper {
                       .asset(payment.getAsset())
                       .amount(payment.getAmount().getInt64())
                       .from(sourceAccount)
+                      .sourceAccount(sourceAccount)
                       .to(
                           StrKey.encodeEd25519PublicKey(
                               payment.getDestination().getEd25519().getUint256()))
@@ -57,6 +58,7 @@ public class LedgerClientHelper {
                       .to(
                           StrKey.encodeEd25519PublicKey(
                               payment.getDestination().getEd25519().getUint256()))
+                      .sourceAccount(sourceAccount)
                       .build())
               .build();
       default -> null;

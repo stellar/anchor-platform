@@ -45,6 +45,7 @@ public class ObservedPayment {
 
   @SneakyThrows
   public static ObservedPayment from(LedgerTransaction txn, LedgerPaymentOperation paymentOp) {
+    // TODO: Add unit tests
     String assetName = getSep11AssetName(paymentOp.getAsset());
 
     String sourceAccount = txn.getSourceAccount();

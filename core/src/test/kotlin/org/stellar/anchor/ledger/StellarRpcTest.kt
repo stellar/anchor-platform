@@ -80,14 +80,16 @@ class StellarRpcTest {
     assertEquals(result.signers[1].key, "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O")
     assertEquals(result.signers[2].key, "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG")
 
-    //    result.accountId =
     verify(exactly = 1) { sorobanServer.getLedgerEntries(any()) }
   }
 
   @Test
   fun `test getTransaction()`() {
-    every { sorobanServer.getTransaction(any()) } returns
-      gson.fromJson(txnTestResponse, GetTransactionResponse::class.java)
+    every {
+      sorobanServer.getTransaction(
+        "4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5"
+      )
+    } returns gson.fromJson(txnTestResponse, GetTransactionResponse::class.java)
 
     val txn =
       stellarRpc.getTransaction("4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5")
@@ -100,13 +102,20 @@ class StellarRpcTest {
     assertEquals(OperationType.PAYMENT, txn.operations[0].type)
     assertEquals("7338544330723329", txn.operations[0].paymentOperation.id)
 
-    verify(exactly = 1) { sorobanServer.getTransaction(any()) }
+    verify(exactly = 1) {
+      sorobanServer.getTransaction(
+        "4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5"
+      )
+    }
   }
 
   @Test
   fun `test getTransaction() not found`() {
-    every { sorobanServer.getTransaction(any()) } returns
-      gson.fromJson(txnNotFoundResponse, GetTransactionResponse::class.java)
+    every {
+      sorobanServer.getTransaction(
+        "4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5"
+      )
+    } returns gson.fromJson(txnNotFoundResponse, GetTransactionResponse::class.java)
 
     val result =
       stellarRpc.getTransaction("4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5")
@@ -119,6 +128,7 @@ class StellarRpcTest {
     val successTxn = gson.fromJson(txnTestResponse, GetTransactionResponse::class.java)
     val notFoundTxn = gson.fromJson(txnNotFoundResponse, GetTransactionResponse::class.java)
     val spyStellarRpc = spyk(stellarRpc)
+
     every { sorobanServer.sendTransaction(any()) } returns
       gson.fromJson(submitTxnTestResponse, SendTransactionResponse::class.java)
     every { sorobanServer.getTransaction(any()) } returnsMany

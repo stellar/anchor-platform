@@ -14,12 +14,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import lombok.SneakyThrows;
 import org.stellar.anchor.api.custody.fireblocks.FireblocksEventObject;
 import org.stellar.anchor.api.custody.fireblocks.TransactionDetails;
-import org.stellar.anchor.api.exception.AnchorException;
-import org.stellar.anchor.api.exception.BadRequestException;
-import org.stellar.anchor.api.exception.InvalidConfigException;
-import org.stellar.anchor.api.exception.SepException;
+import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.platform.config.FireblocksConfig;
@@ -110,6 +108,7 @@ public class FireblocksEventService extends CustodyEventService {
     }
   }
 
+  @SneakyThrows
   public Optional<CustodyPayment> convert(TransactionDetails td) throws IOException {
     LedgerTransaction.LedgerOperation ledgerOperation = null;
     CustodyPayment.CustodyPaymentStatus status =
@@ -126,6 +125,9 @@ public class FireblocksEventService extends CustodyEventService {
 
     try {
       ledgerTxn = ledgerClient.getTransaction(td.getTxHash());
+      if (ledgerTxn == null)
+        throw new Exception(String.format("Transaction(hash=%s) not found", td.getTxHash()));
+
       Optional<LedgerTransaction.LedgerOperation> op =
           ledgerTxn.getOperations().stream()
               .filter(it -> PAYMENT_TRANSACTION_OPERATION_TYPES.contains(it.getType()))
@@ -181,6 +183,7 @@ public class FireblocksEventService extends CustodyEventService {
         errorF(
             "Unknown Stellar transaction operation type[{}]. This should never happen.",
             ledgerOperation.getType());
+        throw new LedgerException("Unknown Stellar transaction operation type");
       }
     } catch (SepException ex) {
       warnF("Fireblocks event with id[{}] contains unsupported memo", td.getId());

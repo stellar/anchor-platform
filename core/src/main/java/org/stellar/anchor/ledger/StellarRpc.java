@@ -44,13 +44,13 @@ public class StellarRpc implements LedgerClient {
   @SneakyThrows
   @Override
   public boolean hasTrustline(String account, String asset) {
-    return (getTrustlineRpc(sorobanServer, account, asset) != null);
+    return (getTrustlineRpc(account, asset) != null);
   }
 
   @Override
   public Account getAccount(String account) throws LedgerException {
     try {
-      AccountEntry ae = getAccountRpc(sorobanServer, account);
+      AccountEntry ae = getAccountRpc(account);
       org.stellar.sdk.xdr.Thresholds thresholdsXdr = ae.getThresholds();
       org.stellar.sdk.xdr.Signer[] signersXdr = ae.getSigners();
       List<Signer> signers =
@@ -179,8 +179,7 @@ public class StellarRpc implements LedgerClient {
     sleep(1000);
   }
 
-  private TrustLineEntry getTrustlineRpc(SorobanServer stellarRpc, String accountId, String asset)
-      throws LedgerException {
+  private TrustLineEntry getTrustlineRpc(String accountId, String asset) throws LedgerException {
     KeyPair kp = KeyPair.fromAccountId(accountId);
 
     // Create ledger keys for querying account and trustline
@@ -196,7 +195,7 @@ public class StellarRpc implements LedgerClient {
             .build());
 
     // Assuming `stellarRpc` is defined elsewhere
-    var response = stellarRpc.getLedgerEntries(ledgerKeys);
+    var response = sorobanServer.getLedgerEntries(ledgerKeys);
 
     if (response.getEntries().isEmpty()) return null;
 
@@ -207,8 +206,7 @@ public class StellarRpc implements LedgerClient {
     }
   }
 
-  private AccountEntry getAccountRpc(SorobanServer stellarRpc, String accountId)
-      throws IOException {
+  private AccountEntry getAccountRpc(String accountId) throws IOException {
     KeyPair kp = KeyPair.fromAccountId(accountId);
 
     LedgerKey ledgerKey =
@@ -218,7 +216,7 @@ public class StellarRpc implements LedgerClient {
             .build();
 
     List<LedgerKey> ledgerKeys = Collections.singletonList(ledgerKey);
-    GetLedgerEntriesResponse response = stellarRpc.getLedgerEntries(ledgerKeys);
+    GetLedgerEntriesResponse response = sorobanServer.getLedgerEntries(ledgerKeys);
 
     LedgerEntryData ledgerEntryData =
         LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr());

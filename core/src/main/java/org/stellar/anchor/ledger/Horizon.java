@@ -194,6 +194,7 @@ public class Horizon implements LedgerClient {
               .to(paymentOp.getTo())
               .amount(toXdrAmount(paymentOp.getAmount()))
               .asset(paymentOp.getAsset().toXdr())
+              .sourceAccount(paymentOp.getSourceAccount())
               .build());
     } else if (op instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
       builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE);
@@ -205,8 +206,6 @@ public class Horizon implements LedgerClient {
               .amount(toXdrAmount(pathPaymentOp.getAmount()))
               .asset(pathPaymentOp.getAsset().toXdr())
               .sourceAccount(pathPaymentOp.getSourceAccount())
-              .sourceAmount(Long.parseLong(pathPaymentOp.getSourceAmount()))
-              .sourceAsset(pathPaymentOp.getSourceAsset().toXdr())
               .build());
     } else {
       return null;

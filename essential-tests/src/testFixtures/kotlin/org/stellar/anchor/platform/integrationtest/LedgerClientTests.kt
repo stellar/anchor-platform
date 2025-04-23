@@ -15,12 +15,12 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
-import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.*
 import org.stellar.sdk.Network.TESTNET
 import org.stellar.sdk.operations.PaymentOperation
+import org.stellar.sdk.responses.AccountResponse
 import org.stellar.sdk.xdr.AssetType
 import org.stellar.sdk.xdr.OperationType
 import org.stellar.sdk.xdr.TransactionEnvelope
@@ -29,6 +29,7 @@ import org.stellar.sdk.xdr.TransactionEnvelope
 @Execution(ExecutionMode.SAME_THREAD)
 class LedgerClientTests {
   private val appConfig = mockk<AppConfig>()
+  private val trustlineTestAccount = "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
   val gson = GsonUtils.getInstance()!!
 
   @BeforeAll
@@ -41,24 +42,24 @@ class LedgerClientTests {
 
   @ParameterizedTest
   @MethodSource("getLedgerClient")
-  fun `test getAccount()`(ledgerClient: LedgerClient, accountId: String) {
-    val account = ledgerClient.getAccount(accountId)
+  fun `test getAccount()`(ledgerClient: LedgerClient) {
+    val account = ledgerClient.getAccount(trustlineTestAccount)
     JSONAssert.assertEquals(expectedAccount, gson.toJson(account), JSONCompareMode.LENIENT)
   }
 
   @ParameterizedTest
   @MethodSource("getLedgerClient")
-  fun `test getTrustline()`(ledgerClient: LedgerClient, accountId: String) {
+  fun `test getTrustline()`(ledgerClient: LedgerClient) {
     assertTrue(
       ledgerClient.hasTrustline(
-        accountId,
+        trustlineTestAccount,
         "USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       )
     )
 
     assertFalse(
       ledgerClient.hasTrustline(
-        accountId,
+        trustlineTestAccount,
         "JPY:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       )
     )
@@ -70,22 +71,12 @@ class LedgerClientTests {
     ledgerClient: LedgerClient,
     accountId: String,
   ) {
-    val paymentTxn = buildPaymentTransaction(ledgerClient)
+    val (sourceKp, _, paymentTxn) = buildPaymentTransaction(ledgerClient)
     val result = ledgerClient.submitTransaction(paymentTxn)
+    val txn = ledgerClient.getTransaction(result.hash)
 
-    var txn: LedgerTransaction? = null
-    for (i in 1..10) {
-      try {
-        txn = ledgerClient.getTransaction(result.hash)
-        break
-      } catch (e: Exception) {
-        println(e.message)
-        // wait and retry
-        Thread.sleep(1000)
-      }
-    }
-
-    JSONAssert.assertEquals(expectedTxn, gson.toJson(txn), JSONCompareMode.LENIENT)
+    assertEquals(sourceKp.accountId, txn.sourceAccount)
+    assertEquals("Hello Stellar!", txn.memo.text.toString())
 
     TransactionEnvelope.fromXdrBase64(txn!!.envelopeXdr).let {
       assertNotNull(it.v1)
@@ -101,18 +92,20 @@ class LedgerClientTests {
     }
   }
 
-  private fun buildPaymentTransaction(ledgerClient: LedgerClient): Transaction? {
-    val sourceKeypair =
-      KeyPair.fromSecretSeed("SAJW2O2NH5QMMVWYAN352OEXS2RUY675A2HPK5HEG2FRR2NXPYA4OLYN")
-    // The destination account is the account we will be sending the lumens to.
-    val destination =
-      KeyPair.fromSecretSeed("SBHTWEF5U7FK53FLGDMBQYGXRUJ24VBM3M6VDXCHRIGCRG3Z64PH45LW").accountId
+  private fun buildPaymentTransaction(
+    ledgerClient: LedgerClient
+  ): Triple<KeyPair, KeyPair, Transaction> {
+    val sourceKeypair = KeyPair.random()
+    val destKeyPair = KeyPair.random()
+    val horizonServer = Server(appConfig.horizonUrl)
+    prepareAccount(horizonServer, sourceKeypair)
+    prepareAccount(horizonServer, destKeyPair)
 
     val sourceAccount = ledgerClient.getAccount(sourceKeypair.accountId)
 
     val paymentOperation =
       PaymentOperation.builder()
-        .destination(destination)
+        .destination(destKeyPair.accountId)
         .asset(Asset.createNativeAsset())
         .amount(BigDecimal("0.000123"))
         .build()
@@ -128,17 +121,26 @@ class LedgerClientTests {
         .addOperation(paymentOperation) // Add the payment operation to the transaction
         .build()
     transaction.sign(sourceKeypair)
-    return transaction
+    return Triple(sourceKeypair, destKeyPair, transaction)
   }
 
   private fun getLedgerClient(): List<Array<Any>> {
     val stellarRpc = StellarRpc(appConfig)
     val horizon = Horizon(appConfig)
 
-    return listOf(
-      arrayOf(stellarRpc, "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"),
-      arrayOf(horizon, "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"),
-    )
+    return listOf(arrayOf(stellarRpc), arrayOf(horizon))
+  }
+}
+
+fun prepareAccount(horizonServer: Server, kp: KeyPair): AccountResponse? {
+  val friendBotUrl = "https://friendbot.stellar.org/?addr=${kp.accountId}"
+  try {
+    java.net.URL(friendBotUrl).openStream()
+    val account = horizonServer.accounts().account(kp.accountId)
+    return account
+  } catch (e: java.io.IOException) {
+    println("ERROR! " + e.message)
+    throw e
   }
 }
 
@@ -169,18 +171,5 @@ private val expectedAccount =
     }
   ]
 }  
-"""
-    .trimIndent()
-
-private val expectedTxn =
-  """
-  {
-    "sourceAccount": "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
-    "memo": {
-      "text": {
-        "bytes": "SGVsbG8gU3RlbGxhciE="
-      }
-    }
-  }
 """
     .trimIndent()
