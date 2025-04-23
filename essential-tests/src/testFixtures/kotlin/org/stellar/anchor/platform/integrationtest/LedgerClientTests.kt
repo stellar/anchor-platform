@@ -31,6 +31,8 @@ class LedgerClientTests {
   private val appConfig = mockk<AppConfig>()
   private val trustlineTestAccount = "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
   val gson = GsonUtils.getInstance()!!
+  private lateinit var sourceKeypair: KeyPair
+  private lateinit var destKeyPair: KeyPair
 
   @BeforeAll
   fun setup() {
@@ -38,6 +40,10 @@ class LedgerClientTests {
     every { appConfig.horizonUrl } returns "https://horizon-testnet.stellar.org"
     every { appConfig.stellarNetwork } returns "TESTNET"
     every { appConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
+
+    sourceKeypair = KeyPair.random()
+    destKeyPair = KeyPair.fromAccountId("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG")
+    prepareAccount(Server(appConfig.horizonUrl), sourceKeypair)
   }
 
   @ParameterizedTest
@@ -67,10 +73,7 @@ class LedgerClientTests {
 
   @ParameterizedTest
   @MethodSource("getLedgerClient")
-  fun `test submitTransaction() then getTransaction()`(
-    ledgerClient: LedgerClient,
-    accountId: String,
-  ) {
+  fun `test submitTransaction() then getTransaction()`(ledgerClient: LedgerClient) {
     val (sourceKp, _, paymentTxn) = buildPaymentTransaction(ledgerClient)
     val result = ledgerClient.submitTransaction(paymentTxn)
     val txn = ledgerClient.getTransaction(result.hash)
@@ -95,12 +98,6 @@ class LedgerClientTests {
   private fun buildPaymentTransaction(
     ledgerClient: LedgerClient
   ): Triple<KeyPair, KeyPair, Transaction> {
-    val sourceKeypair = KeyPair.random()
-    val destKeyPair = KeyPair.random()
-    val horizonServer = Server(appConfig.horizonUrl)
-    prepareAccount(horizonServer, sourceKeypair)
-    prepareAccount(horizonServer, destKeyPair)
-
     val sourceAccount = ledgerClient.getAccount(sourceKeypair.accountId)
 
     val paymentOperation =
