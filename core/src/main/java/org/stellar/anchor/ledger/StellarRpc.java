@@ -1,7 +1,6 @@
 package org.stellar.anchor.ledger;
 
 import static java.lang.Thread.sleep;
-import static org.stellar.anchor.util.Log.info;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 
@@ -92,38 +91,46 @@ public class StellarRpc implements LedgerClient {
   }
 
   @Override
-  @SneakyThrows
-  public LedgerTransaction getTransaction(String txnHash) {
+  public LedgerTransaction getTransaction(String txnHash) throws LedgerException {
     GetTransactionResponse txn = sorobanServer.getTransaction(txnHash);
     if (txn == null
-        || txn.getStatus() != GetTransactionStatus.SUCCESS
+        || txn.getStatus() == GetTransactionStatus.NOT_FOUND
         || txn.getEnvelopeXdr() == null) {
-      // not found or not yet available or failure
+      // not found
       return null;
     }
-    TransactionEnvelope txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
+
+    if (txn.getStatus() == GetTransactionStatus.FAILED) {
+      throw new LedgerException("Error getting transaction: " + txnHash);
+    }
+
+    TransactionEnvelope txnEnv;
+    try {
+      txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
+    } catch (IOException ioex) {
+      throw new LedgerException("Unable to parse transaction envelope", ioex);
+    }
     Integer applicationOrder = txn.getApplicationOrder();
     Long sequenceNumber = txn.getLedger();
-
     LedgerClientHelper.ParsedTransaction osm = LedgerClientHelper.parseTransaction(txnEnv, txnHash);
 
     return LedgerTransaction.builder()
         .hash(txn.getTxHash())
-        .sourceAccount(osm.sourceAccount)
+        .sourceAccount(osm.sourceAccount())
         .envelopeXdr(txn.getEnvelopeXdr())
-        .memo(osm.memo)
+        .memo(osm.memo())
         .sequenceNumber(sequenceNumber)
         .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
         .operations(
-            IntStream.range(0, osm.operations.length)
+            IntStream.range(0, osm.operations().length)
                 .mapToObj(
                     opIndex ->
                         LedgerClientHelper.convert(
-                            osm.sourceAccount,
+                            osm.sourceAccount(),
                             sequenceNumber,
                             applicationOrder,
                             opIndex + 1, // operation index is 1-based
-                            osm.operations[opIndex]))
+                            osm.operations()[opIndex]))
                 .filter(Objects::nonNull)
                 .toList())
         .build();
@@ -133,32 +140,12 @@ public class StellarRpc implements LedgerClient {
   @SneakyThrows
   public LedgerTransactionResponse submitTransaction(Transaction transaction) {
     SendTransactionResponse txnR = sorobanServer.sendTransaction(transaction);
-    LedgerTransaction txn = null;
-    Instant startTime = Instant.now();
-    int pollCount = 0;
-    try {
-      do {
-        delay();
-        if (java.time.Duration.between(startTime, Instant.now()).getSeconds() > maxTimeout
-            || pollCount >= maxPollCount)
-          throw new InterruptedException("Transaction took too long to complete");
-        txn = getTransaction(txnR.getHash());
-        pollCount++;
-      } while (txn == null);
-    } catch (InterruptedException e) {
-      info("Interrupted while waiting for transaction to complete");
-    }
 
-    if (txn != null) {
-      return LedgerTransactionResponse.builder()
-          .hash(txnR.getHash())
-          .envelopXdr(txn.getEnvelopeXdr())
-          .sourceAccount(txn.getSourceAccount())
-          .createdAt(txn.getCreatedAt())
-          .build();
-    } else {
-      return null;
-    }
+    return LedgerTransactionResponse.builder()
+        .hash(txnR.getHash())
+        .errorResultXdr(txnR.getErrorResultXdr())
+        .status(txnR.getStatus())
+        .build();
   }
 
   @SneakyThrows

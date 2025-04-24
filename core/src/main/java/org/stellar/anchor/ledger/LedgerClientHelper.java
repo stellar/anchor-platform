@@ -1,11 +1,19 @@
 package org.stellar.anchor.ledger;
 
+import static java.lang.Thread.sleep;
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
+import static org.stellar.anchor.util.Log.debug;
+import static org.stellar.anchor.util.Log.info;
+import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
 import static org.stellar.sdk.xdr.OperationType.PAYMENT;
+import static org.stellar.sdk.xdr.SignerKeyType.*;
+import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
 
+import java.time.Instant;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.TOID;
+import org.stellar.sdk.responses.SubmitTransactionAsyncResponse;
 import org.stellar.sdk.xdr.*;
 
 public class LedgerClientHelper {
@@ -96,15 +104,62 @@ public class LedgerClientHelper {
     return new ParsedTransaction(operations, sourceAccount, memo);
   }
 
-  public static class ParsedTransaction {
-    public final Operation[] operations;
-    public final String sourceAccount;
-    public final Memo memo;
+  public record ParsedTransaction(Operation[] operations, String sourceAccount, Memo memo) {}
 
-    public ParsedTransaction(Operation[] operations, String sourceAccount, Memo memo) {
-      this.operations = operations;
-      this.sourceAccount = sourceAccount;
-      this.memo = memo;
+  /**
+   * Convert from Horizon signer key type to XDR signer key type.
+   *
+   * @param type the Horizon signer key type
+   * @return the XDR signer key type
+   */
+  public static SignerKeyType getKeyTypeDiscriminant(String type) {
+    return switch (type) {
+      case "ed25519_public_key" -> SIGNER_KEY_TYPE_ED25519;
+      case "preauth_tx" -> SIGNER_KEY_TYPE_PRE_AUTH_TX;
+      case "sha256_hash" -> SIGNER_KEY_TYPE_HASH_X;
+      case "ed25519_signed_payload" -> SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
+      default -> throw new IllegalArgumentException("Invalid signer key type: " + type);
+    };
+  }
+
+  public static SendTransactionStatus convert(
+      SubmitTransactionAsyncResponse.TransactionStatus status) {
+    return switch (status) {
+      case PENDING -> SendTransactionStatus.PENDING;
+      case ERROR -> SendTransactionStatus.ERROR;
+      case DUPLICATE -> SendTransactionStatus.DUPLICATE;
+      case TRY_AGAIN_LATER -> SendTransactionStatus.TRY_AGAIN_LATER;
+    };
+  }
+
+  public static LedgerTransaction waitForTransactionAvailable(
+      LedgerClient ledgerClient, String txhHash) throws LedgerException {
+    return waitForTransactionAvailable(ledgerClient, txhHash, 10, 10);
+  }
+
+  public static LedgerTransaction waitForTransactionAvailable(
+      LedgerClient ledgerClient, String txhHash, long maxTimeout, int maxPollCount)
+      throws LedgerException {
+    Instant startTime = Instant.now();
+    int pollCount = 0;
+    try {
+      do {
+        if (java.time.Duration.between(startTime, Instant.now()).getSeconds() > maxTimeout
+            || pollCount >= maxPollCount)
+          throw new InterruptedException("Transaction took too long to complete");
+        try {
+          LedgerTransaction txn = ledgerClient.getTransaction(txhHash);
+          if (txn != null) return txn;
+          pollCount++;
+        } catch (org.stellar.sdk.exception.BadRequestException e) {
+          debug("Transaction not yet available: " + e.getMessage());
+        }
+        sleep(1000);
+
+      } while (true);
+    } catch (InterruptedException e) {
+      info("Interrupted while waiting for transaction to complete");
     }
+    throw new LedgerException("Transaction took too long to complete");
   }
 }

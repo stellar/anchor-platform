@@ -2,7 +2,6 @@ package org.stellar.anchor.ledger
 
 import io.mockk.every
 import io.mockk.mockk
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -131,26 +130,5 @@ internal class HorizonTest {
     every { horizon.server } returns server
     every { horizon.hasTrustline(account, asset) } answers { callOriginal() }
     assertFalse(horizon.hasTrustline(account, asset))
-  }
-
-  @Test
-  fun `test getKeyTypeDiscriminant with valid types`() {
-    val horizon = Horizon(appConfig)
-
-    assertEquals(SIGNER_KEY_TYPE_ED25519, horizon.getKeyTypeDiscriminant("ed25519_public_key"))
-    assertEquals(SIGNER_KEY_TYPE_PRE_AUTH_TX, horizon.getKeyTypeDiscriminant("preauth_tx"))
-    assertEquals(SIGNER_KEY_TYPE_HASH_X, horizon.getKeyTypeDiscriminant("sha256_hash"))
-    assertEquals(
-      SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD,
-      horizon.getKeyTypeDiscriminant("ed25519_signed_payload")
-    )
-  }
-
-  @Test
-  fun `test getKeyTypeDiscriminant with invalid type`() {
-    val horizon = Horizon(appConfig)
-    val exception =
-      assertThrows<IllegalArgumentException> { horizon.getKeyTypeDiscriminant("invalid_type") }
-    assertEquals("Invalid signer key type: invalid_type", exception.message)
   }
 }

@@ -41,8 +41,8 @@ public interface LedgerClient {
   LedgerTransaction getTransaction(String txnHash) throws LedgerException;
 
   /**
-   * Submit a transaction to the network. The function blocks until the transaction is committed.
-   * Otherwise, it throws an exception.
+   * Submit a transaction to the network. The function returns as soon as the transaction is
+   * submitted. It is up to the caller of this function to make sure the transaction is committed.
    *
    * @param transaction The transaction to submit.
    * @return The transaction response.

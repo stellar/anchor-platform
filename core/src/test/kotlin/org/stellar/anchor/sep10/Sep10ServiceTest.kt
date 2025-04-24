@@ -53,6 +53,7 @@ import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
+import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.FileUtil
@@ -806,7 +807,8 @@ internal class Sep10ServiceTest {
         )
         .build()
     multisigTx.sign(clientMasterKP)
-    ledgerClient.submitTransaction(multisigTx)
+    val txnResponse = ledgerClient.submitTransaction(multisigTx)
+    LedgerClientHelper.waitForTransactionAvailable(ledgerClient, txnResponse.hash)
 
     // 4 ------ Run tests
     val validationRequest = ValidationRequest.of(transaction.toEnvelopeXdrBase64())

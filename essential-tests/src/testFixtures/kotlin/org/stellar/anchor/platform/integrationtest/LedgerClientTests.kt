@@ -15,6 +15,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
+import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.*
@@ -75,8 +76,11 @@ class LedgerClientTests {
   @MethodSource("getLedgerClient")
   fun `test submitTransaction() then getTransaction()`(ledgerClient: LedgerClient) {
     val (sourceKp, _, paymentTxn) = buildPaymentTransaction(ledgerClient)
-    val result = ledgerClient.submitTransaction(paymentTxn)
-    val txn = ledgerClient.getTransaction(result.hash)
+    val txn =
+      LedgerClientHelper.waitForTransactionAvailable(
+        ledgerClient,
+        ledgerClient.submitTransaction(paymentTxn).hash
+      )
 
     assertEquals(sourceKp.accountId, txn.sourceAccount)
     assertEquals("Hello Stellar!", txn.memo.text.toString())

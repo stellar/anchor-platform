@@ -140,23 +140,6 @@ class StellarRpcTest {
     verify(exactly = 3) { sorobanServer.getTransaction(any()) }
     assertNotNull(result)
     assertEquals("b3a5deea298f0754da4591525aa36ab824e2b5a57da18160b5da95fb35b4b6d3", result.hash)
-    assertNotNull(result.envelopXdr)
-    assertEquals("GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP", result.sourceAccount)
-  }
-
-  @Test
-  fun `test submitTransaction() timeout`() {
-    val notFoundTxn = gson.fromJson(txnNotFoundResponse, GetTransactionResponse::class.java)
-    val spyStellarRpc = spyk(stellarRpc)
-    every { sorobanServer.sendTransaction(any()) } returns
-      gson.fromJson(submitTxnTestResponse, SendTransactionResponse::class.java)
-    every { sorobanServer.getTransaction(any()) } returns notFoundTxn
-    every { spyStellarRpc.delay() } answers {}
-
-    val result = spyStellarRpc.submitTransaction(mockk<Transaction>())
-
-    verify(exactly = stellarRpc.maxPollCount) { sorobanServer.getTransaction(any()) }
-    assertNull(result)
   }
 }
 

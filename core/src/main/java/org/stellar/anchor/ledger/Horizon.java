@@ -1,9 +1,10 @@
 package org.stellar.anchor.ledger;
 
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
+import static org.stellar.anchor.ledger.LedgerClientHelper.*;
 import static org.stellar.anchor.util.AssetHelper.toXdrAmount;
+import static org.stellar.anchor.util.Log.debug;
 import static org.stellar.sdk.xdr.OperationType.PAYMENT;
-import static org.stellar.sdk.xdr.SignerKeyType.*;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -22,7 +23,10 @@ import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TrustLineAsset;
+import org.stellar.sdk.exception.BadRequestException;
+import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.responses.AccountResponse;
+import org.stellar.sdk.responses.SubmitTransactionAsyncResponse;
 import org.stellar.sdk.responses.TransactionResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
@@ -103,7 +107,16 @@ public class Horizon implements LedgerClient {
 
   @Override
   public LedgerTransaction getTransaction(String txnHash) throws LedgerException {
-    TransactionResponse txnResponse = getServer().transactions().transaction(txnHash);
+    TransactionResponse txnResponse;
+    try {
+      txnResponse = getServer().transactions().transaction(txnHash);
+    } catch (BadRequestException brex) {
+      debug("Transaction not found: " + txnHash);
+      return null;
+    } catch (NetworkException nex) {
+      throw new LedgerException("Error getting transaction: " + txnHash, nex);
+    }
+
     TransactionEnvelope txnEnv;
     try {
       txnEnv = TransactionEnvelope.fromXdrBase64(txnResponse.getEnvelopeXdr());
@@ -115,25 +128,25 @@ public class Horizon implements LedgerClient {
         TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder();
     Long sequenceNumber = txnResponse.getLedger();
 
-    ParsedTransaction osm = LedgerClientHelper.parseTransaction(txnEnv, txnHash);
+    ParsedTransaction osm = parseTransaction(txnEnv, txnHash);
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())
         .sourceAccount(txnResponse.getSourceAccount())
         .envelopeXdr(txnResponse.getEnvelopeXdr())
-        .memo(osm.memo)
+        .memo(osm.memo())
         .sequenceNumber(txnResponse.getSourceAccountSequence())
         .createdAt(Instant.parse(txnResponse.getCreatedAt()))
         .operations(
-            IntStream.range(0, osm.operations.length)
+            IntStream.range(0, osm.operations().length)
                 .mapToObj(
                     opIndex ->
-                        LedgerClientHelper.convert(
-                            osm.sourceAccount,
+                        convert(
+                            osm.sourceAccount(),
                             sequenceNumber,
                             applicationOrder,
                             opIndex + 1, // operation index is 1-based
-                            osm.operations[opIndex]))
+                            osm.operations()[opIndex]))
                 .filter(Objects::nonNull)
                 .toList())
         .build();
@@ -141,14 +154,12 @@ public class Horizon implements LedgerClient {
 
   @Override
   public LedgerTransactionResponse submitTransaction(Transaction transaction) {
-    TransactionResponse txnR = getServer().submitTransaction(transaction, false);
+    SubmitTransactionAsyncResponse txnR = getServer().submitTransactionAsync(transaction, false);
 
     return LedgerTransactionResponse.builder()
         .hash(txnR.getHash())
-        .envelopXdr(txnR.getEnvelopeXdr())
-        .sourceAccount(txnR.getSourceAccount())
-        .feeCharged(Long.parseLong(txnR.getFeeCharged().toString()))
-        .createdAt(Instant.parse(txnR.getCreatedAt()))
+        .errorResultXdr(txnR.getErrorResultXdr())
+        .status(LedgerClientHelper.convert(txnR.getTxStatus()))
         .build();
   }
 
@@ -185,6 +196,7 @@ public class Horizon implements LedgerClient {
 
   public static LedgerOperation toLedgerOperation(OperationResponse op) {
     LedgerOperation.LedgerOperationBuilder builder = LedgerOperation.builder();
+    // TODO: Capture muxed account events
     if (op instanceof PaymentOperationResponse paymentOp) {
       builder.type(PAYMENT);
       builder.paymentOperation(
@@ -211,21 +223,5 @@ public class Horizon implements LedgerClient {
       return null;
     }
     return builder.build();
-  }
-
-  /**
-   * Convert from Horizon signer key type to XDR signer key type.
-   *
-   * @param type the Horizon signer key type
-   * @return the XDR signer key type
-   */
-  SignerKeyType getKeyTypeDiscriminant(String type) {
-    return switch (type) {
-      case "ed25519_public_key" -> SIGNER_KEY_TYPE_ED25519;
-      case "preauth_tx" -> SIGNER_KEY_TYPE_PRE_AUTH_TX;
-      case "sha256_hash" -> SIGNER_KEY_TYPE_HASH_X;
-      case "ed25519_signed_payload" -> SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
-      default -> throw new IllegalArgumentException("Invalid signer key type: " + type);
-    };
   }
 }

@@ -1,5 +1,7 @@
 package org.stellar.anchor.ledger;
 
+import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
+
 import java.time.Instant;
 import java.util.List;
 import lombok.Builder;
@@ -58,11 +60,7 @@ public class LedgerTransaction {
   @Data
   public static class LedgerTransactionResponse {
     String hash;
-    String envelopXdr;
-    String sourceAccount;
-    Long feeCharged;
-    Memo memo;
-    Long sequenceNumber;
-    Instant createdAt;
+    String errorResultXdr;
+    SendTransactionStatus status;
   }
 }
