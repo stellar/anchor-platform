@@ -180,9 +180,6 @@ public class FireblocksEventService extends CustodyEventService {
                 message,
                 td.getTxHash());
       } else {
-        errorF(
-            "Unknown Stellar transaction operation type[{}]. This should never happen.",
-            ledgerOperation.getType());
         throw new LedgerException("Unknown Stellar transaction operation type");
       }
     } catch (SepException ex) {

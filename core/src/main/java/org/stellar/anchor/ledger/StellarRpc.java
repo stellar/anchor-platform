@@ -1,6 +1,5 @@
 package org.stellar.anchor.ledger;
 
-import static java.lang.Thread.sleep;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 
@@ -160,10 +159,6 @@ public class StellarRpc implements LedgerClient {
     GetLedgerEntriesResponse response = sorobanServer.getLedgerEntries(ledgerKeys);
     return LedgerEntry.LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr())
         .getAccount();
-  }
-
-  void delay() throws InterruptedException {
-    sleep(1000);
   }
 
   private TrustLineEntry getTrustlineRpc(String accountId, String asset) throws LedgerException {

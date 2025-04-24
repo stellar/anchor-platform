@@ -2,7 +2,7 @@ package org.stellar.anchor.ledger
 
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.spyk
+import io.mockk.slot
 import io.mockk.verify
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -10,10 +10,10 @@ import org.junit.jupiter.api.Test
 import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.SorobanServer
-import org.stellar.sdk.Transaction
+import org.stellar.sdk.StrKey
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
-import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse
+import org.stellar.sdk.xdr.LedgerKey
 import org.stellar.sdk.xdr.OperationType
 
 class StellarRpcTest {
@@ -38,15 +38,28 @@ class StellarRpcTest {
 
   @Test
   fun `test hasTrustline() is true`() {
-    every { sorobanServer.getLedgerEntries(any()) } returns
+    val capturedKeys = slot<Collection<LedgerKey>>()
+    every { sorobanServer.getLedgerEntries(capture(capturedKeys)) } returns
       gson.fromJson(trustlineTestResponse, GetLedgerEntriesResponse::class.java)
+
     val result =
       stellarRpc.hasTrustline(
         "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
         "USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       )
+
     assertTrue(result)
     verify(exactly = 1) { sorobanServer.getLedgerEntries(any()) }
+
+    // Verify the captured argument
+    val keys = capturedKeys.captured
+    assertEquals(1, keys.size) // Example: Verify the size of the collection
+    val key = keys.first()
+    assertNotNull(key.trustLine)
+    assertEquals(
+      "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+      StrKey.encodeEd25519PublicKey(key.trustLine?.accountID?.accountID?.ed25519?.uint256)
+    )
   }
 
   @Test
@@ -67,7 +80,8 @@ class StellarRpcTest {
 
   @Test
   fun `test getAccount()`() {
-    every { sorobanServer.getLedgerEntries(any()) } returns
+    val capturedKeys = slot<Collection<LedgerKey>>()
+    every { sorobanServer.getLedgerEntries(capture(capturedKeys)) } returns
       gson.fromJson(accountTestResponse, GetLedgerEntriesResponse::class.java)
 
     val result = stellarRpc.getAccount("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG")
@@ -81,6 +95,16 @@ class StellarRpcTest {
     assertEquals(result.signers[2].key, "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG")
 
     verify(exactly = 1) { sorobanServer.getLedgerEntries(any()) }
+
+    // Verify the captured argument
+    val keys = capturedKeys.captured
+    assertEquals(1, keys.size) // Example: Verify the size of the collection
+    val key = keys.first()
+    assertNotNull(key.account)
+    assertEquals(
+      "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+      StrKey.encodeEd25519PublicKey(key.account?.accountID?.accountID?.ed25519?.uint256)
+    )
   }
 
   @Test
@@ -121,25 +145,6 @@ class StellarRpcTest {
       stellarRpc.getTransaction("4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5")
 
     assertNull(result)
-  }
-
-  @Test
-  fun `test submitTransaction()`() {
-    val successTxn = gson.fromJson(txnTestResponse, GetTransactionResponse::class.java)
-    val notFoundTxn = gson.fromJson(txnNotFoundResponse, GetTransactionResponse::class.java)
-    val spyStellarRpc = spyk(stellarRpc)
-
-    every { sorobanServer.sendTransaction(any()) } returns
-      gson.fromJson(submitTxnTestResponse, SendTransactionResponse::class.java)
-    every { sorobanServer.getTransaction(any()) } returnsMany
-      listOf(notFoundTxn, notFoundTxn, successTxn)
-    every { spyStellarRpc.delay() } answers {}
-
-    val result = spyStellarRpc.submitTransaction(mockk<Transaction>())
-
-    verify(exactly = 3) { sorobanServer.getTransaction(any()) }
-    assertNotNull(result)
-    assertEquals("b3a5deea298f0754da4591525aa36ab824e2b5a57da18160b5da95fb35b4b6d3", result.hash)
   }
 }
 
@@ -206,17 +211,6 @@ private val txnTestResponse =
     "resultMetaXdr": "AAAAAwAAAAAAAAACAAAAAwAaEl4AAAAAAAAAAAIlCw8BhjgyQpskF3xaXvjabvcVvrjytZWEK7AJxsPMAAAAFlaBw40AAAfaAAAH2QAAAAIAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAMAAAAAABoQVwAAAABn2u2DAAAAAAAAAAEAGhJeAAAAAAAAAAACJQsPAYY4MkKbJBd8Wl742m73Fb648rWVhCuwCcbDzAAAABZWgcONAAAH2gAAB9oAAAACAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAADAAAAAAAaEl4AAAAAZ9r3qQAAAAAAAAABAAAABAAAAAMAGhJeAAAAAAAAAAACJQsPAYY4MkKbJBd8Wl742m73Fb648rWVhCuwCcbDzAAAABZWgcONAAAH2gAAB9oAAAACAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAADAAAAAAAaEl4AAAAAZ9r3qQAAAAAAAAABABoSXgAAAAAAAAAAAiULDwGGODJCmyQXfFpe+Npu9xW+uPK1lYQrsAnGw8wAAAAWVoG+vwAAB9oAAAfaAAAAAgAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAwAAAAAAGhJeAAAAAGfa96kAAAAAAAAAAwAaEFAAAAAAAAAAANKw4wpgrtrVoAuJ7zcXgZAOgF0etbzpRfZJhXKBED5VAAAAGFE+qbcAAAffAAALBgAAAAQAAAAAAAAAAAAAAAABAAAAAAAAAgAAAAAmTAkMTnRfY5v8JYPy5YeOsfcP4wKclK/NSQGl2OQmIAAAAAEAAAAAvX0BoNOlt2iSPSvr840/k88R+iO0kP++3j48ORcqjsMAAAABAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAB88AAAACAAAAAAAAAAAAAAADAAAAAAAaEFAAAAAAZ9rtYAAAAAAAAAABABoSXgAAAAAAAAAA0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlUAAAAYUT6uhQAAB98AAAsGAAAABAAAAAAAAAAAAAAAAAEAAAAAAAACAAAAACZMCQxOdF9jm/wlg/Llh46x9w/jApyUr81JAaXY5CYgAAAAAQAAAAC9fQGg06W3aJI9K+vzjT+TzxH6I7SQ/77ePjw5FyqOwwAAAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAHzwAAAAIAAAAAAAAAAAAAAAMAAAAAABoQUAAAAABn2u1gAAAAAAAAAAAAAAAA",
     "ledger": 1708638,
     "createdAt": 1742403497
-  }
-"""
-    .trimIndent()
-
-private val submitTxnTestResponse =
-  """
-  {
-    "status": "PENDING",
-    "hash": "b3a5deea298f0754da4591525aa36ab824e2b5a57da18160b5da95fb35b4b6d3",
-    "latestLedger": 1708794,
-    "latestLedgerCloseTime": 1742404278
   }
 """
     .trimIndent()

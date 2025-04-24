@@ -1,6 +1,6 @@
 package org.stellar.anchor.util;
 
-import static java.math.RoundingMode.HALF_UP;
+import static java.math.RoundingMode.DOWN;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import java.math.BigDecimal;
@@ -9,6 +9,7 @@ import lombok.SneakyThrows;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawOperation;
+import org.stellar.sdk.AssetTypeCreditAlphaNum;
 import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.xdr.Asset;
 
@@ -61,6 +62,9 @@ public class AssetHelper {
 
   /**
    * Returns the asset code from asset
+   *
+   * <p>Exmamples: - stellar:USDC:GABCD... -> USD - iso4217:USD -> USD - native -> native -
+   * USD:GABCD... -> USD
    *
    * @param asset asset
    * @return The asset code
@@ -125,7 +129,17 @@ public class AssetHelper {
     if (xdrAsset == null) {
       return null;
     }
-    return org.stellar.sdk.Asset.fromXdr(xdrAsset).toString();
+
+    org.stellar.sdk.Asset asset = org.stellar.sdk.Asset.fromXdr(xdrAsset);
+
+    return switch (asset.getType()) {
+      case ASSET_TYPE_NATIVE -> AssetInfo.NATIVE_ASSET_CODE;
+      case ASSET_TYPE_CREDIT_ALPHANUM4, ASSET_TYPE_CREDIT_ALPHANUM12 -> {
+        AssetTypeCreditAlphaNum creditAlphaAsset = (AssetTypeCreditAlphaNum) asset;
+        yield creditAlphaAsset.getCode() + ":" + creditAlphaAsset.getIssuer();
+      }
+      default -> throw new IllegalArgumentException("Unsupported asset type: " + asset.getType());
+    };
   }
 
   // Check if deposit is enabled for the asset
@@ -167,7 +181,7 @@ public class AssetHelper {
    * @return the string representation of the amount
    */
   public static String fromXdrAmount(Long amount) {
-    return BigDecimal.valueOf(amount).divide(XDR_SCALE_FACTOR, 7, HALF_UP).toPlainString();
+    return BigDecimal.valueOf(amount).divide(XDR_SCALE_FACTOR, 7, DOWN).toPlainString();
   }
 
   /**
@@ -180,6 +194,6 @@ public class AssetHelper {
     if (amount == null || amount.isEmpty()) {
       return null;
     }
-    return new BigDecimal(amount).multiply(XDR_SCALE_FACTOR).setScale(0, HALF_UP).longValue();
+    return new BigDecimal(amount).multiply(XDR_SCALE_FACTOR).setScale(0, DOWN).longValue();
   }
 }
