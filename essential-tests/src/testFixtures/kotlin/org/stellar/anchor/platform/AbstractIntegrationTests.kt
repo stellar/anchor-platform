@@ -185,58 +185,6 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
     return payments.first()
   }
 
-  //
-  //  private fun fetchTestPaymentFromHorizon() {
-  //    if (config.get("stellar_network.horizon_url") == null) {
-  //      throw Exception("stellar_network.horizon_url is not set")
-  //    }
-  //
-  //    val horizonServer = Server(config.get("stellar_network.horizon_url")!!)
-  //    val destAccount = TEST_PAYMENT_DEST_ACCOUNT
-  //    val payments =
-  //      horizonServer
-  //        .payments()
-  //        .forAccount(destAccount)
-  //        .order(RequestBuilder.Order.DESC)
-  //        .includeTransactions(true)
-  //        .limit(10)
-  //        .execute()
-  //        .records
-  //
-  //    if (payments.isEmpty()) {
-  //      sendTestPaymentToHorizon(horizonServer)
-  //    }
-  //
-  //    for (payment in payments) {
-  //      if (payment is PaymentOperationResponse) {
-  //        if (payment.transaction.memo.toString() == TEST_PAYMENT_MEMO) {
-  //          println("Found test payment")
-  //          // initialize the test payment value pairs for injection
-  //          testPaymentValues =
-  //            listOf(
-  //              Pair("%TESTPAYMENT_ID%", payment.id.toString()),
-  //              Pair("%TESTPAYMENT_AMOUNT%", payment.amount),
-  //              Pair("%TESTPAYMENT_TXN_HASH%", payment.transactionHash),
-  //              Pair("%TESTPAYMENT_SRC_ACCOUNT%", payment.from),
-  //              Pair("%TESTPAYMENT_DEST_ACCOUNT%", payment.to),
-  //              Pair("%TESTPAYMENT_ASSET_CIRCLE_USDC%", TEST_PAYMENT_ASSET_CIRCLE_USDC),
-  //              Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT),
-  //            )
-  //
-  //          return
-  //        }
-  //      }
-  //    }
-  //
-  //    println("\n*** STOP ***")
-  //    println("Cannot find test payment")
-  //    println(
-  //      "Please visit the testnet reset script: https://github.com/stellar/useful-scripts to
-  // create the test payment"
-  //    )
-  //    throw Exception("Cannot find test payment")
-  //  }
-
   private fun sendTestPaymentToHorizon(server: Server) {
     // send test payment of 1 USDC from distribution account to the test receiver account
     val usdcAsset =
