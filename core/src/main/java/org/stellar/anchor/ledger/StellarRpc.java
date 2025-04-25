@@ -111,17 +111,8 @@ public class StellarRpc implements LedgerClient {
     Integer applicationOrder = txn.getApplicationOrder();
     Long sequenceNumber = txn.getLedger();
     LedgerClientHelper.ParsedTransaction osm = LedgerClientHelper.parseTransaction(txnEnv, txnHash);
-
-    List<LedgerTransaction.LedgerOperation> operations = new ArrayList<>(osm.operations().length);
-    for (int opIndex = 0; opIndex < osm.operations().length; opIndex++) {
-      operations.add(
-          LedgerClientHelper.convert(
-              osm.sourceAccount(),
-              sequenceNumber,
-              applicationOrder,
-              opIndex + 1, // operation index is 1-based
-              osm.operations()[opIndex]));
-    }
+    List<LedgerTransaction.LedgerOperation> operations =
+        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, osm);
 
     return LedgerTransaction.builder()
         .hash(txn.getTxHash())

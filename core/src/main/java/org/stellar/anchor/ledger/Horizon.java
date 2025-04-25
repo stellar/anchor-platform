@@ -8,7 +8,6 @@ import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.stellar.anchor.api.exception.LedgerException;
@@ -130,16 +129,8 @@ public class Horizon implements LedgerClient {
     Long sequenceNumber = txnResponse.getLedger();
 
     ParsedTransaction osm = parseTransaction(txnEnv, txnHash);
-    List<LedgerTransaction.LedgerOperation> operations = new ArrayList<>(osm.operations().length);
-    for (int opIndex = 0; opIndex < osm.operations().length; opIndex++) {
-      operations.add(
-          LedgerClientHelper.convert(
-              osm.sourceAccount(),
-              sequenceNumber,
-              applicationOrder,
-              opIndex + 1, // operation index is 1-based
-              osm.operations()[opIndex]));
-    }
+    List<LedgerOperation> operations =
+        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, osm);
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())

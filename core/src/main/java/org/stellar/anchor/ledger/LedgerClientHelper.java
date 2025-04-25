@@ -10,6 +10,8 @@ import static org.stellar.sdk.xdr.SignerKeyType.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.TOID;
@@ -132,6 +134,22 @@ public class LedgerClientHelper {
       case DUPLICATE -> SendTransactionStatus.DUPLICATE;
       case TRY_AGAIN_LATER -> SendTransactionStatus.TRY_AGAIN_LATER;
     };
+  }
+
+  static List<LedgerOperation> getLedgerOperations(
+      Integer applicationOrder, Long sequenceNumber, LedgerClientHelper.ParsedTransaction osm)
+      throws LedgerException {
+    List<LedgerTransaction.LedgerOperation> operations = new ArrayList<>(osm.operations().length);
+    for (int opIndex = 0; opIndex < osm.operations().length; opIndex++) {
+      operations.add(
+          LedgerClientHelper.convert(
+              osm.sourceAccount(),
+              sequenceNumber,
+              applicationOrder,
+              opIndex + 1, // operation index is 1-based
+              osm.operations()[opIndex]));
+    }
+    return operations;
   }
 
   public static LedgerTransaction waitForTransactionAvailable(
