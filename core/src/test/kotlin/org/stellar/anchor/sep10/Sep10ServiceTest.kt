@@ -40,10 +40,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_HOME_DOMAIN_PATTERN
 import org.stellar.anchor.TestConstants.Companion.TEST_MEMO
 import org.stellar.anchor.TestConstants.Companion.TEST_SIGNING_SEED
 import org.stellar.anchor.TestConstants.Companion.TEST_WEB_AUTH_DOMAIN
-import org.stellar.anchor.api.exception.SepException
-import org.stellar.anchor.api.exception.SepMissingAuthHeaderException
-import org.stellar.anchor.api.exception.SepNotAuthorizedException
-import org.stellar.anchor.api.exception.SepValidationException
+import org.stellar.anchor.api.exception.*
 import org.stellar.anchor.api.sep.sep10.ChallengeRequest
 import org.stellar.anchor.api.sep.sep10.ChallengeResponse
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
@@ -56,13 +53,14 @@ import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
+import org.stellar.anchor.ledger.LedgerClientHelper
+import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.FileUtil
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.NetUtil
 import org.stellar.sdk.*
 import org.stellar.sdk.Network.*
-import org.stellar.sdk.exception.BadRequestException
 import org.stellar.sdk.exception.InvalidSep10ChallengeException
 import org.stellar.sdk.operations.ManageDataOperation
 import org.stellar.sdk.operations.SetOptionsOperation
@@ -77,7 +75,7 @@ internal class TestSigner(
   @SerializedName("key") val key: String,
   @SerializedName("type") val type: String,
   @SerializedName("weight") val weight: Int,
-  @SerializedName("sponsor") val sponsor: String
+  @SerializedName("sponsor") val sponsor: String,
 ) {
   fun toSigner(): LedgerClient.Signer {
     val gson = GsonUtils.getInstance()
@@ -104,10 +102,23 @@ internal class Sep10ServiceTest {
     }
 
     @JvmStatic
-    fun stellarNetworks(): Stream<Arguments> {
+    fun ledgerClients(): Stream<Arguments> {
       return Stream.of(
-        Arguments.of("https://horizon-testnet.stellar.org", TESTNET),
-        Arguments.of("https://horizon-futurenet.stellar.org", FUTURENET)
+        Arguments.of(
+          Horizon("https://horizon-testnet.stellar.org"),
+          "https://horizon-testnet.stellar.org",
+          TESTNET,
+        ),
+        Arguments.of(
+          Horizon("https://horizon-futurenet.stellar.org"),
+          "https://horizon-futurenet.stellar.org",
+          FUTURENET,
+        ),
+        Arguments.of(
+          StellarRpc("https://soroban-testnet.stellar.org"),
+          "https://horizon-testnet.stellar.org",
+          TESTNET,
+        ),
       )
     }
 
@@ -150,7 +161,7 @@ internal class Sep10ServiceTest {
   fun createTestChallenge(
     clientDomain: String,
     homeDomain: String,
-    signWithClientDomain: Boolean
+    signWithClientDomain: Boolean,
   ): String {
     val now = System.currentTimeMillis() / 1000L
     val signer = KeyPair.fromSecretSeed(TEST_SIGNING_SEED)
@@ -166,7 +177,7 @@ internal class Sep10ServiceTest {
           TimeBounds(now, now + 900),
           clientDomain,
           if (clientDomain.isEmpty()) "" else clientDomainKeyPair.accountId,
-          memo
+          memo,
         )
     txn.sign(clientKeyPair)
     if (clientDomain.isNotEmpty() && signWithClientDomain) {
@@ -176,10 +187,8 @@ internal class Sep10ServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(
-    strings = ["https://horizon-testnet.stellar.org", "https://horizon-futurenet.stellar.org"]
-  )
-  fun `test challenge with non existent account and client domain`(horizonUrl: String) {
+  @MethodSource("ledgerClients")
+  fun `test challenge with non existent account and client domain`(ledgerClient: LedgerClient) {
     // 1 ------ Create Test Transaction
 
     // serverKP does not exist in the network.
@@ -237,20 +246,19 @@ internal class Sep10ServiceTest {
 
     // 2 ------ Create Services
     every { secretConfig.sep10SigningSeed } returns String(serverKP.secretSeed)
-    every { appConfig.horizonUrl } returns horizonUrl
-    every { appConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
-    val ledgerApi = Horizon(appConfig)
-    // TODO: to be parameterized for Stellar RPC and Horizon
     this.sep10Service =
-      Sep10Service(appConfig, secretConfig, sep10Config, ledgerApi, jwtService, clientFinder)
+      Sep10Service(appConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder)
 
     // 3 ------ Run tests
     val validationRequest = ValidationRequest.of(transaction.toEnvelopeXdrBase64())
     assertDoesNotThrow { sep10Service.validateChallenge(validationRequest) }
   }
 
-  @Test
-  fun `test challenge with existent account multisig with invalid ed dsa public key and client domain`() {
+  @ParameterizedTest
+  @MethodSource("ledgerClients")
+  fun `test challenge with existent account multisig with invalid ed dsa public key and client domain`(
+    ledgerClient: LedgerClient
+  ) {
     // 1 ------ Mock client account and its response from horizon
     // The public key of the client that exists thanks to a mockk
     // GDFWZYGUNUFW4H3PP3DSNGTDFBUHO6NUFPQ6FAPMCKEJ6EHDKX2CV2IM
@@ -323,9 +331,8 @@ internal class Sep10ServiceTest {
     every { secretConfig.sep10SigningSeed } returns String(serverKP.secretSeed)
     every { appConfig.horizonUrl } returns mockHorizonUrl
     every { appConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
-    val ledgerApi = Horizon(appConfig)
     this.sep10Service =
-      Sep10Service(appConfig, secretConfig, sep10Config, ledgerApi, jwtService, clientFinder)
+      Sep10Service(appConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder)
 
     // 3 ------ Run tests
     val validationRequest = ValidationRequest.of(transaction.toEnvelopeXdrBase64())
@@ -363,7 +370,7 @@ internal class Sep10ServiceTest {
         any(),
         clientDomain ?: "",
         any(),
-        any()
+        any(),
       )
     }
   }
@@ -374,13 +381,13 @@ internal class Sep10ServiceTest {
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
 
     val mockSigners =
-      listOf(TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner())
+      listOf(TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner())
     val accountResponse =
       mockk<LedgerClient.Account> {
         every { accountId } returns clientKeyPair.accountId
         every { sequenceNumber } returns 1
         every { signers } returns mockSigners
-        every { thresholds.medThreshold } returns 1
+        every { thresholds.medium } returns 1
       }
 
     every { ledgerClient.getAccount(any()) } returns accountResponse
@@ -395,8 +402,8 @@ internal class Sep10ServiceTest {
   fun `test validate challenge with client domain`() {
     val mockSigners =
       listOf(
-        TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner(),
-        TestSigner(clientDomainKeyPair.accountId, "ed25519_public_key", 1, "").toSigner()
+        TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner(),
+        TestSigner(clientDomainKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner(),
       )
 
     val accountResponse =
@@ -404,7 +411,7 @@ internal class Sep10ServiceTest {
         every { accountId } returns clientKeyPair.accountId
         every { sequenceNumber } returns 1
         every { signers } returns mockSigners
-        every { thresholds.medThreshold } returns 1
+        every { thresholds.medium } returns 1
       }
 
     every { ledgerClient.getAccount(any()) } returns accountResponse
@@ -424,10 +431,7 @@ internal class Sep10ServiceTest {
 
     // Test when the transaction was not signed by the client domain and the client account not
     // exists
-    every { ledgerClient.getAccount(any()) } answers
-      {
-        throw BadRequestException(400, "mock error", null, null)
-      }
+    every { ledgerClient.getAccount(any()) } answers { throw LedgerException("mock error") }
     vr.transaction = createTestChallenge(TEST_CLIENT_DOMAIN, TEST_HOME_DOMAIN, false)
 
     assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
@@ -438,9 +442,9 @@ internal class Sep10ServiceTest {
     val vr = ValidationRequest()
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
 
-    every { ledgerClient.getAccount(any()) } answers
+    every { ledgerClient.getAccount(ofType(String::class)) } answers
       {
-        throw BadRequestException(400, "mock error", null, null)
+        throw LedgerException("mock error")
       }
 
     sep10Service.validateChallenge(vr)
@@ -631,7 +635,7 @@ internal class Sep10ServiceTest {
             .clientDomain(TEST_CLIENT_DOMAIN)
             .build(),
           MemoId(1234567890),
-          null
+          null,
         )
       }
     // Then
@@ -702,10 +706,11 @@ internal class Sep10ServiceTest {
   }
 
   @ParameterizedTest
-  @MethodSource("stellarNetworks")
+  @MethodSource("ledgerClients")
   fun `test the challenge with existent account, multisig, and client domain`(
+    ledgerClient: LedgerClient,
     horizonUrl: String,
-    network: Network
+    network: Network,
   ) {
     // 1 ------ Create Test Transaction
 
@@ -769,9 +774,9 @@ internal class Sep10ServiceTest {
     every { secretConfig.sep10SigningSeed } returns String(serverKP.secretSeed)
     every { appConfig.horizonUrl } returns horizonUrl
     every { appConfig.stellarNetworkPassphrase } returns network.networkPassphrase
-    val ledgerApi = Horizon(appConfig)
+
     this.sep10Service =
-      Sep10Service(appConfig, secretConfig, sep10Config, ledgerApi, jwtService, clientFinder)
+      Sep10Service(appConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder)
 
     // 3 ------ Setup multisig
     val httpRequest =
@@ -783,7 +788,7 @@ internal class Sep10ServiceTest {
     val response = httpClient.newCall(httpRequest).execute()
     assertEquals(200, response.code)
 
-    val clientAccount = ledgerApi.getAccount(clientMasterKP.accountId)
+    val clientAccount = ledgerClient.getAccount(clientMasterKP.accountId)
     val multisigTx =
       TransactionBuilder(clientAccount, network)
         .addPreconditions(
@@ -802,7 +807,8 @@ internal class Sep10ServiceTest {
         )
         .build()
     multisigTx.sign(clientMasterKP)
-    ledgerApi.submitTransaction(multisigTx)
+    val txnResponse = ledgerClient.submitTransaction(multisigTx)
+    LedgerClientHelper.waitForTransactionAvailable(ledgerClient, txnResponse.hash)
 
     // 4 ------ Run tests
     val validationRequest = ValidationRequest.of(transaction.toEnvelopeXdrBase64())
@@ -822,7 +828,7 @@ internal class Sep10ServiceTest {
       override suspend fun createToken(
         claims: Map<String, String>,
         clientDomain: String?,
-        issuer: AccountKeyPair?
+        issuer: AccountKeyPair?,
       ): String {
         val timeExp = Instant.ofEpochSecond(Clock.System.now().plus(expiration).epochSeconds)
         val builder = createBuilder(timeExp, claims)
@@ -870,7 +876,7 @@ internal class Sep10ServiceTest {
         custodialKp,
         authEndpoint.replace("https", "http"),
         params,
-        authHeaderSigner = custodialSigner
+        authHeaderSigner = custodialSigner,
       )
 
     val req = ChallengeRequest.builder().account(custodialKp.address).memo(custodialMemo).build()
@@ -912,7 +918,7 @@ internal class Sep10ServiceTest {
         SigningKeyPair(KeyPair.random()),
         authEndpoint,
         params,
-        authHeaderSigner = domainSigner
+        authHeaderSigner = domainSigner,
       )
 
     val req =
@@ -934,7 +940,7 @@ internal class Sep10ServiceTest {
         custodialKp,
         "https://wrongdomain.com/auth",
         params,
-        authHeaderSigner = custodialSigner
+        authHeaderSigner = custodialSigner,
       )
 
     val req = ChallengeRequest.builder().account(custodialKp.address).memo(custodialMemo).build()
@@ -989,7 +995,7 @@ internal class Sep10ServiceTest {
       mutableMapOf(
         "account" to custodialKp.address,
         "memo" to custodialMemo,
-        "home_domain" to "testdomain.com"
+        "home_domain" to "testdomain.com",
       )
     token = createAuthSignToken(custodialKp, authEndpoint, params, authHeaderSigner = domainSigner)
     req =
@@ -1008,7 +1014,7 @@ internal class Sep10ServiceTest {
         "account" to custodialKp.address,
         "memo" to custodialMemo,
         "home_domain" to "testdomain.com",
-        "client_domain" to clientDomain
+        "client_domain" to clientDomain,
       )
     token = createAuthSignToken(custodialKp, authEndpoint, params, authHeaderSigner = domainSigner)
     req =
@@ -1053,12 +1059,12 @@ internal class Sep10ServiceTest {
 fun Sep10Service.validateAuthorizationToken(
   request: ChallengeRequest,
   authorization: String?,
-  clientSigningKey: String?
+  clientSigningKey: String?,
 ) {
   this.validateAuthorization(
     request,
     authorization?.run { "Bearer $authorization" },
-    clientSigningKey
+    clientSigningKey,
   )
 }
 

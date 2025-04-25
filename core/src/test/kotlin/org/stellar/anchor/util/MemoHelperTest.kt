@@ -8,7 +8,9 @@ import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.util.MemoHelper.*
 import org.stellar.sdk.MemoHash
+import org.stellar.sdk.MemoId
 import org.stellar.sdk.MemoReturnHash
+import org.stellar.sdk.MemoText
 import org.stellar.sdk.xdr.MemoType.*
 
 private const val MEMO_VALUE_1 = "edb2690440c820de8df242beb313d8ec48cf628ac1e6804939e94c1c2f511ba0"
@@ -59,5 +61,14 @@ internal class MemoHelperTest {
         makeMemo(Base64.getEncoder().encodeToString(MEMO_VALUE_2.encodeToByteArray()), MEMO_RETURN)
       )
     )
+  }
+
+  @Test
+  fun `test toXdr()`() {
+    val memoId: MemoId = makeMemo("123", MEMO_ID) as MemoId
+    assertEquals("123", "${toXdr(memoId).id.uint64.number}")
+
+    val memoText: MemoText = makeMemo("memo text", MEMO_TEXT) as MemoText
+    assertEquals("memo text", "${toXdr(memoText).text}")
   }
 }

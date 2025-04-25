@@ -1,11 +1,8 @@
 package org.stellar.anchor.platform.custody.fireblocks;
 
-import static org.stellar.anchor.util.Log.debugF;
-import static org.stellar.anchor.util.Log.error;
-import static org.stellar.anchor.util.Log.errorEx;
-import static org.stellar.anchor.util.Log.warnEx;
-import static org.stellar.anchor.util.Log.warnF;
+import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
+import static org.stellar.sdk.xdr.OperationType.*;
 
 import java.io.IOException;
 import java.security.InvalidKeyException;
@@ -13,33 +10,31 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.SignatureException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import lombok.SneakyThrows;
 import org.stellar.anchor.api.custody.fireblocks.FireblocksEventObject;
 import org.stellar.anchor.api.custody.fireblocks.TransactionDetails;
-import org.stellar.anchor.api.exception.AnchorException;
-import org.stellar.anchor.api.exception.BadRequestException;
-import org.stellar.anchor.api.exception.InvalidConfigException;
-import org.stellar.anchor.api.exception.SepException;
-import org.stellar.anchor.ledger.Horizon;
+import org.stellar.anchor.api.exception.*;
+import org.stellar.anchor.ledger.LedgerClient;
+import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.platform.config.FireblocksConfig;
 import org.stellar.anchor.platform.custody.*;
 import org.stellar.anchor.platform.data.JdbcCustodyTransactionRepo;
 import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.RSAUtil;
-import org.stellar.sdk.responses.operations.OperationResponse;
-import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
-import org.stellar.sdk.responses.operations.PaymentOperationResponse;
+import org.stellar.sdk.xdr.OperationType;
 
 /** Service, that is responsible for handling Fireblocks events */
 public class FireblocksEventService extends CustodyEventService {
 
   public static final String FIREBLOCKS_SIGNATURE_HEADER = "fireblocks-signature";
-  private static final Set<String> PAYMENT_TRANSACTION_OPERATION_TYPES =
-      Set.of("payment", "path_payment");
+  private static final Set<OperationType> PAYMENT_TRANSACTION_OPERATION_TYPES =
+      Set.of(PAYMENT, PATH_PAYMENT_STRICT_SEND, PATH_PAYMENT_STRICT_RECEIVE);
 
-  private final Horizon horizon;
+  private final LedgerClient ledgerClient;
   private final PublicKey publicKey;
 
   public FireblocksEventService(
@@ -47,7 +42,7 @@ public class FireblocksEventService extends CustodyEventService {
       Sep6CustodyPaymentHandler sep6CustodyPaymentHandler,
       Sep24CustodyPaymentHandler sep24CustodyPaymentHandler,
       Sep31CustodyPaymentHandler sep31CustodyPaymentHandler,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       FireblocksConfig fireblocksConfig)
       throws InvalidConfigException {
     super(
@@ -55,7 +50,7 @@ public class FireblocksEventService extends CustodyEventService {
         sep6CustodyPaymentHandler,
         sep24CustodyPaymentHandler,
         sep31CustodyPaymentHandler);
-    this.horizon = horizon;
+    this.ledgerClient = ledgerClient;
     this.publicKey = fireblocksConfig.getFireblocksPublicKey();
   }
 
@@ -113,8 +108,9 @@ public class FireblocksEventService extends CustodyEventService {
     }
   }
 
+  @SneakyThrows
   public Optional<CustodyPayment> convert(TransactionDetails td) throws IOException {
-    Optional<OperationResponse> operation = Optional.empty();
+    LedgerTransaction.LedgerOperation ledgerOperation = null;
     CustodyPayment.CustodyPaymentStatus status =
         td.getStatus().isCompleted()
             ? CustodyPayment.CustodyPaymentStatus.SUCCESS
@@ -125,18 +121,23 @@ public class FireblocksEventService extends CustodyEventService {
       message = td.getSubStatus().name();
     }
 
+    LedgerTransaction ledgerTxn = null;
+
     try {
-      operation =
-          horizon
-              .getServer()
-              .payments()
-              .includeTransactions(true)
-              .forTransaction(td.getTxHash())
-              .execute()
-              .getRecords()
-              .stream()
-              .filter(o -> PAYMENT_TRANSACTION_OPERATION_TYPES.contains(o.getType()))
+      ledgerTxn = ledgerClient.getTransaction(td.getTxHash());
+      if (ledgerTxn == null)
+        throw new Exception(String.format("Transaction(hash=%s) not found", td.getTxHash()));
+
+      Optional<LedgerTransaction.LedgerOperation> op =
+          ledgerTxn.getOperations().stream()
+              .filter(it -> PAYMENT_TRANSACTION_OPERATION_TYPES.contains(it.getType()))
               .findFirst();
+
+      if (op.isEmpty()) {
+        return Optional.empty();
+      }
+
+      ledgerOperation = op.get();
     } catch (Exception e) {
       warnF(
           "Unable to find Stellar transaction for Fireblocks event. Id[{}], error[{}]",
@@ -147,38 +148,39 @@ public class FireblocksEventService extends CustodyEventService {
     CustodyPayment payment = null;
 
     try {
-      if (operation.isEmpty()) {
+      if (ledgerOperation == null) {
         payment =
             CustodyPayment.fromPayment(
-                Optional.empty(),
+                ledgerTxn,
+                null,
                 td.getId(),
                 Instant.ofEpochMilli(td.getLastUpdated()),
                 status,
                 message,
                 td.getTxHash());
-      } else if (operation.get() instanceof PaymentOperationResponse) {
-        PaymentOperationResponse paymentOperation = (PaymentOperationResponse) operation.get();
+      } else if (ledgerOperation.getType() == PAYMENT) {
         payment =
             CustodyPayment.fromPayment(
-                Optional.of(paymentOperation),
+                ledgerTxn,
+                ledgerOperation.getPaymentOperation(),
                 td.getId(),
                 Instant.ofEpochMilli(td.getLastUpdated()),
                 status,
                 message,
                 td.getTxHash());
-      } else if (operation.get() instanceof PathPaymentBaseOperationResponse) {
-        PathPaymentBaseOperationResponse pathPaymentOperation =
-            (PathPaymentBaseOperationResponse) operation.get();
+      } else if (List.of(PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND)
+          .contains(ledgerOperation.getType())) {
         payment =
             CustodyPayment.fromPathPayment(
-                Optional.of(pathPaymentOperation),
+                ledgerTxn,
+                ledgerOperation.getPathPaymentOperation(),
                 td.getId(),
                 Instant.ofEpochMilli(td.getLastUpdated()),
                 status,
                 message,
                 td.getTxHash());
       } else {
-        warnF("Unknown Stellar transaction operation type[{}]", operation.get().getType());
+        throw new LedgerException("Unknown Stellar transaction operation type");
       }
     } catch (SepException ex) {
       warnF("Fireblocks event with id[{}] contains unsupported memo", td.getId());

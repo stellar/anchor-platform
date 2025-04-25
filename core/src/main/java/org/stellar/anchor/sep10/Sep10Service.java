@@ -6,6 +6,7 @@ import static org.stellar.anchor.util.MetricConstants.SEP10_CHALLENGE_CREATED;
 import static org.stellar.anchor.util.MetricConstants.SEP10_CHALLENGE_VALIDATED;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.Network.TESTNET;
+import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
@@ -36,7 +37,6 @@ import org.stellar.anchor.util.Log;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Sep10Challenge.ChallengeTransaction;
 import org.stellar.sdk.exception.InvalidSep10ChallengeException;
-import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.operations.ManageDataOperation;
 import org.stellar.sdk.operations.Operation;
 
@@ -126,11 +126,11 @@ public class Sep10Service implements ISep10Service {
 
     // fetch the client domain from the transaction
     String clientDomain = fetchClientDomain(challenge);
-    // fetch the account response from the ledgerApi
+    // fetch the account response from the ledger
     LedgerClient.Account account = fetchAccount(request, challenge, clientDomain);
 
     if (account == null) {
-      // The account does not exist from LedgerApi, using the client's master key to verify.
+      // The account does not exist from ledger, using the client's master key to verify.
       return ValidationResponse.of(generateSep10Jwt(challenge, clientDomain, homeDomain));
     }
     // Since the account exists, we should check the signers and the client domain
@@ -392,7 +392,7 @@ public class Sep10Service implements ISep10Service {
     // fetch the signers from the transaction
     Set<Sep10Challenge.Signer> signers = fetchSigners(account);
     // the signatures must be greater than the medium threshold of the account.
-    int threshold = account.getThresholds().getMedThreshold();
+    int threshold = account.getThresholds().getMedium();
     Network network = new Network(appConfig.getStellarNetworkPassphrase());
     String homeDomain = extractHomeDomainFromChallengeXdr(request.getTransaction(), network);
 
@@ -416,8 +416,8 @@ public class Sep10Service implements ISep10Service {
   Set<Sep10Challenge.Signer> fetchSigners(LedgerClient.Account account) {
     // Find the signers of the client account.
     return account.getSigners().stream()
-        .filter(as -> as.getType().equals("ed25519_public_key"))
-        .map(as -> new Sep10Challenge.Signer(as.getKey(), as.getWeight()))
+        .filter(as -> as.getType().equals(SIGNER_KEY_TYPE_ED25519.name()))
+        .map(as -> new Sep10Challenge.Signer(as.getKey(), as.getWeight().intValue()))
         .collect(Collectors.toSet());
   }
 
@@ -432,7 +432,7 @@ public class Sep10Service implements ISep10Service {
       traceF("challenge account: {}", account);
       sep10ChallengeValidatedCounter.increment();
       return account;
-    } catch (NetworkException ex) {
+    } catch (LedgerException ex) {
       infoF("Account {} does not exist in the Stellar Network");
       // account not found
       // The client account does not exist, using the client's master key to verify.

@@ -1,52 +1,55 @@
 package org.stellar.anchor.ledger;
 
-import java.io.IOException;
 import java.util.List;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Value;
+import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TransactionBuilderAccount;
-import org.stellar.sdk.exception.NetworkException;
 
 public interface LedgerClient {
   /**
    * Check if the account has a trustline for the given asset.
    *
    * @param account The account to check.
-   * @param asset The asset to check.
+   * @param asset The asset in SEP-11 format. Canonical string representation of an Alpha4 or
+   *     Alpha12 asset
    * @return True if the account has a trustline for the asset.
-   * @throws NetworkException If there was an error communicating with the network.
+   * @throws LedgerException If there was an error communicating with the network.
    */
-  boolean hasTrustline(String account, String asset) throws NetworkException, IOException;
+  boolean hasTrustline(String account, String asset) throws LedgerException;
 
   /**
    * Get the account details for the given account.
    *
    * @param account The account to get.
    * @return The account details.
-   * @throws NetworkException If there was an error communicating with the network.
+   * @throws LedgerException If there was an error communicating with the network.
    */
-  Account getAccount(String account) throws NetworkException;
+  Account getAccount(String account) throws LedgerException;
 
   /**
    * Get the operations for the given Stellar transaction.
    *
-   * @param stellarTxnId The Stellar transaction ID.
+   * @param txnHash The Stellar transaction ID.
    * @return The operations for the transaction.
+   * @throws LedgerException If there was an error communicating with the network.
    */
-  LedgerTransaction getTransaction(String stellarTxnId);
+  LedgerTransaction getTransaction(String txnHash) throws LedgerException;
 
   /**
-   * Submit a transaction to the network.
+   * Submit a transaction to the network. The function returns as soon as the transaction is
+   * submitted. It is up to the caller of this function to make sure the transaction is committed.
    *
    * @param transaction The transaction to submit.
    * @return The transaction response.
-   * @throws NetworkException If there was an error communicating with the network.
+   * @throws LedgerException If there was an error communicating with the network.
    */
   LedgerTransaction.LedgerTransactionResponse submitTransaction(Transaction transaction)
-      throws NetworkException;
+      throws LedgerException;
 
   @Builder
   @Getter
@@ -80,19 +83,20 @@ public interface LedgerClient {
 
   @Builder
   @Getter
+  @AllArgsConstructor
   class Thresholds {
-    Integer lowThreshold;
-    Integer medThreshold;
-    Integer highThreshold;
+    Integer low;
+    Integer medium;
+    Integer high;
   }
 
   @Value
   @Builder
   @Getter
+  @AllArgsConstructor
   class Signer {
     String key;
     String type;
-    Integer weight;
-    String sponsor;
+    Long weight;
   }
 }
