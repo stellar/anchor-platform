@@ -72,7 +72,7 @@ public class ObservedPayment {
   }
 
   public static ObservedPayment from(
-      LedgerTransaction ledgerTxn, LedgerPathPaymentOperation pathPaymentOp) throws SepException {
+      LedgerTransaction ledgerTxn, LedgerPathPaymentOperation pathPaymentOp) {
     String assetName = getSep11AssetName(pathPaymentOp.getAsset());
     String sourceAssetName = getSep11AssetName(pathPaymentOp.getSourceAsset());
     String from =
@@ -80,7 +80,12 @@ public class ObservedPayment {
             ? pathPaymentOp.getFrom()
             : pathPaymentOp.getSourceAccount();
     Memo memo = ledgerTxn.getMemo();
-
+    String memoStr;
+    try {
+      memoStr = MemoHelper.memoAsString(fromXdr(memo));
+    } catch (SepException e) {
+      throw new IllegalStateException("Error converting memo to string", e);
+    }
     return ObservedPayment.builder()
         .id(pathPaymentOp.getId())
         .type(Type.PATH_PAYMENT)
@@ -99,7 +104,7 @@ public class ObservedPayment {
         .sourceAccount(pathPaymentOp.getSourceAccount())
         .createdAt(ledgerTxn.getCreatedAt().toString())
         .transactionHash(ledgerTxn.getHash())
-        .transactionMemo(MemoHelper.memoAsString(fromXdr(memo)))
+        .transactionMemo(memoStr)
         .transactionMemoType(MemoHelper.memoTypeAsString(fromXdr(memo)))
         .transactionEnvelope(ledgerTxn.getEnvelopeXdr())
         .build();
