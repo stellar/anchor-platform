@@ -79,7 +79,7 @@ class NotifyOnchainFundsReceivedHandlerTest {
         .ledger(1L)
         .applicationOrder(1)
         .memo(MemoHelper.toXdr(Memo.id(12345)))
-        .sourceAccount("testSourceAccount")
+        .sourceAccount("testFrom")
         .createdAt(Instant.parse("2023-05-10T10:18:20Z"))
         .fee(100)
         .envelopeXdr("testEnvelopeXdr")
