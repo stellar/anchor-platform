@@ -51,9 +51,8 @@ class StellarRpcTest {
     assertTrue(result)
     verify(exactly = 1) { sorobanServer.getLedgerEntries(any()) }
 
-    // Verify the captured argument
     val keys = capturedKeys.captured
-    assertEquals(1, keys.size) // Example: Verify the size of the collection
+    assertEquals(1, keys.size)
     val key = keys.first()
     assertNotNull(key.trustLine)
     assertEquals(
@@ -96,9 +95,8 @@ class StellarRpcTest {
 
     verify(exactly = 1) { sorobanServer.getLedgerEntries(any()) }
 
-    // Verify the captured argument
     val keys = capturedKeys.captured
-    assertEquals(1, keys.size) // Example: Verify the size of the collection
+    assertEquals(1, keys.size)
     val key = keys.first()
     assertNotNull(key.account)
     assertEquals(

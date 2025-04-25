@@ -79,7 +79,7 @@ class LedgerClientTests {
     val txn =
       LedgerClientHelper.waitForTransactionAvailable(
         ledgerClient,
-        ledgerClient.submitTransaction(paymentTxn).hash
+        ledgerClient.submitTransaction(paymentTxn).hash,
       )
 
     assertEquals(sourceKp.accountId, txn.sourceAccount)
@@ -112,14 +112,11 @@ class LedgerClientTests {
         .build()
 
     val transaction =
-      TransactionBuilder(
-          Account(sourceKeypair.accountId, sourceAccount.sequenceNumber),
-          TESTNET,
-        ) // we are going to submit the transaction to the test network
-        .setBaseFee(AbstractTransaction.MIN_BASE_FEE) // set base fee, see
-        .addMemo(Memo.text("Hello Stellar!")) // Add a text memo
-        .setTimeout(30) // Make this transaction valid for the next 30 seconds only
-        .addOperation(paymentOperation) // Add the payment operation to the transaction
+      TransactionBuilder(Account(sourceKeypair.accountId, sourceAccount.sequenceNumber), TESTNET)
+        .setBaseFee(AbstractTransaction.MIN_BASE_FEE)
+        .addMemo(Memo.text("Hello Stellar!"))
+        .setTimeout(30)
+        .addOperation(paymentOperation)
         .build()
     transaction.sign(sourceKeypair)
     return Triple(sourceKeypair, destKeyPair, transaction)
@@ -140,7 +137,6 @@ fun prepareAccount(horizonServer: Server, kp: KeyPair): AccountResponse? {
     val account = horizonServer.accounts().account(kp.accountId)
     return account
   } catch (e: java.io.IOException) {
-    println("ERROR! " + e.message)
     throw e
   }
 }

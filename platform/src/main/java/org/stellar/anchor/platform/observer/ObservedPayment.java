@@ -7,7 +7,6 @@ import static org.stellar.sdk.Memo.fromXdr;
 import com.google.gson.annotations.SerializedName;
 import lombok.Builder;
 import lombok.Data;
-import lombok.SneakyThrows;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.util.AssetHelper;
@@ -44,14 +43,18 @@ public class ObservedPayment {
   String transactionMemoType;
   String transactionEnvelope;
 
-  @SneakyThrows
   public static ObservedPayment from(LedgerTransaction txn, LedgerPaymentOperation paymentOp) {
     // TODO: Add unit tests
     String assetName = getSep11AssetName(paymentOp.getAsset());
 
     String from = paymentOp.getFrom() != null ? paymentOp.getFrom() : paymentOp.getSourceAccount();
     Memo memo = txn.getMemo();
-
+    String memoStr;
+    try {
+      memoStr = MemoHelper.memoAsString(fromXdr(memo));
+    } catch (SepException e) {
+      throw new IllegalStateException("Error converting memo to string", e);
+    }
     return ObservedPayment.builder()
         .id(paymentOp.getId())
         .type(Type.PAYMENT)
@@ -65,7 +68,7 @@ public class ObservedPayment {
         .sourceAccount(paymentOp.getSourceAccount())
         .createdAt(txn.getCreatedAt().toString())
         .transactionHash(txn.getHash())
-        .transactionMemo(MemoHelper.memoAsString(fromXdr(txn.getMemo())))
+        .transactionMemo(memoStr)
         .transactionMemoType(MemoHelper.memoTypeAsString(fromXdr(memo)))
         .transactionEnvelope(txn.getEnvelopeXdr())
         .build();

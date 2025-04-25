@@ -16,7 +16,6 @@ import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TrustLineAsset;
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse;
-import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse.GetTransactionStatus;
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse;
 import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
@@ -26,8 +25,6 @@ import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
 public class StellarRpc implements LedgerClient {
   String rpcServerUrl;
   SorobanServer sorobanServer;
-  int maxTimeout = 10;
-  int maxPollCount = 10;
 
   public StellarRpc(String rpcServerUrl) {
     this.rpcServerUrl = rpcServerUrl;
@@ -38,10 +35,9 @@ public class StellarRpc implements LedgerClient {
     this(appConfig.getRpcUrl());
   }
 
-  @SneakyThrows
   @Override
-  public boolean hasTrustline(String account, String asset) {
-    return (getTrustlineRpc(account, asset) != null);
+  public boolean hasTrustline(String account, String asset) throws LedgerException {
+    return getTrustlineRpc(account, asset) != null;
   }
 
   @Override
@@ -91,38 +87,38 @@ public class StellarRpc implements LedgerClient {
   @Override
   public LedgerTransaction getTransaction(String txnHash) throws LedgerException {
     GetTransactionResponse txn = sorobanServer.getTransaction(txnHash);
-    if (txn == null
-        || txn.getStatus() == GetTransactionStatus.NOT_FOUND
-        || txn.getEnvelopeXdr() == null) {
-      // not found
+    if (txn == null) {
       return null;
     }
 
-    if (txn.getStatus() == GetTransactionStatus.FAILED) {
-      throw new LedgerException("Error getting transaction: " + txnHash);
-    }
+    return switch (txn.getStatus()) {
+      case NOT_FOUND -> null;
+      case FAILED -> throw new LedgerException("Error getting transaction: " + txnHash);
+      case SUCCESS -> {
+        TransactionEnvelope txnEnv;
+        try {
+          txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
+        } catch (IOException ioex) {
+          throw new LedgerException("Unable to parse transaction envelope", ioex);
+        }
+        Integer applicationOrder = txn.getApplicationOrder();
+        Long sequenceNumber = txn.getLedger();
+        LedgerClientHelper.ParsedTransaction osm =
+            LedgerClientHelper.parseTransaction(txnEnv, txnHash);
+        List<LedgerTransaction.LedgerOperation> operations =
+            LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, osm);
 
-    TransactionEnvelope txnEnv;
-    try {
-      txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
-    } catch (IOException ioex) {
-      throw new LedgerException("Unable to parse transaction envelope", ioex);
-    }
-    Integer applicationOrder = txn.getApplicationOrder();
-    Long sequenceNumber = txn.getLedger();
-    LedgerClientHelper.ParsedTransaction osm = LedgerClientHelper.parseTransaction(txnEnv, txnHash);
-    List<LedgerTransaction.LedgerOperation> operations =
-        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, osm);
-
-    return LedgerTransaction.builder()
-        .hash(txn.getTxHash())
-        .sourceAccount(osm.sourceAccount())
-        .envelopeXdr(txn.getEnvelopeXdr())
-        .memo(osm.memo())
-        .sequenceNumber(sequenceNumber)
-        .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
-        .operations(operations)
-        .build();
+        yield LedgerTransaction.builder()
+            .hash(txn.getTxHash())
+            .sourceAccount(osm.sourceAccount())
+            .envelopeXdr(txn.getEnvelopeXdr())
+            .memo(osm.memo())
+            .sequenceNumber(sequenceNumber)
+            .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
+            .operations(operations)
+            .build();
+      }
+    };
   }
 
   @Override
@@ -166,7 +162,6 @@ public class StellarRpc implements LedgerClient {
             .discriminant(LedgerEntryType.TRUSTLINE)
             .build());
 
-    // Assuming `stellarRpc` is defined elsewhere
     var response = sorobanServer.getLedgerEntries(ledgerKeys);
 
     if (response.getEntries().isEmpty()) return null;

@@ -5,7 +5,6 @@ import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import java.math.BigDecimal;
 import java.util.Currency;
-import lombok.SneakyThrows;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawOperation;
@@ -61,12 +60,18 @@ public class AssetHelper {
   }
 
   /**
-   * Returns the asset code from asset
+   * Returns the asset code from asset.
    *
-   * <p>Exmamples: - stellar:USDC:GABCD... -> USD - iso4217:USD -> USD - native -> native -
-   * USD:GABCD... -> USD
+   * <p>Examples:
    *
-   * @param asset asset
+   * <pre>
+   * stellar:USDC:GABCD... -> USDC
+   * iso4217:USD           -> USD
+   * native                -> native
+   * USD:GABCD...          -> USD
+   * </pre>
+   *
+   * @param asset asset. Allowed asset schemas are [stellar, iso4217]
    * @return The asset code
    */
   public static String getAssetCode(String asset) {
@@ -124,7 +129,6 @@ public class AssetHelper {
     }
   }
 
-  @SneakyThrows
   public static String getSep11AssetName(Asset xdrAsset) {
     if (xdrAsset == null) {
       return null;
@@ -181,6 +185,7 @@ public class AssetHelper {
    * @return the string representation of the amount
    */
   public static String fromXdrAmount(Long amount) {
+    // The rounding mode is set to DOWN because the XDR_SCALE_FACTOR is also 7 digits.
     return BigDecimal.valueOf(amount).divide(XDR_SCALE_FACTOR, 7, DOWN).toPlainString();
   }
 
@@ -194,6 +199,7 @@ public class AssetHelper {
     if (amount == null || amount.isEmpty()) {
       return null;
     }
+    // The rounding mode is set to DOWN because the XDR_SCALE_FACTOR is also 7 digits.
     return new BigDecimal(amount).multiply(XDR_SCALE_FACTOR).setScale(0, DOWN).longValue();
   }
 }

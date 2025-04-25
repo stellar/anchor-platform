@@ -96,13 +96,11 @@ public class LedgerClientHelper {
         sourceAccount =
             StrKey.encodeEd25519PublicKey(
                 txnEnv.getV1().getTx().getSourceAccount().getEd25519().getUint256());
-        memo = txnEnv.getV1().getTx().getMemo(); // Fixed: was incorrectly using V0 memo
+        memo = txnEnv.getV1().getTx().getMemo();
         break;
       default:
         throw new LedgerException(
-            String.format(
-                "Malformed transaction detected. The transaction(hash=%s) has unknown envelope type.",
-                txnHash));
+            String.format("The transaction(hash=%s) has unhandled envelope type.", txnHash));
     }
 
     return new ParsedTransaction(operations, sourceAccount, memo);
