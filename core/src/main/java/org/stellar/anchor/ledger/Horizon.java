@@ -8,10 +8,9 @@ import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.ledger.LedgerClientHelper.ParsedTransaction;
@@ -124,11 +123,23 @@ public class Horizon implements LedgerClient {
       throw new LedgerException("Unable to parse transaction envelope", ioex);
     }
 
+    // The relationship between TOID and application order is defined at:
+    // https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0035.md
     int applicationOrder =
         TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder();
     Long sequenceNumber = txnResponse.getLedger();
 
     ParsedTransaction osm = parseTransaction(txnEnv, txnHash);
+    List<LedgerTransaction.LedgerOperation> operations = new ArrayList<>(osm.operations().length);
+    for (int opIndex = 0; opIndex < osm.operations().length; opIndex++) {
+      operations.add(
+          LedgerClientHelper.convert(
+              osm.sourceAccount(),
+              sequenceNumber,
+              applicationOrder,
+              opIndex + 1, // operation index is 1-based
+              osm.operations()[opIndex]));
+    }
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())
@@ -137,18 +148,7 @@ public class Horizon implements LedgerClient {
         .memo(osm.memo())
         .sequenceNumber(txnResponse.getSourceAccountSequence())
         .createdAt(Instant.parse(txnResponse.getCreatedAt()))
-        .operations(
-            IntStream.range(0, osm.operations().length)
-                .mapToObj(
-                    opIndex ->
-                        convert(
-                            osm.sourceAccount(),
-                            sequenceNumber,
-                            applicationOrder,
-                            opIndex + 1, // operation index is 1-based
-                            osm.operations()[opIndex]))
-                .filter(Objects::nonNull)
-                .toList())
+        .operations(operations)
         .build();
   }
 

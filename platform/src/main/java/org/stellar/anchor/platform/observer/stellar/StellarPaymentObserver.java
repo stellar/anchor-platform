@@ -25,6 +25,7 @@ import lombok.Data;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.exception.EventPublishException;
+import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.healthcheck.HealthCheckable;
@@ -355,7 +356,6 @@ public class StellarPaymentObserver implements HealthCheckable {
     }
     LedgerOperation ledgerOperation = Horizon.toLedgerOperation(operationResponse);
     if (ledgerOperation == null) {
-      // The operation is not a payment operation. Ignore it.
       return;
     }
     LedgerTransaction ledgerTxn =
@@ -363,8 +363,14 @@ public class StellarPaymentObserver implements HealthCheckable {
     ObservedPayment observedPayment =
         switch (ledgerOperation.getType()) {
           case PAYMENT -> ObservedPayment.from(ledgerTxn, ledgerOperation.getPaymentOperation());
-          case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND ->
-              ObservedPayment.from(ledgerTxn, ledgerOperation.getPathPaymentOperation());
+          case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND -> {
+            try {
+              yield ObservedPayment.from(ledgerTxn, ledgerOperation.getPathPaymentOperation());
+            } catch (SepException e) {
+              errorEx("Error converting path payment operation", e);
+              throw new IllegalStateException("Error converting path payment operation", e);
+            }
+          }
           default ->
               throw new IllegalStateException("Unexpected value: " + ledgerOperation.getType());
         };

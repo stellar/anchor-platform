@@ -50,7 +50,6 @@ class FireblocksEventServiceTest {
   private lateinit var sep6CustodyPaymentHandler: Sep6CustodyPaymentHandler
   private lateinit var sep24CustodyPaymentHandler: Sep24CustodyPaymentHandler
   private lateinit var sep31CustodyPaymentHandler: Sep31CustodyPaymentHandler
-  //  private lateinit var horizon: Horizon
   private lateinit var ledgerClient: LedgerClient
   private lateinit var server: Server
   private lateinit var paymentsRequestBuilder: PaymentsRequestBuilder

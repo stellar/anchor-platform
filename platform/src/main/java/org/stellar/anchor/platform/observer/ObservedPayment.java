@@ -8,6 +8,7 @@ import com.google.gson.annotations.SerializedName;
 import lombok.Builder;
 import lombok.Data;
 import lombok.SneakyThrows;
+import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.MemoHelper;
@@ -70,9 +71,8 @@ public class ObservedPayment {
         .build();
   }
 
-  @SneakyThrows
   public static ObservedPayment from(
-      LedgerTransaction ledgerTxn, LedgerPathPaymentOperation pathPaymentOp) {
+      LedgerTransaction ledgerTxn, LedgerPathPaymentOperation pathPaymentOp) throws SepException {
     String assetName = getSep11AssetName(pathPaymentOp.getAsset());
     String sourceAssetName = getSep11AssetName(pathPaymentOp.getSourceAsset());
     String from =

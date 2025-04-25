@@ -23,12 +23,14 @@ public class LedgerClientHelper {
       Long sequenceNumber,
       Integer applicationOrder,
       int opIndex,
-      Operation op) {
+      Operation op)
+      throws LedgerException {
     if (op == null) {
-      return null;
+      throw new LedgerException(
+          "Malformed transaction detected. The operation is null. Please check the transaction.");
     }
     if (op.getBody() == null) {
-      return null;
+      throw new LedgerException("Malformed transaction detected. The operation body is null.");
     }
     String operationId =
         String.valueOf(new TOID(sequenceNumber.intValue(), applicationOrder, opIndex).toInt64());

@@ -6,7 +6,6 @@ import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.IntStream;
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
@@ -113,6 +112,17 @@ public class StellarRpc implements LedgerClient {
     Long sequenceNumber = txn.getLedger();
     LedgerClientHelper.ParsedTransaction osm = LedgerClientHelper.parseTransaction(txnEnv, txnHash);
 
+    List<LedgerTransaction.LedgerOperation> operations = new ArrayList<>(osm.operations().length);
+    for (int opIndex = 0; opIndex < osm.operations().length; opIndex++) {
+      operations.add(
+          LedgerClientHelper.convert(
+              osm.sourceAccount(),
+              sequenceNumber,
+              applicationOrder,
+              opIndex + 1, // operation index is 1-based
+              osm.operations()[opIndex]));
+    }
+
     return LedgerTransaction.builder()
         .hash(txn.getTxHash())
         .sourceAccount(osm.sourceAccount())
@@ -120,18 +130,7 @@ public class StellarRpc implements LedgerClient {
         .memo(osm.memo())
         .sequenceNumber(sequenceNumber)
         .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
-        .operations(
-            IntStream.range(0, osm.operations().length)
-                .mapToObj(
-                    opIndex ->
-                        LedgerClientHelper.convert(
-                            osm.sourceAccount(),
-                            sequenceNumber,
-                            applicationOrder,
-                            opIndex + 1, // operation index is 1-based
-                            osm.operations()[opIndex]))
-                .filter(Objects::nonNull)
-                .toList())
+        .operations(operations)
         .build();
   }
 
