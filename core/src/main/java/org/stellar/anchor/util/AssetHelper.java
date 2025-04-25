@@ -142,7 +142,8 @@ public class AssetHelper {
         AssetTypeCreditAlphaNum creditAlphaAsset = (AssetTypeCreditAlphaNum) asset;
         yield creditAlphaAsset.getCode() + ":" + creditAlphaAsset.getIssuer();
       }
-      default -> throw new IllegalArgumentException("Unsupported asset type: " + asset.getType());
+      case ASSET_TYPE_POOL_SHARE ->
+          throw new IllegalArgumentException("Unsupported asset type: " + asset.getType());
     };
   }
 
@@ -173,7 +174,7 @@ public class AssetHelper {
       case ASSET_TYPE_NATIVE -> "native";
       case ASSET_TYPE_CREDIT_ALPHANUM4 -> "credit_alphanum4";
       case ASSET_TYPE_CREDIT_ALPHANUM12 -> "credit_alphanum12";
-      default ->
+      case ASSET_TYPE_POOL_SHARE ->
           throw new IllegalArgumentException("Unsupported asset type: " + asset.getDiscriminant());
     };
   }

@@ -353,21 +353,22 @@ public class StellarPaymentObserver implements HealthCheckable {
       savePagingToken(operationResponse.getPagingToken());
       return;
     }
-    LedgerOperation ledgerOperation = Horizon.toLedgerOperation(operationResponse);
-    if (ledgerOperation == null) {
-      return;
-    }
-    LedgerTransaction ledgerTxn =
-        Horizon.toLedgerTransaction(server, operationResponse.getTransaction());
-    ObservedPayment observedPayment =
-        switch (ledgerOperation.getType()) {
-          case PAYMENT -> ObservedPayment.from(ledgerTxn, ledgerOperation.getPaymentOperation());
-          case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND ->
-              ObservedPayment.from(ledgerTxn, ledgerOperation.getPathPaymentOperation());
-          default ->
-              throw new IllegalStateException("Unexpected value: " + ledgerOperation.getType());
-        };
     try {
+      LedgerOperation ledgerOperation = Horizon.toLedgerOperation(operationResponse);
+      if (ledgerOperation == null) {
+        return;
+      }
+      LedgerTransaction ledgerTxn =
+          Horizon.toLedgerTransaction(server, operationResponse.getTransaction());
+      ObservedPayment observedPayment =
+          switch (ledgerOperation.getType()) {
+            case PAYMENT -> ObservedPayment.from(ledgerTxn, ledgerOperation.getPaymentOperation());
+            case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND ->
+                ObservedPayment.from(ledgerTxn, ledgerOperation.getPathPaymentOperation());
+            default ->
+                throw new IllegalStateException("Unexpected value: " + ledgerOperation.getType());
+          };
+
       if (observedPayment != null) {
         if (paymentObservingAccountsManager.lookupAndUpdate(observedPayment.getTo())) {
           for (PaymentListener listener : paymentListeners) {

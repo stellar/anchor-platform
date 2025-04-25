@@ -20,6 +20,17 @@ import org.stellar.sdk.xdr.*;
 
 public class LedgerClientHelper {
 
+  /**
+   * Convert a Stellar operation to a LedgerOperation.
+   *
+   * @param sourceAccount the source account.
+   * @param sequenceNumber the sequence number of the transaction
+   * @param applicationOrder the application order of the transaction
+   * @param opIndex the operation index of the transaction
+   * @param op the operation to convert
+   * @return the converted LedgerOperation
+   * @throws LedgerException if the operation is null or malformed
+   */
   static LedgerOperation convert(
       String sourceAccount,
       Long sequenceNumber,

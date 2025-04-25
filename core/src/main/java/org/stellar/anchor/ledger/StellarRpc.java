@@ -110,6 +110,8 @@ public class StellarRpc implements LedgerClient {
 
         yield LedgerTransaction.builder()
             .hash(txn.getTxHash())
+            .ledger(txn.getLedger())
+            .applicationOrder(txn.getApplicationOrder())
             .sourceAccount(osm.sourceAccount())
             .envelopeXdr(txn.getEnvelopeXdr())
             .memo(osm.memo())

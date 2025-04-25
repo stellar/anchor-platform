@@ -76,6 +76,8 @@ class NotifyOnchainFundsReceivedHandlerTest {
     private val testLedgerTxn =
       LedgerTransaction.builder()
         .hash("stellarTxId")
+        .ledger(1L)
+        .applicationOrder(1)
         .memo(MemoHelper.toXdr(Memo.id(12345)))
         .sourceAccount("testSourceAccount")
         .createdAt(Instant.parse("2023-05-10T10:18:20Z"))

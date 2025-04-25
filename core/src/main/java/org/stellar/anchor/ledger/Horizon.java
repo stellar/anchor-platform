@@ -134,6 +134,8 @@ public class Horizon implements LedgerClient {
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())
+        .applicationOrder(applicationOrder)
+        .ledger(txnResponse.getLedger())
         .sourceAccount(txnResponse.getSourceAccount())
         .envelopeXdr(txnResponse.getEnvelopeXdr())
         .memo(osm.memo())
@@ -158,6 +160,9 @@ public class Horizon implements LedgerClient {
       Server server, TransactionResponse txnResponse) {
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())
+        .ledger(txnResponse.getLedger())
+        .applicationOrder(
+            TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder())
         .sourceAccount(txnResponse.getSourceAccount())
         .envelopeXdr(txnResponse.getEnvelopeXdr())
         .memo(MemoHelper.toXdr(txnResponse.getMemo()))

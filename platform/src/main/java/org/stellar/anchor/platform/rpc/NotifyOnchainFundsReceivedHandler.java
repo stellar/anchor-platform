@@ -166,7 +166,7 @@ public class NotifyOnchainFundsReceivedHandler
 
       if (Sep.SEP_31.equals(Sep.from(txn.getProtocol()))) {
         JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
-        txn31.setFromAccount(ledgerTxn.getSourceAccount());
+        txn31.setFromAccount(ledgerTxn.getOperations().get(0).getPaymentOperation().getFrom());
       }
     } catch (LedgerException ex) {
       errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
