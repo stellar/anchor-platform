@@ -126,8 +126,7 @@ public class FireblocksEventService extends CustodyEventService {
     try {
       ledgerTxn = ledgerClient.getTransaction(td.getTxHash());
       if (ledgerTxn == null)
-        throw new NotFoundException(
-            String.format("Transaction(hash=%s) not found", td.getTxHash()));
+        throw new Exception(String.format("Transaction(hash=%s) not found", td.getTxHash()));
 
       Optional<LedgerTransaction.LedgerOperation> op =
           ledgerTxn.getOperations().stream()
@@ -139,7 +138,7 @@ public class FireblocksEventService extends CustodyEventService {
       }
 
       ledgerOperation = op.get();
-    } catch (NotFoundException e) {
+    } catch (Exception e) {
       warnF(
           "Unable to find Stellar transaction for Fireblocks event. Id[{}], error[{}]",
           td.getId(),
