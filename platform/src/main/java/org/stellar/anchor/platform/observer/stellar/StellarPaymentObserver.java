@@ -471,23 +471,12 @@ public class StellarPaymentObserver implements HealthCheckable {
   public HealthCheckResult check() {
     List<StreamHealth> results = new ArrayList<>();
 
-    HealthCheckStatus status;
-    switch (this.status) {
-      case STREAM_ERROR:
-      case SILENCE_ERROR:
-      case PUBLISHER_ERROR:
-      case DATABASE_ERROR:
-        status = YELLOW;
-        break;
-      case NEEDS_SHUTDOWN:
-      case SHUTDOWN:
-        status = RED;
-        break;
-      case RUNNING:
-      default:
-        status = GREEN;
-        break;
-    }
+    HealthCheckStatus status =
+        switch (this.status) {
+          case STREAM_ERROR, SILENCE_ERROR, PUBLISHER_ERROR, DATABASE_ERROR -> YELLOW;
+          case NEEDS_SHUTDOWN, SHUTDOWN -> RED;
+          case RUNNING -> GREEN;
+        };
     StreamHealth.StreamHealthBuilder healthBuilder = StreamHealth.builder();
     healthBuilder.account(mapStreamToAccount.get(stream));
     // populate executorService information
