@@ -464,11 +464,6 @@ public class Sep10Service implements ISep10Service {
       }
 
       if ((clientDomain == null && challenge.getTransaction().getSignatures().size() != 2)) {
-        String errorMessage =
-            String.format(
-                "Invalid SEP 10 challenge. 2 signatures are expected (server and client) but %s were found. account_id=%s",
-                challenge.getTransaction().getSignatures().size(), challenge.getClientAccountId());
-        info(errorMessage);
         throw new InvalidSep10ChallengeException("error");
       }
 
