@@ -468,8 +468,6 @@ public class Sep10Service implements ISep10Service {
               homeDomain,
               sep10Config.getWebAuthDomain(),
               signers);
-
-      // increment counter
     }
     sep10ChallengeValidatedCounter.increment();
     return null;
