@@ -54,8 +54,6 @@ public class LedgerTransaction {
     Long amount;
     Asset asset;
     String sourceAccount;
-    Long sourceAmount;
-    Asset sourceAsset;
   }
 
   @Builder

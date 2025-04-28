@@ -29,12 +29,6 @@ public class ObservedPayment {
   String assetIssuer;
   String assetName;
 
-  String sourceAmount;
-  String sourceAssetType;
-  String sourceAssetCode;
-  String sourceAssetIssuer;
-  String sourceAssetName;
-
   String sourceAccount;
   String createdAt;
 
@@ -77,7 +71,6 @@ public class ObservedPayment {
   public static ObservedPayment from(
       LedgerTransaction ledgerTxn, LedgerPathPaymentOperation pathPaymentOp) {
     String assetName = getSep11AssetName(pathPaymentOp.getAsset());
-    String sourceAssetName = getSep11AssetName(pathPaymentOp.getSourceAsset());
     String from =
         pathPaymentOp.getFrom() != null
             ? pathPaymentOp.getFrom()
@@ -99,11 +92,6 @@ public class ObservedPayment {
         .assetCode(AssetHelper.getAssetCode(assetName))
         .assetIssuer(AssetHelper.getAssetIssuer(assetName))
         .assetName(pathPaymentOp.getAsset().toString())
-        .sourceAmount(String.valueOf(pathPaymentOp.getSourceAmount()))
-        .sourceAssetType(pathPaymentOp.getSourceAsset().getDiscriminant().name())
-        .sourceAssetName(sourceAssetName)
-        .sourceAssetCode(AssetHelper.getAssetCode(sourceAssetName))
-        .sourceAssetIssuer(AssetHelper.getAssetIssuer(sourceAssetName))
         .sourceAccount(pathPaymentOp.getSourceAccount())
         .createdAt(ledgerTxn.getCreatedAt().toString())
         .transactionHash(ledgerTxn.getHash())
