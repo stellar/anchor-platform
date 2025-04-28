@@ -29,12 +29,6 @@ public class ObservedPayment {
   String assetIssuer;
   String assetName;
 
-  //  String sourceAmount;
-  //  String sourceAssetType;
-  //  String sourceAssetCode;
-  //  String sourceAssetIssuer;
-  //  String sourceAssetName;
-
   String sourceAccount;
   String createdAt;
 
