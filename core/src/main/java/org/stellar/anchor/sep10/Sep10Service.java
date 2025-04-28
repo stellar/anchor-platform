@@ -446,15 +446,56 @@ public class Sep10Service implements ISep10Service {
           clientDomain,
           signers.size());
 
-      if ((clientDomain != null && challenge.getTransaction().getSignatures().size() != 3)
-          || (clientDomain == null && challenge.getTransaction().getSignatures().size() != 2)) {
-        infoF(
-            "Invalid SEP 10 challenge exception, there is more than one client signer on challenge transaction for an account that doesn't exist. client_domain={}, account_id={}",
-            clientDomain,
-            challenge.getClientAccountId());
-        throw new InvalidSep10ChallengeException(
-            "There is more than one client signer on challenge transaction for an account that doesn't exist");
+      //      if ((clientDomain != null && challenge.getTransaction().getSignatures().size() != 3)
+      //          || (clientDomain == null && challenge.getTransaction().getSignatures().size() !=
+      // 2)) {
+      //        infoF(
+      //            "Invalid SEP 10 challenge exception, there is more than one client signer on
+      // challenge transaction for an account that doesn't exist. client_domain={}, account_id={}",
+      //            clientDomain,
+      //            challenge.getClientAccountId());
+      //        throw new InvalidSep10ChallengeException(
+      //            "There is more than one client signer on challenge transaction for an account
+      // that doesn't exist");
+      //      }
+
+      if (clientDomain != null && challenge.getTransaction().getSignatures().size() != 3) {
+        throw new InvalidSep10ChallengeException("error");
       }
+
+      if ((clientDomain == null && challenge.getTransaction().getSignatures().size() != 2)) {
+        String errorMessage =
+            String.format(
+                "Invalid SEP 10 challenge. 2 signatures are expected (server and client) but %s were found. account_id=%s",
+                challenge.getTransaction().getSignatures().size(), challenge.getClientAccountId());
+        info(errorMessage);
+        throw new InvalidSep10ChallengeException("error");
+      }
+
+      //      if (clientDomain != null && challenge.getTransaction().getSignatures().size() != 3) {
+      //        String errorMessage =
+      //                String.format(
+      //                        "Invalid SEP 10 challenge. The client_domain is present and 3
+      // signatures (server, client, and client domain) are expected but %s were found.
+      // client_domain=%s, account_id=%s",
+      //                        challenge.getTransaction().getSignatures().size(),
+      //                        clientDomain,
+      //                        challenge.getClientAccountId());
+      //        info(errorMessage);
+      //        throw new InvalidSep10ChallengeException(errorMessage);
+      //      }
+      //
+      //      if ((clientDomain == null && challenge.getTransaction().getSignatures().size() != 2))
+      // {
+      //        String errorMessage =
+      //                String.format(
+      //                        "Invalid SEP 10 challenge. 2 signatures are expected (server and
+      // client) but %s were found. account_id=%s",
+      //                        challenge.getTransaction().getSignatures().size(),
+      // challenge.getClientAccountId());
+      //        info(errorMessage);
+      //        throw new InvalidSep10ChallengeException(errorMessage);
+      //      }
 
       Network network = new Network(appConfig.getStellarNetworkPassphrase());
       String homeDomain = extractHomeDomainFromChallengeXdr(request.getTransaction(), network);
