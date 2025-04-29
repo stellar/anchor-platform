@@ -12,6 +12,7 @@ import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.platform.config.RpcConfig
 import org.stellar.anchor.platform.data.*
+import org.stellar.anchor.util.AssetHelper.*
 import org.stellar.sdk.xdr.Asset
 import org.stellar.sdk.xdr.AssetType.ASSET_TYPE_POOL_SHARE
 import org.stellar.sdk.xdr.Memo
@@ -340,7 +341,7 @@ class DefaultPaymentListenerTest {
       platformApiClient.notifyOnchainFundsReceived(
         "123",
         testTxn.hash,
-        testPayment.amount.toString(),
+        fromXdrAmount(testPayment.amount).toString(),
         any(),
       )
     }
@@ -369,7 +370,7 @@ class DefaultPaymentListenerTest {
       platformApiClient.notifyOnchainFundsReceived(
         "123",
         testTxn.hash,
-        testPayment.amount.toString(),
+        fromXdrAmount(testPayment.amount).toString(),
         any(),
       )
     }
@@ -420,7 +421,7 @@ class DefaultPaymentListenerTest {
       platformApiClient.notifyOnchainFundsReceived(
         "123",
         testTxn.hash,
-        testPayment.amount.toString(),
+        fromXdrAmount(testPayment.amount).toString(),
         any(),
       )
     }
