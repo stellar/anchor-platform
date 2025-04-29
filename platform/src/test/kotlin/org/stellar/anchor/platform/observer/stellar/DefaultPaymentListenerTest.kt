@@ -257,20 +257,16 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  fun `test if findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger an event`() {
+  fun `test if Sep31 findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
     val ledgerTransaction = createTestLedgerTransaction()
     xdrMemoText.text = XdrString("my_memo_3")
     ledgerTransaction.memo = xdrMemoText
 
-    val slotMemo = slot<String>()
-    val slotAccount = slot<String>()
-    val slotStatus = slot<String>()
-
     every {
       sep31TransactionStore.findByToAccountAndMemoAndStatus(
-        capture(slotAccount),
-        capture(slotMemo),
-        capture(slotStatus),
+        "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+        "my_memo_3",
+        "pending_sender",
       )
     } throws RuntimeException("Something went wrong")
 
@@ -283,9 +279,86 @@ class DefaultPaymentListenerTest {
         "pending_sender",
       )
     }
-    assertEquals("my_memo_3", slotMemo.captured)
-    assertEquals("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364", slotAccount.captured)
-    assertEquals("pending_sender", slotStatus.captured)
+
+    verify(exactly = 0) {
+      paymentListener.handleSep31Transaction(
+        ledgerTransaction,
+        ledgerTransaction.operations[0].paymentOperation,
+        any(),
+      )
+    }
+  }
+
+  @Test
+  fun `test if Sep24 findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
+    val ledgerTransaction = createTestLedgerTransaction()
+    xdrMemoText.text = XdrString("my_memo_3")
+    ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      null
+    every {
+      sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+        "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+        "my_memo_3",
+        "pending_user_transfer_start",
+      )
+    } throws RuntimeException("Something went wrong")
+
+    paymentListener.onReceived(ledgerTransaction)
+
+    verify(exactly = 1) {
+      sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+        "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+        "my_memo_3",
+        "pending_user_transfer_start",
+      )
+    }
+
+    verify(exactly = 0) {
+      paymentListener.handleSep24Transaction(
+        ledgerTransaction,
+        ledgerTransaction.operations[0].paymentOperation,
+        any(),
+      )
+    }
+  }
+
+  @Test
+  fun `test if Sep6 findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
+    val ledgerTransaction = createTestLedgerTransaction()
+    xdrMemoText.text = XdrString("my_memo_3")
+    ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      null
+    every { sep24TransactionStore.findOneByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      null
+    every {
+      sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+        "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+        "my_memo_3",
+        "pending_user_transfer_start",
+      )
+    } throws RuntimeException("Something went wrong")
+
+    paymentListener.onReceived(ledgerTransaction)
+
+    verify(exactly = 1) {
+      sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+        "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+        "my_memo_3",
+        "pending_user_transfer_start",
+      )
+    }
+
+    verify(exactly = 0) {
+      paymentListener.handleSep24Transaction(
+        ledgerTransaction,
+        ledgerTransaction.operations[0].paymentOperation,
+        any(),
+      )
+    }
   }
 
   @Test
