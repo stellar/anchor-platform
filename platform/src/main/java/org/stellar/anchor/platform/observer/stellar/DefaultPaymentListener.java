@@ -1,7 +1,6 @@
 package org.stellar.anchor.platform.observer.stellar;
 
-import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.DEPOSIT;
-import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHDRAWAL;
+import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*;
 import static org.stellar.anchor.platform.utils.PaymentsUtil.getLedgerPayment;
 import static org.stellar.anchor.util.AssetHelper.getSep11AssetName;
 import static org.stellar.anchor.util.Log.*;
@@ -206,12 +205,14 @@ public class DefaultPaymentListener
     checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
 
     JdbcSep6Transaction sep6Txn = (JdbcSep6Transaction) sepTransaction;
-    if (DEPOSIT.getKind().equals(sep6Txn.getKind())) {
+    if (DEPOSIT.getKind().equals(sep6Txn.getKind())
+        || DEPOSIT_EXCHANGE.getKind().equals(sep6Txn.getKind())) {
       platformApiClient.notifyOnchainFundsSent(
           sepTransaction.getId(),
           ledgerTransaction.getHash(),
           rpcConfig.getCustomMessages().getOutgoingPaymentSent());
-    } else if (WITHDRAWAL.getKind().equals(sep6Txn.getKind())) {
+    } else if (WITHDRAWAL.getKind().equals(sep6Txn.getKind())
+        || WITHDRAWAL_EXCHANGE.getKind().equals(sep6Txn.getKind())) {
       platformApiClient.notifyOnchainFundsReceived(
           sepTransaction.getId(),
           ledgerTransaction.getHash(),
