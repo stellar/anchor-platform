@@ -67,7 +67,6 @@ public class DefaultPaymentListener
 
   void processAndDispatchLedgerPayment(
       LedgerTransaction ledgerTransaction, LedgerPayment ledgerPayment) {
-
     if (!validate(ledgerTransaction, ledgerPayment)) {
       return;
     }
