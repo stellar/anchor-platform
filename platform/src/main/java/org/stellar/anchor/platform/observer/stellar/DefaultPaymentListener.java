@@ -144,7 +144,7 @@ public class DefaultPaymentListener
     platformApiClient.notifyOnchainFundsReceived(
         sepTransaction.getId(),
         ledgerTransaction.getHash(),
-        String.valueOf(ledgerPayment.getAmount()),
+        AssetHelper.fromXdrAmount(ledgerPayment.getAmount()),
         rpcConfig.getCustomMessages().getIncomingPaymentReceived());
 
     // Update metrics
@@ -178,7 +178,7 @@ public class DefaultPaymentListener
       platformApiClient.notifyOnchainFundsReceived(
           sepTransaction.getId(),
           ledgerTransaction.getHash(),
-          String.valueOf(ledgerPayment.getAmount()),
+          AssetHelper.fromXdrAmount(ledgerPayment.getAmount()),
           rpcConfig.getCustomMessages().getIncomingPaymentReceived());
     } else {
       throw new IllegalStateException(
@@ -215,7 +215,7 @@ public class DefaultPaymentListener
       platformApiClient.notifyOnchainFundsReceived(
           sepTransaction.getId(),
           ledgerTransaction.getHash(),
-          String.valueOf(ledgerPayment.getAmount()),
+          AssetHelper.fromXdrAmount(ledgerPayment.getAmount()),
           rpcConfig.getCustomMessages().getIncomingPaymentReceived());
     } else {
       throw new IllegalStateException(

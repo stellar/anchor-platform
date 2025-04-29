@@ -81,6 +81,7 @@ public class PaymentObserverBeans {
     return stellarPaymentObserver;
   }
 
+  @Bean
   public DefaultPaymentListener paymentListener(
       PaymentObservingAccountsManager paymentObservingAccountsManager,
       JdbcSep31TransactionStore sep31TransactionStore,
