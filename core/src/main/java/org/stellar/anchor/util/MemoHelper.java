@@ -3,6 +3,7 @@ package org.stellar.anchor.util;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.xdr.MemoType.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
@@ -150,5 +151,18 @@ public class MemoHelper {
     } else {
       throw new IllegalArgumentException(memo.toString());
     }
+  }
+
+  public static String xdrMemoToString(org.stellar.sdk.xdr.Memo memoXdr) {
+    if (memoXdr == null) {
+      return null;
+    }
+    return switch (memoXdr.getDiscriminant()) {
+      case MEMO_NONE -> null; // No memo
+      case MEMO_TEXT -> new String(memoXdr.getText().getBytes(), StandardCharsets.UTF_8);
+      case MEMO_ID -> String.valueOf(memoXdr.getId().getUint64());
+      case MEMO_HASH, MEMO_RETURN ->
+          Base64.getEncoder().encodeToString(memoXdr.getHash().getHash());
+    };
   }
 }

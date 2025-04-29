@@ -34,9 +34,23 @@ public class LedgerTransaction {
     LedgerPathPaymentOperation pathPaymentOperation;
   }
 
+  public interface LedgerPayment {
+    String getId();
+
+    String getFrom();
+
+    String getTo();
+
+    Long getAmount();
+
+    Asset getAsset();
+
+    String getSourceAccount();
+  }
+
   @Builder
   @Data
-  public static class LedgerPaymentOperation {
+  public static class LedgerPaymentOperation implements LedgerPayment {
     String id;
     String from;
     String to;
@@ -47,7 +61,7 @@ public class LedgerTransaction {
 
   @Builder
   @Data
-  public static class LedgerPathPaymentOperation {
+  public static class LedgerPathPaymentOperation implements LedgerPayment {
     String id;
     String from;
     String to;

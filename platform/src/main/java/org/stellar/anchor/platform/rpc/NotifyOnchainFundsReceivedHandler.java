@@ -162,7 +162,7 @@ public class NotifyOnchainFundsReceivedHandler
         throw new NotFoundException(String.format("Transaction (hash=%s) not found", stellarTxnId));
       }
 
-      addStellarTransaction(txn, ledgerTxn);
+      addStellarTransaction(ledgerTxn, txn);
 
       if (Sep.SEP_31.equals(Sep.from(txn.getProtocol()))) {
         JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
