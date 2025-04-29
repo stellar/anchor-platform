@@ -1,7 +1,7 @@
 package org.stellar.anchor.platform.observer.stellar;
 
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*;
-import static org.stellar.anchor.platform.utils.PaymentsUtil.getLedgerPayment;
+import static org.stellar.anchor.platform.utils.PaymentHelper.getLedgerPayment;
 import static org.stellar.anchor.util.AssetHelper.getSep11AssetName;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.Log.warnF;
@@ -22,6 +22,7 @@ import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.*;
 import org.stellar.anchor.platform.service.AnchorMetrics;
 import org.stellar.anchor.util.AssetHelper;
+import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.xdr.AssetType;
@@ -241,6 +242,9 @@ public class DefaultPaymentListener
         || isEmpty(MemoHelper.xdrMemoToString(ledgerTransaction.getMemo()))) {
       // The transaction do not have a hash or memo.
       // We do not process it.
+      debugF(
+          "Transaction {} does not have a hash or memo. This indicates a potential bug from stellar network events.",
+          ledgerTransaction.getHash());
       return false;
     }
 
@@ -250,7 +254,9 @@ public class DefaultPaymentListener
             AssetType.ASSET_TYPE_CREDIT_ALPHANUM12)
         .contains(ledgerPayment.getAsset().getDiscriminant())) {
       // unsupported asset type
-      debugF("{} is not a native or an issued asset.", ledgerPayment.getAsset().getDiscriminant());
+      debugF(
+          "{} is not a native or an issued asset.",
+          GsonUtils.getInstance().toJson(ledgerPayment.getAsset()));
       return false;
     }
     return true;
@@ -272,15 +278,17 @@ public class DefaultPaymentListener
     // Check if the payment contains the expected amount (or greater)
     BigDecimal expectedAmount = decimal(sepTransaction.getAmountIn());
     BigDecimal gotAmount = decimal(ledgerPayment.getAmount());
-    String message = "Incoming payment for SEP-31 transaction";
     if (gotAmount.compareTo(expectedAmount) >= 0) {
-      Log.info(message);
+      Log.infoF(
+          "Incoming payment for SEP-{} transaction. sepTxn.id={}, ledgerTxn.id={}",
+          sepTransaction.getProtocol(),
+          sepTransaction.getId(),
+          ledgerTransaction.getHash());
     } else {
-      message =
-          String.format(
-              "The incoming payment amount was insufficient! Expected: \"%s\", Received: \"%s\"",
-              formatAmount(expectedAmount), formatAmount(gotAmount));
-      Log.warn(message);
+      Log.warnF(
+          "The incoming payment amount was different from Expected: {}, Received: {}",
+          formatAmount(expectedAmount),
+          formatAmount(gotAmount));
     }
   }
 }

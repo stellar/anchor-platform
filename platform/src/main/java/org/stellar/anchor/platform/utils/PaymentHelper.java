@@ -16,10 +16,11 @@ import org.stellar.anchor.ledger.LedgerTransaction.LedgerPayment;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep31Transaction;
+import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
 import org.stellar.anchor.util.AssetHelper;
 
-public class PaymentsUtil {
+public class PaymentHelper {
 
   public static LedgerPayment getLedgerPayment(LedgerOperation ledgerOperation) {
     return switch (ledgerOperation.getType()) {
@@ -45,6 +46,11 @@ public class PaymentsUtil {
         memo = txn31.getStellarMemo();
         memoType = txn31.getStellarMemoType();
         break;
+      case SEP_6:
+        JdbcSep6Transaction sep6 = (JdbcSep6Transaction) sepTxn;
+        memo = sep6.getMemo();
+        memoType = sep6.getMemoType();
+        break;
     }
 
     StellarTransaction stellarTransaction =
@@ -56,7 +62,7 @@ public class PaymentsUtil {
             .envelope(ledgerTxn.getEnvelopeXdr())
             .payments(
                 ledgerTxn.getOperations().stream()
-                    .map(PaymentsUtil::getLedgerPayment)
+                    .map(PaymentHelper::getLedgerPayment)
                     .filter(Objects::nonNull)
                     .map(
                         payment ->

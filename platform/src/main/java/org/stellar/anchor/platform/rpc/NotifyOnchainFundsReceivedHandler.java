@@ -4,7 +4,7 @@ import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHD
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHDRAWAL_EXCHANGE;
 import static org.stellar.anchor.api.rpc.method.RpcMethod.NOTIFY_ONCHAIN_FUNDS_RECEIVED;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.*;
-import static org.stellar.anchor.platform.utils.PaymentsUtil.addStellarTransaction;
+import static org.stellar.anchor.platform.utils.PaymentHelper.addStellarTransaction;
 import static org.stellar.anchor.util.Log.errorEx;
 
 import com.google.common.collect.ImmutableSet;
