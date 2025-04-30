@@ -269,7 +269,7 @@ public class DefaultPaymentListener
     // Compare asset code
     String paymentAssetName = "stellar:" + getSep11AssetName(ledgerPayment.getAsset());
     if (!sepTransaction.getAmountInAsset().equals(paymentAssetName)) {
-      infoF(
+      debugF(
           "Payment asset {} does not match the expected asset {}.",
           paymentAssetName,
           sepTransaction.getAmountInAsset());
@@ -277,10 +277,18 @@ public class DefaultPaymentListener
 
     // Check if the payment contains the expected amount (or greater)
     BigDecimal expectedAmount = decimal(sepTransaction.getAmountExpected());
-    BigDecimal gotAmount = decimal(ledgerPayment.getAmount());
-    Log.infoF(
-        "The incoming payment amount was insufficient from Expected: {}, Received: {}",
-        formatAmount(expectedAmount),
-        formatAmount(gotAmount));
+    BigDecimal gotAmount = decimal(AssetHelper.fromXdrAmount(ledgerPayment.getAmount()));
+    if (gotAmount.compareTo(expectedAmount) >= 0) {
+      Log.debugF(
+          "Incoming payment for SEP-{} transaction. sepTxn.id={}, ledgerTxn.id={}",
+          sepTransaction.getProtocol(),
+          sepTransaction.getId(),
+          ledgerTransaction.getHash());
+    } else {
+      Log.debugF(
+          "The incoming payment amount was insufficient from Expected: {}, Received: {}",
+          formatAmount(expectedAmount),
+          formatAmount(gotAmount));
+    }
   }
 }
