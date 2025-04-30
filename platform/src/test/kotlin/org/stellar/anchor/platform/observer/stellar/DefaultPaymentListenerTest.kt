@@ -10,11 +10,11 @@ import org.stellar.anchor.api.platform.PlatformTransactionData
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
-import org.stellar.anchor.ledger.LedgerTransferEvent
-import org.stellar.anchor.ledger.LedgerTransferEvent.SingleOpLedgerTransaction
+import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.platform.config.RpcConfig
 import org.stellar.anchor.platform.data.*
 import org.stellar.anchor.util.AssetHelper.fromXdrAmount
+import org.stellar.sdk.TOID
 import org.stellar.sdk.xdr.Asset
 import org.stellar.sdk.xdr.AssetType.ASSET_TYPE_POOL_SHARE
 import org.stellar.sdk.xdr.Memo
@@ -73,7 +73,7 @@ class DefaultPaymentListenerTest {
     var ledgerTransaction = createTestTransferEvent().ledgerTransaction
     // empty hash
     ledgerTransaction.hash = null
-    var testPayment = ledgerTransaction.operation.paymentOperation
+    var testPayment = ledgerTransaction.operations[0].paymentOperation
 
     assertFalse(paymentListener.validate(ledgerTransaction, testPayment))
 
@@ -91,7 +91,7 @@ class DefaultPaymentListenerTest {
 
     // unsupported asset type
     ledgerTransaction = createTestTransferEvent().ledgerTransaction
-    testPayment = ledgerTransaction.operation.paymentOperation
+    testPayment = ledgerTransaction.operations[0].paymentOperation
     testPayment.asset = Asset()
     testPayment.asset.discriminant = ASSET_TYPE_POOL_SHARE
     assertFalse(paymentListener.validate(ledgerTransaction, testPayment))
@@ -103,7 +103,7 @@ class DefaultPaymentListenerTest {
     val ledgerTransaction = event.ledgerTransaction
     val poolShareAsset = Asset()
     poolShareAsset.discriminant = ASSET_TYPE_POOL_SHARE
-    ledgerTransaction.operation.paymentOperation.asset = poolShareAsset
+    ledgerTransaction.operations[0].paymentOperation.asset = poolShareAsset
 
     paymentListener.onReceived(event)
 
@@ -233,7 +233,11 @@ class DefaultPaymentListenerTest {
     assertEquals("pending_user_transfer_start", slotStatus.captured)
   }
 
-  private fun createTestTransferEvent(): LedgerTransferEvent {
+  private val ledgerSequence = 1234567
+  private val applicationOrder = 1
+  private val testTOID = TOID(ledgerSequence, applicationOrder, 1)
+
+  private fun createTestTransferEvent(): PaymentTransferEvent {
     val testAssetFoo =
       org.stellar.sdk.Asset.create(
         null,
@@ -242,24 +246,36 @@ class DefaultPaymentListenerTest {
       )
 
     val ledgerTransaction =
-      SingleOpLedgerTransaction.builder()
+      LedgerTransaction.builder()
         .hash("1ad62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af30")
         .memo(xdrMemoText)
-        .operation(
-          LedgerOperation.builder()
-            .type(OperationType.PAYMENT)
-            .paymentOperation(
-              LedgerTransaction.LedgerPaymentOperation.builder()
-                .asset(testAssetFoo.toXdr())
-                .amount(1)
-                .sourceAccount("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
-                .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
-                .build()
-            )
-            .build()
+        .ledger(ledgerSequence.toLong())
+        .operations(
+          listOf(
+            LedgerOperation.builder()
+              .type(OperationType.PAYMENT)
+              .paymentOperation(
+                LedgerTransaction.LedgerPaymentOperation.builder()
+                  .id(testTOID.toInt64().toString())
+                  .asset(testAssetFoo.toXdr())
+                  .amount(1)
+                  .sourceAccount("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
+                  .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
+                  .build()
+              )
+              .build()
+          )
         )
         .build()
-    return LedgerTransferEvent.builder().ledgerTransaction(ledgerTransaction).build()
+
+    return PaymentTransferEvent.builder()
+      .from("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
+      .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
+      .amount(1)
+      .txHash("1ad62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af30")
+      .operationId(testTOID.toInt64())
+      .ledgerTransaction(ledgerTransaction)
+      .build()
   }
 
   @Test
@@ -291,7 +307,7 @@ class DefaultPaymentListenerTest {
     verify(exactly = 0) {
       paymentListener.handleSep31Transaction(
         ledgerTransaction,
-        ledgerTransaction.operation.paymentOperation,
+        ledgerTransaction.operations[0].paymentOperation,
         any(),
       )
     }
@@ -328,7 +344,7 @@ class DefaultPaymentListenerTest {
     verify(exactly = 0) {
       paymentListener.handleSep24Transaction(
         ledgerTransaction,
-        ledgerTransaction.operation.paymentOperation,
+        ledgerTransaction.operations[0].paymentOperation,
         any(),
       )
     }
@@ -367,7 +383,7 @@ class DefaultPaymentListenerTest {
     verify(exactly = 0) {
       paymentListener.handleSep24Transaction(
         ledgerTransaction,
-        ledgerTransaction.operation.paymentOperation,
+        ledgerTransaction.operations[0].paymentOperation,
         any(),
       )
     }
@@ -412,7 +428,7 @@ class DefaultPaymentListenerTest {
     val event = createTestTransferEvent()
     val testTxn = event.ledgerTransaction
 
-    val testPayment = testTxn.operation.paymentOperation
+    val testPayment = testTxn.operations[0].paymentOperation
     val testJdbcSepTransaction = JdbcSep31Transaction()
     testJdbcSepTransaction.id = "123"
 
@@ -441,7 +457,7 @@ class DefaultPaymentListenerTest {
     val event = createTestTransferEvent()
     val testTxn = event.ledgerTransaction
 
-    val testPayment = testTxn.operation.paymentOperation
+    val testPayment = testTxn.operations[0].paymentOperation
     val testJdbcSepTransaction = JdbcSep24Transaction()
     testJdbcSepTransaction.id = "123"
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
@@ -469,7 +485,7 @@ class DefaultPaymentListenerTest {
     val event = createTestTransferEvent()
     val testTxn = event.ledgerTransaction
 
-    val testPayment = testTxn.operation.paymentOperation
+    val testPayment = testTxn.operations[0].paymentOperation
     val testJdbcSepTransaction = JdbcSep24Transaction()
     testJdbcSepTransaction.id = "123"
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
@@ -491,7 +507,7 @@ class DefaultPaymentListenerTest {
     val event = createTestTransferEvent()
     val testTxn = event.ledgerTransaction
 
-    val testPayment = testTxn.operation.paymentOperation
+    val testPayment = testTxn.operations[0].paymentOperation
     val testJdbcSepTransaction = JdbcSep6Transaction()
     testJdbcSepTransaction.id = "123"
 
@@ -521,7 +537,7 @@ class DefaultPaymentListenerTest {
   fun `test handleSep6Transaction DEPOSIT`() {
     val event = createTestTransferEvent()
     val testTxn = event.ledgerTransaction
-    val testPayment = testTxn.operation.paymentOperation
+    val testPayment = testTxn.operations[0].paymentOperation
     val testJdbcSepTransaction = JdbcSep6Transaction()
     testJdbcSepTransaction.id = "123"
 

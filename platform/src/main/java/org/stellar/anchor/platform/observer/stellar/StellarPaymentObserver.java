@@ -4,7 +4,6 @@ import static io.micrometer.core.instrument.Metrics.gauge;
 import static org.stellar.anchor.api.platform.HealthCheckStatus.*;
 import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.ALL;
 import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.EVENT;
-import static org.stellar.anchor.ledger.LedgerClientHelper.toLedgerOperation;
 import static org.stellar.anchor.platform.observer.stellar.ObserverStatus.*;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.MetricConstants.*;
@@ -26,27 +25,28 @@ import lombok.Data;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.exception.EventPublishException;
+import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.healthcheck.HealthCheckable;
-import org.stellar.anchor.ledger.LedgerTransferEvent;
-import org.stellar.anchor.ledger.LedgerTransferEvent.SingleOpLedgerTransaction;
+import org.stellar.anchor.ledger.Horizon;
+import org.stellar.anchor.ledger.LedgerTransaction;
+import org.stellar.anchor.ledger.PaymentTransferEvent;
 import org.stellar.anchor.platform.config.PaymentObserverConfig;
 import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.utils.DaemonExecutors;
+import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.ExponentialBackoffTimer;
 import org.stellar.anchor.util.Log;
-import org.stellar.anchor.util.MemoHelper;
-import org.stellar.sdk.Server;
-import org.stellar.sdk.TOID;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.requests.EventListener;
 import org.stellar.sdk.requests.PaymentsRequestBuilder;
 import org.stellar.sdk.requests.RequestBuilder;
 import org.stellar.sdk.requests.SSEStream;
 import org.stellar.sdk.responses.Page;
-import org.stellar.sdk.responses.TransactionResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
+import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
+import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 
 public class StellarPaymentObserver implements HealthCheckable {
   /** The maximum number of results the Stellar Blockchain can return. */
@@ -55,7 +55,7 @@ public class StellarPaymentObserver implements HealthCheckable {
   /** The minimum number of results the Stellar Blockchain can return. */
   private static final int MIN_RESULTS = 1;
 
-  final Server server;
+  final Horizon horizon;
   final PaymentObserverConfig.StellarPaymentObserverConfig config;
   final List<PaymentListener> paymentListeners;
   final StellarPaymentStreamerCursorStore paymentStreamerCursorStore;
@@ -77,12 +77,12 @@ public class StellarPaymentObserver implements HealthCheckable {
   final ScheduledExecutorService statusWatcher = DaemonExecutors.newScheduledThreadPool(1);
 
   public StellarPaymentObserver(
-      String horizonServer,
+      String horizonUrl,
       PaymentObserverConfig.StellarPaymentObserverConfig config,
       List<PaymentListener> paymentListeners,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
       StellarPaymentStreamerCursorStore paymentStreamerCursorStore) {
-    this.server = new Server(horizonServer);
+    this.horizon = new Horizon(horizonUrl);
     this.config = config;
     this.paymentListeners = paymentListeners;
     this.paymentObservingAccountsManager = paymentObservingAccountsManager;
@@ -137,9 +137,9 @@ public class StellarPaymentObserver implements HealthCheckable {
     infoF("SSEStream cursor={}", latestCursor);
 
     PaymentsRequestBuilder paymentsRequest =
-        server
+        horizon
+            .getServer()
             .payments()
-            .includeTransactions(true)
             .cursor(latestCursor)
             .order(RequestBuilder.Order.ASC)
             .limit(MAX_RESULTS);
@@ -147,26 +147,20 @@ public class StellarPaymentObserver implements HealthCheckable {
         new EventListener<>() {
           @Override
           public void onEvent(OperationResponse operationResponse) {
-            if (operationResponse.getTransaction() != null) {
-              metricLatestBlockRead.set(operationResponse.getTransaction().getLedger());
-
-              if (isHealthy()) {
-                debugF("Received payment {}", operationResponse.getId());
-                // clear stream timeout/reconnect status
-                lastActivityTime = Instant.now();
-                silenceTimeoutCount = 0;
-                streamBackoffTimer.reset();
-                try {
-                  processPayment(operationResponse);
-                  metricLatestBlockProcessed.set(operationResponse.getTransaction().getLedger());
-
-                } catch (TransactionException ex) {
-                  errorEx("Error handling events", ex);
-                  setStatus(DATABASE_ERROR);
-                }
-              } else {
-                warnF("Observer is not healthy. Ignore event {}", operationResponse.getId());
+            if (isHealthy()) {
+              debugF("Received payment {}", operationResponse.getId());
+              // clear stream timeout/reconnect status
+              lastActivityTime = Instant.now();
+              silenceTimeoutCount = 0;
+              streamBackoffTimer.reset();
+              try {
+                processPayment(operationResponse);
+              } catch (TransactionException ex) {
+                errorEx("Error handling events", ex);
+                setStatus(DATABASE_ERROR);
               }
+            } else {
+              warnF("Observer is not healthy. Ignore event {}", operationResponse.getId());
             }
           }
 
@@ -340,7 +334,12 @@ public class StellarPaymentObserver implements HealthCheckable {
     try {
       infoF("Fetching the latest payments records. (limit={})", MIN_RESULTS);
       pageOpResponse =
-          server.payments().order(RequestBuilder.Order.DESC).limit(MIN_RESULTS).execute();
+          horizon
+              .getServer()
+              .payments()
+              .order(RequestBuilder.Order.DESC)
+              .limit(MIN_RESULTS)
+              .execute();
     } catch (NetworkException e) {
       Log.errorEx("Error fetching the latest /payments result.", e);
       return null;
@@ -358,17 +357,17 @@ public class StellarPaymentObserver implements HealthCheckable {
   }
 
   void processPayment(OperationResponse operationResponse) {
-    if (!operationResponse.getTransactionSuccessful()) {
-      savePagingToken(operationResponse.getPagingToken());
-      return;
-    }
     try {
-      LedgerTransferEvent transferEvent = toLedgerTransferEvent(operationResponse);
-      for (PaymentListener listener : paymentListeners) {
-        listener.onReceived(transferEvent);
+      PaymentTransferEvent transferEvent = toLedgerTransferEvent(operationResponse);
+      if (transferEvent != null) {
+        metricLatestBlockRead.set(operationResponse.getTransaction().getLedger());
+        // process the payment
+        for (PaymentListener listener : paymentListeners) {
+          listener.onReceived(transferEvent);
+        }
+        metricLatestBlockProcessed.set(operationResponse.getTransaction().getLedger());
+        publishingBackoffTimer.reset();
       }
-      publishingBackoffTimer.reset();
-      paymentStreamerCursorStore.save(operationResponse.getPagingToken());
     } catch (EventPublishException ex) {
       // restart the observer from where it stopped, in case the queue fails to
       // publish the message.
@@ -385,25 +384,40 @@ public class StellarPaymentObserver implements HealthCheckable {
     }
   }
 
-  LedgerTransferEvent toLedgerTransferEvent(OperationResponse operationResponse) {
-    SingleOpLedgerTransaction ledgerTransaction = toSingleOpLedgerTransaction(operationResponse);
-    return LedgerTransferEvent.builder().ledgerTransaction(ledgerTransaction).build();
-  }
+  PaymentTransferEvent toLedgerTransferEvent(OperationResponse operation) throws LedgerException {
+    LedgerTransaction txn = horizon.getTransaction(operation.getTransactionHash());
+    if (txn == null) {
+      debugF("Transaction not found: {}", operation.getTransactionHash());
+      return null;
+    }
 
-  SingleOpLedgerTransaction toSingleOpLedgerTransaction(OperationResponse operationResponse) {
-    TransactionResponse txnResponse = operationResponse.getTransaction();
-    return SingleOpLedgerTransaction.builder()
-        .hash(txnResponse.getHash())
-        .ledger(txnResponse.getLedger())
-        .applicationOrder(
-            TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder())
-        .sourceAccount(txnResponse.getSourceAccount())
-        .envelopeXdr(txnResponse.getEnvelopeXdr())
-        .memo(MemoHelper.toXdr(txnResponse.getMemo()))
-        .sequenceNumber(txnResponse.getSourceAccountSequence())
-        .createdAt(Instant.parse(txnResponse.getCreatedAt()))
-        .operation(toLedgerOperation(operationResponse))
-        .build();
+    if (operation instanceof PaymentOperationResponse paymentOp) {
+      return PaymentTransferEvent.builder()
+          .from(paymentOp.getFrom())
+          .to(paymentOp.getTo())
+          .sep11Asset(
+              AssetHelper.getSep11AssetName(paymentOp.getAssetCode(), paymentOp.getAssetIssuer()))
+          .amount(AssetHelper.toXdrAmount(paymentOp.getAmount()))
+          .operationId(operation.getId())
+          .txHash(paymentOp.getTransactionHash())
+          .ledgerTransaction(txn)
+          .build();
+    } else if (operation instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
+      return PaymentTransferEvent.builder()
+          .from(pathPaymentOp.getFrom())
+          .to(pathPaymentOp.getTo())
+          .sep11Asset(
+              AssetHelper.getSep11AssetName(
+                  pathPaymentOp.getAssetCode(), pathPaymentOp.getAssetIssuer()))
+          .amount(AssetHelper.toXdrAmount(pathPaymentOp.getAmount()))
+          .operationId(operation.getId())
+          .txHash(pathPaymentOp.getTransactionHash())
+          .ledgerTransaction(txn)
+          .build();
+    } else {
+      warnF("Unsupported operation type: {}", operation.getClass().getName());
+      return null;
+    }
   }
 
   String loadPagingToken() {

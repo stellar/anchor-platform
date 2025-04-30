@@ -1,7 +1,6 @@
 package org.stellar.anchor.platform.observer.stellar;
 
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*;
-import static org.stellar.anchor.platform.utils.PaymentHelper.getLedgerPayment;
 import static org.stellar.anchor.util.AssetHelper.getSep11AssetName;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.Log.warnF;
@@ -18,18 +17,17 @@ import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPayment;
-import org.stellar.anchor.ledger.LedgerTransferEvent;
+import org.stellar.anchor.ledger.PaymentTransferEvent;
 import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.*;
+import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.service.AnchorMetrics;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.GsonUtils;
-import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.xdr.AssetType;
 
-public class DefaultPaymentListener
-    implements org.stellar.anchor.platform.observer.PaymentListener {
+public class DefaultPaymentListener implements PaymentListener {
   final PaymentObservingAccountsManager paymentObservingAccountsManager;
   final JdbcSep31TransactionStore sep31TransactionStore;
   final JdbcSep24TransactionStore sep24TransactionStore;
@@ -53,10 +51,32 @@ public class DefaultPaymentListener
   }
 
   @Override
-  public void onReceived(LedgerTransferEvent ledgerTransferEvent) {
-    LedgerTransaction ledgerTransaction = ledgerTransferEvent.getLedgerTransaction();
-    LedgerPayment ledgerPayment =
-        getLedgerPayment(ledgerTransferEvent.getLedgerTransaction().getOperation());
+  public void onReceived(PaymentTransferEvent paymentTransferEvent) {
+    LedgerTransaction ledgerTransaction = paymentTransferEvent.getLedgerTransaction();
+    LedgerPayment ledgerPayment = null;
+    for (LedgerTransaction.LedgerOperation operation : ledgerTransaction.getOperations()) {
+      switch (operation.getType()) {
+        case PAYMENT:
+          if (operation
+              .getPaymentOperation()
+              .getId()
+              .equals(String.valueOf(paymentTransferEvent.getOperationId()))) {
+            ledgerPayment = operation.getPaymentOperation();
+          }
+          break;
+        case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND:
+          if (operation
+              .getPathPaymentOperation()
+              .getId()
+              .equals(String.valueOf(paymentTransferEvent.getOperationId()))) {
+            ledgerPayment = operation.getPaymentOperation();
+          }
+          break;
+        default:
+          // Ignore other operation types
+          break;
+      }
+    }
     if (ledgerPayment != null) {
       // Check if the payment is to or from an account we are observing
       if (paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getTo())
@@ -156,7 +176,7 @@ public class DefaultPaymentListener
     Metrics.counter(
             AnchorMetrics.PAYMENT_RECEIVED.toString(),
             "asset",
-            AssetHelper.getSep11AssetName(ledgerPayment.getAsset()))
+            getSep11AssetName(ledgerPayment.getAsset()))
         .increment(ledgerPayment.getAmount());
   }
 
@@ -193,7 +213,7 @@ public class DefaultPaymentListener
     Metrics.counter(
             AnchorMetrics.PAYMENT_RECEIVED.toString(),
             "asset",
-            AssetHelper.getSep11AssetName(ledgerPayment.getAsset()))
+            getSep11AssetName(ledgerPayment.getAsset()))
         .increment(ledgerPayment.getAmount());
   }
 
@@ -279,13 +299,13 @@ public class DefaultPaymentListener
     BigDecimal expectedAmount = decimal(sepTransaction.getAmountExpected());
     BigDecimal gotAmount = decimal(AssetHelper.fromXdrAmount(ledgerPayment.getAmount()));
     if (gotAmount.compareTo(expectedAmount) >= 0) {
-      Log.debugF(
+      debugF(
           "Incoming payment for SEP-{} transaction. sepTxn.id={}, ledgerTxn.id={}",
           sepTransaction.getProtocol(),
           sepTransaction.getId(),
           ledgerTransaction.getHash());
     } else {
-      Log.debugF(
+      debugF(
           "The incoming payment amount was insufficient from Expected: {}, Received: {}",
           formatAmount(expectedAmount),
           formatAmount(gotAmount));
