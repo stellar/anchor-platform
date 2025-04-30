@@ -6,12 +6,11 @@ import java.time.Instant;
 import java.util.List;
 import lombok.Builder;
 import lombok.Data;
-import lombok.experimental.SuperBuilder;
 import org.stellar.sdk.xdr.Asset;
 import org.stellar.sdk.xdr.Memo;
 import org.stellar.sdk.xdr.OperationType;
 
-@SuperBuilder
+@Builder
 @Data
 public class LedgerTransaction {
   String hash;
