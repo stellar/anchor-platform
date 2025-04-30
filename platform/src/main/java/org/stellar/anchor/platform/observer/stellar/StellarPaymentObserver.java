@@ -172,13 +172,17 @@ public class StellarPaymentObserver implements HealthCheckable {
 
           @Override
           public void onFailure(Optional<Throwable> error, Optional<Integer> responseCode) {
-            // The SSEStreamer has internal errors. We will give up and let the container
-            // manager to restart.
-            errorEx("stellar payment observer stream error: ", error.orElse(null));
-            // Mark the observer unhealthy
-            setStatus(STREAM_ERROR);
+            handleFailure(error.orElse(null));
           }
         });
+  }
+
+  void handleFailure(Throwable error) {
+    // The SSEStreamer has internal errors. We will give up and let the container
+    // manager to restart.
+    errorEx("stellar payment observer stream error: ", error);
+    // Mark the observer unhealthy
+    setStatus(STREAM_ERROR);
   }
 
   void stopStream() {

@@ -10,9 +10,11 @@ import org.stellar.anchor.api.platform.PlatformTransactionData
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
+import org.stellar.anchor.ledger.LedgerTransferEvent
+import org.stellar.anchor.ledger.LedgerTransferEvent.SingleOpLedgerTransaction
 import org.stellar.anchor.platform.config.RpcConfig
 import org.stellar.anchor.platform.data.*
-import org.stellar.anchor.util.AssetHelper.*
+import org.stellar.anchor.util.AssetHelper.fromXdrAmount
 import org.stellar.sdk.xdr.Asset
 import org.stellar.sdk.xdr.AssetType.ASSET_TYPE_POOL_SHARE
 import org.stellar.sdk.xdr.Memo
@@ -59,37 +61,37 @@ class DefaultPaymentListenerTest {
   @Test
   fun `test If the account is not monitored, processAndDispatchLedgerPayment should not be called`() {
     every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
-    val ledgerTransaction = createTestLedgerTransaction()
+    val event = createTestTransferEvent()
 
-    paymentListener.onReceived(ledgerTransaction)
+    paymentListener.onReceived(event)
 
     verify(exactly = 0) { paymentListener.processAndDispatchLedgerPayment(any(), any()) }
   }
 
   @Test
   fun `test validate()`() {
-    var ledgerTransaction = createTestLedgerTransaction()
+    var ledgerTransaction = createTestTransferEvent().ledgerTransaction
     // empty hash
     ledgerTransaction.hash = null
-    var testPayment = ledgerTransaction.operations[0].paymentOperation
+    var testPayment = ledgerTransaction.operation.paymentOperation
 
     assertFalse(paymentListener.validate(ledgerTransaction, testPayment))
 
     // null memo
-    ledgerTransaction = createTestLedgerTransaction()
+    ledgerTransaction = createTestTransferEvent().ledgerTransaction
     ledgerTransaction.memo = null
     assertFalse(paymentListener.validate(ledgerTransaction, testPayment))
 
     // empty memo
-    ledgerTransaction = createTestLedgerTransaction()
+    ledgerTransaction = createTestTransferEvent().ledgerTransaction
     ledgerTransaction.memo = Memo()
     ledgerTransaction.memo.discriminant = MEMO_TEXT
     ledgerTransaction.memo.text = XdrString("")
     assertFalse(paymentListener.validate(ledgerTransaction, testPayment))
 
     // unsupported asset type
-    ledgerTransaction = createTestLedgerTransaction()
-    testPayment = ledgerTransaction.operations[0].paymentOperation
+    ledgerTransaction = createTestTransferEvent().ledgerTransaction
+    testPayment = ledgerTransaction.operation.paymentOperation
     testPayment.asset = Asset()
     testPayment.asset.discriminant = ASSET_TYPE_POOL_SHARE
     assertFalse(paymentListener.validate(ledgerTransaction, testPayment))
@@ -97,12 +99,13 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test unsupported assets should not trigger any process`() {
-    val ledgerTransaction = createTestLedgerTransaction()
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
     val poolShareAsset = Asset()
     poolShareAsset.discriminant = ASSET_TYPE_POOL_SHARE
-    ledgerTransaction.operations[0].paymentOperation.asset = poolShareAsset
+    ledgerTransaction.operation.paymentOperation.asset = poolShareAsset
 
-    paymentListener.onReceived(ledgerTransaction)
+    paymentListener.onReceived(event)
 
     verify { sep31TransactionStore wasNot Called }
     verify { sep24TransactionStore wasNot Called }
@@ -111,7 +114,8 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test handleSep31Transaction are called properly`() {
-    val ledgerTransaction = createTestLedgerTransaction()
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
     xdrMemoText.text = XdrString("my_memo_1")
     ledgerTransaction.memo = xdrMemoText
 
@@ -129,7 +133,7 @@ class DefaultPaymentListenerTest {
 
     every { paymentListener.handleSep31Transaction(any(), any(), any()) } answers {}
 
-    paymentListener.onReceived(ledgerTransaction)
+    paymentListener.onReceived(event)
 
     verify(exactly = 1) {
       sep31TransactionStore.findByToAccountAndMemoAndStatus(
@@ -148,7 +152,8 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test handleSep24Transaction are called properly`() {
-    val ledgerTransaction = createTestLedgerTransaction()
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
     xdrMemoText.text = XdrString("my_memo_1")
     ledgerTransaction.memo = xdrMemoText
 
@@ -169,7 +174,7 @@ class DefaultPaymentListenerTest {
 
     every { paymentListener.handleSep24Transaction(any(), any(), any()) } answers {}
 
-    paymentListener.onReceived(ledgerTransaction)
+    paymentListener.onReceived(event)
 
     verify(exactly = 1) {
       sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
@@ -188,7 +193,8 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test handleSep6Transaction are called properly`() {
-    val ledgerTransaction = createTestLedgerTransaction()
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
     xdrMemoText.text = XdrString("my_memo_1")
     ledgerTransaction.memo = xdrMemoText
 
@@ -210,7 +216,7 @@ class DefaultPaymentListenerTest {
 
     every { paymentListener.handleSep6Transaction(any(), any(), any()) } answers {}
 
-    paymentListener.onReceived(ledgerTransaction)
+    paymentListener.onReceived(event)
 
     verify(exactly = 1) {
       sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
@@ -227,7 +233,7 @@ class DefaultPaymentListenerTest {
     assertEquals("pending_user_transfer_start", slotStatus.captured)
   }
 
-  private fun createTestLedgerTransaction(): LedgerTransaction {
+  private fun createTestTransferEvent(): LedgerTransferEvent {
     val testAssetFoo =
       org.stellar.sdk.Asset.create(
         null,
@@ -235,11 +241,11 @@ class DefaultPaymentListenerTest {
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
       )
 
-    return LedgerTransaction.builder()
-      .hash("1ad62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af30")
-      .memo(xdrMemoText)
-      .operations(
-        listOf(
+    val ledgerTransaction =
+      SingleOpLedgerTransaction.builder()
+        .hash("1ad62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af30")
+        .memo(xdrMemoText)
+        .operation(
           LedgerOperation.builder()
             .type(OperationType.PAYMENT)
             .paymentOperation(
@@ -252,13 +258,15 @@ class DefaultPaymentListenerTest {
             )
             .build()
         )
-      )
-      .build()
+        .build()
+    return LedgerTransferEvent.builder().ledgerTransaction(ledgerTransaction).build()
   }
 
   @Test
   fun `test if Sep31 findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
-    val ledgerTransaction = createTestLedgerTransaction()
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+
     xdrMemoText.text = XdrString("my_memo_3")
     ledgerTransaction.memo = xdrMemoText
 
@@ -270,7 +278,7 @@ class DefaultPaymentListenerTest {
       )
     } throws RuntimeException("Something went wrong")
 
-    paymentListener.onReceived(ledgerTransaction)
+    paymentListener.onReceived(event)
 
     verify(exactly = 1) {
       sep31TransactionStore.findByToAccountAndMemoAndStatus(
@@ -283,7 +291,7 @@ class DefaultPaymentListenerTest {
     verify(exactly = 0) {
       paymentListener.handleSep31Transaction(
         ledgerTransaction,
-        ledgerTransaction.operations[0].paymentOperation,
+        ledgerTransaction.operation.paymentOperation,
         any(),
       )
     }
@@ -291,7 +299,9 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test if Sep24 findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
-    val ledgerTransaction = createTestLedgerTransaction()
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+
     xdrMemoText.text = XdrString("my_memo_3")
     ledgerTransaction.memo = xdrMemoText
 
@@ -305,7 +315,7 @@ class DefaultPaymentListenerTest {
       )
     } throws RuntimeException("Something went wrong")
 
-    paymentListener.onReceived(ledgerTransaction)
+    paymentListener.onReceived(event)
 
     verify(exactly = 1) {
       sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
@@ -318,7 +328,7 @@ class DefaultPaymentListenerTest {
     verify(exactly = 0) {
       paymentListener.handleSep24Transaction(
         ledgerTransaction,
-        ledgerTransaction.operations[0].paymentOperation,
+        ledgerTransaction.operation.paymentOperation,
         any(),
       )
     }
@@ -326,7 +336,9 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test if Sep6 findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
-    val ledgerTransaction = createTestLedgerTransaction()
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+
     xdrMemoText.text = XdrString("my_memo_3")
     ledgerTransaction.memo = xdrMemoText
 
@@ -342,7 +354,7 @@ class DefaultPaymentListenerTest {
       )
     } throws RuntimeException("Something went wrong")
 
-    paymentListener.onReceived(ledgerTransaction)
+    paymentListener.onReceived(event)
 
     verify(exactly = 1) {
       sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
@@ -355,7 +367,7 @@ class DefaultPaymentListenerTest {
     verify(exactly = 0) {
       paymentListener.handleSep24Transaction(
         ledgerTransaction,
-        ledgerTransaction.operations[0].paymentOperation,
+        ledgerTransaction.operation.paymentOperation,
         any(),
       )
     }
@@ -363,7 +375,9 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test If asset code from the fetched tx is different, don't trigger event`() {
-    val ledgerTransaction = createTestLedgerTransaction()
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+
     xdrMemoText.text = XdrString("my_memo_4")
     ledgerTransaction.memo = xdrMemoText
     val sep31TxMock = JdbcSep31Transaction()
@@ -380,7 +394,7 @@ class DefaultPaymentListenerTest {
         capture(slotStatus),
       )
     } returns sep31TxMock
-    paymentListener.onReceived(ledgerTransaction)
+    paymentListener.onReceived(event)
     verify(exactly = 1) {
       sep31TransactionStore.findByToAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
@@ -395,8 +409,10 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test handleSep31Transaction`() {
-    val testTxn = createTestLedgerTransaction()
-    val testPayment = testTxn.operations[0].paymentOperation
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+
+    val testPayment = testTxn.operation.paymentOperation
     val testJdbcSepTransaction = JdbcSep31Transaction()
     testJdbcSepTransaction.id = "123"
 
@@ -422,8 +438,10 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test handleSep24Transaction WITHDRAWAL`() {
-    val testTxn = createTestLedgerTransaction()
-    val testPayment = testTxn.operations[0].paymentOperation
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+
+    val testPayment = testTxn.operation.paymentOperation
     val testJdbcSepTransaction = JdbcSep24Transaction()
     testJdbcSepTransaction.id = "123"
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
@@ -448,8 +466,10 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test handleSep24Transaction DEPOSIT`() {
-    val testTxn = createTestLedgerTransaction()
-    val testPayment = testTxn.operations[0].paymentOperation
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+
+    val testPayment = testTxn.operation.paymentOperation
     val testJdbcSepTransaction = JdbcSep24Transaction()
     testJdbcSepTransaction.id = "123"
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
@@ -468,8 +488,10 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test handleSep6Transaction WITHDRAWAL`() {
-    val testTxn = createTestLedgerTransaction()
-    val testPayment = testTxn.operations[0].paymentOperation
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+
+    val testPayment = testTxn.operation.paymentOperation
     val testJdbcSepTransaction = JdbcSep6Transaction()
     testJdbcSepTransaction.id = "123"
 
@@ -497,8 +519,9 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test handleSep6Transaction DEPOSIT`() {
-    val testTxn = createTestLedgerTransaction()
-    val testPayment = testTxn.operations[0].paymentOperation
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+    val testPayment = testTxn.operation.paymentOperation
     val testJdbcSepTransaction = JdbcSep6Transaction()
     testJdbcSepTransaction.id = "123"
 

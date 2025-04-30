@@ -5,7 +5,6 @@ package org.stellar.anchor.platform.observer.stellar
 import com.google.gson.reflect.TypeToken
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
-import java.util.*
 import javax.net.ssl.SSLProtocolException
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -47,7 +46,7 @@ class StellarPaymentObserverTest {
           stellarPaymentObserverConfig,
           null,
           paymentObservingAccountsManager,
-          paymentStreamerCursorStore
+          paymentStreamerCursorStore,
         )
       )
 
@@ -66,7 +65,7 @@ class StellarPaymentObserverTest {
         stellarPaymentObserverConfig,
         null,
         paymentObservingAccountsManager,
-        paymentStreamerCursorStore
+        paymentStreamerCursorStore,
       )
 
     // 2.1 If fetching from the network throws an error, we return `null`
@@ -155,12 +154,12 @@ class StellarPaymentObserverTest {
           stellarPaymentObserverConfig,
           null,
           paymentObservingAccountsManager,
-          paymentStreamerCursorStore
+          paymentStreamerCursorStore,
         )
       )
     every { observer.startSSEStream() } returns stream
     observer.start()
-    observer.handleFailure(Optional.of(SSLProtocolException("")))
+    observer.handleFailure(SSLProtocolException(""))
     assertEquals(ObserverStatus.STREAM_ERROR, observer.status)
 
     val checkResult = observer.check()
