@@ -18,6 +18,7 @@ import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPayment;
+import org.stellar.anchor.ledger.LedgerTransferEvent;
 import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.*;
 import org.stellar.anchor.platform.service.AnchorMetrics;
@@ -52,17 +53,16 @@ public class DefaultPaymentListener
   }
 
   @Override
-  public void onReceived(LedgerTransaction ledgerTransaction) {
-    ledgerTransaction
-        .getOperations()
-        .forEach(
-            ledgerOperation -> {
-              LedgerPayment ledgerPayment = getLedgerPayment(ledgerOperation);
-              // Check if the payment is to or from an account we are observing
-              if (paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getTo())
-                  || paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getFrom()))
-                processAndDispatchLedgerPayment(ledgerTransaction, ledgerPayment);
-            });
+  public void onReceived(LedgerTransferEvent ledgerTransferEvent) {
+    LedgerTransaction ledgerTransaction = ledgerTransferEvent.getLedgerTransaction();
+    LedgerPayment ledgerPayment =
+        getLedgerPayment(ledgerTransferEvent.getLedgerTransaction().getOperation());
+    if (ledgerPayment != null) {
+      // Check if the payment is to or from an account we are observing
+      if (paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getTo())
+          || paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getFrom()))
+        processAndDispatchLedgerPayment(ledgerTransaction, ledgerPayment);
+    }
   }
 
   void processAndDispatchLedgerPayment(

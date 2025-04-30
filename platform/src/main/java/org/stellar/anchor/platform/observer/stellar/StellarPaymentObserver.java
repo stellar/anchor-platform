@@ -32,6 +32,8 @@ import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.healthcheck.HealthCheckable;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
+import org.stellar.anchor.ledger.LedgerTransferEvent;
+import org.stellar.anchor.ledger.LedgerTransferEvent.SingleOpLedgerTransaction;
 import org.stellar.anchor.platform.config.PaymentObserverConfig;
 import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.utils.DaemonExecutors;
@@ -155,14 +157,13 @@ public class StellarPaymentObserver implements HealthCheckable {
               metricLatestBlockRead.set(operationResponse.getTransaction().getLedger());
 
               if (isHealthy()) {
-                debugF("Received event {}", operationResponse.getId());
+                debugF("Received payment {}", operationResponse.getId());
                 // clear stream timeout/reconnect status
                 lastActivityTime = Instant.now();
                 silenceTimeoutCount = 0;
                 streamBackoffTimer.reset();
                 try {
-                  debugF("Dispatching event {}", operationResponse.getId());
-                  handleEvent(operationResponse);
+                  processPayment(operationResponse);
                   metricLatestBlockProcessed.set(operationResponse.getTransaction().getLedger());
 
                 } catch (TransactionException ex) {
@@ -358,15 +359,15 @@ public class StellarPaymentObserver implements HealthCheckable {
     return token;
   }
 
-  void handleEvent(OperationResponse operationResponse) {
+  void processPayment(OperationResponse operationResponse) {
     if (!operationResponse.getTransactionSuccessful()) {
       savePagingToken(operationResponse.getPagingToken());
       return;
     }
     try {
-      LedgerTransaction ledgerTxn = toLedgerTransaction(operationResponse);
+      LedgerTransferEvent transferEvent = toLedgerTransferEvent(operationResponse);
       for (PaymentListener listener : paymentListeners) {
-        listener.onReceived(ledgerTxn);
+        listener.onReceived(transferEvent);
       }
       publishingBackoffTimer.reset();
       paymentStreamerCursorStore.save(operationResponse.getPagingToken());
@@ -386,9 +387,14 @@ public class StellarPaymentObserver implements HealthCheckable {
     }
   }
 
-  LedgerTransaction toLedgerTransaction(OperationResponse operationResponse) {
+  LedgerTransferEvent toLedgerTransferEvent(OperationResponse operationResponse) {
+    SingleOpLedgerTransaction ledgerTransaction = toSingleOpLedgerTransaction(operationResponse);
+    return LedgerTransferEvent.builder().ledgerTransaction(ledgerTransaction).build();
+  }
+
+  SingleOpLedgerTransaction toSingleOpLedgerTransaction(OperationResponse operationResponse) {
     TransactionResponse txnResponse = operationResponse.getTransaction();
-    return LedgerTransaction.builder()
+    return SingleOpLedgerTransaction.builder()
         .hash(txnResponse.getHash())
         .ledger(txnResponse.getLedger())
         .applicationOrder(
@@ -398,7 +404,7 @@ public class StellarPaymentObserver implements HealthCheckable {
         .memo(MemoHelper.toXdr(txnResponse.getMemo()))
         .sequenceNumber(txnResponse.getSourceAccountSequence())
         .createdAt(Instant.parse(txnResponse.getCreatedAt()))
-        .operations(List.of(toLedgerOperation(operationResponse)))
+        .operation(toLedgerOperation(operationResponse))
         .build();
   }
 
