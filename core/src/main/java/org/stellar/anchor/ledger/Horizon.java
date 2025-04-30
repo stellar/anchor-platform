@@ -2,9 +2,7 @@ package org.stellar.anchor.ledger;
 
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
 import static org.stellar.anchor.ledger.LedgerClientHelper.*;
-import static org.stellar.anchor.util.AssetHelper.toXdrAmount;
 import static org.stellar.anchor.util.Log.debug;
-import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -14,10 +12,8 @@ import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.ledger.LedgerClientHelper.ParsedTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
-import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.anchor.util.AssetHelper;
-import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TrustLineAsset;
@@ -26,9 +22,6 @@ import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.responses.AccountResponse;
 import org.stellar.sdk.responses.SubmitTransactionAsyncResponse;
 import org.stellar.sdk.responses.TransactionResponse;
-import org.stellar.sdk.responses.operations.OperationResponse;
-import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
-import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 import org.stellar.sdk.xdr.*;
 
 /** The horizon-server that implements LedgerClient. */
@@ -154,70 +147,5 @@ public class Horizon implements LedgerClient {
         .errorResultXdr(txnR.getErrorResultXdr())
         .status(LedgerClientHelper.convert(txnR.getTxStatus()))
         .build();
-  }
-
-  public static LedgerTransaction toLedgerTransaction(
-      Server server, TransactionResponse txnResponse) {
-    return LedgerTransaction.builder()
-        .hash(txnResponse.getHash())
-        .ledger(txnResponse.getLedger())
-        .applicationOrder(
-            TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder())
-        .sourceAccount(txnResponse.getSourceAccount())
-        .envelopeXdr(txnResponse.getEnvelopeXdr())
-        .memo(MemoHelper.toXdr(txnResponse.getMemo()))
-        .sequenceNumber(txnResponse.getSourceAccountSequence())
-        .createdAt(Instant.parse(txnResponse.getCreatedAt()))
-        .operations(getLedgerOperations(server, txnResponse.getHash()))
-        .build();
-  }
-
-  /**
-   * Get the ledger operations for a given transaction.
-   *
-   * @param txnHash the transaction hash
-   * @return the ledger operations
-   */
-  public static List<LedgerOperation> getLedgerOperations(Server server, String txnHash) {
-    return server
-        .payments()
-        .includeTransactions(true)
-        .forTransaction(txnHash)
-        .execute()
-        .getRecords()
-        .stream()
-        .map(Horizon::toLedgerOperation)
-        .collect(Collectors.toList());
-  }
-
-  public static LedgerOperation toLedgerOperation(OperationResponse op) {
-    LedgerOperation.LedgerOperationBuilder builder = LedgerOperation.builder();
-    // TODO: Capture muxed account events
-    if (op instanceof PaymentOperationResponse paymentOp) {
-      builder.type(PAYMENT);
-      builder.paymentOperation(
-          LedgerPaymentOperation.builder()
-              .id(String.valueOf(paymentOp.getId()))
-              .from(paymentOp.getFrom())
-              .to(paymentOp.getTo())
-              .amount(toXdrAmount(paymentOp.getAmount()))
-              .asset(paymentOp.getAsset().toXdr())
-              .sourceAccount(paymentOp.getSourceAccount())
-              .build());
-    } else if (op instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
-      builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE);
-      builder.pathPaymentOperation(
-          LedgerTransaction.LedgerPathPaymentOperation.builder()
-              .id(String.valueOf(pathPaymentOp.getId()))
-              .from(pathPaymentOp.getFrom())
-              .to(pathPaymentOp.getTo())
-              .amount(toXdrAmount(pathPaymentOp.getAmount()))
-              .asset(pathPaymentOp.getAsset().toXdr())
-              .sourceAccount(pathPaymentOp.getSourceAccount())
-              .build());
-    } else {
-      return null;
-    }
-    return builder.build();
   }
 }

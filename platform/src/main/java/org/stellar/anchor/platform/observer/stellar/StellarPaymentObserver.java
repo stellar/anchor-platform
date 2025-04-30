@@ -5,10 +5,12 @@ import static org.stellar.anchor.api.platform.HealthCheckStatus.*;
 import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.ALL;
 import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.EVENT;
 import static org.stellar.anchor.platform.observer.stellar.ObserverStatus.*;
+import static org.stellar.anchor.util.AssetHelper.toXdrAmount;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.MetricConstants.*;
 import static org.stellar.anchor.util.ReflectionUtil.getField;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
+import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 
 import com.google.gson.annotations.SerializedName;
 import java.time.Duration;
@@ -28,7 +30,6 @@ import org.stellar.anchor.api.exception.EventPublishException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.healthcheck.HealthCheckable;
-import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.platform.config.PaymentObserverConfig;
@@ -36,14 +37,20 @@ import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.utils.DaemonExecutors;
 import org.stellar.anchor.util.ExponentialBackoffTimer;
 import org.stellar.anchor.util.Log;
+import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.Server;
+import org.stellar.sdk.TOID;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.requests.EventListener;
 import org.stellar.sdk.requests.PaymentsRequestBuilder;
 import org.stellar.sdk.requests.RequestBuilder;
 import org.stellar.sdk.requests.SSEStream;
 import org.stellar.sdk.responses.Page;
+import org.stellar.sdk.responses.TransactionResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
+import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
+import org.stellar.sdk.responses.operations.PaymentOperationResponse;
+import org.stellar.sdk.xdr.OperationType;
 
 public class StellarPaymentObserver implements HealthCheckable {
   /** The maximum number of results the Stellar Blockchain can return. */
@@ -170,7 +177,11 @@ public class StellarPaymentObserver implements HealthCheckable {
 
           @Override
           public void onFailure(Optional<Throwable> error, Optional<Integer> responseCode) {
-            handleFailure(error);
+            // The SSEStreamer has internal errors. We will give up and let the container
+            // manager to restart.
+            errorEx("stellar payment observer stream error: ", error.orElse(null));
+            // Mark the observer unhealthy
+            setStatus(STREAM_ERROR);
           }
         });
   }
@@ -353,16 +364,10 @@ public class StellarPaymentObserver implements HealthCheckable {
       return;
     }
     try {
-      LedgerOperation ledgerOperation = Horizon.toLedgerOperation(operationResponse);
-      if (ledgerOperation == null) {
-        return;
-      }
-      LedgerTransaction ledgerTxn =
-          Horizon.toLedgerTransaction(server, operationResponse.getTransaction());
+      LedgerTransaction ledgerTxn = toLedgerTransaction(operationResponse);
       for (PaymentListener listener : paymentListeners) {
         listener.onReceived(ledgerTxn);
       }
-
       publishingBackoffTimer.reset();
       paymentStreamerCursorStore.save(operationResponse.getPagingToken());
     } catch (EventPublishException ex) {
@@ -381,13 +386,51 @@ public class StellarPaymentObserver implements HealthCheckable {
     }
   }
 
-  void handleFailure(Optional<Throwable> throwable) {
-    // The SSEStreamer has internal errors. We will give up and let the container
-    // manager to restart.
-    errorEx("stellar payment observer stream error: ", throwable.orElse(null));
+  LedgerTransaction toLedgerTransaction(OperationResponse operationResponse) {
+    TransactionResponse txnResponse = operationResponse.getTransaction();
+    return LedgerTransaction.builder()
+        .hash(txnResponse.getHash())
+        .ledger(txnResponse.getLedger())
+        .applicationOrder(
+            TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder())
+        .sourceAccount(txnResponse.getSourceAccount())
+        .envelopeXdr(txnResponse.getEnvelopeXdr())
+        .memo(MemoHelper.toXdr(txnResponse.getMemo()))
+        .sequenceNumber(txnResponse.getSourceAccountSequence())
+        .createdAt(Instant.parse(txnResponse.getCreatedAt()))
+        .operations(List.of(toLedgerOperation(operationResponse)))
+        .build();
+  }
 
-    // Mark the observer unhealthy
-    setStatus(STREAM_ERROR);
+  LedgerOperation toLedgerOperation(OperationResponse op) {
+    LedgerOperation.LedgerOperationBuilder builder = LedgerOperation.builder();
+    // TODO: Capture muxed account events
+    if (op instanceof PaymentOperationResponse paymentOp) {
+      builder.type(PAYMENT);
+      builder.paymentOperation(
+          LedgerTransaction.LedgerPaymentOperation.builder()
+              .id(String.valueOf(paymentOp.getId()))
+              .from(paymentOp.getFrom())
+              .to(paymentOp.getTo())
+              .amount(toXdrAmount(paymentOp.getAmount()))
+              .asset(paymentOp.getAsset().toXdr())
+              .sourceAccount(paymentOp.getSourceAccount())
+              .build());
+    } else if (op instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
+      builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE);
+      builder.pathPaymentOperation(
+          LedgerTransaction.LedgerPathPaymentOperation.builder()
+              .id(String.valueOf(pathPaymentOp.getId()))
+              .from(pathPaymentOp.getFrom())
+              .to(pathPaymentOp.getTo())
+              .amount(toXdrAmount(pathPaymentOp.getAmount()))
+              .asset(pathPaymentOp.getAsset().toXdr())
+              .sourceAccount(pathPaymentOp.getSourceAccount())
+              .build());
+    } else {
+      return null;
+    }
+    return builder.build();
   }
 
   String loadPagingToken() {
