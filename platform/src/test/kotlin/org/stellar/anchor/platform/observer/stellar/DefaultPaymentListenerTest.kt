@@ -426,10 +426,7 @@ class DefaultPaymentListenerTest {
     val testPayment = testTxn.operations[0].paymentOperation
     val testJdbcSepTransaction = JdbcSep24Transaction()
     testJdbcSepTransaction.id = "123"
-
-    // Test WITHDRAWAL
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
-
     every {
       paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     } answers {}
@@ -455,8 +452,6 @@ class DefaultPaymentListenerTest {
     val testPayment = testTxn.operations[0].paymentOperation
     val testJdbcSepTransaction = JdbcSep24Transaction()
     testJdbcSepTransaction.id = "123"
-
-    // Test WITHDRAWAL
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
 
     every {
