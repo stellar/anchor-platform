@@ -15,10 +15,10 @@ import org.stellar.anchor.platform.data.JdbcSep24TransactionStore;
 import org.stellar.anchor.platform.data.JdbcSep31TransactionStore;
 import org.stellar.anchor.platform.data.JdbcSep6TransactionStore;
 import org.stellar.anchor.platform.observer.PaymentListener;
+import org.stellar.anchor.platform.observer.stellar.DefaultPaymentListener;
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager;
 import org.stellar.anchor.platform.observer.stellar.StellarPaymentObserver;
 import org.stellar.anchor.platform.observer.stellar.StellarPaymentStreamerCursorStore;
-import org.stellar.anchor.platform.service.PaymentOperationToEventListener;
 
 @Configuration
 public class PaymentObserverBeans {
@@ -36,12 +36,12 @@ public class PaymentObserverBeans {
       throw new ServerErrorException("Asset service cannot be empty.");
     }
     List<StellarAssetInfo> stellarAssets = assetService.getStellarAssets();
-    if (stellarAssets.size() == 0) {
+    if (stellarAssets.isEmpty()) {
       throw new ServerErrorException("Asset service should contain at least one Stellar asset.");
     }
 
     // validate paymentListeners
-    if (paymentListeners == null || paymentListeners.size() == 0) {
+    if (paymentListeners == null || paymentListeners.isEmpty()) {
       throw new ServerErrorException(
           "The stellar payment observer service needs at least one listener.");
     }
@@ -82,13 +82,16 @@ public class PaymentObserverBeans {
   }
 
   @Bean
-  public PaymentOperationToEventListener paymentOperationToEventListener(
+  public DefaultPaymentListener paymentListener(
+      PaymentObservingAccountsManager paymentObservingAccountsManager,
       JdbcSep31TransactionStore sep31TransactionStore,
       JdbcSep24TransactionStore sep24TransactionStore,
       JdbcSep6TransactionStore sep6TransactionStore,
       PlatformApiClient platformApiClient,
       RpcConfig rpcConfig) {
-    return new PaymentOperationToEventListener(
+
+    return new DefaultPaymentListener(
+        paymentObservingAccountsManager,
         sep31TransactionStore,
         sep24TransactionStore,
         sep6TransactionStore,

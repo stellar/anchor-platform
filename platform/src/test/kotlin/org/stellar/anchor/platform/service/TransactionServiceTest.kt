@@ -793,6 +793,7 @@ class TransactionServiceTest {
       "id": "a4baff5f-778c-43d6-bbef-3e9fb41d096e",
       "status": "pending_receiver",
       "status_eta": 120,
+      "amount_expected": "100",
       "amount_in": "100.0000",
       "amount_in_asset": "iso4217:USD",
       "amount_out": "98.0000000",

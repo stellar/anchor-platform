@@ -32,7 +32,6 @@ import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.platform.config.PaymentObserverConfig;
-import org.stellar.anchor.platform.observer.ObservedPayment;
 import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.utils.DaemonExecutors;
 import org.stellar.anchor.util.ExponentialBackoffTimer;
@@ -360,31 +359,12 @@ public class StellarPaymentObserver implements HealthCheckable {
       }
       LedgerTransaction ledgerTxn =
           Horizon.toLedgerTransaction(server, operationResponse.getTransaction());
-      ObservedPayment observedPayment =
-          switch (ledgerOperation.getType()) {
-            case PAYMENT -> ObservedPayment.from(ledgerTxn, ledgerOperation.getPaymentOperation());
-            case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND ->
-                ObservedPayment.from(ledgerTxn, ledgerOperation.getPathPaymentOperation());
-            default ->
-                throw new IllegalStateException("Unexpected value: " + ledgerOperation.getType());
-          };
-
-      if (observedPayment != null) {
-        if (paymentObservingAccountsManager.lookupAndUpdate(observedPayment.getTo())) {
-          for (PaymentListener listener : paymentListeners) {
-            listener.onReceived(observedPayment);
-          }
-        }
-
-        if (paymentObservingAccountsManager.lookupAndUpdate(observedPayment.getFrom())
-            && !observedPayment.getTo().equals(observedPayment.getFrom())) {
-          for (PaymentListener listener : paymentListeners) {
-            listener.onSent(observedPayment);
-          }
-        }
-        publishingBackoffTimer.reset();
-        paymentStreamerCursorStore.save(operationResponse.getPagingToken());
+      for (PaymentListener listener : paymentListeners) {
+        listener.onReceived(ledgerTxn);
       }
+
+      publishingBackoffTimer.reset();
+      paymentStreamerCursorStore.save(operationResponse.getPagingToken());
     } catch (EventPublishException ex) {
       // restart the observer from where it stopped, in case the queue fails to
       // publish the message.

@@ -6,7 +6,7 @@ import static org.stellar.anchor.api.rpc.method.RpcMethod.NOTIFY_ONCHAIN_FUNDS_S
 import static org.stellar.anchor.api.sep.SepTransactionStatus.COMPLETED;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_ANCHOR;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_STELLAR;
-import static org.stellar.anchor.platform.utils.PaymentsUtil.addStellarTransaction;
+import static org.stellar.anchor.platform.utils.PaymentHelper.addStellarTransaction;
 import static org.stellar.anchor.util.Log.errorEx;
 
 import com.google.common.collect.ImmutableSet;
@@ -112,7 +112,7 @@ public class NotifyOnchainFundsSentHandler
         throw new InternalErrorException(
             String.format("Failed to retrieve Stellar transaction by ID[%s]", stellarTxnId));
       }
-      addStellarTransaction(txn, ledgerTxn);
+      addStellarTransaction(ledgerTxn, txn);
     } catch (LedgerException ex) {
       errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
       throw new InternalErrorException(
