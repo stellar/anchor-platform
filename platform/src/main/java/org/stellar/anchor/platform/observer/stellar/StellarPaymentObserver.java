@@ -396,8 +396,7 @@ public class StellarPaymentObserver implements HealthCheckable {
       return PaymentTransferEvent.builder()
           .from(paymentOp.getFrom())
           .to(paymentOp.getTo())
-          .sep11Asset(
-              AssetHelper.getSep11AssetName(paymentOp.getAssetCode(), paymentOp.getAssetIssuer()))
+          .sep11Asset(AssetHelper.getSep11AssetName(paymentOp.getAsset().toXdr()))
           .amount(AssetHelper.toXdrAmount(paymentOp.getAmount()))
           .operationId(operation.getId())
           .txHash(paymentOp.getTransactionHash())
@@ -412,9 +411,7 @@ public class StellarPaymentObserver implements HealthCheckable {
       return PaymentTransferEvent.builder()
           .from(pathPaymentOp.getFrom())
           .to(pathPaymentOp.getTo())
-          .sep11Asset(
-              AssetHelper.getSep11AssetName(
-                  pathPaymentOp.getAssetCode(), pathPaymentOp.getAssetIssuer()))
+          .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset().toXdr()))
           .amount(AssetHelper.toXdrAmount(pathPaymentOp.getAmount()))
           .operationId(operation.getId())
           .txHash(pathPaymentOp.getTransactionHash())
