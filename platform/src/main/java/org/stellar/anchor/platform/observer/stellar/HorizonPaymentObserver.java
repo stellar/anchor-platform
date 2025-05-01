@@ -1,27 +1,21 @@
 package org.stellar.anchor.platform.observer.stellar;
 
-import static io.micrometer.core.instrument.Metrics.gauge;
 import static org.stellar.anchor.api.platform.HealthCheckStatus.*;
+import static org.stellar.anchor.api.platform.HealthCheckStatus.RED;
 import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.ALL;
 import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.EVENT;
-import static org.stellar.anchor.platform.observer.stellar.ObserverStatus.*;
+import static org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.ObserverStatus.*;
 import static org.stellar.anchor.util.Log.*;
-import static org.stellar.anchor.util.MetricConstants.*;
+import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.ReflectionUtil.getField;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
-import com.google.gson.annotations.SerializedName;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import lombok.Builder;
-import lombok.Data;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.exception.EventPublishException;
@@ -32,11 +26,9 @@ import org.stellar.anchor.healthcheck.HealthCheckable;
 import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.PaymentTransferEvent;
-import org.stellar.anchor.platform.config.PaymentObserverConfig;
+import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig;
 import org.stellar.anchor.platform.observer.PaymentListener;
-import org.stellar.anchor.platform.utils.DaemonExecutors;
 import org.stellar.anchor.util.AssetHelper;
-import org.stellar.anchor.util.ExponentialBackoffTimer;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.requests.EventListener;
@@ -48,84 +40,40 @@ import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
 import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 
-public class StellarPaymentObserver implements HealthCheckable {
-  /** The maximum number of results the Stellar Blockchain can return. */
+public class HorizonPaymentObserver extends AbstractPaymentObserver {
+
   private static final int MAX_RESULTS = 200;
 
   /** The minimum number of results the Stellar Blockchain can return. */
   private static final int MIN_RESULTS = 1;
 
   final Horizon horizon;
-  final PaymentObserverConfig.StellarPaymentObserverConfig config;
-  final List<PaymentListener> paymentListeners;
-  final StellarPaymentStreamerCursorStore paymentStreamerCursorStore;
-  final Map<SSEStream<OperationResponse>, String> mapStreamToAccount = new HashMap<>();
-  final PaymentObservingAccountsManager paymentObservingAccountsManager;
+  final StellarPaymentObserverConfig config;
   SSEStream<OperationResponse> stream;
 
-  final ExponentialBackoffTimer publishingBackoffTimer;
-  final ExponentialBackoffTimer streamBackoffTimer;
-  final ExponentialBackoffTimer databaseBackoffTimer = new ExponentialBackoffTimer(1, 20);
-
-  int silenceTimeoutCount = 0;
-  ObserverStatus status = RUNNING;
-  Instant lastActivityTime;
-  AtomicLong metricLatestBlockRead = new AtomicLong(0);
-  AtomicLong metricLatestBlockProcessed = new AtomicLong(0);
-
-  final ScheduledExecutorService silenceWatcher = DaemonExecutors.newScheduledThreadPool(1);
-  final ScheduledExecutorService statusWatcher = DaemonExecutors.newScheduledThreadPool(1);
-
-  public StellarPaymentObserver(
+  public HorizonPaymentObserver(
       String horizonUrl,
-      PaymentObserverConfig.StellarPaymentObserverConfig config,
+      StellarPaymentObserverConfig config,
       List<PaymentListener> paymentListeners,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
       StellarPaymentStreamerCursorStore paymentStreamerCursorStore) {
+    super(config, paymentListeners, paymentObservingAccountsManager, paymentStreamerCursorStore);
     this.horizon = new Horizon(horizonUrl);
     this.config = config;
-    this.paymentListeners = paymentListeners;
-    this.paymentObservingAccountsManager = paymentObservingAccountsManager;
-    this.paymentStreamerCursorStore = paymentStreamerCursorStore;
-
-    publishingBackoffTimer =
-        new ExponentialBackoffTimer(
-            config.getInitialEventBackoffTime(), config.getMaxEventBackoffTime());
-    streamBackoffTimer =
-        new ExponentialBackoffTimer(
-            config.getInitialStreamBackoffTime(), config.getMaxStreamBackoffTime());
-
-    // register gauges
-    gauge(PAYMENT_OBSERVER_LATEST_BLOCK_READ, metricLatestBlockRead);
-    gauge(PAYMENT_OBSERVER_LATEST_BLOCK_PROCESSED, metricLatestBlockProcessed);
   }
 
   /** Start the observer. */
-  public void start() {
+  @Override
+  void startInternal() {
     infoF("Starting the SSEStream");
     startStream();
-
-    infoF("Starting the observer silence watcher");
-    silenceWatcher.scheduleAtFixedRate(
-        this::checkSilence, 1, config.getSilenceCheckInterval(), TimeUnit.SECONDS);
-
-    infoF("Starting the status watcher");
-    statusWatcher.scheduleWithFixedDelay(this::checkStatus, 1, 1, TimeUnit.SECONDS);
-
-    setStatus(RUNNING);
   }
 
   /** Graceful shut down the observer */
-  public void shutdown() {
+  @Override
+  void shutdownInternal() {
     infoF("Shutting down the SSEStream");
     stopStream();
-
-    infoF("Stopping the silence watcher");
-    silenceWatcher.shutdown();
-
-    infoF("Stopping the status watcher");
-    statusWatcher.shutdown();
-    setStatus(SHUTDOWN);
   }
 
   void startStream() {
@@ -184,118 +132,6 @@ public class StellarPaymentObserver implements HealthCheckable {
       info("Stopping the stream");
       this.stream.close();
       this.stream = null;
-    }
-  }
-
-  void checkSilence() {
-    if (isHealthy()) {
-      Instant now = Instant.now();
-      if (lastActivityTime != null) {
-        Duration silenceDuration = Duration.between(lastActivityTime, now);
-        if (silenceDuration.getSeconds() > config.getSilenceTimeout()) {
-          debugF(
-              "The observer had been silent for {} seconds. This is too long. Setting status to SILENCE_ERROR",
-              silenceDuration.getSeconds());
-          setStatus(SILENCE_ERROR);
-        } else {
-          debugF("The observer had been silent for {} seconds.", silenceDuration.getSeconds());
-        }
-      }
-    }
-  }
-
-  void restartStream() {
-    try {
-      infoF("Restarting the stream");
-      stopStream();
-      startStream();
-      setStatus(RUNNING);
-    } catch (TransactionException tex) {
-      errorEx("Error restarting stream.", tex);
-      setStatus(DATABASE_ERROR);
-    }
-  }
-
-  void checkStatus() {
-    switch (status) {
-      case NEEDS_SHUTDOWN:
-        infoF("shut down the observer");
-        shutdown();
-        break;
-      case STREAM_ERROR:
-        // We got stream connection error. We will use the backoff timer to reconnect.
-        // If the backoff timer reaches max, we will shut down the observer
-        if (streamBackoffTimer.isTimerMaxed()) {
-          infoF("The streamer backoff timer is maxed. Shutdown the observer");
-          setStatus(NEEDS_SHUTDOWN);
-        } else {
-          try {
-            infoF(
-                "The streamer needs restart. Start backoff timer: {} seconds",
-                streamBackoffTimer.currentTimer());
-            streamBackoffTimer.backoff();
-            restartStream();
-          } catch (InterruptedException e) {
-            // if this thread is interrupted, we are shutting down the status watcher.
-            infoF("The status watcher is interrupted. Shutdown the observer");
-            setStatus(NEEDS_SHUTDOWN);
-          }
-        }
-        break;
-      case SILENCE_ERROR:
-        infoF("The silence reconnection count: {}", silenceTimeoutCount);
-        // We got the silence error. If silence reconnect too many times and the max retries is
-        // greater than zero, we will shut down the observer.
-        if (config.getSilenceTimeoutRetries() > 0
-            && silenceTimeoutCount >= config.getSilenceTimeoutRetries()) {
-          infoF(
-              "The silence error has happened for too many times:{}. Shutdown the observer",
-              silenceTimeoutCount);
-          setStatus(NEEDS_SHUTDOWN);
-        } else {
-          restartStream();
-          lastActivityTime = Instant.now();
-          silenceTimeoutCount++;
-        }
-        break;
-      case PUBLISHER_ERROR:
-        try {
-          infoF(
-              "Start the publishing backoff timer: {} seconds",
-              publishingBackoffTimer.currentTimer());
-          publishingBackoffTimer.backoff();
-          restartStream();
-        } catch (InterruptedException e) {
-          // if this thread is interrupted, we are shutting down the status watcher.
-          setStatus(NEEDS_SHUTDOWN);
-        }
-        break;
-      case DATABASE_ERROR:
-        try {
-          if (databaseBackoffTimer.isTimerMaxed()) {
-            infoF("The database timer is maxed. Shutdown the observer");
-            setStatus(NEEDS_SHUTDOWN);
-          } else {
-            infoF(
-                "Start the database backoff timer: {} seconds",
-                databaseBackoffTimer.currentTimer());
-            databaseBackoffTimer.backoff();
-            // now try to connect to database
-            restartStream();
-          }
-        } catch (InterruptedException e) {
-          // if this thread is interrupted, we are shutting down the status watcher.
-          setStatus(NEEDS_SHUTDOWN);
-        } catch (TransactionException tex) {
-          // database is still not available.
-          infoF("Still cannot connect to database");
-        }
-        break;
-      case RUNNING:
-      case SHUTDOWN:
-      default:
-        // NOOP
-        break;
     }
   }
 
@@ -360,13 +196,7 @@ public class StellarPaymentObserver implements HealthCheckable {
     try {
       PaymentTransferEvent transferEvent = toPaymentTransferEvent(operationResponse);
       if (transferEvent != null) {
-        metricLatestBlockRead.set(transferEvent.getLedgerTransaction().getLedger());
-        // process the payment
-        for (PaymentListener listener : paymentListeners) {
-          listener.onReceived(transferEvent);
-        }
-        metricLatestBlockProcessed.set(transferEvent.getLedgerTransaction().getLedger());
-        publishingBackoffTimer.reset();
+        handleEvent(transferEvent);
       }
     } catch (EventPublishException ex) {
       // restart the observer from where it stopped, in case the queue fails to
@@ -385,7 +215,7 @@ public class StellarPaymentObserver implements HealthCheckable {
   }
 
   PaymentTransferEvent toPaymentTransferEvent(OperationResponse operation) throws LedgerException {
-    LedgerTransaction txn = null;
+    LedgerTransaction txn;
 
     if (operation instanceof PaymentOperationResponse paymentOp) {
       txn = horizon.getTransaction(operation.getTransactionHash());
@@ -422,38 +252,6 @@ public class StellarPaymentObserver implements HealthCheckable {
     }
   }
 
-  String loadPagingToken() {
-    info("Loading the last stored cursor from database...");
-    String token = paymentStreamerCursorStore.load();
-    infoF("The last stored cursor is: {}", token);
-    debug("Resetting the database backoff timer...");
-    databaseBackoffTimer.reset();
-
-    return token;
-  }
-
-  void savePagingToken(String token) {
-    traceF("Saving the last stored cursor to database: {}", token);
-    paymentStreamerCursorStore.save(token);
-    traceF("Resetting the database backoff timer...");
-    databaseBackoffTimer.reset();
-  }
-
-  void setStatus(ObserverStatus status) {
-    if (this.status != status) {
-      if (this.status.isSettable(status)) {
-        infoF("Setting status to {}", status);
-        this.status = status;
-      } else {
-        warnF("Cannot set status to {} while the current status is {}", status, this.status);
-      }
-    }
-  }
-
-  boolean isHealthy() {
-    return (status == RUNNING);
-  }
-
   @Override
   public int compareTo(@NotNull HealthCheckable other) {
     return this.getName().compareTo(other.getName());
@@ -480,7 +278,6 @@ public class StellarPaymentObserver implements HealthCheckable {
           default -> GREEN;
         };
     StreamHealth.StreamHealthBuilder healthBuilder = StreamHealth.builder();
-    healthBuilder.account(mapStreamToAccount.get(stream));
     // populate executorService information
     if (stream != null) {
       ExecutorService executorService = getField(stream, "executorService", null);
@@ -520,84 +317,5 @@ public class StellarPaymentObserver implements HealthCheckable {
     results.add(healthBuilder.build());
 
     return SPOHealthCheckResult.builder().name(getName()).streams(results).status(status).build();
-  }
-}
-
-/** The health check result of StellarPaymentObserver class. */
-@Builder
-@Data
-class SPOHealthCheckResult implements HealthCheckResult {
-  transient String name;
-
-  List<HealthCheckStatus> statuses;
-
-  HealthCheckStatus status;
-
-  List<StreamHealth> streams;
-
-  public String name() {
-    return name;
-  }
-}
-
-@Data
-@Builder
-class StreamHealth {
-  String account;
-
-  @SerializedName("thread_shutdown")
-  boolean threadShutdown;
-
-  @SerializedName("thread_terminated")
-  boolean threadTerminated;
-
-  boolean stopped;
-
-  @SerializedName("last_event_id")
-  String lastEventId;
-
-  @SerializedName("seconds_since_last_event")
-  String silenceSinceLastEvent;
-}
-
-enum ObserverStatus {
-  // healthy
-  RUNNING,
-  // errors
-  DATABASE_ERROR,
-  PUBLISHER_ERROR,
-  SILENCE_ERROR,
-  STREAM_ERROR,
-  // shutdown
-  NEEDS_SHUTDOWN,
-  SHUTDOWN;
-
-  static final Map<ObserverStatus, Set<ObserverStatus>> stateTransition = new HashMap<>();
-
-  // Build the state transition
-  static {
-    addStateTransition(
-        RUNNING,
-        DATABASE_ERROR,
-        PUBLISHER_ERROR,
-        SILENCE_ERROR,
-        STREAM_ERROR,
-        NEEDS_SHUTDOWN,
-        SHUTDOWN);
-    addStateTransition(DATABASE_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
-    addStateTransition(PUBLISHER_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
-    addStateTransition(SILENCE_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
-    addStateTransition(STREAM_ERROR, RUNNING, NEEDS_SHUTDOWN, SHUTDOWN);
-    addStateTransition(NEEDS_SHUTDOWN, SHUTDOWN);
-    addStateTransition(SHUTDOWN, SHUTDOWN);
-  }
-
-  static void addStateTransition(ObserverStatus source, ObserverStatus... dests) {
-    stateTransition.put(source, Set.of(dests));
-  }
-
-  public boolean isSettable(ObserverStatus dest) {
-    Set<ObserverStatus> dests = stateTransition.get(this);
-    return dests != null && dests.contains(dest);
   }
 }
