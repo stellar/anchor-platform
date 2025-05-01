@@ -215,14 +215,18 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
   }
 
   PaymentTransferEvent toPaymentTransferEvent(OperationResponse operation) throws LedgerException {
-    LedgerTransaction txn;
+    if (!(operation instanceof PaymentOperationResponse
+        || operation instanceof PathPaymentBaseOperationResponse)) {
+      // only fetch transaction if the operation is a payment operation
+      return null;
+    }
 
+    LedgerTransaction txn = horizon.getTransaction(operation.getTransactionHash());
+    if (txn == null) {
+      debugF("Transaction not found: {}", operation.getTransactionHash());
+      return null;
+    }
     if (operation instanceof PaymentOperationResponse paymentOp) {
-      txn = horizon.getTransaction(operation.getTransactionHash());
-      if (txn == null) {
-        debugF("Transaction not found: {}", operation.getTransactionHash());
-        return null;
-      }
       return PaymentTransferEvent.builder()
           .from(paymentOp.getFrom())
           .to(paymentOp.getTo())
@@ -232,12 +236,8 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
           .txHash(paymentOp.getTransactionHash())
           .ledgerTransaction(txn)
           .build();
-    } else if (operation instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
-      txn = horizon.getTransaction(operation.getTransactionHash());
-      if (txn == null) {
-        debugF("Transaction not found: {}", operation.getTransactionHash());
-        return null;
-      }
+    } else {
+      PathPaymentBaseOperationResponse pathPaymentOp = (PathPaymentBaseOperationResponse) operation;
       return PaymentTransferEvent.builder()
           .from(pathPaymentOp.getFrom())
           .to(pathPaymentOp.getTo())
@@ -247,8 +247,6 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
           .txHash(pathPaymentOp.getTransactionHash())
           .ledgerTransaction(txn)
           .build();
-    } else {
-      return null;
     }
   }
 

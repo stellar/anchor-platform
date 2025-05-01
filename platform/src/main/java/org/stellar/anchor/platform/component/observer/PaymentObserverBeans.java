@@ -16,15 +16,15 @@ import org.stellar.anchor.platform.data.JdbcSep31TransactionStore;
 import org.stellar.anchor.platform.data.JdbcSep6TransactionStore;
 import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.observer.stellar.DefaultPaymentListener;
+import org.stellar.anchor.platform.observer.stellar.HorizonPaymentObserver;
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager;
-import org.stellar.anchor.platform.observer.stellar.StellarPaymentObserver;
 import org.stellar.anchor.platform.observer.stellar.StellarPaymentStreamerCursorStore;
 
 @Configuration
 public class PaymentObserverBeans {
   @Bean
   @SneakyThrows
-  public StellarPaymentObserver stellarPaymentObserver(
+  public HorizonPaymentObserver stellarPaymentObserver(
       AssetService assetService,
       List<PaymentListener> paymentListeners,
       StellarPaymentStreamerCursorStore stellarPaymentStreamerCursorStore,
@@ -60,8 +60,8 @@ public class PaymentObserverBeans {
       throw new ServerErrorException("PaymentObserverConfig cannot be empty.");
     }
 
-    StellarPaymentObserver stellarPaymentObserver =
-        new StellarPaymentObserver(
+    HorizonPaymentObserver stellarPaymentObserver =
+        new HorizonPaymentObserver(
             appConfig.getHorizonUrl(),
             paymentObserverConfig.getStellar(),
             paymentListeners,
