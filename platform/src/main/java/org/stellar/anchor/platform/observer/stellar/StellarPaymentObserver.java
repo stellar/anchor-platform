@@ -358,7 +358,7 @@ public class StellarPaymentObserver implements HealthCheckable {
 
   void processOperation(OperationResponse operationResponse) {
     try {
-      PaymentTransferEvent transferEvent = toLedgerTransferEvent(operationResponse);
+      PaymentTransferEvent transferEvent = toPaymentTransferEvent(operationResponse);
       if (transferEvent != null) {
         metricLatestBlockRead.set(transferEvent.getLedgerTransaction().getLedger());
         // process the payment
@@ -384,7 +384,7 @@ public class StellarPaymentObserver implements HealthCheckable {
     }
   }
 
-  PaymentTransferEvent toLedgerTransferEvent(OperationResponse operation) throws LedgerException {
+  PaymentTransferEvent toPaymentTransferEvent(OperationResponse operation) throws LedgerException {
     LedgerTransaction txn = null;
 
     if (operation instanceof PaymentOperationResponse paymentOp) {
