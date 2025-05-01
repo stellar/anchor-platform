@@ -7,8 +7,10 @@ import lombok.Data;
  * This class represents a payment transfer event. It contains the information of a CAP-0067 payment
  * event. For more information about CAP-0067, see: <a
  * href="https://github.com/stellar/stellar-protocol/blob/master/core/cap-0067.md#payment">...</a>
- * contract: asset, topics: ["transfer", from:Address, to:Address, sep0011_asset:String], data:
- * amount:i128
+ *
+ * <pre>
+ * contract: asset, topics: ["transfer", from:Address, to:Address, sep0011_asset:String], data: * amount:i128
+ * </pre>
  */
 @Data
 @Builder
