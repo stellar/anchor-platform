@@ -3,6 +3,7 @@ package org.stellar.anchor.platform
 import io.ktor.client.plugins.*
 import io.ktor.http.*
 import java.math.BigDecimal
+import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
@@ -12,10 +13,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
-import org.stellar.anchor.ledger.LedgerClientHelper.*
+import org.stellar.anchor.ledger.LedgerClientHelper.toLedgerOperation
+import org.stellar.anchor.ledger.LedgerClientHelper.waitForTransactionAvailable
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
+import org.stellar.anchor.util.MemoHelper
 import org.stellar.anchor.util.Sep1Helper.TomlContent
 import org.stellar.anchor.util.Sep1Helper.parse
 import org.stellar.sdk.*
@@ -91,7 +94,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
         val payment = fetchTestPaymentFromHorizon(horizonServer)
         val ledgerTxn: LedgerTransaction? =
           if (payment != null) {
-            Horizon.toLedgerTransaction(horizonServer, payment.transaction)
+            toLedgerTransaction(payment)
           } else {
             val ledgerClient = Horizon(config.get("stellar_network.horizon_url")!!)
             sendTestPayment(ledgerClient)
@@ -102,6 +105,21 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
       }
     }
     return testPaymentValues
+  }
+
+  private fun toLedgerTransaction(operationResponse: OperationResponse): LedgerTransaction {
+    val txnResponse = operationResponse.transaction
+    return LedgerTransaction.builder()
+      .hash(txnResponse.hash)
+      .ledger(txnResponse.ledger)
+      .applicationOrder(TOID.fromInt64(txnResponse.pagingToken.toLong()).transactionOrder)
+      .sourceAccount(txnResponse.sourceAccount)
+      .envelopeXdr(txnResponse.envelopeXdr)
+      .memo(MemoHelper.toXdr(txnResponse.memo))
+      .sequenceNumber(txnResponse.sourceAccountSequence)
+      .createdAt(Instant.parse(txnResponse.createdAt))
+      .operations(listOf(toLedgerOperation(operationResponse)))
+      .build()
   }
 
   private fun sendTestPayment(ledgerClient: LedgerClient): LedgerTransaction? {

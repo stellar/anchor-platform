@@ -2,6 +2,7 @@ package org.stellar.anchor.ledger;
 
 import static java.lang.Thread.sleep;
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
+import static org.stellar.anchor.util.AssetHelper.toXdrAmount;
 import static org.stellar.anchor.util.Log.debug;
 import static org.stellar.anchor.util.Log.info;
 import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
@@ -16,6 +17,9 @@ import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.TOID;
 import org.stellar.sdk.responses.SubmitTransactionAsyncResponse;
+import org.stellar.sdk.responses.operations.OperationResponse;
+import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
+import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 import org.stellar.sdk.xdr.*;
 
 public class LedgerClientHelper {
@@ -190,5 +194,36 @@ public class LedgerClientHelper {
       info("Interrupted while waiting for transaction to complete");
     }
     throw new LedgerException("Transaction took too long to complete");
+  }
+
+  public static LedgerOperation toLedgerOperation(OperationResponse op) {
+    LedgerOperation.LedgerOperationBuilder builder = LedgerOperation.builder();
+    // TODO: Capture muxed account events
+    if (op instanceof PaymentOperationResponse paymentOp) {
+      builder.type(PAYMENT);
+      builder.paymentOperation(
+          LedgerTransaction.LedgerPaymentOperation.builder()
+              .id(String.valueOf(paymentOp.getId()))
+              .from(paymentOp.getFrom())
+              .to(paymentOp.getTo())
+              .amount(toXdrAmount(paymentOp.getAmount()))
+              .asset(paymentOp.getAsset().toXdr())
+              .sourceAccount(paymentOp.getSourceAccount())
+              .build());
+    } else if (op instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
+      builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE);
+      builder.pathPaymentOperation(
+          LedgerTransaction.LedgerPathPaymentOperation.builder()
+              .id(String.valueOf(pathPaymentOp.getId()))
+              .from(pathPaymentOp.getFrom())
+              .to(pathPaymentOp.getTo())
+              .amount(toXdrAmount(pathPaymentOp.getAmount()))
+              .asset(pathPaymentOp.getAsset().toXdr())
+              .sourceAccount(pathPaymentOp.getSourceAccount())
+              .build());
+    } else {
+      return null;
+    }
+    return builder.build();
   }
 }

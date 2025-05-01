@@ -2,8 +2,8 @@ package org.stellar.anchor.platform.observer;
 
 import java.io.IOException;
 import org.stellar.anchor.api.exception.AnchorException;
-import org.stellar.anchor.ledger.LedgerTransaction;
+import org.stellar.anchor.ledger.PaymentTransferEvent;
 
 public interface PaymentListener {
-  void onReceived(LedgerTransaction ledgerTransaction) throws AnchorException, IOException;
+  void onReceived(PaymentTransferEvent paymentTransferEvent) throws AnchorException, IOException;
 }
