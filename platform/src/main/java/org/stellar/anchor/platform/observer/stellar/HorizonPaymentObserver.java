@@ -16,13 +16,11 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.exception.EventPublishException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
-import org.stellar.anchor.healthcheck.HealthCheckable;
 import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.PaymentTransferEvent;
@@ -48,7 +46,6 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
   private static final int MIN_RESULTS = 1;
 
   final Horizon horizon;
-  final StellarPaymentObserverConfig config;
   SSEStream<OperationResponse> stream;
 
   public HorizonPaymentObserver(
@@ -59,7 +56,6 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
       StellarPaymentStreamerCursorStore paymentStreamerCursorStore) {
     super(config, paymentListeners, paymentObservingAccountsManager, paymentStreamerCursorStore);
     this.horizon = new Horizon(horizonUrl);
-    this.config = config;
   }
 
   /** Start the observer. */
@@ -214,6 +210,13 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
+  /**
+   * Convert the operation to a PaymentTransferEvent.
+   *
+   * @param operation the Horizon operation to convert
+   * @return the PaymentTransferEvent
+   * @throws LedgerException if there is an error fetching the transaction
+   */
   PaymentTransferEvent toPaymentTransferEvent(OperationResponse operation) throws LedgerException {
     if (!(operation instanceof PaymentOperationResponse
         || operation instanceof PathPaymentBaseOperationResponse)) {
@@ -251,13 +254,8 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
   }
 
   @Override
-  public int compareTo(@NotNull HealthCheckable other) {
-    return this.getName().compareTo(other.getName());
-  }
-
-  @Override
   public String getName() {
-    return "stellar_payment_observer";
+    return "horizon_payment_observer";
   }
 
   @Override

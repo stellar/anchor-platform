@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import lombok.Builder;
 import lombok.Data;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
@@ -120,6 +121,14 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     }
   }
 
+  /**
+   * Handle the payment transfer event. This is called when a new payment transfer event is received
+   * from the ledger.
+   *
+   * @param transferEvent the payment transfer event
+   * @throws AnchorException if the event cannot be handled
+   * @throws IOException if there is an error processing the event
+   */
   void handleEvent(PaymentTransferEvent transferEvent) throws AnchorException, IOException {
     metricLatestBlockRead.set(transferEvent.getLedgerTransaction().getLedger());
     // process the payment
@@ -128,6 +137,11 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     }
     metricLatestBlockProcessed.set(transferEvent.getLedgerTransaction().getLedger());
     publishingBackoffTimer.reset();
+  }
+
+  @Override
+  public int compareTo(@NotNull HealthCheckable other) {
+    return this.getName().compareTo(other.getName());
   }
 
   void setStatus(HorizonPaymentObserver.ObserverStatus status) {

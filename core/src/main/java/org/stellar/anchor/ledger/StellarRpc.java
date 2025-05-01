@@ -6,6 +6,7 @@ import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
+import lombok.Getter;
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
@@ -24,7 +25,7 @@ import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
 /** The Stellar RPC server that implements LedgerClient. */
 public class StellarRpc implements LedgerClient {
   String rpcServerUrl;
-  SorobanServer sorobanServer;
+  @Getter SorobanServer sorobanServer;
 
   public StellarRpc(String rpcServerUrl) {
     this.rpcServerUrl = rpcServerUrl;
