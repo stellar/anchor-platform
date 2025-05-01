@@ -154,7 +154,7 @@ public class StellarPaymentObserver implements HealthCheckable {
               silenceTimeoutCount = 0;
               streamBackoffTimer.reset();
               try {
-                processPayment(operationResponse);
+                processOperation(operationResponse);
               } catch (TransactionException ex) {
                 errorEx("Error handling events", ex);
                 setStatus(DATABASE_ERROR);
@@ -356,16 +356,16 @@ public class StellarPaymentObserver implements HealthCheckable {
     return token;
   }
 
-  void processPayment(OperationResponse operationResponse) {
+  void processOperation(OperationResponse operationResponse) {
     try {
       PaymentTransferEvent transferEvent = toLedgerTransferEvent(operationResponse);
       if (transferEvent != null) {
-        metricLatestBlockRead.set(operationResponse.getTransaction().getLedger());
+        metricLatestBlockRead.set(transferEvent.getLedgerTransaction().getLedger());
         // process the payment
         for (PaymentListener listener : paymentListeners) {
           listener.onReceived(transferEvent);
         }
-        metricLatestBlockProcessed.set(operationResponse.getTransaction().getLedger());
+        metricLatestBlockProcessed.set(transferEvent.getLedgerTransaction().getLedger());
         publishingBackoffTimer.reset();
       }
     } catch (EventPublishException ex) {
@@ -385,13 +385,14 @@ public class StellarPaymentObserver implements HealthCheckable {
   }
 
   PaymentTransferEvent toLedgerTransferEvent(OperationResponse operation) throws LedgerException {
-    LedgerTransaction txn = horizon.getTransaction(operation.getTransactionHash());
-    if (txn == null) {
-      debugF("Transaction not found: {}", operation.getTransactionHash());
-      return null;
-    }
+    LedgerTransaction txn = null;
 
     if (operation instanceof PaymentOperationResponse paymentOp) {
+      txn = horizon.getTransaction(operation.getTransactionHash());
+      if (txn == null) {
+        debugF("Transaction not found: {}", operation.getTransactionHash());
+        return null;
+      }
       return PaymentTransferEvent.builder()
           .from(paymentOp.getFrom())
           .to(paymentOp.getTo())
@@ -403,6 +404,11 @@ public class StellarPaymentObserver implements HealthCheckable {
           .ledgerTransaction(txn)
           .build();
     } else if (operation instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
+      txn = horizon.getTransaction(operation.getTransactionHash());
+      if (txn == null) {
+        debugF("Transaction not found: {}", operation.getTransactionHash());
+        return null;
+      }
       return PaymentTransferEvent.builder()
           .from(pathPaymentOp.getFrom())
           .to(pathPaymentOp.getTo())
@@ -415,7 +421,6 @@ public class StellarPaymentObserver implements HealthCheckable {
           .ledgerTransaction(txn)
           .build();
     } else {
-      warnF("Unsupported operation type: {}", operation.getClass().getName());
       return null;
     }
   }
