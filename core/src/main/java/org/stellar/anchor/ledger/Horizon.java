@@ -121,9 +121,9 @@ public class Horizon implements LedgerClient {
         TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder();
     Long sequenceNumber = txnResponse.getLedger();
 
-    ParseResult osm = parseOperationAndSourceAccountAndMemo(txnEnv, txnHash);
+    ParseResult result = parseOperationAndSourceAccountAndMemo(txnEnv, txnHash);
     List<LedgerOperation> operations =
-        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, osm);
+        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, result);
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())
@@ -131,7 +131,7 @@ public class Horizon implements LedgerClient {
         .ledger(txnResponse.getLedger())
         .sourceAccount(txnResponse.getSourceAccount())
         .envelopeXdr(txnResponse.getEnvelopeXdr())
-        .memo(osm.memo())
+        .memo(result.memo())
         .sequenceNumber(txnResponse.getSourceAccountSequence())
         .createdAt(Instant.parse(txnResponse.getCreatedAt()))
         .operations(operations)

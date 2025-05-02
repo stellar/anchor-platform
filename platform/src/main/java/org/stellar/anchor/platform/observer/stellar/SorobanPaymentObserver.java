@@ -27,13 +27,12 @@ import org.stellar.sdk.SorobanServer;
 import org.stellar.sdk.requests.sorobanrpc.GetTransactionsRequest;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionsResponse;
-import org.stellar.sdk.xdr.TransactionEnvelope;
 
 public class SorobanPaymentObserver extends AbstractPaymentObserver {
   final StellarRpc stellarRpc;
   final SorobanServer sorobanServer;
 
-  SorobanPaymentObserver(
+  public SorobanPaymentObserver(
       String rpcUrl,
       StellarPaymentObserverConfig config,
       List<PaymentListener> paymentListeners,
@@ -46,7 +45,7 @@ public class SorobanPaymentObserver extends AbstractPaymentObserver {
 
   @Override
   void startInternal() {
-    info("Starting Stellar RPC payment observer");
+    info("Starting Soroban RPC payment observer");
     startMockStream();
   }
 
@@ -57,7 +56,7 @@ public class SorobanPaymentObserver extends AbstractPaymentObserver {
 
   @Override
   public String getName() {
-    return "rpc_payment_observer";
+    return "soroban_payment_observer";
   }
 
   @Override
@@ -108,47 +107,23 @@ public class SorobanPaymentObserver extends AbstractPaymentObserver {
       for (GetTransactionsResponse.Transaction txn : response.getTransactions()) {
         // Process the transaction
         try {
-          TransactionEnvelope txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
-          LedgerClientHelper.ParseResult parseResult =
-              LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txn.getTxHash());
-          List<LedgerTransaction.LedgerOperation> operations = null;
-
-          switch (txnEnv.getDiscriminant()) {
-            case ENVELOPE_TYPE_TX_V0:
-              operations =
-                  LedgerClientHelper.getLedgerOperations(
-                      txn.getApplicationOrder(),
-                      txnEnv.getV0().getTx().getSeqNum().getSequenceNumber().getInt64(),
-                      parseResult);
-              break;
-            case ENVELOPE_TYPE_TX:
-              operations =
-                  LedgerClientHelper.getLedgerOperations(
-                      txn.getApplicationOrder(),
-                      txnEnv.getV1().getTx().getSeqNum().getSequenceNumber().getInt64(),
-                      parseResult);
-              break;
-            default:
-              break;
+          LedgerTransaction ledgerTxn = LedgerClientHelper.fromSorobantransaction(txn);
+          if (ledgerTxn == null) {
+            continue;
           }
-          assert operations != null;
-          operations.forEach(
-              op -> {
-                try {
-                  processOperation(txn.getTxHash(), op);
-                } catch (IOException | AnchorException e) {
-                  warnF(
-                      "Skipping a received operation. Error processing operation: {}. ex={}",
-                      GsonUtils.getInstance().toJson(op),
-                      e.getMessage());
-                }
-              });
-        } catch (IOException e) {
-          debugF(
-              "Unable to parse transaction envelope. hash={}. ex={}",
-              txn.getTxHash(),
-              e.getMessage());
-          System.out.println("Unable to parse transaction envelope. hash=" + txn.getTxHash());
+          ledgerTxn
+              .getOperations()
+              .forEach(
+                  op -> {
+                    try {
+                      processOperation(ledgerTxn, op);
+                    } catch (IOException | AnchorException e) {
+                      warnF(
+                          "Skipping a received operation. Error processing operation: {}. ex={}",
+                          GsonUtils.getInstance().toJson(op),
+                          e.getMessage());
+                    }
+                  });
         } catch (LedgerException lex) {
           debugF("Error getting transaction: {}. ex={}", txn.getTxHash(), lex.getMessage());
         }
@@ -157,7 +132,7 @@ public class SorobanPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  private void processOperation(String txHash, LedgerTransaction.LedgerOperation op)
+  private void processOperation(LedgerTransaction ledgerTxn, LedgerTransaction.LedgerOperation op)
       throws IOException, AnchorException {
     PaymentTransferEvent event =
         switch (op.getType()) {
@@ -168,8 +143,9 @@ public class SorobanPaymentObserver extends AbstractPaymentObserver {
                 .to(paymentOp.getTo())
                 .sep11Asset(AssetHelper.getSep11AssetName(op.getPaymentOperation().getAsset()))
                 .amount(paymentOp.getAmount())
-                .txHash(txHash)
+                .txHash(ledgerTxn.getHash())
                 .operationId(paymentOp.getId())
+                .ledgerTransaction(ledgerTxn)
                 .build();
           }
           case PATH_PAYMENT_STRICT_SEND, PATH_PAYMENT_STRICT_RECEIVE -> {
@@ -179,8 +155,9 @@ public class SorobanPaymentObserver extends AbstractPaymentObserver {
                 .to(paymentOp.getTo())
                 .sep11Asset(AssetHelper.getSep11AssetName(op.getPaymentOperation().getAsset()))
                 .amount(paymentOp.getAmount())
-                .txHash(txHash)
+                .txHash(ledgerTxn.getHash())
                 .operationId(paymentOp.getId())
+                .ledgerTransaction(ledgerTxn)
                 .build();
           }
           default -> null;
@@ -191,12 +168,12 @@ public class SorobanPaymentObserver extends AbstractPaymentObserver {
   }
 
   private String fetchCursor() {
-    // TODO: Implement cursor fetching logic
+    // TODO: Implement cursor fetching logic when unified event is available
     return cursor;
   }
 
   private void saveCursor(String cursor) {
-    // TODO: Implement cursor saving logic
+    // TODO: Implement cursor saving logic when unified event is available
     this.cursor = cursor;
   }
 

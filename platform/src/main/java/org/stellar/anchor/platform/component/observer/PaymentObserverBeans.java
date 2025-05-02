@@ -1,5 +1,7 @@
 package org.stellar.anchor.platform.component.observer;
 
+import static org.stellar.anchor.util.StringHelper.isNotEmpty;
+
 import java.util.List;
 import lombok.SneakyThrows;
 import org.springframework.context.annotation.Bean;
@@ -15,16 +17,13 @@ import org.stellar.anchor.platform.data.JdbcSep24TransactionStore;
 import org.stellar.anchor.platform.data.JdbcSep31TransactionStore;
 import org.stellar.anchor.platform.data.JdbcSep6TransactionStore;
 import org.stellar.anchor.platform.observer.PaymentListener;
-import org.stellar.anchor.platform.observer.stellar.DefaultPaymentListener;
-import org.stellar.anchor.platform.observer.stellar.HorizonPaymentObserver;
-import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager;
-import org.stellar.anchor.platform.observer.stellar.StellarPaymentStreamerCursorStore;
+import org.stellar.anchor.platform.observer.stellar.*;
 
 @Configuration
 public class PaymentObserverBeans {
   @Bean
   @SneakyThrows
-  public HorizonPaymentObserver stellarPaymentObserver(
+  public AbstractPaymentObserver stellarPaymentObserver(
       AssetService assetService,
       List<PaymentListener> paymentListeners,
       StellarPaymentStreamerCursorStore stellarPaymentStreamerCursorStore,
@@ -60,14 +59,6 @@ public class PaymentObserverBeans {
       throw new ServerErrorException("PaymentObserverConfig cannot be empty.");
     }
 
-    HorizonPaymentObserver stellarPaymentObserver =
-        new HorizonPaymentObserver(
-            appConfig.getHorizonUrl(),
-            paymentObserverConfig.getStellar(),
-            paymentListeners,
-            paymentObservingAccountsManager,
-            stellarPaymentStreamerCursorStore);
-
     // Add distribution wallet to the observing list as type RESIDENTIAL
     for (StellarAssetInfo asset : stellarAssets) {
       if (!paymentObservingAccountsManager.lookupAndUpdate(asset.getDistributionAccount())) {
@@ -77,8 +68,29 @@ public class PaymentObserverBeans {
       }
     }
 
-    stellarPaymentObserver.start();
-    return stellarPaymentObserver;
+    AbstractPaymentObserver paymentObserver;
+    if (isNotEmpty(appConfig.getRpcUrl())) {
+      paymentObserver =
+          new SorobanPaymentObserver(
+              appConfig.getRpcUrl(),
+              paymentObserverConfig.getStellar(),
+              paymentListeners,
+              paymentObservingAccountsManager,
+              stellarPaymentStreamerCursorStore);
+    } else if (isNotEmpty(appConfig.getHorizonUrl())) {
+      paymentObserver =
+          new HorizonPaymentObserver(
+              appConfig.getHorizonUrl(),
+              paymentObserverConfig.getStellar(),
+              paymentListeners,
+              paymentObservingAccountsManager,
+              stellarPaymentStreamerCursorStore);
+    } else {
+      throw new ServerErrorException("Either RPC or Horizon URL must be provided.");
+    }
+
+    paymentObserver.start();
+    return paymentObserver;
   }
 
   @Bean
