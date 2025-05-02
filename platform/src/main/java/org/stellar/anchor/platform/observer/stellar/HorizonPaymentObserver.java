@@ -235,7 +235,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
           .to(paymentOp.getTo())
           .sep11Asset(AssetHelper.getSep11AssetName(paymentOp.getAsset().toXdr()))
           .amount(AssetHelper.toXdrAmount(paymentOp.getAmount()))
-          .operationId(operation.getId())
+          .operationId(String.valueOf(operation.getId()))
           .txHash(paymentOp.getTransactionHash())
           .ledgerTransaction(txn)
           .build();
@@ -246,7 +246,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
           .to(pathPaymentOp.getTo())
           .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset().toXdr()))
           .amount(AssetHelper.toXdrAmount(pathPaymentOp.getAmount()))
-          .operationId(operation.getId())
+          .operationId(String.valueOf(operation.getId()))
           .txHash(pathPaymentOp.getTransactionHash())
           .ledgerTransaction(txn)
           .build();

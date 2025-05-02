@@ -273,7 +273,7 @@ class DefaultPaymentListenerTest {
       .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
       .amount(1)
       .txHash("1ad62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af30")
-      .operationId(testTOID.toInt64())
+      .operationId(testTOID.toInt64().toString())
       .ledgerTransaction(ledgerTransaction)
       .build()
   }
