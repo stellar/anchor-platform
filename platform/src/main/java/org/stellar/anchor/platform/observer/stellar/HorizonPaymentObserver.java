@@ -140,8 +140,8 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
    */
   String fetchStreamingCursor() {
     // Use database value, if any.
-    String strLastStored = loadPagingToken();
-    String strLatestFromNetwork = fetchLatestCursorFromNetwork();
+    String strLastStored = loadCursorFromDatabase();
+    String strLatestFromNetwork = fetchLatestCursorFromHorizon();
     Log.infoF("The latest cursor fetched from Stellar network is: {}", strLatestFromNetwork);
     if (isEmpty(strLastStored)) {
       info("No last stored cursor, so use the latest cursor");
@@ -160,7 +160,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  String fetchLatestCursorFromNetwork() {
+  String fetchLatestCursorFromHorizon() {
     // Fetch the latest cursor from the stellar network
     Page<OperationResponse> pageOpResponse;
     try {

@@ -51,7 +51,7 @@ class StellarPaymentObserverTest {
         )
       )
 
-    every { stellarObserver.fetchLatestCursorFromNetwork() } returns "1000"
+    every { stellarObserver.fetchLatestCursorFromHorizon() } returns "1000"
     var gotCursor = stellarObserver.fetchStreamingCursor()
     assertEquals("800", gotCursor)
     verify(exactly = 1) { paymentStreamerCursorStore.load() }

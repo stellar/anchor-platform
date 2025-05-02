@@ -265,7 +265,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
    *
    * @return the last stored cursor
    */
-  String loadPagingToken() {
+  String loadCursorFromDatabase() {
     info("Loading the last stored cursor from database...");
     String token = paymentStreamerCursorStore.load();
     infoF("The last stored cursor is: {}", token);

@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
-import org.stellar.anchor.ledger.LedgerClientHelper.ParsedTransaction;
+import org.stellar.anchor.ledger.LedgerClientHelper.ParseResult;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.anchor.util.AssetHelper;
@@ -121,7 +121,7 @@ public class Horizon implements LedgerClient {
         TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder();
     Long sequenceNumber = txnResponse.getLedger();
 
-    ParsedTransaction osm = parseTransaction(txnEnv, txnHash);
+    ParseResult osm = parseOperationAndSourceAccountAndMemo(txnEnv, txnHash);
     List<LedgerOperation> operations =
         LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, osm);
 

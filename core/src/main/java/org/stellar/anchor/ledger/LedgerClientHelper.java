@@ -10,6 +10,7 @@ import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 import static org.stellar.sdk.xdr.SignerKeyType.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +21,7 @@ import org.stellar.sdk.responses.SubmitTransactionAsyncResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
 import org.stellar.sdk.responses.operations.PaymentOperationResponse;
+import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse;
 import org.stellar.sdk.xdr.*;
 
 public class LedgerClientHelper {
@@ -92,8 +94,8 @@ public class LedgerClientHelper {
     };
   }
 
-  public static ParsedTransaction parseTransaction(TransactionEnvelope txnEnv, String txnHash)
-      throws LedgerException {
+  public static ParseResult parseOperationAndSourceAccountAndMemo(
+      TransactionEnvelope txnEnv, String txnHash) throws LedgerException {
     Operation[] operations;
     String sourceAccount;
     Memo memo;
@@ -118,10 +120,10 @@ public class LedgerClientHelper {
             String.format("The transaction(hash=%s) has unhandled envelope type.", txnHash));
     }
 
-    return new ParsedTransaction(operations, sourceAccount, memo);
+    return new ParseResult(operations, sourceAccount, memo);
   }
 
-  public record ParsedTransaction(Operation[] operations, String sourceAccount, Memo memo) {}
+  public record ParseResult(Operation[] operations, String sourceAccount, Memo memo) {}
 
   /**
    * Convert from Horizon signer key type to XDR signer key type.
@@ -149,9 +151,8 @@ public class LedgerClientHelper {
     };
   }
 
-  static List<LedgerOperation> getLedgerOperations(
-      Integer applicationOrder, Long sequenceNumber, LedgerClientHelper.ParsedTransaction osm)
-      throws LedgerException {
+  public static List<LedgerOperation> getLedgerOperations(
+      Integer applicationOrder, Long sequenceNumber, ParseResult osm) throws LedgerException {
     List<LedgerTransaction.LedgerOperation> operations = new ArrayList<>(osm.operations().length);
     for (int opIndex = 0; opIndex < osm.operations().length; opIndex++) {
       operations.add(
@@ -225,5 +226,40 @@ public class LedgerClientHelper {
       return null;
     }
     return builder.build();
+  }
+
+  /**
+   * Convert a GetTransactionResponse to a LedgerTransaction.
+   *
+   * @param txnResponse the GetTransactionResponse to convert
+   * @return the converted LedgerTransaction
+   * @throws LedgerException if the transaction is null or malformed
+   */
+  public static LedgerTransaction fromGetTransactionResponse(GetTransactionResponse txnResponse)
+      throws LedgerException {
+    TransactionEnvelope txnEnv;
+    try {
+      txnEnv = TransactionEnvelope.fromXdrBase64(txnResponse.getEnvelopeXdr());
+    } catch (IOException ioex) {
+      throw new LedgerException("Unable to parse transaction envelope", ioex);
+    }
+    Integer applicationOrder = txnResponse.getApplicationOrder();
+    Long sequenceNumber = txnResponse.getLedger();
+    ParseResult parseResult =
+        LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txnResponse.getTxHash());
+    List<LedgerTransaction.LedgerOperation> operations =
+        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
+
+    return LedgerTransaction.builder()
+        .hash(txnResponse.getTxHash())
+        .ledger(txnResponse.getLedger())
+        .applicationOrder(txnResponse.getApplicationOrder())
+        .sourceAccount(parseResult.sourceAccount())
+        .envelopeXdr(txnResponse.getEnvelopeXdr())
+        .memo(parseResult.memo())
+        .sequenceNumber(sequenceNumber)
+        .createdAt(Instant.ofEpochSecond(txnResponse.getCreatedAt()))
+        .operations(operations)
+        .build();
   }
 }
