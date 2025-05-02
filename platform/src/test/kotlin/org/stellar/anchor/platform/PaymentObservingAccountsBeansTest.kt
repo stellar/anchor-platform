@@ -16,9 +16,7 @@ import org.stellar.anchor.platform.component.observer.PaymentObserverBeans
 import org.stellar.anchor.platform.config.PaymentObserverConfig
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
-import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountStore
-import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager
-import org.stellar.anchor.platform.observer.stellar.StellarPaymentStreamerCursorStore
+import org.stellar.anchor.platform.observer.stellar.*
 
 class PaymentObservingAccountsBeansTest {
   @MockK private lateinit var paymentStreamerCursorStore: StellarPaymentStreamerCursorStore
@@ -54,7 +52,7 @@ class PaymentObservingAccountsBeansTest {
         null,
         null,
         null,
-        null
+        null,
       )
     }
     assertInstanceOf(ServerErrorException::class.java, ex)
@@ -71,7 +69,7 @@ class PaymentObservingAccountsBeansTest {
         null,
         null,
         null,
-        null
+        null,
       )
     }
     assertInstanceOf(ServerErrorException::class.java, ex)
@@ -99,7 +97,7 @@ class PaymentObservingAccountsBeansTest {
         null,
         null,
         null,
-        null
+        null,
       )
     }
     assertInstanceOf(ServerErrorException::class.java, ex)
@@ -114,7 +112,7 @@ class PaymentObservingAccountsBeansTest {
         paymentStreamerCursorStore,
         null,
         null,
-        null
+        null,
       )
     }
     assertInstanceOf(ServerErrorException::class.java, ex)
@@ -136,17 +134,51 @@ class PaymentObservingAccountsBeansTest {
     val mockPaymentObserverConfig = mockk<PaymentObserverConfig>()
 
     every { mockAppConfig.horizonUrl } returns "https://horizon-testnet.stellar.org"
+    every { mockAppConfig.rpcUrl } returns null
     every { mockPaymentObserverConfig.stellar } returns
       StellarPaymentObserverConfig(1, 5, 1, 1, 2, 1, 2)
 
     assertDoesNotThrow {
+      val paymentObserver =
+        paymentObserverBeans.stellarPaymentObserver(
+          assetService,
+          mockPaymentListeners,
+          paymentStreamerCursorStore,
+          paymentObservingAccountsManager,
+          mockAppConfig,
+          mockPaymentObserverConfig,
+        )
+      assertNotNull(paymentObserver)
+      assertTrue(paymentObserver is HorizonPaymentObserver)
+    }
+
+    every { mockAppConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
+
+    assertDoesNotThrow {
+      val paymentObserver =
+        paymentObserverBeans.stellarPaymentObserver(
+          assetService,
+          mockPaymentListeners,
+          paymentStreamerCursorStore,
+          paymentObservingAccountsManager,
+          mockAppConfig,
+          mockPaymentObserverConfig,
+        )
+      assertNotNull(paymentObserver)
+      assertTrue(paymentObserver is SorobanPaymentObserver)
+    }
+
+    every { mockAppConfig.horizonUrl } returns null
+    every { mockAppConfig.rpcUrl } returns null
+
+    assertThrows<IllegalArgumentException> {
       paymentObserverBeans.stellarPaymentObserver(
         assetService,
         mockPaymentListeners,
         paymentStreamerCursorStore,
         paymentObservingAccountsManager,
         mockAppConfig,
-        mockPaymentObserverConfig
+        mockPaymentObserverConfig,
       )
     }
   }

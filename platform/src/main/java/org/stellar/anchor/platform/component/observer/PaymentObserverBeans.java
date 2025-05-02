@@ -86,7 +86,7 @@ public class PaymentObserverBeans {
               paymentObservingAccountsManager,
               stellarPaymentStreamerCursorStore);
     } else {
-      throw new ServerErrorException("Either RPC or Horizon URL must be provided.");
+      throw new IllegalArgumentException("Either RPC or Horizon URL must be provided.");
     }
 
     paymentObserver.start();
