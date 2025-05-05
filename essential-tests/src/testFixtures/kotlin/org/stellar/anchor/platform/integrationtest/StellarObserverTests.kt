@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import org.stellar.anchor.platform.AbstractIntegrationTests
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.gson
+import org.stellar.anchor.util.StringHelper.isNotEmpty
 
 class StellarObserverTests : AbstractIntegrationTests(TestConfig()) {
   companion object {
@@ -46,7 +47,7 @@ class StellarObserverTests : AbstractIntegrationTests(TestConfig()) {
     assertEquals(2, checks.size)
     assertNotNull(checks["config"])
 
-    if (this.config.env["stellar_network.rpc_url"] != null) {
+    if (isNotEmpty(this.config.env["stellar_network.rpc_url"])) {
       val stellarPaymentObserverCheck = checks["soroban_payment_observer"] as Map<*, *>
       assertNotNull(stellarPaymentObserverCheck)
       assertEquals(stellarPaymentObserverCheck["status"], "GREEN")
