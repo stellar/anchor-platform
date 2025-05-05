@@ -107,7 +107,7 @@ public class SorobanPaymentObserver extends AbstractPaymentObserver {
       for (GetTransactionsResponse.Transaction txn : response.getTransactions()) {
         // Process the transaction
         try {
-          LedgerTransaction ledgerTxn = LedgerClientHelper.fromSorobantransaction(txn);
+          LedgerTransaction ledgerTxn = LedgerClientHelper.fromSorobanTransaction(txn);
           if (ledgerTxn == null) {
             continue;
           }

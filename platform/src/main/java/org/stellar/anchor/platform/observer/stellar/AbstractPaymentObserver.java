@@ -29,6 +29,18 @@ import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.utils.DaemonExecutors;
 import org.stellar.anchor.util.ExponentialBackoffTimer;
 
+/**
+ * Abstract class for payment observers (HorizonPaymentObserver and SorobanPaymentObserver).
+ *
+ * <ol>
+ *   This class is responsible for managing:
+ *   <li>the payment observer's lifecycle (start, stop, restart)
+ *   <li>the payment observer's status (running, error, shutdown)
+ *   <li>the payment observer's silence (check if the observer is silent for too long)
+ *   <li>the payment observer's backoff timers (for reconnecting to the stream, database, etc.)
+ *   <li>the payment observer's metrics (latest block read, latest block processed)
+ * </ol>
+ */
 public abstract class AbstractPaymentObserver implements HealthCheckable {
   final StellarPaymentObserverConfig config;
   final List<PaymentListener> paymentListeners;

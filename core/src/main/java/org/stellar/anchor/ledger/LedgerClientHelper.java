@@ -276,7 +276,14 @@ public class LedgerClientHelper {
         .build();
   }
 
-  public static LedgerTransaction fromSorobantransaction(GetTransactionsResponse.Transaction txn)
+  /**
+   * Converting from Soroban transaction to LedgerTransaction.
+   *
+   * @param txn
+   * @return
+   * @throws LedgerException
+   */
+  public static LedgerTransaction fromSorobanTransaction(GetTransactionsResponse.Transaction txn)
       throws LedgerException {
     TransactionEnvelope txnEnv;
     try {
