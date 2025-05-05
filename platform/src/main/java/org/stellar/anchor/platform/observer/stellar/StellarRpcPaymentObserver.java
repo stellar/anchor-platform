@@ -107,7 +107,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       for (GetTransactionsResponse.Transaction txn : response.getTransactions()) {
         // Process the transaction
         try {
-          LedgerTransaction ledgerTxn = LedgerClientHelper.fromSorobanTransaction(txn);
+          LedgerTransaction ledgerTxn = LedgerClientHelper.fromStellarRpcTransaction(txn);
           if (ledgerTxn == null) {
             continue;
           }

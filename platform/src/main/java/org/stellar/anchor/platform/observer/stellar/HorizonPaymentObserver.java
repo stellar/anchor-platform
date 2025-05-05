@@ -22,7 +22,6 @@ import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.ledger.Horizon;
-import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.PaymentTransferEvent;
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig;
 import org.stellar.anchor.platform.observer.PaymentListener;
@@ -224,32 +223,37 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
       return null;
     }
 
-    LedgerTransaction txn = horizon.getTransaction(operation.getTransactionHash());
-    if (txn == null) {
-      debugF("Transaction not found: {}", operation.getTransactionHash());
-      return null;
-    }
     if (operation instanceof PaymentOperationResponse paymentOp) {
-      return PaymentTransferEvent.builder()
-          .from(paymentOp.getFrom())
-          .to(paymentOp.getTo())
-          .sep11Asset(AssetHelper.getSep11AssetName(paymentOp.getAsset().toXdr()))
-          .amount(AssetHelper.toXdrAmount(paymentOp.getAmount()))
-          .operationId(String.valueOf(operation.getId()))
-          .txHash(paymentOp.getTransactionHash())
-          .ledgerTransaction(txn)
-          .build();
+      if (paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getTo())
+          || paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getFrom())) {
+        return PaymentTransferEvent.builder()
+            .from(paymentOp.getFrom())
+            .to(paymentOp.getTo())
+            .sep11Asset(AssetHelper.getSep11AssetName(paymentOp.getAsset().toXdr()))
+            .amount(AssetHelper.toXdrAmount(paymentOp.getAmount()))
+            .operationId(String.valueOf(operation.getId()))
+            .txHash(paymentOp.getTransactionHash())
+            .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
+            .build();
+      } else {
+        return null;
+      }
     } else {
       PathPaymentBaseOperationResponse pathPaymentOp = (PathPaymentBaseOperationResponse) operation;
-      return PaymentTransferEvent.builder()
-          .from(pathPaymentOp.getFrom())
-          .to(pathPaymentOp.getTo())
-          .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset().toXdr()))
-          .amount(AssetHelper.toXdrAmount(pathPaymentOp.getAmount()))
-          .operationId(String.valueOf(operation.getId()))
-          .txHash(pathPaymentOp.getTransactionHash())
-          .ledgerTransaction(txn)
-          .build();
+      if (paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getTo())
+          || paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getFrom())) {
+        return PaymentTransferEvent.builder()
+            .from(pathPaymentOp.getFrom())
+            .to(pathPaymentOp.getTo())
+            .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset().toXdr()))
+            .amount(AssetHelper.toXdrAmount(pathPaymentOp.getAmount()))
+            .operationId(String.valueOf(operation.getId()))
+            .txHash(pathPaymentOp.getTransactionHash())
+            .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
+            .build();
+      } else {
+        return null;
+      }
     }
   }
 

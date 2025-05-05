@@ -277,13 +277,13 @@ public class LedgerClientHelper {
   }
 
   /**
-   * Converting from Soroban transaction to LedgerTransaction.
+   * Converting from Stellar RPC transaction to LedgerTransaction.
    *
-   * @param txn the Soroban transaction to convert
+   * @param txn the Stellar RPC transaction to convert
    * @return the converted LedgerTransaction
    * @throws LedgerException
    */
-  public static LedgerTransaction fromSorobanTransaction(GetTransactionsResponse.Transaction txn)
+  public static LedgerTransaction fromStellarRpcTransaction(GetTransactionsResponse.Transaction txn)
       throws LedgerException {
     TransactionEnvelope txnEnv;
     try {
