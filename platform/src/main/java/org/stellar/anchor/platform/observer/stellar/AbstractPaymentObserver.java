@@ -52,7 +52,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
   final ExponentialBackoffTimer databaseBackoffTimer = new ExponentialBackoffTimer(1, 20);
 
   int silenceTimeoutCount = 0;
-  HorizonPaymentObserver.ObserverStatus status = RUNNING;
+  ObserverStatus status = RUNNING;
   Instant lastActivityTime;
   AtomicLong metricLatestBlockRead = new AtomicLong(0);
   AtomicLong metricLatestBlockProcessed = new AtomicLong(0);
@@ -156,7 +156,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     return this.getName().compareTo(other.getName());
   }
 
-  void setStatus(HorizonPaymentObserver.ObserverStatus status) {
+  void setStatus(ObserverStatus status) {
     if (this.status != status) {
       if (this.status.isSettable(status)) {
         infoF("Setting status to {}", status);

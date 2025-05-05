@@ -28,11 +28,11 @@ import org.stellar.sdk.requests.sorobanrpc.GetTransactionsRequest;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionsResponse;
 
-public class SorobanPaymentObserver extends AbstractPaymentObserver {
+public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   final StellarRpc stellarRpc;
   final SorobanServer sorobanServer;
 
-  public SorobanPaymentObserver(
+  public StellarRpcPaymentObserver(
       String rpcUrl,
       StellarPaymentObserverConfig config,
       List<PaymentListener> paymentListeners,
@@ -56,7 +56,7 @@ public class SorobanPaymentObserver extends AbstractPaymentObserver {
 
   @Override
   public String getName() {
-    return "soroban_payment_observer";
+    return "stellar_rpc_payment_observer";
   }
 
   @Override

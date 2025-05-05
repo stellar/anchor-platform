@@ -48,7 +48,7 @@ class StellarObserverTests : AbstractIntegrationTests(TestConfig()) {
     assertNotNull(checks["config"])
 
     if (isNotEmpty(this.config.env["stellar_network.rpc_url"])) {
-      val stellarPaymentObserverCheck = checks["soroban_payment_observer"] as Map<*, *>
+      val stellarPaymentObserverCheck = checks["stellar_rpc_payment_observer"] as Map<*, *>
       assertNotNull(stellarPaymentObserverCheck)
       assertEquals(stellarPaymentObserverCheck["status"], "GREEN")
       // TODO: Check the streams after unified event observer is implemented.

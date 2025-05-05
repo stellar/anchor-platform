@@ -71,7 +71,7 @@ public class PaymentObserverBeans {
     AbstractPaymentObserver paymentObserver;
     if (isNotEmpty(appConfig.getRpcUrl())) {
       paymentObserver =
-          new SorobanPaymentObserver(
+          new StellarRpcPaymentObserver(
               appConfig.getRpcUrl(),
               paymentObserverConfig.getStellar(),
               paymentListeners,

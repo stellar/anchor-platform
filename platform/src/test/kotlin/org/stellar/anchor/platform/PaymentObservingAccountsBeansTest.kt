@@ -165,7 +165,7 @@ class PaymentObservingAccountsBeansTest {
           mockPaymentObserverConfig,
         )
       assertNotNull(paymentObserver)
-      assertTrue(paymentObserver is SorobanPaymentObserver)
+      assertTrue(paymentObserver is StellarRpcPaymentObserver)
     }
 
     every { mockAppConfig.horizonUrl } returns null
