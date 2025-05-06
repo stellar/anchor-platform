@@ -96,9 +96,9 @@ public class LedgerClientHelper {
 
   public static ParseResult parseOperationAndSourceAccountAndMemo(
       TransactionEnvelope txnEnv, String txnHash) {
-    Operation[] operations = new Operation[0];
-    String sourceAccount = "";
-    Memo memo = Memo.builder().discriminant(MemoType.MEMO_NONE).build();
+    Operation[] operations;
+    String sourceAccount;
+    Memo memo;
 
     switch (txnEnv.getDiscriminant()) {
       case ENVELOPE_TYPE_TX_V0:
@@ -126,9 +126,15 @@ public class LedgerClientHelper {
           memo = txnFeeBump.getMemo();
         } else {
           debugF("FeeBump tx does not have a ENVELOPE_TYPE_TX discriminant. tx.hash={}", txnHash);
+          return null;
         }
         break;
       default:
+        debugF(
+            "Error parsing transaction: (hash={}, discriminant={}). ",
+            txnHash,
+            txnEnv.getDiscriminant());
+
         return null;
     }
 
@@ -282,7 +288,8 @@ public class LedgerClientHelper {
   }
 
   /**
-   * Converting from Stellar RPC transaction to LedgerTransaction.
+   * Converting from Stellar RPC transaction to LedgerTransaction. TODO: This function will be
+   * removed after migrating to getEvents methods.
    *
    * @param txn the Stellar RPC transaction to convert
    * @return the converted LedgerTransaction
