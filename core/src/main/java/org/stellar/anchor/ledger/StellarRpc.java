@@ -1,11 +1,12 @@
 package org.stellar.anchor.ledger;
 
+import static org.stellar.anchor.ledger.LedgerClientHelper.fromGetTransactionResponse;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.util.*;
+import lombok.Getter;
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
@@ -24,7 +25,7 @@ import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
 /** The Stellar RPC server that implements LedgerClient. */
 public class StellarRpc implements LedgerClient {
   String rpcServerUrl;
-  SorobanServer sorobanServer;
+  @Getter SorobanServer sorobanServer;
 
   public StellarRpc(String rpcServerUrl) {
     this.rpcServerUrl = rpcServerUrl;
@@ -94,32 +95,7 @@ public class StellarRpc implements LedgerClient {
     return switch (txn.getStatus()) {
       case NOT_FOUND -> null;
       case FAILED -> throw new LedgerException("Error getting transaction: " + txnHash);
-      case SUCCESS -> {
-        TransactionEnvelope txnEnv;
-        try {
-          txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
-        } catch (IOException ioex) {
-          throw new LedgerException("Unable to parse transaction envelope", ioex);
-        }
-        Integer applicationOrder = txn.getApplicationOrder();
-        Long sequenceNumber = txn.getLedger();
-        LedgerClientHelper.ParsedTransaction osm =
-            LedgerClientHelper.parseTransaction(txnEnv, txnHash);
-        List<LedgerTransaction.LedgerOperation> operations =
-            LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, osm);
-
-        yield LedgerTransaction.builder()
-            .hash(txn.getTxHash())
-            .ledger(txn.getLedger())
-            .applicationOrder(txn.getApplicationOrder())
-            .sourceAccount(osm.sourceAccount())
-            .envelopeXdr(txn.getEnvelopeXdr())
-            .memo(osm.memo())
-            .sequenceNumber(sequenceNumber)
-            .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
-            .operations(operations)
-            .build();
-      }
+      case SUCCESS -> fromGetTransactionResponse(txn);
     };
   }
 

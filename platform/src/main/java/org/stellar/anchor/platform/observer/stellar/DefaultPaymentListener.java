@@ -52,6 +52,9 @@ public class DefaultPaymentListener implements PaymentListener {
 
   @Override
   public void onReceived(PaymentTransferEvent paymentTransferEvent) {
+    debugF(
+        "Received payment transfer event: {}",
+        GsonUtils.getInstance().toJson(paymentTransferEvent));
     LedgerTransaction ledgerTransaction = paymentTransferEvent.getLedgerTransaction();
     LedgerPayment ledgerPayment = null;
     for (LedgerTransaction.LedgerOperation operation : ledgerTransaction.getOperations()) {

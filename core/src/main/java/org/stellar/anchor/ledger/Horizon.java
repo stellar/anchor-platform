@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.AppConfig;
-import org.stellar.anchor.ledger.LedgerClientHelper.ParsedTransaction;
+import org.stellar.anchor.ledger.LedgerClientHelper.ParseResult;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.anchor.util.AssetHelper;
@@ -121,9 +121,9 @@ public class Horizon implements LedgerClient {
         TOID.fromInt64(Long.parseLong(txnResponse.getPagingToken())).getTransactionOrder();
     Long sequenceNumber = txnResponse.getLedger();
 
-    ParsedTransaction osm = parseTransaction(txnEnv, txnHash);
+    ParseResult result = parseOperationAndSourceAccountAndMemo(txnEnv, txnHash);
     List<LedgerOperation> operations =
-        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, osm);
+        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, result);
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())
@@ -131,7 +131,7 @@ public class Horizon implements LedgerClient {
         .ledger(txnResponse.getLedger())
         .sourceAccount(txnResponse.getSourceAccount())
         .envelopeXdr(txnResponse.getEnvelopeXdr())
-        .memo(osm.memo())
+        .memo(result.memo())
         .sequenceNumber(txnResponse.getSourceAccountSequence())
         .createdAt(Instant.parse(txnResponse.getCreatedAt()))
         .operations(operations)

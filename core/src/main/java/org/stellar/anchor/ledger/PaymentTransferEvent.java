@@ -31,7 +31,7 @@ public class PaymentTransferEvent {
   String txHash;
 
   // the TOID used to identify the operation in the transaction.
-  Long operationId;
+  String operationId;
 
   /**
    * The ledgerTransaction that contains the payment operation. Please note that the field can be

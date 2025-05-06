@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.platform.HealthCheckStatus.RED
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
+import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.ObserverStatus
 import org.stellar.sdk.Server
 import org.stellar.sdk.exception.NetworkException
 import org.stellar.sdk.requests.RequestBuilder
@@ -28,7 +29,7 @@ class StellarPaymentObserverTest {
   @MockK lateinit var paymentStreamerCursorStore: StellarPaymentStreamerCursorStore
   @MockK lateinit var paymentObservingAccountsManager: PaymentObservingAccountsManager
 
-  val stellarPaymentObserverConfig = StellarPaymentObserverConfig(1, 5, 1, 1, 2, 1, 2)
+  private val stellarPaymentObserverConfig = StellarPaymentObserverConfig(1, 5, 1, 1, 2, 1, 2)
 
   @BeforeEach
   fun setUp() {
@@ -41,7 +42,7 @@ class StellarPaymentObserverTest {
     every { paymentStreamerCursorStore.load() } returns "123"
     var stellarObserver =
       spyk(
-        StellarPaymentObserver(
+        HorizonPaymentObserver(
           TEST_HORIZON_URI,
           stellarPaymentObserverConfig,
           null,
@@ -50,7 +51,7 @@ class StellarPaymentObserverTest {
         )
       )
 
-    every { stellarObserver.fetchLatestCursorFromNetwork() } returns "1000"
+    every { stellarObserver.fetchLatestCursorFromHorizon() } returns "1000"
     var gotCursor = stellarObserver.fetchStreamingCursor()
     assertEquals("800", gotCursor)
     verify(exactly = 1) { paymentStreamerCursorStore.load() }
@@ -60,7 +61,7 @@ class StellarPaymentObserverTest {
     every { paymentStreamerCursorStore.load() } returns null
     mockkConstructor(Server::class)
     stellarObserver =
-      StellarPaymentObserver(
+      HorizonPaymentObserver(
         TEST_HORIZON_URI,
         stellarPaymentObserverConfig,
         null,
@@ -149,7 +150,7 @@ class StellarPaymentObserverTest {
     val stream: SSEStream<OperationResponse> = mockk(relaxed = true)
     val observer =
       spyk(
-        StellarPaymentObserver(
+        HorizonPaymentObserver(
           TEST_HORIZON_URI,
           stellarPaymentObserverConfig,
           null,
