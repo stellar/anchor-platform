@@ -3,8 +3,7 @@ package org.stellar.anchor.ledger;
 import static java.lang.Thread.sleep;
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
 import static org.stellar.anchor.util.AssetHelper.toXdrAmount;
-import static org.stellar.anchor.util.Log.debug;
-import static org.stellar.anchor.util.Log.info;
+import static org.stellar.anchor.util.Log.*;
 import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
 import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 import static org.stellar.sdk.xdr.SignerKeyType.*;
@@ -96,10 +95,10 @@ public class LedgerClientHelper {
   }
 
   public static ParseResult parseOperationAndSourceAccountAndMemo(
-      TransactionEnvelope txnEnv, String txnHash) throws LedgerException {
-    Operation[] operations;
-    String sourceAccount;
-    Memo memo;
+      TransactionEnvelope txnEnv, String txnHash) {
+    Operation[] operations = new Operation[0];
+    String sourceAccount = "";
+    Memo memo = Memo.builder().discriminant(MemoType.MEMO_NONE).build();
 
     switch (txnEnv.getDiscriminant()) {
       case ENVELOPE_TYPE_TX_V0:
@@ -117,16 +116,19 @@ public class LedgerClientHelper {
         memo = txnEnv.getV1().getTx().getMemo();
         break;
       case ENVELOPE_TYPE_TX_FEE_BUMP:
-        operations = new Operation[0];
-        sourceAccount =
-            StrKey.encodeEd25519PublicKey(
-                txnEnv.getFeeBump().getTx().getFeeSource().getEd25519().getUint256());
-        memo = Memo.builder().discriminant(MemoType.MEMO_NONE).build();
+        if (txnEnv.getFeeBump().getTx().getInnerTx().getDiscriminant()
+            == EnvelopeType.ENVELOPE_TYPE_TX) {
+          Transaction txnFeeBump = txnEnv.getFeeBump().getTx().getInnerTx().getV1().getTx();
+          operations = txnFeeBump.getOperations();
+          sourceAccount =
+              StrKey.encodeEd25519PublicKey(
+                  txnFeeBump.getSourceAccount().getEd25519().getUint256());
+          memo = txnFeeBump.getMemo();
+        } else {
+          debugF("FeeBump tx does not have a ENVELOPE_TYPE_TX discriminant. tx.hash={}", txnHash);
+        }
         break;
       default:
-        operations = new Operation[0];
-        sourceAccount = "";
-        memo = Memo.builder().discriminant(MemoType.MEMO_NONE).build();
         return null;
     }
 
@@ -162,16 +164,18 @@ public class LedgerClientHelper {
   }
 
   public static List<LedgerOperation> getLedgerOperations(
-      Integer applicationOrder, Long sequenceNumber, ParseResult osm) throws LedgerException {
-    List<LedgerTransaction.LedgerOperation> operations = new ArrayList<>(osm.operations().length);
-    for (int opIndex = 0; opIndex < osm.operations().length; opIndex++) {
+      Integer applicationOrder, Long sequenceNumber, ParseResult parseResult)
+      throws LedgerException {
+    List<LedgerTransaction.LedgerOperation> operations =
+        new ArrayList<>(parseResult.operations().length);
+    for (int opIndex = 0; opIndex < parseResult.operations().length; opIndex++) {
       LedgerOperation ledgerOp =
           LedgerClientHelper.convert(
-              osm.sourceAccount(),
+              parseResult.sourceAccount(),
               sequenceNumber,
               applicationOrder,
               opIndex + 1, // operation index is 1-based
-              osm.operations()[opIndex]);
+              parseResult.operations()[opIndex]);
       if (ledgerOp != null) {
         operations.add(ledgerOp);
       }
@@ -260,6 +264,7 @@ public class LedgerClientHelper {
     Long sequenceNumber = txnResponse.getLedger();
     ParseResult parseResult =
         LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txnResponse.getTxHash());
+    if (parseResult == null) return null;
     List<LedgerTransaction.LedgerOperation> operations =
         LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
 
@@ -281,7 +286,7 @@ public class LedgerClientHelper {
    *
    * @param txn the Stellar RPC transaction to convert
    * @return the converted LedgerTransaction
-   * @throws LedgerException
+   * @throws LedgerException if the transaction is null or malformed
    */
   public static LedgerTransaction fromStellarRpcTransaction(GetTransactionsResponse.Transaction txn)
       throws LedgerException {
@@ -295,9 +300,9 @@ public class LedgerClientHelper {
     Long sequenceNumber = txn.getLedger();
     ParseResult parseResult =
         LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txn.getTxHash());
+    if (parseResult == null) return null;
     List<LedgerTransaction.LedgerOperation> operations =
         LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
-
     return LedgerTransaction.builder()
         .hash(txn.getTxHash())
         .ledger(txn.getLedger())
