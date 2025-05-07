@@ -15,7 +15,6 @@ import org.stellar.sdk.xdr.OperationType.PATH_PAYMENT_STRICT_RECEIVE
 import org.stellar.sdk.xdr.SignerKeyType.*
 
 internal class LedgerClientHelperTest {
-
   @Test
   fun `test getKeyTypeDiscriminant with valid types`() {
     assertEquals(
