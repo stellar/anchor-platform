@@ -122,6 +122,7 @@ public class Horizon implements LedgerClient {
     Long sequenceNumber = txnResponse.getLedger();
 
     ParseResult result = parseOperationAndSourceAccountAndMemo(txnEnv, txnHash);
+    if (result == null) return null;
     List<LedgerOperation> operations =
         LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, result);
 
