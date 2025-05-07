@@ -49,12 +49,12 @@ public class UrlConstructorHelper {
   }
 
   public static String getAccount(Sep24Transaction txn) {
-    return isEmpty(txn.getSep10AccountMemo())
-        ? txn.getSep10Account()
-        : txn.getSep10Account() + ":" + txn.getSep10AccountMemo();
+    return isEmpty(txn.getWebAuthAccountMemo())
+        ? txn.getWebAuthAccount()
+        : txn.getWebAuthAccount() + ":" + txn.getWebAuthAccountMemo();
   }
 
-  public static String getAccount(String sep10Account, String sep10AccountMemo) {
-    return isEmpty(sep10AccountMemo) ? sep10Account : sep10Account + ":" + sep10AccountMemo;
+  public static String getAccount(String webAuthAccount, String webAuthAccountMemo) {
+    return isEmpty(webAuthAccountMemo) ? webAuthAccount : webAuthAccount + ":" + webAuthAccountMemo;
   }
 }

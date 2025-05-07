@@ -7,14 +7,14 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.gson
 import org.stellar.anchor.util.Log
 import org.stellar.sdk.KeyPair
 
-class Sep6Tests : AbstractIntegrationTests(TestConfig()) {
+class Sep6Tests : IntegrationTestBase(TestConfig()) {
   private val sep6Client = Sep6Client(toml.getString("TRANSFER_SERVER"), token.token)
   private val sep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId

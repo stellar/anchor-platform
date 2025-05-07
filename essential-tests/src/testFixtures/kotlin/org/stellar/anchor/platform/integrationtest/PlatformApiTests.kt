@@ -25,7 +25,6 @@ import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.client.*
-import org.stellar.anchor.platform.AbstractIntegrationTests
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.util.GsonUtils
@@ -184,7 +183,7 @@ class RpcPlatformApiTests : PlatformApiTests() {
 }
 
 // TODO add refund flow test for withdrawal: https://stellarorg.atlassian.net/browse/ANCHOR-694
-abstract class PlatformApiTests : AbstractIntegrationTests(TestConfig()) {
+abstract class PlatformApiTests : PlatformAPITestBase(TestConfig()) {
   companion object {
     val USDC = IssuedAssetId("USDC", "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP")
     val clientWalletAccount: String = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId

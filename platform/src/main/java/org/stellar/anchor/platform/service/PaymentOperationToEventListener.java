@@ -46,11 +46,27 @@ public class PaymentOperationToEventListener implements PaymentListener {
 
   @Override
   public void onReceived(ObservedPayment payment) throws IOException {
-    // Check if payment is connected to a transaction
-    if (Objects.toString(payment.getTransactionHash(), "").isEmpty()
-        || Objects.toString(payment.getTransactionMemo(), "").isEmpty()) {
-      traceF("Ignore the payment {} is not connected to a transaction.", payment.getId());
-      return;
+    String memo = null;
+    String memoType;
+    if (!payment.getType().equals(ObservedPayment.Type.SAC_TRANSFER)) {
+      if (Objects.toString(payment.getTransactionHash(), "").isEmpty()
+          || Objects.toString(payment.getTransactionMemo(), "").isEmpty()) {
+        traceF("Ignore the payment {} is not connected to a transaction.", payment.getId());
+        return;
+      }
+
+      // Parse memo
+      memo = payment.getTransactionMemo();
+      memoType = payment.getTransactionMemoType();
+      if (memoType.equals(MemoHelper.memoTypeAsString(MemoType.MEMO_HASH))) {
+        try {
+          memo = MemoHelper.convertHexToBase64(payment.getTransactionMemo());
+        } catch (DecoderException ex) {
+          infoF(
+              "The memo type is \"hash\" but the memo string {} could not be parsed as such.",
+              memo);
+        }
+      }
     }
 
     // Check if the payment contains the expected asset type
@@ -59,18 +75,6 @@ public class PaymentOperationToEventListener implements PaymentListener {
       // Asset type does not match
       debugF("{} is not an issued asset.", payment.getAssetType());
       return;
-    }
-
-    // Parse memo
-    String memo = payment.getTransactionMemo();
-    String memoType = payment.getTransactionMemoType();
-    if (memoType.equals(MemoHelper.memoTypeAsString(MemoType.MEMO_HASH))) {
-      try {
-        memo = MemoHelper.convertHexToBase64(payment.getTransactionMemo());
-      } catch (DecoderException ex) {
-        infoF(
-            "The memo type is \"hash\" but the memo string {} could not be parsed as such.", memo);
-      }
     }
 
     // Find a transaction matching the memo, assumes transactions are unique to account+memo
@@ -96,9 +100,19 @@ public class PaymentOperationToEventListener implements PaymentListener {
     // Find a transaction matching the memo, assumes transactions are unique to account+memo
     JdbcSep24Transaction sep24Txn = null;
     try {
-      sep24Txn =
-          sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
-              payment.getTo(), memo, SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+      if (memo != null) {
+        sep24Txn =
+            sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+                payment.getTo(), memo, SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+      } else {
+        // SAC transfers do not include a memo so we need to find the transaction by the
+        // from_account
+        sep24Txn =
+            sep24TransactionStore.findOneByToAccountAndFromAccountAndStatus(
+                payment.getTo(),
+                payment.getFrom(),
+                SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+      }
     } catch (Exception ex) {
       errorEx(ex);
     }
@@ -115,9 +129,19 @@ public class PaymentOperationToEventListener implements PaymentListener {
     // Find a transaction matching the memo, assumes transactions are unique to account+memo
     JdbcSep6Transaction sep6Txn = null;
     try {
-      sep6Txn =
-          sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
-              payment.getTo(), memo, SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+      if (memo != null) {
+        sep6Txn =
+            sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+                payment.getTo(), memo, SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+      } else {
+        // SAC transfers do not include a memo so we need to find the transaction by the
+        // from_account
+        sep6Txn =
+            sep6TransactionStore.findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
+                payment.getTo(),
+                payment.getFrom(),
+                SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+      }
     } catch (Exception ex) {
       errorEx(ex);
     }

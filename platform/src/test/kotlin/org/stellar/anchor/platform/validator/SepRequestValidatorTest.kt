@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException
 
-class RequestValidatorTest {
+class SepRequestValidatorTest {
 
   @MockK(relaxed = true) private lateinit var validator: Validator
 
@@ -37,7 +37,7 @@ class RequestValidatorTest {
     val ex = assertThrows<InvalidParamsException> { requestValidator.validate(request) }
     assertEquals(
       "violation error message 1\n" + "violation error message 2",
-      ex.message?.trimIndent()
+      ex.message?.trimIndent(),
     )
   }
 

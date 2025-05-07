@@ -31,7 +31,8 @@ import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep10Config;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.network.Horizon;
+import org.stellar.anchor.util.ClientDomainHelper;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Sep10Challenge.ChallengeTransaction;
@@ -132,14 +133,14 @@ public class Sep10Service implements ISep10Service {
 
     if (account == null) {
       // The account does not exist from Horizon, using the client's master key to verify.
-      return ValidationResponse.of(generateSep10Jwt(challenge, clientDomain, homeDomain));
+      return ValidationResponse.of(generateWebAuthJwt(challenge, clientDomain, homeDomain));
     }
     // Since the account exists, we should check the signers and the client domain
     validateChallengeRequest(request, account, clientDomain);
     // increment counter
     incrementValidationRequestValidatedCounter();
     // Generate the JWT token
-    return ValidationResponse.of(generateSep10Jwt(challenge, clientDomain, homeDomain));
+    return ValidationResponse.of(generateWebAuthJwt(challenge, clientDomain, homeDomain));
   }
 
   @Override
@@ -152,7 +153,7 @@ public class Sep10Service implements ISep10Service {
       throw new SepValidationException("Invalid challenge transaction.");
     }
 
-    if (!Sep10Helper.isDomainNameMatch(sep10Config.getHomeDomains(), homeDomain)) {
+    if (!ClientDomainHelper.isDomainNameMatch(sep10Config.getHomeDomains(), homeDomain)) {
       throw new SepValidationException(format("Invalid home_domain. %s", homeDomain));
     }
 
@@ -280,7 +281,7 @@ public class Sep10Service implements ISep10Service {
   }
 
   String fetchSigningKeyFromClientDomain(String clientDomain) throws SepException {
-    return Sep10Helper.fetchSigningKeyFromClientDomain(
+    return ClientDomainHelper.fetchSigningKeyFromClientDomain(
         clientDomain,
         appConfig.getStellarNetworkPassphrase().equals(TESTNET.getNetworkPassphrase()));
   }
@@ -363,7 +364,8 @@ public class Sep10Service implements ISep10Service {
 
   void validateHomeDomain(ChallengeRequest request) throws SepValidationException {
     String homeDomain = request.getHomeDomain();
-    String defaultHomeDomain = Sep10Helper.getDefaultDomainName(sep10Config.getHomeDomains());
+    String defaultHomeDomain =
+        ClientDomainHelper.getDefaultDomainName(sep10Config.getHomeDomains());
 
     if (homeDomain == null && defaultHomeDomain == null) {
       info("home_domain is required but not provided");
@@ -371,7 +373,7 @@ public class Sep10Service implements ISep10Service {
     } else if (homeDomain == null && !isEmpty(defaultHomeDomain)) {
       debugF("home_domain is not specified. Will use the default: {}", defaultHomeDomain);
       request.setHomeDomain(defaultHomeDomain);
-    } else if (!Sep10Helper.isDomainNameMatch(sep10Config.getHomeDomains(), homeDomain)) {
+    } else if (!ClientDomainHelper.isDomainNameMatch(sep10Config.getHomeDomains(), homeDomain)) {
       infoF("Bad home_domain: {}", homeDomain);
       throw new SepValidationException(format("home_domain [%s] is not supported.", homeDomain));
     }
@@ -533,10 +535,11 @@ public class Sep10Service implements ISep10Service {
     return challenge;
   }
 
-  String generateSep10Jwt(ChallengeTransaction challenge, String clientDomain, String homeDomain) {
+  String generateWebAuthJwt(
+      ChallengeTransaction challenge, String clientDomain, String homeDomain) {
     long issuedAt = challenge.getTransaction().getTimeBounds().getMinTime().longValue();
     Memo memo = challenge.getTransaction().getMemo();
-    Sep10Jwt sep10Jwt =
+    Sep10Jwt webAuthJwt =
         Sep10Jwt.of(
             authUrl(),
             (memo == null || memo instanceof MemoNone)
@@ -547,8 +550,8 @@ public class Sep10Service implements ISep10Service {
             challenge.getTransaction().hashHex(),
             clientDomain,
             homeDomain);
-    debug("jwtToken:", sep10Jwt);
-    return jwtService.encode(sep10Jwt);
+    debug("jwtToken:", webAuthJwt);
+    return jwtService.encode(webAuthJwt);
   }
 
   private String authUrl() {
@@ -590,7 +593,7 @@ public class Sep10Service implements ISep10Service {
 
     ManageDataOperation manageDataOperation = (ManageDataOperation) operation;
     String homeDomain = manageDataOperation.getName().split(" ")[0];
-    if (!Sep10Helper.isDomainNameMatch(sep10Config.getHomeDomains(), homeDomain)) {
+    if (!ClientDomainHelper.isDomainNameMatch(sep10Config.getHomeDomains(), homeDomain)) {
       throw new SepValidationException(
           "The transaction's operation key name does not include one of the expected home domains.");
     }

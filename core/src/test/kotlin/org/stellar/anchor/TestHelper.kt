@@ -3,6 +3,7 @@ package org.stellar.anchor
 import io.mockk.every
 import javax.crypto.SecretKey
 import org.stellar.anchor.auth.Sep10Jwt
+import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.util.KeyUtil
@@ -13,13 +14,13 @@ class TestHelper {
     const val TEST_ACCOUNT = "GBJDSMTMG4YBP27ZILV665XBISBBNRP62YB7WZA2IQX2HIPK7ABLF4C2"
     const val TEST_MEMO = "123456"
 
-    fun createSep10Jwt(
+    fun createWebAuthJwt(
       account: String = TEST_ACCOUNT,
       accountMemo: String? = null,
       hostUrl: String = "",
       clientDomain: String = "vibrant.stellar.org",
-      homeDomain: String = "test.stellar.org"
-    ): Sep10Jwt {
+      homeDomain: String = "test.stellar.org",
+    ): WebAuthJwt {
       val issuedAt: Long = System.currentTimeMillis() / 1000L
       return Sep10Jwt.of(
         "$hostUrl/auth",
@@ -28,7 +29,7 @@ class TestHelper {
         issuedAt + 60,
         "",
         clientDomain,
-        homeDomain
+        homeDomain,
       )
     }
   }
@@ -48,6 +49,8 @@ fun SecretConfig.setupMock(block: (() -> Any)? = null) {
     "jwt_secret_sep_6_more_info_url_jwt_secret".also { KeyUtil.validateJWTSecret(it) }
   every { cfg.sep10JwtSecretKey } returns
     "jwt_secret_sep_10_secret_key_jwt_secret".also { KeyUtil.validateJWTSecret(it) }
+  every { cfg.sep45JwtSecretKey } returns
+    "jwt_secret_sep_45_secret_key_jwt_secret".also { KeyUtil.validateJWTSecret(it) }
   every { cfg.sep10SigningSeed } returns TEST_SIGNING_SEED.also { KeyUtil.validateJWTSecret(it) }
   every { cfg.sep24InteractiveUrlJwtSecret } returns
     "jwt_secret_sep_24_interactive_url_jwt_secret".also { KeyUtil.validateJWTSecret(it) }

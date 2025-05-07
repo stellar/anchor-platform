@@ -1,4 +1,4 @@
-package org.stellar.anchor.sep6;
+package org.stellar.anchor.util;
 
 import static org.stellar.anchor.util.SepHelper.amountEquals;
 

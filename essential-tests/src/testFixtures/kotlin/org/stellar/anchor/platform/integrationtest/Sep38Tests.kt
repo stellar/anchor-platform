@@ -6,12 +6,12 @@ import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.sep.sep38.Sep38Context.SEP31
 import org.stellar.anchor.client.Sep38Client
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.printRequest
 import org.stellar.anchor.platform.printResponse
 
-class Sep38Tests : AbstractIntegrationTests(TestConfig()) {
+class Sep38Tests : IntegrationTestBase(TestConfig()) {
   private val sep38Client: Sep38Client =
     Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
 

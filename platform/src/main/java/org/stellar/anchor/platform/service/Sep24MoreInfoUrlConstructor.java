@@ -26,8 +26,8 @@ public class Sep24MoreInfoUrlConstructor extends SimpleMoreInfoUrlConstructor {
     Sep24Transaction sep24Txn = (Sep24Transaction) txn;
     return construct(
         sep24Txn.getClientDomain(),
-        sep24Txn.getSep10Account(),
-        sep24Txn.getSep10AccountMemo(),
+        sep24Txn.getWebAuthAccount(),
+        sep24Txn.getWebAuthAccountMemo(),
         sep24Txn.getTransactionId(),
         sep24Txn,
         lang);
@@ -36,11 +36,11 @@ public class Sep24MoreInfoUrlConstructor extends SimpleMoreInfoUrlConstructor {
   @Override
   @SneakyThrows
   public MoreInfoUrlJwt getBaseToken(
-      String clientDomain, String sep10Account, String sep10AccountMemo, String transactionId) {
+      String clientDomain, String webAuthAccount, String webAuthAccountMemo, String transactionId) {
     ClientConfig clientConfig =
-        clientsService.getClientConfigByDomainAndSep10Account(clientDomain, sep10Account);
+        clientsService.getClientConfigByDomainAndAccount(clientDomain, webAuthAccount);
     return new Sep24MoreInfoUrlJwt(
-        UrlConstructorHelper.getAccount(sep10Account, sep10AccountMemo),
+        UrlConstructorHelper.getAccount(webAuthAccount, webAuthAccountMemo),
         transactionId,
         Instant.now().getEpochSecond() + config.getJwtExpiration(),
         clientDomain,

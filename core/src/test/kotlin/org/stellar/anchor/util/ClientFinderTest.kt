@@ -18,11 +18,10 @@ import org.stellar.anchor.client.ClientService
 import org.stellar.anchor.client.CustodialClient
 import org.stellar.anchor.client.NonCustodialClient
 import org.stellar.anchor.config.Sep10Config
-import org.stellar.anchor.sep6.ExchangeAmountsCalculatorTest
 
 class ClientFinderTest {
   companion object {
-    val token = TestHelper.createSep10Jwt(TEST_ACCOUNT, TEST_MEMO)
+    val token = TestHelper.createWebAuthJwt(TEST_ACCOUNT, TEST_MEMO)
     private val custodialClient =
       CustodialClient.builder()
         .name("referenceCustodial")
