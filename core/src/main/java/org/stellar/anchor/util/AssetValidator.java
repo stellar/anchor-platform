@@ -169,7 +169,7 @@ public class AssetValidator {
                 assetId, receiveInfo.getMinAmount()));
       }
 
-      if (receiveInfo.getMaxAmount() <= 0) {
+      if (receiveInfo.getMaxAmount() != null && receiveInfo.getMaxAmount() <= 0) {
         errors.add(
             format(
                 "Asset %s: SEP-31 receive 'max_amount' must be positive (current value: %s).",
