@@ -1,7 +1,7 @@
 ---
-name: Release a New Version
-about: Publishing a new release
-title: 'Release a New Version'
+name: Release a FEATURE Version
+about: Publishing a feature release
+title: 'Release a FEATURE Version'
 labels: ''
 assignees: ''
 

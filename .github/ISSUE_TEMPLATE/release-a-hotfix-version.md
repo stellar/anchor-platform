@@ -1,7 +1,7 @@
 ---
-name: Release a New Version
-about: Publishing a new release
-title: 'Release a New Version'
+name: Release a Hotfix Version
+about: Publishing a hotfix release
+title: 'Release a HOTFIX Version'
 labels: ''
 assignees: ''
 
