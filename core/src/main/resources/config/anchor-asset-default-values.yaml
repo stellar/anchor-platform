@@ -32,7 +32,7 @@ items:
         # The minimum amount that the user can deposit.
         min_amount: 0
         # The maximum amount that the user can deposit.
-        max_amount:
+        max_amount: 999999999
         # The list of the methods that the user can use to deposit the asset.
         # Example:
         #   - SEPA
@@ -45,7 +45,7 @@ items:
         # The minimum amount that the user can withdraw.
         min_amount: 0
         # The maximum amount that the user can withdraw.
-        max_amount: 1000
+        max_amount: 999999999
         # The list of the methods that the anchor supports for the withdrawal of the asset.
         # Example:
         #   - bank_account
@@ -63,7 +63,7 @@ items:
         # The minimum amount that the user can deposit.
         min_amount: 0
         # The maximum amount that the user can deposit.
-        max_amount:
+        max_amount: 999999999
         # The list of the methods that the user can use to deposit the asset.
         # Example:
         #   - SEPA
@@ -77,7 +77,7 @@ items:
         # the minimum amount that the user can withdraw.
         min_amount: 0
         # the maximum amount that the user can withdraw.
-        max_amount:
+        max_amount: 999999999
         # the list of the methods that the anchor supports for the withdrawal of the asset.
         # Example:
         #   - bank_account
@@ -96,7 +96,7 @@ items:
       receive:
         # the maximum amount that the user can receive.
         min_amount: 0
-        max_amount: 1000
+        max_amount: 999999999
         # The list of methods supported by the anchor to receive assets.
         # Example:
         #   - SEPA
@@ -112,7 +112,7 @@ items:
       # Example:
       #  - iso4217:USD
       #  - iso4217:CAD
-      exchangeable_assets:
+      exchangeable_assets: []
 
   #
   # Fiat (ISO4217) assets
@@ -126,7 +126,7 @@ items:
       receive:
         # the maximum amount that the user can receive.
         min_amount: 0
-        max_amount:
+        max_amount: 999999999
         methods: []
       # `true` if the asset supports quotesinforesponse.java.
       quotes_supported: true
@@ -146,7 +146,7 @@ items:
       # Example:
       #   - US
       #   - CA
-      country_codes:
+      country_codes: []
 
       # An array of objects describing the methods a client can use to sell/deliver funds to the anchor.
       # Refer to: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0038.md#get-info
