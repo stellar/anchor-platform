@@ -130,6 +130,4 @@ public class JdbcSep31Transaction extends JdbcSepTransaction
       BeanUtils.copyProperties(sep31Refunds, this.refunds);
     }
   }
-
-  String amountExpected;
 }
