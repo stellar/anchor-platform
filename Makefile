@@ -8,6 +8,28 @@ TAG ?= stellar/anchor-platform:$(LABEL)
 # https://github.com/opencontainers/image-spec/blob/master/annotations.md
 BUILD_DATE := $(shell date -u +%FT%TZ)
 
+# Define the output JAR file
+JAR_FILE := service-runner/build/libs/anchor-platform-runner*.jar
+
+# Clean build artifacts
+.PHONY: clean
+clean:
+	gradle clean
+	rm -rf service-runner/build
+	rm -rf */build
+	rm -rf .gradle
+
+# Build the anchor platform JAR
+.PHONY: build
+build:
+	gradle clean bootJar --stacktrace -x test
+
+# Run the anchor platform
+.PHONY: run
+run: build
+	chmod +x scripts/start_anchorplatform.sh
+	./scripts/start_anchorplatform.sh
+
 docker-build:
 	$(SUDO) docker build --pull --label org.opencontainers.image.created="$(BUILD_DATE)" -t $(TAG) --build-arg GIT_COMMIT=$(LABEL) .
 

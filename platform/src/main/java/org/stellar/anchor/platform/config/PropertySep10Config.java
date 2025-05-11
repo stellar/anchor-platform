@@ -8,10 +8,7 @@ import jakarta.annotation.PostConstruct;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import lombok.Data;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.validation.Errors;
-import org.springframework.validation.Validator;
 import org.stellar.anchor.client.ClientConfig;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.client.NonCustodialClient;
@@ -20,7 +17,7 @@ import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep10Config;
 import org.stellar.anchor.util.KeyUtil;
 import org.stellar.anchor.util.NetUtil;
-import org.stellar.sdk.*;
+import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.operations.ManageDataOperation;
 
 @Data
@@ -86,9 +83,10 @@ public class PropertySep10Config implements Sep10Config, Validator {
       try {
         KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
       } catch (Throwable ex) {
+        System.out.println("Error creating KeyPair: " + ex.getMessage());
         errors.reject(
             "sep10-signing-seed-invalid",
-            "Please set the secret.sep10.signing_seed or SECRET_SEP10_SIGNING_SEED environment variable");
+            "Could not create KeyPair from secret.sep10.signing_seed or SECRET_SEP10_SIGNING_SEED environment variable");
       }
     }
 
