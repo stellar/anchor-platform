@@ -29,6 +29,7 @@ assignees: ''
 - [ ] Check the docker image of the release automatically published to [Docker Hub](https://hub.docker.com/r/stellar/anchor-platform).
 - [ ] If necessary, update the docker image version in [docs/README.md].
 - [ ] If necessary, update the badges versions in [docs/00 - Stellar Anchor Platform.md].
-- [ ] Checkout the `develop` branch, create a merge commit from `main` to `develop` and checkout to a new `chore/3.x.x` branch.
 - [ ] Create the pull request `chore/3.x.x -> main`. DO NOT squash merge.
+- [ ] Checkout the `develop` branch, create a merge commit from `main` to `develop`. 
+- [ ] Create a pull request to push the merge commit to `develop`.
 - [ ] Publish the new version in the [#release](https://stellarfoundation.slack.com/archives/C04ECVCV162) Slack channel.
