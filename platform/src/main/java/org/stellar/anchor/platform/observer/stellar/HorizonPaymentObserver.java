@@ -33,9 +33,7 @@ import org.stellar.sdk.requests.PaymentsRequestBuilder;
 import org.stellar.sdk.requests.RequestBuilder;
 import org.stellar.sdk.requests.SSEStream;
 import org.stellar.sdk.responses.Page;
-import org.stellar.sdk.responses.operations.OperationResponse;
-import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
-import org.stellar.sdk.responses.operations.PaymentOperationResponse;
+import org.stellar.sdk.responses.operations.*;
 
 public class HorizonPaymentObserver extends AbstractPaymentObserver {
 
@@ -97,7 +95,9 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
               silenceTimeoutCount = 0;
               streamBackoffTimer.reset();
               try {
-                processOperation(operationResponse);
+                if (shouldProcess(operationResponse)) {
+                  processOperation(operationResponse);
+                }
               } catch (TransactionException ex) {
                 errorEx("Error handling events", ex);
                 setStatus(DATABASE_ERROR);
@@ -112,6 +112,25 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
             handleFailure(error.orElse(null));
           }
         });
+  }
+
+  /**
+   * Check if the operation should be processed. This is used to filter out unwanted operations from
+   * Horizon.
+   *
+   * @param operationResponse the operation to check
+   * @return true if the operation should be processed, false otherwise
+   */
+  boolean shouldProcess(OperationResponse operationResponse) {
+    if (operationResponse instanceof PaymentOperationResponse paymentOp) {
+      return paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getTo())
+          || paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getFrom());
+    } else if (operationResponse instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
+      return paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getTo())
+          || paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getFrom());
+    } else {
+      return false;
+    }
   }
 
   void handleFailure(Throwable error) {
@@ -189,10 +208,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
 
   void processOperation(OperationResponse operationResponse) {
     try {
-      PaymentTransferEvent transferEvent = toPaymentTransferEvent(operationResponse);
-      if (transferEvent != null) {
-        handleEvent(transferEvent);
-      }
+      handleEvent(toPaymentTransferEvent(operationResponse));
     } catch (EventPublishException ex) {
       // restart the observer from where it stopped, in case the queue fails to
       // publish the message.
@@ -217,43 +233,28 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
    * @throws LedgerException if there is an error fetching the transaction
    */
   PaymentTransferEvent toPaymentTransferEvent(OperationResponse operation) throws LedgerException {
-    if (!(operation instanceof PaymentOperationResponse
-        || operation instanceof PathPaymentBaseOperationResponse)) {
-      // only fetch transaction if the operation is a payment operation
-      return null;
-    }
-
     if (operation instanceof PaymentOperationResponse paymentOp) {
-      if (paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getTo())
-          || paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getFrom())) {
-        return PaymentTransferEvent.builder()
-            .from(paymentOp.getFrom())
-            .to(paymentOp.getTo())
-            .sep11Asset(AssetHelper.getSep11AssetName(paymentOp.getAsset().toXdr()))
-            .amount(AssetHelper.toXdrAmount(paymentOp.getAmount()))
-            .operationId(String.valueOf(operation.getId()))
-            .txHash(paymentOp.getTransactionHash())
-            .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
-            .build();
-      } else {
-        return null;
-      }
+      return PaymentTransferEvent.builder()
+          .from(paymentOp.getFrom())
+          .to(paymentOp.getTo())
+          .sep11Asset(AssetHelper.getSep11AssetName(paymentOp.getAsset().toXdr()))
+          .amount(AssetHelper.toXdrAmount(paymentOp.getAmount()))
+          .operationId(String.valueOf(operation.getId()))
+          .txHash(paymentOp.getTransactionHash())
+          .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
+          .build();
+    } else if (operation instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
+      return PaymentTransferEvent.builder()
+          .from(pathPaymentOp.getFrom())
+          .to(pathPaymentOp.getTo())
+          .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset().toXdr()))
+          .amount(AssetHelper.toXdrAmount(pathPaymentOp.getAmount()))
+          .operationId(String.valueOf(operation.getId()))
+          .txHash(pathPaymentOp.getTransactionHash())
+          .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
+          .build();
     } else {
-      PathPaymentBaseOperationResponse pathPaymentOp = (PathPaymentBaseOperationResponse) operation;
-      if (paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getTo())
-          || paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getFrom())) {
-        return PaymentTransferEvent.builder()
-            .from(pathPaymentOp.getFrom())
-            .to(pathPaymentOp.getTo())
-            .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset().toXdr()))
-            .amount(AssetHelper.toXdrAmount(pathPaymentOp.getAmount()))
-            .operationId(String.valueOf(operation.getId()))
-            .txHash(pathPaymentOp.getTransactionHash())
-            .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
-            .build();
-      } else {
-        return null;
-      }
+      throw new LedgerException("Unsupported operation type: " + operation.getClass());
     }
   }
 
