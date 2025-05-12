@@ -270,17 +270,23 @@ private val testPathPaymentOpJson =
 {
    "body":{
       "discriminant":"PATH_PAYMENT_STRICT_RECEIVE",
-      "paymentOp":{
+      "pathPaymentStrictReceiveOp":{
+         "sendAsset":{
+             "discriminant":"ASSET_TYPE_NATIVE"
+         },
+            "sendMax":{
+                "int64":1230
+            },
          "destination":{
             "discriminant":"KEY_TYPE_ED25519",
             "ed25519":{
                "uint256":"0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlU="
             }
          },
-         "asset":{
+         "destAsset":{
             "discriminant":"ASSET_TYPE_NATIVE"
          },
-         "amount":{
+         "destAmount":{
             "int64":1230
          }
       }
