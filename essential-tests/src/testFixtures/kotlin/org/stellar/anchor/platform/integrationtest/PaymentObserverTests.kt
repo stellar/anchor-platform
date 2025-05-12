@@ -42,10 +42,6 @@ class PaymentObserverTests {
       val keyPairs = createAccounts()
       fromKeyPair = keyPairs.first
       toKeyPair = keyPairs.second
-      //      fromKeyPair =
-      //        KeyPair.fromSecretSeed("SDYXS6YEEDECL2VVEBY57BHTS36ZGTSUXHWRSJQZDEA5UYZTXDYCYP3A")
-      //      toKeyPair =
-      // KeyPair.fromSecretSeed("SDL3M4UFF3CORSZDOEAHR7J3BLN3UV44S7FAKVLSPU46776VV6VQUXOG")
 
       keyMap.add(fromKeyPair.accountId)
       keyMap.add(toKeyPair.accountId)
