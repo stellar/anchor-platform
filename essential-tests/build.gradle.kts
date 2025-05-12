@@ -12,7 +12,9 @@ dependencies {
   testFixturesImplementation(libs.assertj.core)
   testFixturesImplementation(libs.httpclient)
   testFixturesImplementation(libs.kotlin.serialization.json)
+  testFixturesImplementation(libs.coroutines.core)
   testFixturesImplementation(libs.dotenv)
+  testFixturesImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 
   // Stellar dependencies
   testFixturesImplementation(libs.stellar.wallet.sdk)

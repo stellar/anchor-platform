@@ -91,7 +91,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
           @Override
           public void onEvent(OperationResponse operationResponse) {
             if (isHealthy()) {
-              debugF("Received payment {}", operationResponse.getId());
+              traceF("Received operation {}", operationResponse.getId());
               // clear stream timeout/reconnect status
               lastActivityTime = Instant.now();
               silenceTimeoutCount = 0;

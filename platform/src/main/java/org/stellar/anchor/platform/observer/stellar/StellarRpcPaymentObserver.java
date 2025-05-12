@@ -153,7 +153,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             yield PaymentTransferEvent.builder()
                 .from(paymentOp.getFrom())
                 .to(paymentOp.getTo())
-                .sep11Asset(AssetHelper.getSep11AssetName(op.getPaymentOperation().getAsset()))
+                .sep11Asset(AssetHelper.getSep11AssetName(op.getPathPaymentOperation().getAsset()))
                 .amount(paymentOp.getAmount())
                 .txHash(ledgerTxn.getHash())
                 .operationId(paymentOp.getId())

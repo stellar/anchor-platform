@@ -5,6 +5,7 @@ import static org.stellar.anchor.ledger.LedgerTransaction.*;
 import static org.stellar.anchor.util.AssetHelper.toXdrAmount;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
+import static org.stellar.sdk.xdr.OperationType.PATH_PAYMENT_STRICT_RECEIVE;
 import static org.stellar.sdk.xdr.OperationType.PAYMENT;
 import static org.stellar.sdk.xdr.SignerKeyType.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
@@ -53,43 +54,68 @@ public class LedgerClientHelper {
     }
     String operationId =
         String.valueOf(new TOID(sequenceNumber.intValue(), applicationOrder, opIndex).toInt64());
-    PaymentOp payment = op.getBody().getPaymentOp();
     return switch (op.getBody().getDiscriminant()) {
-      case PAYMENT ->
-          LedgerOperation.builder()
-              .type(PAYMENT)
-              .paymentOperation(
-                  LedgerPaymentOperation.builder()
-                      .id(operationId)
-                      .asset(payment.getAsset())
-                      .amount(payment.getAmount().getInt64())
-                      .from(sourceAccount)
-                      .sourceAccount(sourceAccount)
-                      .to(
-                          StrKey.encodeEd25519PublicKey(
-                              payment.getDestination().getEd25519().getUint256()))
-                      .build())
-              .build();
-      case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND ->
-          LedgerOperation.builder()
-              .type(
-                  switch (op.getBody().getDiscriminant()) {
-                    case PATH_PAYMENT_STRICT_RECEIVE -> OperationType.PATH_PAYMENT_STRICT_RECEIVE;
-                    case PATH_PAYMENT_STRICT_SEND -> OperationType.PATH_PAYMENT_STRICT_SEND;
-                    default -> null;
-                  })
-              .pathPaymentOperation(
-                  LedgerPathPaymentOperation.builder()
-                      .id(operationId)
-                      .asset(payment.getAsset())
-                      .amount(payment.getAmount().getInt64())
-                      .from(sourceAccount)
-                      .to(
-                          StrKey.encodeEd25519PublicKey(
-                              payment.getDestination().getEd25519().getUint256()))
-                      .sourceAccount(sourceAccount)
-                      .build())
-              .build();
+      case PAYMENT -> {
+        PaymentOp payment = op.getBody().getPaymentOp();
+        yield LedgerOperation.builder()
+            .type(PAYMENT)
+            .paymentOperation(
+                LedgerPaymentOperation.builder()
+                    .id(operationId)
+                    .asset(payment.getAsset())
+                    .amount(payment.getAmount().getInt64())
+                    .from(sourceAccount)
+                    .sourceAccount(sourceAccount)
+                    .to(
+                        StrKey.encodeEd25519PublicKey(
+                            payment.getDestination().getEd25519().getUint256()))
+                    .build())
+            .build();
+      }
+      case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND -> {
+        Asset asset;
+        Long amount;
+        String toAddress;
+        if (op.getBody().getDiscriminant() == PATH_PAYMENT_STRICT_RECEIVE) {
+          asset = op.getBody().getPathPaymentStrictReceiveOp().getSendAsset();
+          amount = op.getBody().getPathPaymentStrictReceiveOp().getDestAmount().getInt64();
+          toAddress =
+              StrKey.encodeEd25519PublicKey(
+                  op.getBody()
+                      .getPathPaymentStrictReceiveOp()
+                      .getDestination()
+                      .getEd25519()
+                      .getUint256());
+
+        } else {
+          asset = op.getBody().getPathPaymentStrictSendOp().getSendAsset();
+          amount = op.getBody().getPathPaymentStrictSendOp().getSendAmount().getInt64();
+          toAddress =
+              StrKey.encodeEd25519PublicKey(
+                  op.getBody()
+                      .getPathPaymentStrictSendOp()
+                      .getDestination()
+                      .getEd25519()
+                      .getUint256());
+        }
+        yield LedgerOperation.builder()
+            .type(
+                switch (op.getBody().getDiscriminant()) {
+                  case PATH_PAYMENT_STRICT_RECEIVE -> PATH_PAYMENT_STRICT_RECEIVE;
+                  case PATH_PAYMENT_STRICT_SEND -> OperationType.PATH_PAYMENT_STRICT_SEND;
+                  default -> null;
+                })
+            .pathPaymentOperation(
+                LedgerPathPaymentOperation.builder()
+                    .id(operationId)
+                    .asset(asset)
+                    .amount(amount)
+                    .from(sourceAccount)
+                    .to(toAddress)
+                    .sourceAccount(sourceAccount)
+                    .build())
+            .build();
+      }
       default -> null;
     };
   }
@@ -235,7 +261,7 @@ public class LedgerClientHelper {
               .sourceAccount(paymentOp.getSourceAccount())
               .build());
     } else if (op instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
-      builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE);
+      builder.type(PATH_PAYMENT_STRICT_RECEIVE);
       builder.pathPaymentOperation(
           LedgerTransaction.LedgerPathPaymentOperation.builder()
               .id(String.valueOf(pathPaymentOp.getId()))
