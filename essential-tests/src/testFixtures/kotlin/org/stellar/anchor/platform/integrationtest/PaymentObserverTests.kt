@@ -175,7 +175,7 @@ class PaymentObserverTests {
         println("Event captured for account: $fromAccountId")
         return
       }
-      delay(1000) // Coroutine-friendly delay
+      delay(1000)
     }
     println("Timeout waiting for event for account: $fromAccountId")
   }
