@@ -77,7 +77,7 @@ public class LedgerClientHelper {
         Long amount;
         String toAddress;
         if (op.getBody().getDiscriminant() == PATH_PAYMENT_STRICT_RECEIVE) {
-          asset = op.getBody().getPathPaymentStrictReceiveOp().getSendAsset();
+          asset = op.getBody().getPathPaymentStrictReceiveOp().getDestAsset();
           amount = op.getBody().getPathPaymentStrictReceiveOp().getDestAmount().getInt64();
           toAddress =
               StrKey.encodeEd25519PublicKey(
@@ -88,7 +88,7 @@ public class LedgerClientHelper {
                       .getUint256());
 
         } else {
-          asset = op.getBody().getPathPaymentStrictSendOp().getSendAsset();
+          asset = op.getBody().getPathPaymentStrictSendOp().getDestAsset();
           amount = op.getBody().getPathPaymentStrictSendOp().getSendAmount().getInt64();
           toAddress =
               StrKey.encodeEd25519PublicKey(

@@ -19,6 +19,7 @@ import org.stellar.anchor.platform.observer.stellar.StellarPaymentStreamerCursor
 import org.stellar.anchor.platform.observer.stellar.StellarRpcPaymentObserver
 import org.stellar.anchor.util.AssetHelper
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.Log.info
 import org.stellar.sdk.*
 import org.stellar.sdk.operations.PathPaymentStrictSendOperation
 import org.stellar.sdk.operations.PaymentOperation
@@ -172,16 +173,16 @@ class PaymentObserverTests {
     while (System.currentTimeMillis() - startTime <= timeout) {
       val events = listener.getEventByFrom(fromAccountId)
       if (events != null) {
-        println("Event captured for account: $fromAccountId")
+        info("Event captured for account: $fromAccountId")
         return
       }
       delay(1000)
     }
-    println("Timeout waiting for event for account: $fromAccountId")
+    info("Timeout waiting for event for account: $fromAccountId")
   }
 
   private fun sendTestPayment(fromKeyPair: KeyPair, toKeyPair: KeyPair): Transaction {
-    println("Sending payment from ${fromKeyPair.accountId} to ${toKeyPair.accountId}")
+    info("Sending payment from ${fromKeyPair.accountId} to ${toKeyPair.accountId}")
     val fromAccount: TransactionBuilderAccount = stellarRpc.getAccount(fromKeyPair.accountId)
 
     val txn =
@@ -245,9 +246,7 @@ internal class EventCapturingListener : PaymentListener {
   private val eventsByTo = mutableMapOf<String, MutableList<PaymentTransferEvent>>()
 
   override fun onReceived(paymentTransferEvent: PaymentTransferEvent?) {
-    println(
-      "Received payment transfer event: ${GsonUtils.getInstance().toJson(paymentTransferEvent)}"
-    )
+    info("Received payment transfer event: ${GsonUtils.getInstance().toJson(paymentTransferEvent)}")
     if (eventsByFrom[paymentTransferEvent!!.from] == null) {
       eventsByFrom[paymentTransferEvent.from] = mutableListOf(paymentTransferEvent)
     } else {
@@ -290,9 +289,9 @@ fun fundAccount(keyPair: KeyPair) {
   val friendBotUrl = "https://friendbot.stellar.org/?addr=${keyPair.accountId}"
   try {
     java.net.URL(friendBotUrl).openStream()
-    println("Funded account: ${keyPair.accountId}")
+    info("Funded account: ${keyPair.accountId}")
   } catch (e: java.io.IOException) {
-    println("ERROR! " + e.message)
+    info("ERROR! " + e.message)
     throw e
   }
 }
