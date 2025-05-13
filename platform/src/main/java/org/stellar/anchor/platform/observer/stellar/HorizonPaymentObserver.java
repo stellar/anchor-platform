@@ -191,6 +191,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
     try {
       PaymentTransferEvent transferEvent = toPaymentTransferEvent(operationResponse);
       if (transferEvent != null) {
+        infoF("Processing payment transfer event: {}", transferEvent);
         handleEvent(transferEvent);
       }
     } catch (EventPublishException ex) {

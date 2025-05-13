@@ -3,11 +3,13 @@ package org.stellar.anchor.platform.integrationtest
 import io.mockk.every
 import io.mockk.mockk
 import java.math.BigDecimal
+import java.math.BigInteger
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.ledger.PaymentTransferEvent
@@ -21,8 +23,16 @@ import org.stellar.anchor.util.AssetHelper
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.info
 import org.stellar.sdk.*
+import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
+import org.stellar.sdk.Auth.authorizeEntry
+import org.stellar.sdk.operations.InvokeHostFunctionOperation
 import org.stellar.sdk.operations.PathPaymentStrictSendOperation
 import org.stellar.sdk.operations.PaymentOperation
+import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse
+import org.stellar.sdk.scval.Scv
+import org.stellar.sdk.xdr.SCVal
+import org.stellar.sdk.xdr.SCValType
+import org.stellar.sdk.xdr.SorobanAuthorizationEntry
 
 class PaymentObserverTests {
   companion object {
@@ -30,6 +40,8 @@ class PaymentObserverTests {
       mockk<PaymentObservingAccountsManager>(relaxed = true)
     private lateinit var fromKeyPair: KeyPair
     private lateinit var toKeyPair: KeyPair
+    private lateinit var fromKeyPair2: KeyPair
+    private lateinit var toKeyPair2: KeyPair
     private val keyMap = mutableListOf<String>()
     private val eventCaptureListenerHorizon = EventCapturingListener()
     private val eventCaptureListenerStellarRpc = EventCapturingListener()
@@ -40,9 +52,10 @@ class PaymentObserverTests {
     @JvmStatic
     @BeforeAll
     fun start() {
-      val keyPairs = createAccounts()
-      fromKeyPair = keyPairs.first
-      toKeyPair = keyPairs.second
+      fromKeyPair = createAndFundAccount()
+      toKeyPair = createAndFundAccount()
+      fromKeyPair2 = createAndFundAccount()
+      toKeyPair2 = createAndFundAccount()
 
       keyMap.add(fromKeyPair.accountId)
       keyMap.add(toKeyPair.accountId)
@@ -89,6 +102,8 @@ class PaymentObserverTests {
 
   @Test
   fun `submit a payment and assert events are received as expected`() = runBlocking {
+    // send unmonitored payment
+    sendTestPayment(fromKeyPair2, toKeyPair2)
     val txn = sendTestPayment(fromKeyPair, toKeyPair)
     waitForEventsCoroutine(fromKeyPair.accountId, eventCaptureListenerHorizon)
     assertEventsPayment(
@@ -103,10 +118,15 @@ class PaymentObserverTests {
       eventCaptureListenerStellarRpc.getEventByFrom(fromKeyPair.accountId),
       eventCaptureListenerStellarRpc.getEventByTo(toKeyPair.accountId),
     )
+
+    assertNull(eventCaptureListenerStellarRpc.getEventByFrom(fromKeyPair2.accountId))
+    assertNull(eventCaptureListenerStellarRpc.getEventByTo(toKeyPair2.accountId))
   }
 
   @Test
   fun `submit a path payment and assert events are received as expected`() = runBlocking {
+    // send unmonitored path payment
+    sendTestPathPayment(fromKeyPair2, toKeyPair2)
     val txn = sendTestPathPayment(fromKeyPair, toKeyPair)
     waitForEventsCoroutine(fromKeyPair.accountId, eventCaptureListenerHorizon)
 
@@ -122,6 +142,85 @@ class PaymentObserverTests {
       eventCaptureListenerStellarRpc.getEventByFrom(fromKeyPair.accountId),
       eventCaptureListenerStellarRpc.getEventByTo(toKeyPair.accountId),
     )
+
+    assertNull(eventCaptureListenerStellarRpc.getEventByFrom(fromKeyPair2.accountId))
+    assertNull(eventCaptureListenerStellarRpc.getEventByTo(toKeyPair2.accountId))
+  }
+
+  private val rpc = SorobanServer("https://soroban-testnet.stellar.org")
+
+  // TODO: Merge with WalletClient of the feature/c-account branch
+  private fun sendWithStellarAssetContract(
+    network: Network,
+    signer: KeyPair,
+    from: String,
+    to: String,
+    asset: Asset,
+    amount: String,
+  ): SendTransactionResponse? {
+    val parameters =
+      mutableListOf(
+        // from=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_ADDRESS)
+          .address(Scv.toAddress(from).address)
+          .build(),
+        // to=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_ADDRESS)
+          .address(Scv.toAddress(to).address)
+          .build(),
+        // amount=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_I128)
+          .i128(Scv.toInt128(BigInteger.valueOf((amount.toFloat() * 10000000).toLong())).i128)
+          .build(),
+      )
+
+    val operationBuilder =
+      InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
+          asset.getContractId(network),
+          "transfer",
+          parameters,
+        )
+        .sourceAccount(signer.accountId)
+    val account = rpc.getAccount(signer.accountId)
+    val transaction =
+      TransactionBuilder(account, network)
+        .addOperation(operationBuilder.build())
+        .setBaseFee(MIN_BASE_FEE)
+        .setTimeout(300)
+        .build()
+
+    // Sign authorization entries if needed
+    val simulationResponse = rpc.simulateTransaction(transaction)
+    val signedAuthEntries = mutableListOf<SorobanAuthorizationEntry>()
+    simulationResponse.results.forEach {
+      it.auth.forEach { entryXdr ->
+        val entry = SorobanAuthorizationEntry.fromXdrBase64(entryXdr)
+        val validUntilLedgerSeq = simulationResponse.latestLedger + 10
+
+        val signedEntry = authorizeEntry(entry, signer, validUntilLedgerSeq, Network.TESTNET)
+        signedAuthEntries.add(signedEntry)
+      }
+    }
+
+    // Rebuild the operation with the signed authorization entries
+    if (signedAuthEntries.isNotEmpty()) {
+      operationBuilder.auth(signedAuthEntries)
+    }
+
+    val authorizedTransaction =
+      TransactionBuilder(account, network)
+        .addOperation(operationBuilder.build())
+        .setBaseFee(Transaction.MIN_BASE_FEE)
+        .setTimeout(300)
+        .build()
+
+    // sign and send the transaction
+    val preparedTransaction = rpc.prepareTransaction(authorizedTransaction)
+    preparedTransaction.sign(signer)
+    return rpc.sendTransaction(preparedTransaction)
   }
 
   private fun assertEventsPayment(
@@ -274,18 +373,8 @@ internal class EventCapturingListener : PaymentListener {
   }
 }
 
-internal fun createAccounts(): Pair<KeyPair, KeyPair> {
-  // Generate two random keypairs
-  val fromKeyPair = KeyPair.random()
-  val toKeyPair = KeyPair.random()
-
-  fundAccount(fromKeyPair)
-  fundAccount(toKeyPair)
-
-  return Pair(fromKeyPair, toKeyPair)
-}
-
-fun fundAccount(keyPair: KeyPair) {
+internal fun createAndFundAccount(): KeyPair {
+  val keyPair = KeyPair.random()
   val friendBotUrl = "https://friendbot.stellar.org/?addr=${keyPair.accountId}"
   try {
     java.net.URL(friendBotUrl).openStream()
@@ -294,4 +383,6 @@ fun fundAccount(keyPair: KeyPair) {
     info("ERROR! " + e.message)
     throw e
   }
+
+  return keyPair
 }
