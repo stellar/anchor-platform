@@ -6,6 +6,7 @@ import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.EVENT;
 import static org.stellar.anchor.util.Log.*;
 
 import java.io.IOException;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -15,6 +16,7 @@ import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.ledger.LedgerClientHelper;
 import org.stellar.anchor.ledger.LedgerTransaction;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation;
 import org.stellar.anchor.ledger.PaymentTransferEvent;
@@ -27,6 +29,7 @@ import org.stellar.sdk.SorobanServer;
 import org.stellar.sdk.requests.sorobanrpc.GetTransactionsRequest;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionsResponse;
+import org.stellar.sdk.xdr.OperationType;
 
 public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   final StellarRpc stellarRpc;
@@ -116,7 +119,9 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
               .forEach(
                   op -> {
                     try {
-                      processOperation(ledgerTxn, op);
+                      if (shouldProcess(op)) {
+                        processOperation(ledgerTxn, op);
+                      }
                     } catch (IOException | AnchorException e) {
                       warnF(
                           "Skipping a received operation. Error processing operation: {}. ex={}",
@@ -132,7 +137,38 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  private void processOperation(LedgerTransaction ledgerTxn, LedgerTransaction.LedgerOperation op)
+  /**
+   * Check if the payment observer should process the operation. This is used to filter out unwanted
+   * operations from StellarRPC
+   *
+   * @param operation the operation to check
+   * @return true if the operation should be processed, false otherwise
+   */
+  boolean shouldProcess(LedgerOperation operation) {
+    if (!EnumSet.of(
+            OperationType.PAYMENT,
+            OperationType.PATH_PAYMENT_STRICT_SEND,
+            OperationType.PATH_PAYMENT_STRICT_RECEIVE)
+        .contains(operation.getType())) {
+      return false;
+    }
+    return switch (operation.getType()) {
+      case PAYMENT -> {
+        LedgerTransaction.LedgerPaymentOperation paymentOp = operation.getPaymentOperation();
+        yield paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getFrom())
+            || paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getTo());
+      }
+      case PATH_PAYMENT_STRICT_SEND, PATH_PAYMENT_STRICT_RECEIVE -> {
+        LedgerTransaction.LedgerPathPaymentOperation pathPaymentOp =
+            operation.getPathPaymentOperation();
+        yield paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getFrom())
+            || paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getTo());
+      }
+      default -> false;
+    };
+  }
+
+  private void processOperation(LedgerTransaction ledgerTxn, LedgerOperation op)
       throws IOException, AnchorException {
     PaymentTransferEvent event =
         switch (op.getType()) {
@@ -149,14 +185,14 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                 .build();
           }
           case PATH_PAYMENT_STRICT_SEND, PATH_PAYMENT_STRICT_RECEIVE -> {
-            LedgerPathPaymentOperation paymentOp = op.getPathPaymentOperation();
+            LedgerPathPaymentOperation pathPaymentOp = op.getPathPaymentOperation();
             yield PaymentTransferEvent.builder()
-                .from(paymentOp.getFrom())
-                .to(paymentOp.getTo())
-                .sep11Asset(AssetHelper.getSep11AssetName(op.getPaymentOperation().getAsset()))
-                .amount(paymentOp.getAmount())
+                .from(pathPaymentOp.getFrom())
+                .to(pathPaymentOp.getTo())
+                .sep11Asset(AssetHelper.getSep11AssetName(op.getPathPaymentOperation().getAsset()))
+                .amount(pathPaymentOp.getAmount())
                 .txHash(ledgerTxn.getHash())
-                .operationId(paymentOp.getId())
+                .operationId(pathPaymentOp.getId())
                 .ledgerTransaction(ledgerTxn)
                 .build();
           }

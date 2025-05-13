@@ -18,6 +18,7 @@ import org.stellar.anchor.ledger.LedgerClientHelper.waitForTransactionAvailable
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
+import org.stellar.anchor.util.Log.info
 import org.stellar.anchor.util.MemoHelper
 import org.stellar.anchor.util.Sep1Helper.TomlContent
 import org.stellar.anchor.util.Sep1Helper.parse
@@ -130,7 +131,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
       Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
         as AssetTypeCreditAlphaNum
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
-    println(
+    info(
       "Create test payment transaction: 1 USDC from distribution account to the test receiver account"
     )
     val accountId = sourceKey.accountId
@@ -210,7 +211,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
         as AssetTypeCreditAlphaNum
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
 
-    println(
+    info(
       "Create test payment transaction: 1 USDC from distribution account to the test receiver account"
     )
     // Load the source account's current state
@@ -242,9 +243,9 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
 
     // Check the result
     if (response.successful) {
-      println("Payment transaction successful. Transaction hash: ${response.hash}")
+      info("Payment transaction successful. Transaction hash: ${response.hash}")
     } else {
-      println("Payment failed. ${response.resultXdr}")
+      info("Payment failed. ${response.resultXdr}")
     }
   }
 
