@@ -5,8 +5,8 @@ import static org.stellar.anchor.ledger.LedgerTransaction.*;
 import static org.stellar.anchor.util.AssetHelper.toXdrAmount;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
-import static org.stellar.sdk.xdr.OperationType.PATH_PAYMENT_STRICT_RECEIVE;
-import static org.stellar.sdk.xdr.OperationType.PAYMENT;
+import static org.stellar.sdk.xdr.HostFunctionType.HOST_FUNCTION_TYPE_INVOKE_CONTRACT;
+import static org.stellar.sdk.xdr.OperationType.*;
 import static org.stellar.sdk.xdr.SignerKeyType.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
 
@@ -115,6 +115,31 @@ public class LedgerClientHelper {
                     .sourceAccount(sourceAccount)
                     .build())
             .build();
+      }
+      case INVOKE_HOST_FUNCTION -> {
+        HostFunction hostFunction = op.getBody().getInvokeHostFunctionOp().getHostFunction();
+        if (hostFunction.getDiscriminant() != HOST_FUNCTION_TYPE_INVOKE_CONTRACT) yield null;
+        if (!hostFunction
+            .getInvokeContract()
+            .getFunctionName()
+            .getSCSymbol()
+            .toString()
+            .equals("transfer")) yield null;
+        SCAddress contractAddress = hostFunction.getInvokeContract().getContractAddress();
+        String contractId = StrKey.encodeContract(contractAddress.getContractId().getHash());
+        SCVal from = hostFunction.getInvokeContract().getArgs()[0];
+        SCVal to = hostFunction.getInvokeContract().getArgs()[1];
+        SCVal amount = hostFunction.getInvokeContract().getArgs()[2];
+        LedgerInvokeHostFunctionOperation.builder()
+            .stellarAssetContractId(contractId)
+            .hostFunction("transfer")
+            .id(operationId)
+            .amount(amount.getI64().getInt64())
+            .from(StrKey.encodeEd25519PublicKey(from.getAddress().getAccountId()))
+            .to(StrKey.encodeEd25519PublicKey(to.getAddress().getAccountId()))
+            .sourceAccount(sourceAccount)
+            .build();
+        yield LedgerOperation.builder().build();
       }
       default -> null;
     };

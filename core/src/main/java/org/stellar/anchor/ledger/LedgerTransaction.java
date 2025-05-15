@@ -32,6 +32,7 @@ public class LedgerTransaction {
     OperationType type;
     LedgerPaymentOperation paymentOperation;
     LedgerPathPaymentOperation pathPaymentOperation;
+    LedgerInvokeHostFunctionOperation invokeHostFunctionOperation;
   }
 
   public interface LedgerPayment {
@@ -68,6 +69,32 @@ public class LedgerTransaction {
     Long amount;
     Asset asset;
     String sourceAccount;
+  }
+
+  @Builder
+  @Data
+  public static class LedgerInvokeHostFunctionOperation implements LedgerPayment {
+    String stellarAssetContractId;
+    String hostFunction;
+
+    String id;
+    String from;
+    String to;
+    Long amount;
+    Asset asset;
+    String sourceAccount;
+
+    public Asset getAsset() {
+      if (asset == null) {
+        if (stellarAssetContractId != null) {
+          // The SAC to Asset conversion requires a network call to the ledger. This should be
+          // converted before using the operation.
+          throw new IllegalStateException(
+              "Please convert stellarAssetContractId to Asset before calling getAsset()");
+        }
+      }
+      return asset;
+    }
   }
 
   @Builder

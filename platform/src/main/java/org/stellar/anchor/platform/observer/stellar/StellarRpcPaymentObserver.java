@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import lombok.Getter;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
@@ -32,8 +33,8 @@ import org.stellar.sdk.responses.sorobanrpc.GetTransactionsResponse;
 import org.stellar.sdk.xdr.OperationType;
 
 public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
-  final StellarRpc stellarRpc;
-  final SorobanServer sorobanServer;
+  @Getter final StellarRpc stellarRpc;
+  @Getter final SorobanServer sorobanServer;
 
   public StellarRpcPaymentObserver(
       String rpcUrl,
@@ -195,6 +196,10 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                 .operationId(pathPaymentOp.getId())
                 .ledgerTransaction(ledgerTxn)
                 .build();
+          }
+          case INVOKE_HOST_FUNCTION -> {
+            LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
+                op.getInvokeHostFunctionOperation();
           }
           default -> null;
         };

@@ -3,6 +3,7 @@ package org.stellar.anchor.platform.integrationtest
 import io.mockk.every
 import io.mockk.mockk
 import java.math.BigDecimal
+import java.math.BigInteger
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
@@ -22,8 +23,16 @@ import org.stellar.anchor.util.AssetHelper
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.info
 import org.stellar.sdk.*
+import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
+import org.stellar.sdk.Auth.authorizeEntry
+import org.stellar.sdk.operations.InvokeHostFunctionOperation
 import org.stellar.sdk.operations.PathPaymentStrictSendOperation
 import org.stellar.sdk.operations.PaymentOperation
+import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse
+import org.stellar.sdk.scval.Scv
+import org.stellar.sdk.xdr.SCVal
+import org.stellar.sdk.xdr.SCValType
+import org.stellar.sdk.xdr.SorobanAuthorizationEntry
 
 class PaymentObserverTests {
   companion object {
@@ -43,10 +52,18 @@ class PaymentObserverTests {
     @JvmStatic
     @BeforeAll
     fun start() {
-      fromKeyPair = createAndFundAccount()
-      toKeyPair = createAndFundAccount()
-      fromKeyPair2 = createAndFundAccount()
-      toKeyPair2 = createAndFundAccount()
+      fromKeyPair =
+        KeyPair.fromSecretSeed("SD4XJTFKVTCUC7XOHJLUC7YZHOCZRKOTQ3OAR7VAUKOUCKPGPNC25ZXB")
+      toKeyPair = KeyPair.fromSecretSeed("SAB7GZ6KN2YLJ2NM52JYM4OWXY55AVG54LPYUEVUZGIPUY2PUVFN6OJB")
+      fromKeyPair2 =
+        KeyPair.fromSecretSeed("SAJPASKHPZAMLY27IQBTBYB45G7D62QNXUV3WE5NP42YCVHSC7EMWGDQ")
+      toKeyPair2 =
+        KeyPair.fromSecretSeed("SBRU7TKRPRM2EQC3KLAWNLNKIJ6HTEQVIJ4AQQJCUQJX725NN3M6BWKF")
+
+      //      fromKeyPair = createAndFundAccount()
+      //      toKeyPair = createAndFundAccount()
+      //      fromKeyPair2 = createAndFundAccount()
+      //      toKeyPair2 = createAndFundAccount()
 
       keyMap.add(fromKeyPair.accountId)
       keyMap.add(toKeyPair.accountId)
@@ -89,6 +106,24 @@ class PaymentObserverTests {
   fun cleanup() {
     eventCaptureListenerHorizon.reset()
     eventCaptureListenerStellarRpc.reset()
+  }
+
+  @Test
+  fun `submit a SAC payment and assert events are received as expected`(): Unit = runBlocking {
+    val txn =
+      sendWithStellarAssetContract(
+        rpc = stellarRpcPaymentObserver.sorobanServer,
+        network = Network.TESTNET,
+        signer = fromKeyPair,
+        from = fromKeyPair.accountId,
+        to = "CAYXY6QGTPOCZ676MLGT5JFESVROJ6OJF7VW3LLXMTC2RQIZTP5JYNEL",
+        asset = Asset.createNativeAsset(),
+        amount = "0.0000001",
+      )
+    waitForEventsCoroutine(fromKeyPair.accountId, eventCaptureListenerHorizon)
+    waitForEventsCoroutine(fromKeyPair.accountId, eventCaptureListenerStellarRpc)
+    val ledgerTxn = stellarRpcPaymentObserver.stellarRpc.getTransaction(txn!!.hash)
+    println(ledgerTxn)
   }
 
   @Test
@@ -136,6 +171,82 @@ class PaymentObserverTests {
 
     assertNull(eventCaptureListenerStellarRpc.getEventByFrom(fromKeyPair2.accountId))
     assertNull(eventCaptureListenerStellarRpc.getEventByTo(toKeyPair2.accountId))
+  }
+
+  // TODO: Merge with WalletClient of the feature/c-account branch
+  private fun sendWithStellarAssetContract(
+    rpc: SorobanServer,
+    network: Network,
+    signer: KeyPair,
+    from: String,
+    to: String,
+    asset: Asset,
+    amount: String,
+  ): SendTransactionResponse? {
+    val parameters =
+      mutableListOf(
+        // from=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_ADDRESS)
+          .address(Scv.toAddress(from).address)
+          .build(),
+        // to=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_ADDRESS)
+          .address(Scv.toAddress(to).address)
+          .build(),
+        // amount=
+        SCVal.builder()
+          .discriminant(SCValType.SCV_I128)
+          .i128(Scv.toInt128(BigInteger.valueOf((amount.toFloat() * 10000000).toLong())).i128)
+          .build(),
+      )
+
+    val operationBuilder =
+      InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
+          asset.getContractId(network),
+          "transfer",
+          parameters,
+        )
+        .sourceAccount(signer.accountId)
+    var account = rpc.getAccount(signer.accountId)
+    val transaction =
+      TransactionBuilder(account, network)
+        .addOperation(operationBuilder.build())
+        .setBaseFee(MIN_BASE_FEE)
+        .setTimeout(300)
+        .build()
+
+    // Sign authorization entries if needed
+    val simulationResponse = rpc.simulateTransaction(transaction)
+    val signedAuthEntries = mutableListOf<SorobanAuthorizationEntry>()
+    simulationResponse.results.forEach {
+      it.auth.forEach { entryXdr ->
+        val entry = SorobanAuthorizationEntry.fromXdrBase64(entryXdr)
+        val validUntilLedgerSeq = simulationResponse.latestLedger + 10
+
+        val signedEntry = authorizeEntry(entry, signer, validUntilLedgerSeq, network)
+        signedAuthEntries.add(signedEntry)
+      }
+    }
+
+    // Rebuild the operation with the signed authorization entries
+    if (signedAuthEntries.isNotEmpty()) {
+      operationBuilder.auth(signedAuthEntries)
+    }
+
+    account = rpc.getAccount(signer.accountId)
+    val authorizedTransaction =
+      TransactionBuilder(account, network)
+        .addOperation(operationBuilder.build())
+        .setBaseFee(Transaction.MIN_BASE_FEE)
+        .setTimeout(300)
+        .build()
+
+    // sign and send the transaction
+    val preparedTransaction = rpc.prepareTransaction(authorizedTransaction)
+    preparedTransaction.sign(signer)
+    return rpc.sendTransaction(preparedTransaction)
   }
 
   private fun assertEventsPayment(
