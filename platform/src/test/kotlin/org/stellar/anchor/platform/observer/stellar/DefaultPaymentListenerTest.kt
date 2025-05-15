@@ -433,13 +433,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.id = "123"
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.warnIfAssetOrAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     } answers {}
 
     paymentListener.handleSep31Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.warnIfAssetOrAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     }
 
     verify(exactly = 1) {
@@ -462,13 +462,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.id = "123"
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.warnIfAssetOrAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     } answers {}
 
     paymentListener.handleSep24Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.warnIfAssetOrAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     }
     verify(exactly = 1) {
       platformApiClient.notifyOnchainFundsReceived(
@@ -491,13 +491,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.warnIfAssetOrAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     } answers {}
 
     paymentListener.handleSep24Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.warnIfAssetOrAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     }
     verify(exactly = 1) { platformApiClient.notifyOnchainFundsSent("123", testTxn.hash, any()) }
   }
@@ -515,13 +515,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.warnIfAssetOrAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     } answers {}
 
     paymentListener.handleSep6Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.warnIfAssetOrAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     }
     verify(exactly = 1) {
       platformApiClient.notifyOnchainFundsReceived(
@@ -545,13 +545,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.warnIfAssetOrAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     } answers {}
 
     paymentListener.handleSep6Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.warnIfAssetOrAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     }
     verify(exactly = 1) { platformApiClient.notifyOnchainFundsSent("123", testTxn.hash, any()) }
   }

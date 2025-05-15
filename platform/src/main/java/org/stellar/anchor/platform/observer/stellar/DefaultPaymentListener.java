@@ -56,7 +56,6 @@ public class DefaultPaymentListener implements PaymentListener {
         "Received payment transfer event: {}",
         GsonUtils.getInstance().toJson(paymentTransferEvent));
     LedgerTransaction ledgerTransaction = paymentTransferEvent.getLedgerTransaction();
-    LedgerPayment ledgerPayment = null;
     for (LedgerTransaction.LedgerOperation operation : ledgerTransaction.getOperations()) {
       switch (operation.getType()) {
         case PAYMENT:
@@ -64,7 +63,7 @@ public class DefaultPaymentListener implements PaymentListener {
               .getPaymentOperation()
               .getId()
               .equals(String.valueOf(paymentTransferEvent.getOperationId()))) {
-            ledgerPayment = operation.getPaymentOperation();
+            processAndDispatchLedgerPayment(ledgerTransaction, operation.getPaymentOperation());
           }
           break;
         case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND:
@@ -72,19 +71,13 @@ public class DefaultPaymentListener implements PaymentListener {
               .getPathPaymentOperation()
               .getId()
               .equals(String.valueOf(paymentTransferEvent.getOperationId()))) {
-            ledgerPayment = operation.getPaymentOperation();
+            processAndDispatchLedgerPayment(ledgerTransaction, operation.getPathPaymentOperation());
           }
           break;
         default:
           // Ignore other operation types
           break;
       }
-    }
-    if (ledgerPayment != null) {
-      // Check if the payment is to or from an account we are observing
-      if (paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getTo())
-          || paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getFrom()))
-        processAndDispatchLedgerPayment(ledgerTransaction, ledgerPayment);
     }
   }
 
@@ -162,7 +155,7 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    warnIfAssetOrAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
 
     platformApiClient.notifyOnchainFundsReceived(
         sepTransaction.getId(),
@@ -189,7 +182,7 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    warnIfAssetOrAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
     JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) sepTransaction;
 
     if (DEPOSIT.getKind().equals(sep24Txn.getKind())) {
@@ -226,7 +219,7 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    warnIfAssetOrAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
 
     JdbcSep6Transaction sep6Txn = (JdbcSep6Transaction) sepTransaction;
     if (DEPOSIT.getKind().equals(sep6Txn.getKind())
@@ -285,7 +278,7 @@ public class DefaultPaymentListener implements PaymentListener {
     return true;
   }
 
-  void checkAndWarnAssetAmountMismatch(
+  void warnIfAssetOrAmountMismatch(
       LedgerTransaction ledgerTransaction,
       LedgerPayment ledgerPayment,
       JdbcSepTransaction sepTransaction) {

@@ -17,6 +17,7 @@ import lombok.AllArgsConstructor;
 import org.stellar.anchor.platform.data.PaymentObservingAccount;
 import org.stellar.anchor.platform.utils.DaemonExecutors;
 import org.stellar.anchor.util.Log;
+import org.stellar.sdk.MuxedAccount;
 
 public class PaymentObservingAccountsManager {
   final Map<String, ObservingAccount> allAccounts;
@@ -114,7 +115,13 @@ public class PaymentObservingAccountsManager {
    * @return true if the account is being observed. false, otherwise.
    */
   public boolean lookupAndUpdate(String account) {
-    ObservingAccount acct = allAccounts.get(account);
+    if (account == null) {
+      return false;
+    }
+
+    // MuxedAccount handles both muxed and non-muxed accounts
+    MuxedAccount muxedAccount = new MuxedAccount(account);
+    ObservingAccount acct = allAccounts.get(muxedAccount.getAccountId());
     if (acct == null) return false;
     acct.lastObserved = Instant.now();
     return true;

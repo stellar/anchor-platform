@@ -212,7 +212,6 @@ public class LedgerClientHelper {
           debug("Transaction not yet available: " + e.getMessage());
         }
         sleep(1000);
-
       } while (true);
     } catch (InterruptedException e) {
       info("Interrupted while waiting for transaction to complete");
