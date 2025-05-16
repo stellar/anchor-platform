@@ -109,22 +109,30 @@ class PaymentObserverTests {
   }
 
   @Test
-  fun `submit a SAC payment and assert events are received as expected`(): Unit = runBlocking {
-    val txn =
+  fun `submit a payment to a contract and assert events are received as expected`(): Unit =
+    runBlocking {
+      val smartWalletId = "CAYXY6QGTPOCZ676MLGT5JFESVROJ6OJF7VW3LLXMTC2RQIZTP5JYNEL"
       sendWithStellarAssetContract(
         rpc = stellarRpcPaymentObserver.sorobanServer,
         network = Network.TESTNET,
         signer = fromKeyPair,
         from = fromKeyPair.accountId,
-        to = "CAYXY6QGTPOCZ676MLGT5JFESVROJ6OJF7VW3LLXMTC2RQIZTP5JYNEL",
+        to = smartWalletId,
         asset = Asset.createNativeAsset(),
         amount = "0.0000001",
       )
-    waitForEventsCoroutine(fromKeyPair.accountId, eventCaptureListenerHorizon)
-    waitForEventsCoroutine(fromKeyPair.accountId, eventCaptureListenerStellarRpc)
-    val ledgerTxn = stellarRpcPaymentObserver.stellarRpc.getTransaction(txn!!.hash)
-    println(ledgerTxn)
-  }
+      waitForEventsCoroutine(fromKeyPair.accountId, eventCaptureListenerStellarRpc)
+
+      val fromEvent = eventCaptureListenerStellarRpc.getEventByFrom(fromKeyPair.accountId)
+      val toEvent = eventCaptureListenerStellarRpc.getEventByTo(smartWalletId)
+      assertEquals(1, fromEvent?.size)
+      assertEquals(1, toEvent?.size)
+      assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
+      assertEquals(smartWalletId, toEvent!![0].to)
+      assertEquals(AssetHelper.toXdrAmount("0.0000001"), fromEvent[0].amount)
+      assertEquals(Asset.createNativeAsset().toString(), fromEvent[0].sep11Asset)
+      assertEquals(fromEvent, toEvent)
+    }
 
   @Test
   fun `submit a payment and assert events are received as expected`() = runBlocking {
@@ -249,6 +257,25 @@ class PaymentObserverTests {
     return rpc.sendTransaction(preparedTransaction)
   }
 
+  //
+  //  private fun assertEventsSacPayment(
+  //    txn: Transaction,
+  //    fromEvent: List<PaymentTransferEvent>?,
+  //    toEvent: List<PaymentTransferEvent>?,
+  //  ) {
+  //    assertEquals(1, fromEvent?.size)
+  //    assertEquals(1, toEvent?.size)
+  //    assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
+  //    assertEquals(toKeyPair.accountId, fromEvent[0].to)
+  //    val invokeHostFunctionOp: InvokeHostFunctionOperation =
+  //      txn.operations[0] as InvokeHostFunctionOperation
+  //    assertEquals(
+  //      AssetHelper.toXdrAmount(invokeHostFunctionOp. .parameters[2].i128.toString()),
+  //      fromEvent[0].amount,
+  //    )
+  //    assertEquals(fromEvent, toEvent)
+  //  }
+  //
   private fun assertEventsPayment(
     txn: Transaction,
     fromEvent: List<PaymentTransferEvent>?,

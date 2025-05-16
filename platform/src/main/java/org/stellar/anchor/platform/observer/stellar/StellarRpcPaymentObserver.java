@@ -37,6 +37,7 @@ import org.stellar.sdk.xdr.TransactionEnvelope;
 public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Getter final StellarRpc stellarRpc;
   @Getter final SorobanServer sorobanServer;
+  final SacToAssetMapper sacToAssetMapper;
 
   public StellarRpcPaymentObserver(
       String rpcUrl,
@@ -47,6 +48,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     super(config, paymentListeners, paymentObservingAccountsManager, paymentStreamerCursorStore);
     this.stellarRpc = new StellarRpc(rpcUrl);
     this.sorobanServer = stellarRpc.getSorobanServer();
+    this.sacToAssetMapper = new SacToAssetMapper(this.sorobanServer);
   }
 
   @Override
@@ -151,7 +153,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     if (!EnumSet.of(
             OperationType.PAYMENT,
             OperationType.PATH_PAYMENT_STRICT_SEND,
-            OperationType.PATH_PAYMENT_STRICT_RECEIVE)
+            OperationType.PATH_PAYMENT_STRICT_RECEIVE,
+            OperationType.INVOKE_HOST_FUNCTION)
         .contains(operation.getType())) {
       return false;
     }
@@ -167,6 +170,15 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
         yield paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getFrom())
             || paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getTo());
       }
+      case INVOKE_HOST_FUNCTION -> {
+        LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
+            operation.getInvokeHostFunctionOperation();
+        debug(
+            "Received invoke host function operation: {}",
+            GsonUtils.getInstance().toJson(invokeOp));
+        yield paymentObservingAccountsManager.lookupAndUpdate(invokeOp.getFrom())
+            || paymentObservingAccountsManager.lookupAndUpdate(invokeOp.getTo());
+      }
       default -> false;
     };
   }
@@ -180,7 +192,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             yield PaymentTransferEvent.builder()
                 .from(paymentOp.getFrom())
                 .to(paymentOp.getTo())
-                .sep11Asset(AssetHelper.getSep11AssetName(op.getPaymentOperation().getAsset()))
+                .sep11Asset(AssetHelper.getSep11AssetName(paymentOp.getAsset()))
                 .amount(paymentOp.getAmount())
                 .txHash(ledgerTxn.getHash())
                 .operationId(paymentOp.getId())
@@ -192,7 +204,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             yield PaymentTransferEvent.builder()
                 .from(pathPaymentOp.getFrom())
                 .to(pathPaymentOp.getTo())
-                .sep11Asset(AssetHelper.getSep11AssetName(op.getPathPaymentOperation().getAsset()))
+                .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset()))
                 .amount(pathPaymentOp.getAmount())
                 .txHash(ledgerTxn.getHash())
                 .operationId(pathPaymentOp.getId())
@@ -202,7 +214,17 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           case INVOKE_HOST_FUNCTION -> {
             LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
                 op.getInvokeHostFunctionOperation();
-            yield PaymentTransferEvent.builder().build();
+            invokeOp.setAsset(
+                sacToAssetMapper.getAssetFromSac(invokeOp.getStellarAssetContractId()));
+            yield PaymentTransferEvent.builder()
+                .from(invokeOp.getFrom())
+                .to(invokeOp.getTo())
+                .sep11Asset(AssetHelper.getSep11AssetName(invokeOp.getAsset()))
+                .amount(invokeOp.getAmount())
+                .txHash(ledgerTxn.getHash())
+                .operationId(invokeOp.getId())
+                .ledgerTransaction(ledgerTxn)
+                .build();
           }
           default -> null;
         };

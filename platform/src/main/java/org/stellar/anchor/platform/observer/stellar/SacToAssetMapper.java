@@ -1,9 +1,81 @@
 package org.stellar.anchor.platform.observer.stellar;
 
-import org.stellar.sdk.xdr.Asset;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.stellar.sdk.Address;
+import org.stellar.sdk.SorobanServer;
+import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse;
+import org.stellar.sdk.scval.Scv;
+import org.stellar.sdk.xdr.*;
 
 public class SacToAssetMapper {
-  public static Asset map(String sac) {
-    return null;
+  SorobanServer sorobanServer;
+  HashMap<String, Asset> sacToAssetMap = new HashMap<>();
+
+  public SacToAssetMapper(SorobanServer sorobanServer) {
+    this.sorobanServer = sorobanServer;
+  }
+
+  /**
+   * Maps a Stellar Asset Contract ID to an Asset object.
+   *
+   * @param sac the Stellar Asset Contract ID
+   * @return the corresponding Asset object
+   */
+  public Asset getAssetFromSac(String sac) throws IOException {
+    if (sacToAssetMap.containsKey(sac)) {
+      return sacToAssetMap.get(sac);
+    }
+
+    SCVal metadata = fetchSacMetadata(sac);
+    if (metadata == null) {
+      return null;
+    }
+
+    Map<SCVal, SCVal> scMap = Scv.fromMap(metadata);
+    SCVal scAssetName = scMap.get(Scv.toSymbol("name"));
+    if (scAssetName == null) {
+      return null;
+    }
+
+    String assetName = scAssetName.getStr().getSCString().toString();
+    Asset asset = org.stellar.sdk.Asset.create(assetName).toXdr();
+    sacToAssetMap.put(sac, asset);
+    return asset;
+  }
+
+  private SCVal fetchSacMetadata(String sac) throws IOException {
+    List<LedgerKey> ledgerKeys =
+        Collections.singletonList(
+            LedgerKey.builder()
+                .discriminant(LedgerEntryType.CONTRACT_DATA)
+                .contractData(
+                    LedgerKey.LedgerKeyContractData.builder()
+                        .contract(new Address(sac).toSCAddress())
+                        .key(Scv.toLedgerKeyContractInstance())
+                        .durability(ContractDataDurability.PERSISTENT)
+                        .build())
+                .build());
+
+    GetLedgerEntriesResponse response = sorobanServer.getLedgerEntries(ledgerKeys);
+    SCContractInstance contractInstance =
+        LedgerEntry.LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr())
+            .getContractData()
+            .getVal()
+            .getInstance();
+
+    return switch (contractInstance.getExecutable().getDiscriminant()) {
+      case CONTRACT_EXECUTABLE_STELLAR_ASSET ->
+          Scv.fromMap(
+                  SCVal.builder()
+                      .discriminant(SCValType.SCV_MAP)
+                      .map(contractInstance.getStorage())
+                      .build())
+              .get(Scv.toSymbol("METADATA"));
+      default -> null;
+    };
   }
 }

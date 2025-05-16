@@ -121,21 +121,38 @@ public class LedgerClientHelper {
         SCVal from = hostFunction.getInvokeContract().getArgs()[0];
         SCVal to = hostFunction.getInvokeContract().getArgs()[1];
         SCVal amount = hostFunction.getInvokeContract().getArgs()[2];
-        LedgerInvokeHostFunctionOperation.builder()
-            .stellarAssetContractId(contractId)
-            .hostFunction("transfer")
-            .id(operationId)
-            .amount(amount.getI64().getInt64())
-            .from(StrKey.encodeEd25519PublicKey(from.getAddress().getAccountId()))
-            .to(StrKey.encodeEd25519PublicKey(to.getAddress().getAccountId()))
-            .sourceAccount(sourceAccount)
+        yield LedgerOperation.builder()
+            .type(INVOKE_HOST_FUNCTION)
+            .invokeHostFunctionOperation(
+                LedgerInvokeHostFunctionOperation.builder()
+                    .stellarAssetContractId(contractId)
+                    .hostFunction("transfer")
+                    .id(operationId)
+                    .amount(amount.getI128().getLo().getUint64().getNumber().longValue())
+                    .from(getAddressOrContractId(from.getAddress()))
+                    .to(getAddressOrContractId(to.getAddress()))
+                    .sourceAccount(sourceAccount)
+                    .build())
             .build();
-        yield LedgerOperation.builder().build();
       }
       default -> null;
     };
   }
 
+  static String getAddressOrContractId(SCAddress address) {
+    return switch (address.getDiscriminant()) {
+      case SC_ADDRESS_TYPE_ACCOUNT -> StrKey.encodeEd25519PublicKey(address.getAccountId());
+      case SC_ADDRESS_TYPE_CONTRACT -> StrKey.encodeContract(address.getContractId().getHash());
+    };
+  }
+
+  /**
+   * Parse the transaction envelope and extract the operations, source account, and memo.
+   *
+   * @param txnEnv the transaction envelope
+   * @param txnHash the transaction hash
+   * @return a ParseResult containing the operations, source account, and memo
+   */
   public static ParseResult parseOperationAndSourceAccountAndMemo(
       TransactionEnvelope txnEnv, String txnHash) {
     Operation[] operations;
