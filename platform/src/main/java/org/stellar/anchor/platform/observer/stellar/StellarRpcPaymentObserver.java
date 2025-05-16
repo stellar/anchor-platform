@@ -6,6 +6,7 @@ import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.EVENT;
 import static org.stellar.anchor.util.Log.*;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -31,6 +32,7 @@ import org.stellar.sdk.requests.sorobanrpc.GetTransactionsRequest;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionsResponse;
 import org.stellar.sdk.xdr.OperationType;
+import org.stellar.sdk.xdr.TransactionEnvelope;
 
 public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Getter final StellarRpc stellarRpc;
@@ -111,7 +113,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       for (GetTransactionsResponse.Transaction txn : response.getTransactions()) {
         // Process the transaction
         try {
-          LedgerTransaction ledgerTxn = LedgerClientHelper.fromStellarRpcTransaction(txn);
+          LedgerTransaction ledgerTxn = fromStellarRpcTransaction(txn);
           if (ledgerTxn == null) {
             continue;
           }
@@ -200,6 +202,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           case INVOKE_HOST_FUNCTION -> {
             LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
                 op.getInvokeHostFunctionOperation();
+            yield PaymentTransferEvent.builder().build();
           }
           default -> null;
         };
@@ -221,5 +224,41 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   private Long getLatestLedger() {
     GetLatestLedgerResponse response = sorobanServer.getLatestLedger();
     return response.getSequence().longValue();
+  }
+
+  /**
+   * Converting from Stellar RPC transaction to LedgerTransaction. TODO: This function will be
+   * removed after migrating to getEvents methods.
+   *
+   * @param txn the Stellar RPC transaction to convert
+   * @return the converted LedgerTransaction
+   * @throws LedgerException if the transaction is null or malformed
+   */
+  LedgerTransaction fromStellarRpcTransaction(GetTransactionsResponse.Transaction txn)
+      throws LedgerException {
+    TransactionEnvelope txnEnv;
+    try {
+      txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
+    } catch (IOException ioex) {
+      throw new LedgerException("Unable to parse transaction envelope", ioex);
+    }
+    Integer applicationOrder = txn.getApplicationOrder();
+    Long sequenceNumber = txn.getLedger();
+    LedgerClientHelper.ParseResult parseResult =
+        LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txn.getTxHash());
+    if (parseResult == null) return null;
+    List<LedgerTransaction.LedgerOperation> operations =
+        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
+    return LedgerTransaction.builder()
+        .hash(txn.getTxHash())
+        .ledger(txn.getLedger())
+        .applicationOrder(txn.getApplicationOrder())
+        .sourceAccount(parseResult.sourceAccount())
+        .envelopeXdr(txn.getEnvelopeXdr())
+        .memo(parseResult.memo())
+        .sequenceNumber(sequenceNumber)
+        .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
+        .operations(operations)
+        .build();
   }
 }

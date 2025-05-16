@@ -3,6 +3,8 @@ package org.stellar.anchor.ledger;
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
 import static org.stellar.anchor.ledger.LedgerClientHelper.*;
 import static org.stellar.anchor.util.Log.debug;
+import static org.stellar.sdk.xdr.SignerKeyType.*;
+import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -22,6 +24,7 @@ import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.responses.AccountResponse;
 import org.stellar.sdk.responses.SubmitTransactionAsyncResponse;
 import org.stellar.sdk.responses.TransactionResponse;
+import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse;
 import org.stellar.sdk.xdr.*;
 
 /** The horizon-server that implements LedgerClient. */
@@ -146,7 +149,33 @@ public class Horizon implements LedgerClient {
     return LedgerTransactionResponse.builder()
         .hash(txnR.getHash())
         .errorResultXdr(txnR.getErrorResultXdr())
-        .status(LedgerClientHelper.convert(txnR.getTxStatus()))
+        .status(toSendTranscationStatus(txnR.getTxStatus()))
         .build();
+  }
+
+  static SendTransactionResponse.SendTransactionStatus toSendTranscationStatus(
+      SubmitTransactionAsyncResponse.TransactionStatus status) {
+    return switch (status) {
+      case PENDING -> SendTransactionResponse.SendTransactionStatus.PENDING;
+      case ERROR -> SendTransactionResponse.SendTransactionStatus.ERROR;
+      case DUPLICATE -> SendTransactionResponse.SendTransactionStatus.DUPLICATE;
+      case TRY_AGAIN_LATER -> SendTransactionResponse.SendTransactionStatus.TRY_AGAIN_LATER;
+    };
+  }
+
+  /**
+   * Convert from Horizon signer key type to XDR signer key type.
+   *
+   * @param type the Horizon signer key type
+   * @return the XDR signer key type
+   */
+  static SignerKeyType getKeyTypeDiscriminant(String type) {
+    return switch (type) {
+      case "ed25519_public_key" -> SIGNER_KEY_TYPE_ED25519;
+      case "preauth_tx" -> SIGNER_KEY_TYPE_PRE_AUTH_TX;
+      case "sha256_hash" -> SIGNER_KEY_TYPE_HASH_X;
+      case "ed25519_signed_payload" -> SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
+      default -> throw new IllegalArgumentException("Invalid signer key type: " + type);
+    };
   }
 }
