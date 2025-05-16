@@ -37,7 +37,14 @@ stellar_network:
   # Use TESTNET or PUBLIC
   network: TESTNET
 
+  # The rpc server endpoint.
+  # TODO: Take care of authentication
+  # example:
+  #   rpc_url: https://soroban-testnet.stellar.org
+  rpc_url:
+
   # The horizon server endpoint.
+  # If the rpcURL is set, the horizonURL is not used other than the observer.
   horizon_url: https://horizon-testnet.stellar.org
 
 ##############################

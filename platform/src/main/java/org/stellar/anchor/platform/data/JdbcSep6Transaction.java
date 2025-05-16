@@ -49,10 +49,6 @@ public class JdbcSep6Transaction extends JdbcSepTransaction implements Sep6Trans
   @Column(name = "request_asset_issuer")
   String requestAssetIssuer;
 
-  @SerializedName("amount_expected")
-  @Column(name = "amount_expected")
-  String amountExpected;
-
   @SerializedName("sep10_account")
   @Column(name = "sep10_account")
   String sep10Account;

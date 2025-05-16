@@ -175,11 +175,11 @@ open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
     waitStatus(postTxResponse.id, SepTransactionStatus.COMPLETED)
 
     // Check the events sent to the reference server are recorded correctly
-    val actualEvents = waitForBusinessServerEvents(postTxResponse.id, 5)
+    val actualEvents = waitForBusinessServerEvents(postTxResponse.id, expectedStatuses.size)
     assertEvents(actualEvents, expectedStatuses)
 
     // Check the callbacks sent to the wallet reference server are recorded correctly
-    val actualCallbacks = waitForWalletServerCallbacks(postTxResponse.id, 5)
+    val actualCallbacks = waitForWalletServerCallbacks(postTxResponse.id, expectedStatuses.size)
     assertCallbacks(actualCallbacks, expectedStatuses)
   }
 

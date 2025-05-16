@@ -9,7 +9,7 @@ import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.component.sep.ApiClientBeans;
 import org.stellar.anchor.platform.config.PropertyCustodyConfig;
@@ -44,7 +44,7 @@ public class RpcActionBeans {
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
       CustodyConfig custodyConfig,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       AssetService assetService,
       CustodyService custodyService,
       EventService eventService,
@@ -56,7 +56,7 @@ public class RpcActionBeans {
         txn31Store,
         requestValidator,
         custodyConfig,
-        horizon,
+        ledgerClient,
         assetService,
         custodyService,
         eventService,
@@ -226,7 +226,7 @@ public class RpcActionBeans {
       Sep24TransactionStore txn24Store,
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       AssetService assetService,
       EventService eventService,
       MetricsService metricsService) {
@@ -235,7 +235,7 @@ public class RpcActionBeans {
         txn24Store,
         txn31Store,
         requestValidator,
-        horizon,
+        ledgerClient,
         assetService,
         eventService,
         metricsService);
@@ -247,7 +247,7 @@ public class RpcActionBeans {
       Sep24TransactionStore txn24Store,
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       AssetService assetService,
       EventService eventService,
       MetricsService metricsService) {
@@ -256,7 +256,7 @@ public class RpcActionBeans {
         txn24Store,
         txn31Store,
         requestValidator,
-        horizon,
+        ledgerClient,
         assetService,
         eventService,
         metricsService);
