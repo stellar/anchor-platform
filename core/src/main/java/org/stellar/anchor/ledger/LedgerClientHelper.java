@@ -3,10 +3,8 @@ package org.stellar.anchor.ledger;
 import static java.lang.Thread.sleep;
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
 import static org.stellar.anchor.util.Log.*;
-import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
 import static org.stellar.sdk.xdr.HostFunctionType.HOST_FUNCTION_TYPE_INVOKE_CONTRACT;
 import static org.stellar.sdk.xdr.OperationType.*;
-import static org.stellar.sdk.xdr.SignerKeyType.*;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -125,7 +123,7 @@ public class LedgerClientHelper {
             .type(INVOKE_HOST_FUNCTION)
             .invokeHostFunctionOperation(
                 LedgerInvokeHostFunctionOperation.builder()
-                    .stellarAssetContractId(contractId)
+                    .contractId(contractId)
                     .hostFunction("transfer")
                     .id(operationId)
                     .amount(amount.getI128().getLo().getUint64().getNumber().longValue())

@@ -214,8 +214,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           case INVOKE_HOST_FUNCTION -> {
             LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
                 op.getInvokeHostFunctionOperation();
-            invokeOp.setAsset(
-                sacToAssetMapper.getAssetFromSac(invokeOp.getStellarAssetContractId()));
+            invokeOp.setAsset(sacToAssetMapper.getAssetFromSac(invokeOp.getContractId()));
             yield PaymentTransferEvent.builder()
                 .from(invokeOp.getFrom())
                 .to(invokeOp.getTo())

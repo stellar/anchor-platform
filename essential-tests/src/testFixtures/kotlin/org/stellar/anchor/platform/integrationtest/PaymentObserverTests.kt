@@ -52,18 +52,10 @@ class PaymentObserverTests {
     @JvmStatic
     @BeforeAll
     fun start() {
-      fromKeyPair =
-        KeyPair.fromSecretSeed("SD4XJTFKVTCUC7XOHJLUC7YZHOCZRKOTQ3OAR7VAUKOUCKPGPNC25ZXB")
-      toKeyPair = KeyPair.fromSecretSeed("SAB7GZ6KN2YLJ2NM52JYM4OWXY55AVG54LPYUEVUZGIPUY2PUVFN6OJB")
-      fromKeyPair2 =
-        KeyPair.fromSecretSeed("SAJPASKHPZAMLY27IQBTBYB45G7D62QNXUV3WE5NP42YCVHSC7EMWGDQ")
-      toKeyPair2 =
-        KeyPair.fromSecretSeed("SBRU7TKRPRM2EQC3KLAWNLNKIJ6HTEQVIJ4AQQJCUQJX725NN3M6BWKF")
-
-      //      fromKeyPair = createAndFundAccount()
-      //      toKeyPair = createAndFundAccount()
-      //      fromKeyPair2 = createAndFundAccount()
-      //      toKeyPair2 = createAndFundAccount()
+      fromKeyPair = createAndFundAccount()
+      toKeyPair = createAndFundAccount()
+      fromKeyPair2 = createAndFundAccount()
+      toKeyPair2 = createAndFundAccount()
 
       keyMap.add(fromKeyPair.accountId)
       keyMap.add(toKeyPair.accountId)
@@ -257,25 +249,6 @@ class PaymentObserverTests {
     return rpc.sendTransaction(preparedTransaction)
   }
 
-  //
-  //  private fun assertEventsSacPayment(
-  //    txn: Transaction,
-  //    fromEvent: List<PaymentTransferEvent>?,
-  //    toEvent: List<PaymentTransferEvent>?,
-  //  ) {
-  //    assertEquals(1, fromEvent?.size)
-  //    assertEquals(1, toEvent?.size)
-  //    assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
-  //    assertEquals(toKeyPair.accountId, fromEvent[0].to)
-  //    val invokeHostFunctionOp: InvokeHostFunctionOperation =
-  //      txn.operations[0] as InvokeHostFunctionOperation
-  //    assertEquals(
-  //      AssetHelper.toXdrAmount(invokeHostFunctionOp. .parameters[2].i128.toString()),
-  //      fromEvent[0].amount,
-  //    )
-  //    assertEquals(fromEvent, toEvent)
-  //  }
-  //
   private fun assertEventsPayment(
     txn: Transaction,
     fromEvent: List<PaymentTransferEvent>?,

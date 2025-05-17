@@ -74,7 +74,7 @@ public class LedgerTransaction {
   @Builder
   @Data
   public static class LedgerInvokeHostFunctionOperation implements LedgerPayment {
-    String stellarAssetContractId;
+    String contractId;
     String hostFunction;
 
     String id;
@@ -86,7 +86,7 @@ public class LedgerTransaction {
 
     public Asset getAsset() {
       if (asset == null) {
-        if (stellarAssetContractId != null) {
+        if (contractId != null) {
           // The SAC to Asset conversion requires a network call to the ledger. This should be
           // converted before using the operation.
           throw new IllegalStateException(
