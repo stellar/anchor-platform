@@ -4,6 +4,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -16,6 +17,8 @@ import org.stellar.sdk.TrustLineAsset
 import org.stellar.sdk.requests.AccountsRequestBuilder
 import org.stellar.sdk.responses.AccountResponse
 import org.stellar.sdk.responses.AccountResponse.Balance
+import org.stellar.sdk.responses.SubmitTransactionAsyncResponse.TransactionStatus
+import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus.*
 import org.stellar.sdk.xdr.SignerKeyType.*
 
 internal class HorizonTest {
@@ -130,5 +133,34 @@ internal class HorizonTest {
     every { horizon.server } returns server
     every { horizon.hasTrustline(account, asset) } answers { callOriginal() }
     assertFalse(horizon.hasTrustline(account, asset))
+  }
+
+  @Test
+  fun `test convert() with transaction status`() {
+    assertEquals(PENDING, Horizon.toSendTranscationStatus(TransactionStatus.PENDING))
+    assertEquals(ERROR, Horizon.toSendTranscationStatus(TransactionStatus.ERROR))
+    assertEquals(DUPLICATE, Horizon.toSendTranscationStatus(TransactionStatus.DUPLICATE))
+    assertEquals(
+      TRY_AGAIN_LATER,
+      Horizon.toSendTranscationStatus(TransactionStatus.TRY_AGAIN_LATER),
+    )
+  }
+
+  @Test
+  fun `test getKeyTypeDiscriminant with valid types`() {
+    assertEquals(SIGNER_KEY_TYPE_ED25519, Horizon.getKeyTypeDiscriminant("ed25519_public_key"))
+    assertEquals(SIGNER_KEY_TYPE_PRE_AUTH_TX, Horizon.getKeyTypeDiscriminant("preauth_tx"))
+    assertEquals(SIGNER_KEY_TYPE_HASH_X, Horizon.getKeyTypeDiscriminant("sha256_hash"))
+    assertEquals(
+      SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD,
+      Horizon.getKeyTypeDiscriminant("ed25519_signed_payload"),
+    )
+  }
+
+  @Test
+  fun `test getKeyTypeDiscriminant with invalid type`() {
+    val exception =
+      assertThrows<IllegalArgumentException> { Horizon.getKeyTypeDiscriminant("invalid_type") }
+    kotlin.test.assertEquals("Invalid signer key type: invalid_type", exception.message)
   }
 }
