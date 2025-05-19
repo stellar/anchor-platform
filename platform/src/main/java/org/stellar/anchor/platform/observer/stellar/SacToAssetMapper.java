@@ -30,8 +30,13 @@ public class SacToAssetMapper {
       return sacToAssetMap.get(sac);
     }
 
-    SCVal metadata = fetchSacMetadata(sac);
-    if (metadata == null) {
+    SCVal metadata;
+    try {
+      metadata = fetchSacMetadata(sac);
+      if (metadata == null) {
+        return null;
+      }
+    } catch (IOException e) {
       return null;
     }
 

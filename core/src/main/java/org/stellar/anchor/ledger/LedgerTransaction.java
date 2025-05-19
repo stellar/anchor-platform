@@ -42,6 +42,7 @@ public class LedgerTransaction {
 
     String getTo();
 
+    // The amount is in the smallest unit of the asset as in 10^-7.
     Long getAmount();
 
     Asset getAsset();
