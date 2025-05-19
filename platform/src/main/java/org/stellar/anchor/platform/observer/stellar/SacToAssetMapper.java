@@ -25,7 +25,7 @@ public class SacToAssetMapper {
    * @param sac the Stellar Asset Contract ID
    * @return the corresponding Asset object
    */
-  public Asset getAssetFromSac(String sac) throws IOException {
+  public Asset getAssetFromSac(String sac) {
     if (sacToAssetMap.containsKey(sac)) {
       return sacToAssetMap.get(sac);
     }
