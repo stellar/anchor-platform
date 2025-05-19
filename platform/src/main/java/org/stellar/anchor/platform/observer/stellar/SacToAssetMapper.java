@@ -1,5 +1,7 @@
 package org.stellar.anchor.platform.observer.stellar;
 
+import static org.stellar.sdk.xdr.ContractExecutableType.CONTRACT_EXECUTABLE_STELLAR_ASSET;
+
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -72,15 +74,15 @@ public class SacToAssetMapper {
             .getVal()
             .getInstance();
 
-    return switch (contractInstance.getExecutable().getDiscriminant()) {
-      case CONTRACT_EXECUTABLE_STELLAR_ASSET ->
-          Scv.fromMap(
-                  SCVal.builder()
-                      .discriminant(SCValType.SCV_MAP)
-                      .map(contractInstance.getStorage())
-                      .build())
-              .get(Scv.toSymbol("METADATA"));
-      default -> null;
-    };
+    if (contractInstance.getExecutable().getDiscriminant() == CONTRACT_EXECUTABLE_STELLAR_ASSET) {
+      return Scv.fromMap(
+              SCVal.builder()
+                  .discriminant(SCValType.SCV_MAP)
+                  .map(contractInstance.getStorage())
+                  .build())
+          .get(Scv.toSymbol("METADATA"));
+    } else {
+      return null;
+    }
   }
 }
