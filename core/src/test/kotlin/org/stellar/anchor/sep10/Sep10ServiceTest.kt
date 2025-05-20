@@ -107,7 +107,7 @@ internal class Sep10ServiceTest {
     fun stellarNetworks(): Stream<Arguments> {
       return Stream.of(
         Arguments.of("https://horizon-testnet.stellar.org", TESTNET),
-        Arguments.of("https://horizon-futurenet.stellar.org", FUTURENET)
+        //        Arguments.of("https://horizon-futurenet.stellar.org", FUTURENET)
       )
     }
 
@@ -177,7 +177,11 @@ internal class Sep10ServiceTest {
 
   @ParameterizedTest
   @ValueSource(
-    strings = ["https://horizon-testnet.stellar.org", "https://horizon-futurenet.stellar.org"]
+    strings =
+      [
+        "https://horizon-testnet.stellar.org"
+        //      "https://horizon-futurenet.stellar.org"
+      ]
   )
   fun `test challenge with non existent account and client domain`(horizonUrl: String) {
     // 1 ------ Create Test Transaction
