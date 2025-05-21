@@ -36,7 +36,7 @@ desc = "XLM, the native token of the Stellar network."
 [DOCUMENTATION]
 ORG_NAME = "Stellar Development Foundation"
 ORG_URL = "https://stellar.org"
-ORG_DESCRIPTION = "SEP 24 reference server."
+ORG_DESCRIPTION = "The Stellar Development Foundation (SDF) is a non-profit organization whose mission is to create equitable access to the global financial system."
 ORG_KEYBASE = "stellar.public"
 ORG_TWITTER = "StellarOrg"
 ORG_GITHUB = "stellar"
