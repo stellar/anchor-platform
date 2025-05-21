@@ -25,9 +25,12 @@ import org.stellar.anchor.util.Log.info
 import org.stellar.sdk.*
 import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
 import org.stellar.sdk.Auth.authorizeEntry
+import org.stellar.sdk.exception.NetworkException
+import org.stellar.sdk.exception.PrepareTransactionException
 import org.stellar.sdk.operations.InvokeHostFunctionOperation
 import org.stellar.sdk.operations.PathPaymentStrictSendOperation
 import org.stellar.sdk.operations.PaymentOperation
+import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.SCVal
@@ -42,6 +45,7 @@ class PaymentObserverTests {
     private lateinit var toKeyPair: KeyPair
     private lateinit var fromKeyPair2: KeyPair
     private lateinit var toKeyPair2: KeyPair
+    private lateinit var walletContractId: String
     private val keyMap = mutableListOf<String>()
     private val eventCaptureListenerHorizon = EventCapturingListener()
     private val eventCaptureListenerStellarRpc = EventCapturingListener()
@@ -56,6 +60,14 @@ class PaymentObserverTests {
       toKeyPair = createAndFundAccount()
       fromKeyPair2 = createAndFundAccount()
       toKeyPair2 = createAndFundAccount()
+      walletContractId =
+        createContractWithWasmId(
+          stellarRpc,
+          Network.TESTNET,
+          "a4f2bbf00e661546a2db6de1922dc638ee94e0b52c48adb051dad42329e866fb",
+          fromKeyPair,
+          listOf(Scv.toAddress(fromKeyPair.accountId), Scv.toBytes(fromKeyPair.publicKey)),
+        )
 
       keyMap.add(fromKeyPair.accountId)
       keyMap.add(toKeyPair.accountId)
@@ -101,30 +113,57 @@ class PaymentObserverTests {
   }
 
   @Test
-  fun `submit a payment to a contract and assert events are received as expected`(): Unit =
-    runBlocking {
-      val smartWalletId = "CAYXY6QGTPOCZ676MLGT5JFESVROJ6OJF7VW3LLXMTC2RQIZTP5JYNEL"
-      sendWithStellarAssetContract(
-        rpc = stellarRpcPaymentObserver.sorobanServer,
-        network = Network.TESTNET,
-        signer = fromKeyPair,
-        from = fromKeyPair.accountId,
-        to = smartWalletId,
-        asset = Asset.createNativeAsset(),
-        amount = "0.0000001",
-      )
-      waitForEventsCoroutine(fromKeyPair.accountId, eventCaptureListenerStellarRpc)
+  fun `submit a payment to a contract, send the payment back, and assert events are received as expected`():
+    Unit = runBlocking {
+    // Send a payment from the classic account to the contract account
+    sendWithStellarAssetContract(
+      rpc = stellarRpcPaymentObserver.sorobanServer,
+      network = Network.TESTNET,
+      signer = fromKeyPair,
+      from = fromKeyPair.accountId,
+      to = walletContractId,
+      asset = Asset.createNativeAsset(),
+      amount = "0.0000002",
+    )
 
-      val fromEvent = eventCaptureListenerStellarRpc.getEventByFrom(fromKeyPair.accountId)
-      val toEvent = eventCaptureListenerStellarRpc.getEventByTo(smartWalletId)
-      assertEquals(1, fromEvent?.size)
-      assertEquals(1, toEvent?.size)
-      assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
-      assertEquals(smartWalletId, toEvent!![0].to)
-      assertEquals(AssetHelper.toXdrAmount("0.0000001"), fromEvent[0].amount)
-      assertEquals(Asset.createNativeAsset().toString(), fromEvent[0].sep11Asset)
-      assertEquals(fromEvent, toEvent)
-    }
+    // Wait for the events to be captured
+    waitForEventsCoroutine(fromKeyPair.accountId, eventCaptureListenerStellarRpc)
+
+    // Assert that the events are received as expected
+    val fromEvent = eventCaptureListenerStellarRpc.getEventByFrom(fromKeyPair.accountId)
+    val toEvent = eventCaptureListenerStellarRpc.getEventByTo(walletContractId)
+    assertEquals(1, fromEvent?.size)
+    assertEquals(1, toEvent?.size)
+    assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
+    assertEquals(walletContractId, toEvent!![0].to)
+    assertEquals(AssetHelper.toXdrAmount("0.0000002"), fromEvent[0].amount)
+    assertEquals(Asset.createNativeAsset().toString(), fromEvent[0].sep11Asset)
+    assertEquals(fromEvent, toEvent)
+
+    // Send a payment from the contract account back to the classic account
+    sendWithStellarAssetContract(
+      rpc = stellarRpcPaymentObserver.sorobanServer,
+      network = Network.TESTNET,
+      signer = fromKeyPair,
+      from = walletContractId,
+      to = fromKeyPair.accountId,
+      asset = Asset.createNativeAsset(),
+      amount = "0.0000001",
+    )
+
+    // Wait for the events to be captured
+    waitForEventsCoroutine(walletContractId, eventCaptureListenerStellarRpc)
+
+    // Assert that the events are received as expected
+    val fromEvent2 = eventCaptureListenerStellarRpc.getEventByFrom(walletContractId)
+    val toEvent2 = eventCaptureListenerStellarRpc.getEventByTo(fromKeyPair.accountId)
+    assertEquals(1, fromEvent2?.size)
+    assertEquals(1, toEvent2?.size)
+    assertEquals(walletContractId, fromEvent2!![0].from)
+    assertEquals(fromKeyPair.accountId, toEvent2!![0].to)
+    assertEquals(AssetHelper.toXdrAmount("0.0000001"), fromEvent2[0].amount)
+    assertEquals(fromEvent2, toEvent2)
+  }
 
   @Test
   fun `submit a payment and assert events are received as expected`() = runBlocking {
@@ -239,7 +278,7 @@ class PaymentObserverTests {
     val authorizedTransaction =
       TransactionBuilder(account, network)
         .addOperation(operationBuilder.build())
-        .setBaseFee(Transaction.MIN_BASE_FEE)
+        .setBaseFee(MIN_BASE_FEE)
         .setTimeout(300)
         .build()
 
@@ -411,4 +450,85 @@ internal fun createAndFundAccount(): KeyPair {
   }
 
   return keyPair
+}
+
+internal fun createContractWithWasmIdAndGetHash(
+  sorobanServer: SorobanServer,
+  network: Network,
+  wasmId: String,
+  sourceAccount: KeyPair,
+  constructorArgs: List<SCVal>,
+): String {
+  val txHash: String? =
+    createContractWithWasmId(sorobanServer, network, wasmId, sourceAccount, constructorArgs)
+
+  // Wait until the transaction is created
+  var getTransactionResponse: GetTransactionResponse
+  // Check the transaction status
+  while (true) {
+    getTransactionResponse = sorobanServer.getTransaction(txHash)
+    if (GetTransactionResponse.GetTransactionStatus.NOT_FOUND != getTransactionResponse.status) {
+      break
+    }
+    // Wait for 3 seconds before checking the transaction status again
+    Thread.sleep(3000)
+  }
+  return StrKey.encodeContract(
+    getTransactionResponse.parseResultMetaXdr().v3.sorobanMeta.returnValue.address.contractId.hash
+  )
+}
+
+internal fun createContractWithWasmId(
+  sorobanServer: SorobanServer,
+  network: Network,
+  wasmId: String,
+  sourceAccount: KeyPair,
+  constructorArgs: List<SCVal>,
+): String {
+  val source = sorobanServer.getAccount(sourceAccount.getAccountId())
+
+  val invokeHostFunctionOperation: InvokeHostFunctionOperation =
+    InvokeHostFunctionOperation.createContractOperationBuilder(
+        wasmId,
+        Address(sourceAccount.getAccountId()),
+        constructorArgs,
+        null,
+      )
+      .build()
+
+  // Build the transaction
+  val unpreparedTransaction =
+    TransactionBuilder(source, network)
+      .setBaseFee(MIN_BASE_FEE)
+      .addOperation(invokeHostFunctionOperation)
+      .setTimeout(300)
+      .build()
+
+  // Prepare the transaction
+  val transaction: Transaction
+  try {
+    transaction = sorobanServer.prepareTransaction(unpreparedTransaction)
+  } catch (e: PrepareTransactionException) {
+    throw RuntimeException("Prepare transaction failed", e)
+  } catch (e: NetworkException) {
+    throw RuntimeException("Network error", e)
+  }
+
+  // Sign the transaction
+  transaction.sign(sourceAccount)
+
+  // Send the transaction
+  val sendTransactionResponse: SendTransactionResponse
+  try {
+    sendTransactionResponse = sorobanServer.sendTransaction(transaction)
+  } catch (e: NetworkException) {
+    throw RuntimeException("Send transaction failed", e)
+  }
+  if (
+    SendTransactionResponse.SendTransactionStatus.PENDING != sendTransactionResponse.getStatus()
+  ) {
+    throw RuntimeException("Send transaction failed: " + sendTransactionResponse)
+  }
+
+  return sendTransactionResponse.getHash()
 }
