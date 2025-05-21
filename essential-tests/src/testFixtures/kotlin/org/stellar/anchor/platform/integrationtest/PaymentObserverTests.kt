@@ -61,7 +61,7 @@ class PaymentObserverTests {
       fromKeyPair2 = createAndFundAccount()
       toKeyPair2 = createAndFundAccount()
       walletContractId =
-        createContractWithWasmId(
+        createContractWithWasmIdAndGetContractId(
           stellarRpc,
           Network.TESTNET,
           "a4f2bbf00e661546a2db6de1922dc638ee94e0b52c48adb051dad42329e866fb",
@@ -452,7 +452,7 @@ internal fun createAndFundAccount(): KeyPair {
   return keyPair
 }
 
-internal fun createContractWithWasmIdAndGetHash(
+internal fun createContractWithWasmIdAndGetContractId(
   sorobanServer: SorobanServer,
   network: Network,
   wasmId: String,
