@@ -162,7 +162,7 @@ public class AssetValidator {
     // Validate receive configuration
     ReceiveOperation receiveInfo = sep31Info.getReceive();
     if (receiveInfo != null) {
-      if (receiveInfo.getMinAmount() < 0) {
+      if (receiveInfo.getMinAmount() != null && receiveInfo.getMinAmount() < 0) {
         errors.add(
             format(
                 "Asset %s: SEP-31 receive 'min_amount' must be non-negative (current value: %s).",
