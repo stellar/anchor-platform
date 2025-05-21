@@ -11,6 +11,14 @@ DIRECT_PAYMENT_SERVER = "http://localhost:8080/sep31"
 ANCHOR_QUOTE_SERVER = "http://localhost:8080/sep38"
 
 [[CURRENCIES]]
+code = "SRT"
+issuer = "GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B"
+status = "test"
+is_asset_anchored = false
+anchor_asset_type = "crypto"
+desc = "Stellar Reference Token (SRT) is an asset issued on testnet and is used as an anchored asset for this reference server for demonstration and testing purposes."
+
+[[CURRENCIES]]
 code = "USDC"
 issuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
 status = "test"
@@ -36,7 +44,7 @@ desc = "XLM, the native token of the Stellar network."
 [DOCUMENTATION]
 ORG_NAME = "Stellar Development Foundation"
 ORG_URL = "https://stellar.org"
-ORG_DESCRIPTION = "SEP 24 reference server."
+ORG_DESCRIPTION = "The Stellar Development Foundation (SDF) is a non-profit organization whose mission is to create equitable access to the global financial system."
 ORG_KEYBASE = "stellar.public"
 ORG_TWITTER = "StellarOrg"
 ORG_GITHUB = "stellar"

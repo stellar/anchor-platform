@@ -136,7 +136,43 @@ items:
       enabled: true
       exchangeable_assets:
         - iso4217:USD
-
+  - id: stellar:SRT:GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B
+    distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+    significant_decimals: 7
+    sep6:
+      enabled: true
+      deposit:
+        enabled: true
+        methods:
+          - bank_account
+      withdraw:
+        enabled: true
+        methods:
+          - bank_account
+    sep24:
+      enabled: true
+      deposit:
+        enabled: true
+        fee_fixed: 1.0
+        methods:
+          - bank_account
+      withdraw:
+        enabled: true
+        fee_fixed: 1.0
+        methods:
+          - bank_account
+    sep31:
+      enabled: true
+      fee_fixed: 1.0
+      receive:
+        methods:
+          - bank_account
+      quotes_supported: true
+      quotes_required: false
+    sep38:
+      enabled: true
+      exchangeable_assets:
+        - iso4217:USD
   # Native asset
   - id: stellar:native
     distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
