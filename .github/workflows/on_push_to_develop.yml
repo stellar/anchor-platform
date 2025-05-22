@@ -57,19 +57,6 @@ jobs:
           tags: stellar/anchor-platform:edge,stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}
           file: Dockerfile
 
-    # TODO: enable purge-image when we got the dockerhub token
-    #  purge-image:
-    #    name: Purge Docker edge Images (tags=edge-*)
-    #    runs-on: ubuntu-22.04
-    #    steps:
-    #      - name: Delete image
-    #        uses: bots-house/ghcr-delete-image-action@v1.1.0
-    #        with:
-    #          owner: stellarproducteng
-    #          name: ${{ secrets.DOCKERHUB_USERNAME }}
-    #          token: ${{ secrets.DOCKERHUB_TOKEN }}
-    #          tag: edge-*
-
   complete:
     if: always()
     needs: [ essential_tests, extended_tests, rust_build, build_and_push_docker_image ]
