@@ -182,14 +182,16 @@ class RateService(private val quoteRepository: QuoteRepository) {
     val stellarUSDCtest = "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     val stellarUSDCprod = "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
     val stellarJPYC = "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val stellarSRT = "stellar:SRT:GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B"
     val prices =
       mapOf(
         Pair(fiatUSD, stellarCircleUSDCtest) to "1.02",
-        Pair(fiatUSD, stellarCircleUSDCtest) to "1.02",
         Pair(fiatUSD, stellarUSDCtest) to "1.02",
         Pair(fiatUSD, stellarJPYC) to "0.0083333",
+        Pair(fiatUSD, stellarSRT) to "0.145",
         Pair(fiatCAD, stellarUSDCtest) to "0.74",
         Pair(fiatCAD, stellarUSDCprod) to "0.74",
+        Pair(fiatCAD, stellarSRT) to "0.406",
         Pair(stellarUSDCtest, fiatUSD) to "1.05",
         Pair(stellarUSDCtest, fiatUSD) to "1.05",
         Pair(stellarUSDCtest, stellarJPYC) to "0.0084",
@@ -201,6 +203,8 @@ class RateService(private val quoteRepository: QuoteRepository) {
         Pair(stellarJPYC, stellarUSDCtest) to "120",
         Pair(stellarJPYC, stellarCircleUSDCtest) to "120",
         Pair(stellarJPYC, stellarUSDCprod) to "120",
+        Pair(stellarSRT, fiatUSD) to "6.9",
+        Pair(stellarSRT, fiatCAD) to "2.46",
       )
 
     private fun getPrice(sellAsset: String, buyAsset: String): String? {

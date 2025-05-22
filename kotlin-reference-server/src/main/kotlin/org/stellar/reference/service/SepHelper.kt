@@ -127,9 +127,7 @@ class SepHelper(private val cfg: Config) {
     try {
       resp = server.submitTransaction(transaction)
     } catch (e: BadRequestException) {
-      throw Exception(
-        "Failed to submit transaction with code: ${e.problem?.extras?.resultCodes?.transactionResultCode}"
-      )
+      throw Exception("Failed to submit transaction with code: ${e.problem?.extras?.resultCodes}")
     }
     assert(resp.successful)
     return resp.hash
