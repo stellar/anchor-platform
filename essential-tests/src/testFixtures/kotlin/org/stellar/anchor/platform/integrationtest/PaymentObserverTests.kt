@@ -60,11 +60,13 @@ class PaymentObserverTests {
       toKeyPair = createAndFundAccount()
       fromKeyPair2 = createAndFundAccount()
       toKeyPair2 = createAndFundAccount()
+      // the wasmId is the wasm hash of the contract under soroban/contracts/account.
+      val wasmId = "a4f2bbf00e661546a2db6de1922dc638ee94e0b52c48adb051dad42329e866fb"
       walletContractId =
         createContractWithWasmIdAndGetContractId(
           stellarRpc,
           Network.TESTNET,
-          "a4f2bbf00e661546a2db6de1922dc638ee94e0b52c48adb051dad42329e866fb",
+          wasmId,
           fromKeyPair,
           listOf(Scv.toAddress(fromKeyPair.accountId), Scv.toBytes(fromKeyPair.publicKey)),
         )
