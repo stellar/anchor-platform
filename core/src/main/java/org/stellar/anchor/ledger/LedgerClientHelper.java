@@ -120,6 +120,10 @@ public class LedgerClientHelper {
         SCVal from = hostFunction.getInvokeContract().getArgs()[0];
         SCVal to = hostFunction.getInvokeContract().getArgs()[1];
         SCVal amount = hostFunction.getInvokeContract().getArgs()[2];
+        BigInteger high = BigInteger.valueOf(amount.getI128().getHi().getInt64());
+        BigInteger low = amount.getI128().getLo().getUint64().getNumber();
+        BigInteger amountValue = high.shiftLeft(64).add(low);
+
         yield LedgerOperation.builder()
             .type(INVOKE_HOST_FUNCTION)
             .invokeHostFunctionOperation(
@@ -127,7 +131,7 @@ public class LedgerClientHelper {
                     .contractId(contractId)
                     .hostFunction("transfer")
                     .id(operationId)
-                    .amount(amount.getI128().getLo().getUint64().getNumber())
+                    .amount(amountValue)
                     .from(getAddressOrContractId(from.getAddress()))
                     .to(getAddressOrContractId(to.getAddress()))
                     .sourceAccount(sourceAccount)
