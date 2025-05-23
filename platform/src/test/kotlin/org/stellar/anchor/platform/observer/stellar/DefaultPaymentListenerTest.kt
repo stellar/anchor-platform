@@ -2,6 +2,7 @@ package org.stellar.anchor.platform.observer.stellar
 
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
+import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
@@ -258,7 +259,7 @@ class DefaultPaymentListenerTest {
                 LedgerTransaction.LedgerPaymentOperation.builder()
                   .id(testTOID.toInt64().toString())
                   .asset(testAssetFoo.toXdr())
-                  .amount(1)
+                  .amount(BigInteger.valueOf(1))
                   .sourceAccount("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
                   .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
                   .build()
@@ -271,7 +272,7 @@ class DefaultPaymentListenerTest {
     return PaymentTransferEvent.builder()
       .from("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
       .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
-      .amount(1)
+      .amount(BigInteger.valueOf(1))
       .txHash("1ad62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af30")
       .operationId(testTOID.toInt64().toString())
       .ledgerTransaction(ledgerTransaction)

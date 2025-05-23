@@ -2,6 +2,7 @@ package org.stellar.anchor.ledger;
 
 import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
 
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.List;
 import lombok.Builder;
@@ -32,6 +33,7 @@ public class LedgerTransaction {
     OperationType type;
     LedgerPaymentOperation paymentOperation;
     LedgerPathPaymentOperation pathPaymentOperation;
+    LedgerInvokeHostFunctionOperation invokeHostFunctionOperation;
   }
 
   public interface LedgerPayment {
@@ -41,7 +43,8 @@ public class LedgerTransaction {
 
     String getTo();
 
-    Long getAmount();
+    // The amount is in the smallest unit of the asset as in 10^-7.
+    BigInteger getAmount();
 
     Asset getAsset();
 
@@ -54,7 +57,7 @@ public class LedgerTransaction {
     String id;
     String from;
     String to;
-    Long amount;
+    BigInteger amount;
     Asset asset;
     String sourceAccount;
   }
@@ -65,9 +68,35 @@ public class LedgerTransaction {
     String id;
     String from;
     String to;
-    Long amount;
+    BigInteger amount;
     Asset asset;
     String sourceAccount;
+  }
+
+  @Builder
+  @Data
+  public static class LedgerInvokeHostFunctionOperation implements LedgerPayment {
+    String contractId;
+    String hostFunction;
+
+    String id;
+    String from;
+    String to;
+    BigInteger amount;
+    Asset asset;
+    String sourceAccount;
+
+    public Asset getAsset() {
+      if (asset == null) {
+        if (contractId != null) {
+          // The SAC to Asset conversion requires a network call to the ledger. This should be
+          // converted before using the operation.
+          throw new IllegalStateException(
+              "Please convert stellarAssetContractId to Asset before calling getAsset()");
+        }
+      }
+      return asset;
+    }
   }
 
   @Builder

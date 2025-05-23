@@ -2,27 +2,17 @@ package org.stellar.anchor.ledger;
 
 import static java.lang.Thread.sleep;
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
-import static org.stellar.anchor.util.AssetHelper.toXdrAmount;
 import static org.stellar.anchor.util.Log.*;
-import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
-import static org.stellar.sdk.xdr.OperationType.PATH_PAYMENT_STRICT_RECEIVE;
-import static org.stellar.sdk.xdr.OperationType.PAYMENT;
-import static org.stellar.sdk.xdr.SignerKeyType.*;
-import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
+import static org.stellar.sdk.xdr.HostFunctionType.HOST_FUNCTION_TYPE_INVOKE_CONTRACT;
+import static org.stellar.sdk.xdr.OperationType.*;
 
-import java.io.IOException;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.TOID;
-import org.stellar.sdk.responses.SubmitTransactionAsyncResponse;
-import org.stellar.sdk.responses.operations.OperationResponse;
-import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
-import org.stellar.sdk.responses.operations.PaymentOperationResponse;
-import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse;
-import org.stellar.sdk.responses.sorobanrpc.GetTransactionsResponse;
 import org.stellar.sdk.xdr.*;
 
 public class LedgerClientHelper {
@@ -63,7 +53,7 @@ public class LedgerClientHelper {
                 LedgerPaymentOperation.builder()
                     .id(operationId)
                     .asset(payment.getAsset())
-                    .amount(payment.getAmount().getInt64())
+                    .amount(BigInteger.valueOf(payment.getAmount().getInt64()))
                     .from(sourceAccount)
                     .sourceAccount(sourceAccount)
                     .to(
@@ -109,9 +99,37 @@ public class LedgerClientHelper {
                 LedgerPathPaymentOperation.builder()
                     .id(operationId)
                     .asset(asset)
-                    .amount(amount)
+                    .amount(BigInteger.valueOf(amount))
                     .from(sourceAccount)
                     .to(toAddress)
+                    .sourceAccount(sourceAccount)
+                    .build())
+            .build();
+      }
+      case INVOKE_HOST_FUNCTION -> {
+        HostFunction hostFunction = op.getBody().getInvokeHostFunctionOp().getHostFunction();
+        if (hostFunction.getDiscriminant() != HOST_FUNCTION_TYPE_INVOKE_CONTRACT) yield null;
+        if (!hostFunction
+            .getInvokeContract()
+            .getFunctionName()
+            .getSCSymbol()
+            .toString()
+            .equals("transfer")) yield null;
+        SCAddress contractAddress = hostFunction.getInvokeContract().getContractAddress();
+        String contractId = StrKey.encodeContract(contractAddress.getContractId().getHash());
+        SCVal from = hostFunction.getInvokeContract().getArgs()[0];
+        SCVal to = hostFunction.getInvokeContract().getArgs()[1];
+        SCVal amount = hostFunction.getInvokeContract().getArgs()[2];
+        yield LedgerOperation.builder()
+            .type(INVOKE_HOST_FUNCTION)
+            .invokeHostFunctionOperation(
+                LedgerInvokeHostFunctionOperation.builder()
+                    .contractId(contractId)
+                    .hostFunction("transfer")
+                    .id(operationId)
+                    .amount(amount.getI128().getLo().getUint64().getNumber())
+                    .from(getAddressOrContractId(from.getAddress()))
+                    .to(getAddressOrContractId(to.getAddress()))
                     .sourceAccount(sourceAccount)
                     .build())
             .build();
@@ -120,6 +138,20 @@ public class LedgerClientHelper {
     };
   }
 
+  static String getAddressOrContractId(SCAddress address) {
+    return switch (address.getDiscriminant()) {
+      case SC_ADDRESS_TYPE_ACCOUNT -> StrKey.encodeEd25519PublicKey(address.getAccountId());
+      case SC_ADDRESS_TYPE_CONTRACT -> StrKey.encodeContract(address.getContractId().getHash());
+    };
+  }
+
+  /**
+   * Parse the transaction envelope and extract the operations, source account, and memo.
+   *
+   * @param txnEnv the transaction envelope
+   * @param txnHash the transaction hash
+   * @return a ParseResult containing the operations, source account, and memo
+   */
   public static ParseResult parseOperationAndSourceAccountAndMemo(
       TransactionEnvelope txnEnv, String txnHash) {
     Operation[] operations;
@@ -168,32 +200,6 @@ public class LedgerClientHelper {
   }
 
   public record ParseResult(Operation[] operations, String sourceAccount, Memo memo) {}
-
-  /**
-   * Convert from Horizon signer key type to XDR signer key type.
-   *
-   * @param type the Horizon signer key type
-   * @return the XDR signer key type
-   */
-  public static SignerKeyType getKeyTypeDiscriminant(String type) {
-    return switch (type) {
-      case "ed25519_public_key" -> SIGNER_KEY_TYPE_ED25519;
-      case "preauth_tx" -> SIGNER_KEY_TYPE_PRE_AUTH_TX;
-      case "sha256_hash" -> SIGNER_KEY_TYPE_HASH_X;
-      case "ed25519_signed_payload" -> SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
-      default -> throw new IllegalArgumentException("Invalid signer key type: " + type);
-    };
-  }
-
-  public static SendTransactionStatus convert(
-      SubmitTransactionAsyncResponse.TransactionStatus status) {
-    return switch (status) {
-      case PENDING -> SendTransactionStatus.PENDING;
-      case ERROR -> SendTransactionStatus.ERROR;
-      case DUPLICATE -> SendTransactionStatus.DUPLICATE;
-      case TRY_AGAIN_LATER -> SendTransactionStatus.TRY_AGAIN_LATER;
-    };
-  }
 
   public static List<LedgerOperation> getLedgerOperations(
       Integer applicationOrder, Long sequenceNumber, ParseResult parseResult)
@@ -244,108 +250,5 @@ public class LedgerClientHelper {
       info("Interrupted while waiting for transaction to complete");
     }
     throw new LedgerException("Transaction took too long to complete");
-  }
-
-  public static LedgerOperation toLedgerOperation(OperationResponse op) {
-    LedgerOperation.LedgerOperationBuilder builder = LedgerOperation.builder();
-    // TODO: Capture muxed account events
-    if (op instanceof PaymentOperationResponse paymentOp) {
-      builder.type(PAYMENT);
-      builder.paymentOperation(
-          LedgerTransaction.LedgerPaymentOperation.builder()
-              .id(String.valueOf(paymentOp.getId()))
-              .from(paymentOp.getFrom())
-              .to(paymentOp.getTo())
-              .amount(toXdrAmount(paymentOp.getAmount()))
-              .asset(paymentOp.getAsset().toXdr())
-              .sourceAccount(paymentOp.getSourceAccount())
-              .build());
-    } else if (op instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
-      builder.type(PATH_PAYMENT_STRICT_RECEIVE);
-      builder.pathPaymentOperation(
-          LedgerTransaction.LedgerPathPaymentOperation.builder()
-              .id(String.valueOf(pathPaymentOp.getId()))
-              .from(pathPaymentOp.getFrom())
-              .to(pathPaymentOp.getTo())
-              .amount(toXdrAmount(pathPaymentOp.getAmount()))
-              .asset(pathPaymentOp.getAsset().toXdr())
-              .sourceAccount(pathPaymentOp.getSourceAccount())
-              .build());
-    } else {
-      return null;
-    }
-    return builder.build();
-  }
-
-  /**
-   * Convert a GetTransactionResponse to a LedgerTransaction.
-   *
-   * @param txnResponse the GetTransactionResponse to convert
-   * @return the converted LedgerTransaction
-   * @throws LedgerException if the transaction is null or malformed
-   */
-  public static LedgerTransaction fromGetTransactionResponse(GetTransactionResponse txnResponse)
-      throws LedgerException {
-    TransactionEnvelope txnEnv;
-    try {
-      txnEnv = TransactionEnvelope.fromXdrBase64(txnResponse.getEnvelopeXdr());
-    } catch (IOException ioex) {
-      throw new LedgerException("Unable to parse transaction envelope", ioex);
-    }
-    Integer applicationOrder = txnResponse.getApplicationOrder();
-    Long sequenceNumber = txnResponse.getLedger();
-    ParseResult parseResult =
-        LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txnResponse.getTxHash());
-    if (parseResult == null) return null;
-    List<LedgerTransaction.LedgerOperation> operations =
-        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
-
-    return LedgerTransaction.builder()
-        .hash(txnResponse.getTxHash())
-        .ledger(txnResponse.getLedger())
-        .applicationOrder(txnResponse.getApplicationOrder())
-        .sourceAccount(parseResult.sourceAccount())
-        .envelopeXdr(txnResponse.getEnvelopeXdr())
-        .memo(parseResult.memo())
-        .sequenceNumber(sequenceNumber)
-        .createdAt(Instant.ofEpochSecond(txnResponse.getCreatedAt()))
-        .operations(operations)
-        .build();
-  }
-
-  /**
-   * Converting from Stellar RPC transaction to LedgerTransaction. TODO: This function will be
-   * removed after migrating to getEvents methods.
-   *
-   * @param txn the Stellar RPC transaction to convert
-   * @return the converted LedgerTransaction
-   * @throws LedgerException if the transaction is null or malformed
-   */
-  public static LedgerTransaction fromStellarRpcTransaction(GetTransactionsResponse.Transaction txn)
-      throws LedgerException {
-    TransactionEnvelope txnEnv;
-    try {
-      txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
-    } catch (IOException ioex) {
-      throw new LedgerException("Unable to parse transaction envelope", ioex);
-    }
-    Integer applicationOrder = txn.getApplicationOrder();
-    Long sequenceNumber = txn.getLedger();
-    ParseResult parseResult =
-        LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txn.getTxHash());
-    if (parseResult == null) return null;
-    List<LedgerTransaction.LedgerOperation> operations =
-        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
-    return LedgerTransaction.builder()
-        .hash(txn.getTxHash())
-        .ledger(txn.getLedger())
-        .applicationOrder(txn.getApplicationOrder())
-        .sourceAccount(parseResult.sourceAccount())
-        .envelopeXdr(txn.getEnvelopeXdr())
-        .memo(parseResult.memo())
-        .sequenceNumber(sequenceNumber)
-        .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
-        .operations(operations)
-        .build();
   }
 }

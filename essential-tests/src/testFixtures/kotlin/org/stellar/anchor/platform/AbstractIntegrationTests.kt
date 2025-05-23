@@ -3,6 +3,7 @@ package org.stellar.anchor.platform
 import io.ktor.client.plugins.*
 import io.ktor.http.*
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
@@ -13,11 +14,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
-import org.stellar.anchor.ledger.LedgerClientHelper.toLedgerOperation
 import org.stellar.anchor.ledger.LedgerClientHelper.waitForTransactionAvailable
 import org.stellar.anchor.ledger.LedgerTransaction
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
+import org.stellar.anchor.util.AssetHelper
 import org.stellar.anchor.util.Log.info
 import org.stellar.anchor.util.MemoHelper
 import org.stellar.anchor.util.Sep1Helper.TomlContent
@@ -27,6 +29,9 @@ import org.stellar.sdk.operations.Operation.fromXdrAmount
 import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.requests.RequestBuilder
 import org.stellar.sdk.responses.operations.OperationResponse
+import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse
+import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.sdk.xdr.OperationType
 import org.stellar.sdk.xdr.TransactionEnvelope
 import org.stellar.walletsdk.ApplicationConfiguration
 import org.stellar.walletsdk.StellarConfiguration
@@ -51,6 +56,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
     const val TEST_PAYMENT_DEST_ACCOUNT = "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
     const val TEST_PAYMENT_ASSET_CIRCLE_USDC =
       "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+
     // custody deposit address
     const val CUSTODY_DEST_ACCOUNT = "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
   }
@@ -121,6 +127,43 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
       .createdAt(Instant.parse(txnResponse.createdAt))
       .operations(listOf(toLedgerOperation(operationResponse)))
       .build()
+  }
+
+  private fun toLedgerOperation(op: OperationResponse): LedgerOperation? {
+    val builder = LedgerOperation.builder()
+    // TODO: Capture muxed account events
+    when (op) {
+      is PaymentOperationResponse -> {
+        builder.type(OperationType.PAYMENT)
+        builder.paymentOperation(
+          LedgerTransaction.LedgerPaymentOperation.builder()
+            .id(op.getId().toString())
+            .from(op.from)
+            .to(op.to)
+            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(op.amount)))
+            .asset(op.asset.toXdr())
+            .sourceAccount(op.getSourceAccount())
+            .build()
+        )
+      }
+      is PathPaymentBaseOperationResponse -> {
+        builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE)
+        builder.pathPaymentOperation(
+          LedgerTransaction.LedgerPathPaymentOperation.builder()
+            .id(op.getId().toString())
+            .from(op.from)
+            .to(op.to)
+            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(op.amount)))
+            .asset(op.asset.toXdr())
+            .sourceAccount(op.getSourceAccount())
+            .build()
+        )
+      }
+      else -> {
+        return null
+      }
+    }
+    return builder.build()
   }
 
   private fun sendTestPayment(ledgerClient: LedgerClient): LedgerTransaction? {

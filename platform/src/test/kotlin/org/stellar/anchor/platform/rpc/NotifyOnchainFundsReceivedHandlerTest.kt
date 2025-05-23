@@ -4,6 +4,7 @@ import com.google.gson.reflect.TypeToken
 import io.micrometer.core.instrument.Counter
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
+import java.math.BigInteger
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -90,7 +91,7 @@ class NotifyOnchainFundsReceivedHandlerTest {
               .paymentOperation(
                 LedgerPaymentOperation.builder()
                   .id("12345")
-                  .amount(150000000)
+                  .amount(BigInteger.valueOf(150000000))
                   .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
                   .from("testFrom")
                   .to("testTo")
