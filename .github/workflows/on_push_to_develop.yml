@@ -14,10 +14,6 @@ jobs:
   gradle_build:
     uses: ./.github/workflows/sub_gradle_build.yml
 
-  jacoco_report:
-    needs: [ gradle_build ]
-    uses: ./.github/workflows/sub_jacoco_report.yml
-
   essential_tests:
     needs: [ gradle_build ]
     uses: ./.github/workflows/sub_essential_tests.yml
@@ -57,19 +53,6 @@ jobs:
           push: true
           tags: stellar/anchor-platform:edge,stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}
           file: Dockerfile
-
-    # TODO: enable purge-image when we got the dockerhub token
-    #  purge-image:
-    #    name: Purge Docker edge Images (tags=edge-*)
-    #    runs-on: ubuntu-22.04
-    #    steps:
-    #      - name: Delete image
-    #        uses: bots-house/ghcr-delete-image-action@v1.1.0
-    #        with:
-    #          owner: stellarproducteng
-    #          name: ${{ secrets.DOCKERHUB_USERNAME }}
-    #          token: ${{ secrets.DOCKERHUB_TOKEN }}
-    #          tag: edge-*
 
   complete:
     if: always()

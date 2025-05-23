@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.stellar.anchor.auth.ApiAuthJwt;
 import org.stellar.anchor.auth.AuthHelper;
 import org.stellar.anchor.auth.JwtService;
@@ -18,6 +19,7 @@ import org.stellar.anchor.platform.config.CustodyApiConfig;
 public class CustodyApiBeans {
 
   @Bean(name = "custodyApiHttpClient")
+  @Primary
   OkHttpClient custodyApiHttpClient(CustodyApiConfig custodyApiConfig) {
     return new Builder()
         .connectTimeout(custodyApiConfig.getHttpClient().getConnectTimeout(), TimeUnit.SECONDS)
