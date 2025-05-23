@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.rpc.method.NotifyTrustSetRequest
-import org.stellar.anchor.horizon.Horizon
+import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.platform.config.PropertyCustodyConfig
 import org.stellar.anchor.platform.config.PropertyCustodyConfig.Trustline
 import org.stellar.anchor.platform.data.JdbcTransactionPendingTrust
@@ -56,7 +56,7 @@ class TrustlineCheckJobTest {
 
     every { transactionPendingTrustRepo.findAll() } returns listOf(txnPendingTrust)
     every { custodyConfig.trustline } returns trustline
-    every { horizon.isTrustlineConfigured(ACCOUNT, ASSET) } returns false
+    every { horizon.hasTrustline(ACCOUNT, ASSET) } returns false
 
     trustlineCheckJob.checkTrust()
 
@@ -78,7 +78,7 @@ class TrustlineCheckJobTest {
 
     every { transactionPendingTrustRepo.findAll() } returns listOf(txnPendingTrust)
     every { custodyConfig.trustline } returns trustline
-    every { horizon.isTrustlineConfigured(ACCOUNT, ASSET) } returns true
+    every { horizon.hasTrustline(ACCOUNT, ASSET) } returns true
     every { notifyTrustSetHandler.handle(capture(notifyTrustSetRequestCapture)) } returns null
 
     trustlineCheckJob.checkTrust()

@@ -126,10 +126,6 @@ public class JdbcSep24Transaction extends JdbcSepTransaction
   @Column(name = "claimable_balance_supported")
   Boolean claimableBalanceSupported;
 
-  @SerializedName("amount_expected")
-  @Column(name = "amount_expected")
-  String amountExpected;
-
   @SerializedName("refund_memo")
   @Column(name = "refund_memo")
   String refundMemo;

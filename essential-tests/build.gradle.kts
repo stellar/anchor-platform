@@ -13,10 +13,12 @@ dependencies {
   testFixturesImplementation(libs.httpclient)
   testFixturesImplementation(libs.kotlin.serialization.json)
   testFixturesImplementation(libs.dotenv)
+  testFixturesImplementation(libs.coroutines.core)
 
   // Stellar dependencies
   testFixturesImplementation(libs.stellar.wallet.sdk)
   testFixturesImplementation(variantOf(libs.java.stellar.sdk) { classifier("uber") })
+  testFixturesImplementation(libs.okhttp3.mockserver)
 
   // Spring dependencies
   testFixturesImplementation("org.springframework.boot:spring-boot-starter-data-jpa")
