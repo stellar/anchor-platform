@@ -180,7 +180,7 @@ public class DefaultPaymentListener implements PaymentListener {
             AnchorMetrics.PAYMENT_RECEIVED.toString(),
             "asset",
             getSep11AssetName(ledgerPayment.getAsset()))
-        .increment(ledgerPayment.getAmount());
+        .increment(ledgerPayment.getAmount().doubleValue());
   }
 
   void handleSep24Transaction(
@@ -217,7 +217,7 @@ public class DefaultPaymentListener implements PaymentListener {
             AnchorMetrics.PAYMENT_RECEIVED.toString(),
             "asset",
             getSep11AssetName(ledgerPayment.getAsset()))
-        .increment(ledgerPayment.getAmount());
+        .increment(ledgerPayment.getAmount().doubleValue());
   }
 
   void handleSep6Transaction(
@@ -256,7 +256,7 @@ public class DefaultPaymentListener implements PaymentListener {
             AnchorMetrics.PAYMENT_RECEIVED.toString(),
             "asset",
             getSep11AssetName(ledgerPayment.getAsset()))
-        .increment(ledgerPayment.getAmount());
+        .increment(ledgerPayment.getAmount().doubleValue());
   }
 
   boolean validate(LedgerTransaction ledgerTransaction, LedgerPayment ledgerPayment) {

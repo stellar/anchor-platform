@@ -10,6 +10,7 @@ import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.ReflectionUtil.getField;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
+import java.math.BigInteger;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -231,7 +232,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
             .from(paymentOp.getFrom())
             .to(paymentOp.getTo())
             .sep11Asset(AssetHelper.getSep11AssetName(paymentOp.getAsset().toXdr()))
-            .amount(AssetHelper.toXdrAmount(paymentOp.getAmount()))
+            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(paymentOp.getAmount())))
             .operationId(String.valueOf(operation.getId()))
             .txHash(paymentOp.getTransactionHash())
             .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
@@ -247,7 +248,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
             .from(pathPaymentOp.getFrom())
             .to(pathPaymentOp.getTo())
             .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset().toXdr()))
-            .amount(AssetHelper.toXdrAmount(pathPaymentOp.getAmount()))
+            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(pathPaymentOp.getAmount())))
             .operationId(String.valueOf(operation.getId()))
             .txHash(pathPaymentOp.getTransactionHash())
             .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))

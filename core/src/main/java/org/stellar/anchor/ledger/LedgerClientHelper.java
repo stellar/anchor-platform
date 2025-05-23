@@ -6,6 +6,7 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.sdk.xdr.HostFunctionType.HOST_FUNCTION_TYPE_INVOKE_CONTRACT;
 import static org.stellar.sdk.xdr.OperationType.*;
 
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,7 +53,7 @@ public class LedgerClientHelper {
                 LedgerPaymentOperation.builder()
                     .id(operationId)
                     .asset(payment.getAsset())
-                    .amount(payment.getAmount().getInt64())
+                    .amount(BigInteger.valueOf(payment.getAmount().getInt64()))
                     .from(sourceAccount)
                     .sourceAccount(sourceAccount)
                     .to(
@@ -98,7 +99,7 @@ public class LedgerClientHelper {
                 LedgerPathPaymentOperation.builder()
                     .id(operationId)
                     .asset(asset)
-                    .amount(amount)
+                    .amount(BigInteger.valueOf(amount))
                     .from(sourceAccount)
                     .to(toAddress)
                     .sourceAccount(sourceAccount)
@@ -126,7 +127,7 @@ public class LedgerClientHelper {
                     .contractId(contractId)
                     .hostFunction("transfer")
                     .id(operationId)
-                    .amount(amount.getI128().getLo().getUint64().getNumber().longValue())
+                    .amount(amount.getI128().getLo().getUint64().getNumber())
                     .from(getAddressOrContractId(from.getAddress()))
                     .to(getAddressOrContractId(to.getAddress()))
                     .sourceAccount(sourceAccount)

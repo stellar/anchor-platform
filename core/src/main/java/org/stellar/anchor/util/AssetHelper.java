@@ -4,6 +4,7 @@ import static java.math.RoundingMode.DOWN;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Currency;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.DepositWithdrawInfo;
@@ -171,6 +172,20 @@ public class AssetHelper {
   public static String fromXdrAmount(Long amount) {
     // The rounding mode is set to DOWN because the XDR_SCALE_FACTOR is also 7 digits.
     return BigDecimal.valueOf(amount).divide(XDR_SCALE_FACTOR, 7, DOWN).toPlainString();
+  }
+
+  /**
+   * Converts an amount in XDR format to a string representation.
+   *
+   * @param amount the amount in XDR format
+   * @return the string representation of the amount
+   */
+  public static String fromXdrAmount(BigInteger amount) {
+    if (amount == null) {
+      return null;
+    }
+    // The rounding mode is set to DOWN because the XDR_SCALE_FACTOR is also 7 digits.
+    return new BigDecimal(amount).divide(XDR_SCALE_FACTOR, 7, DOWN).toPlainString();
   }
 
   /**

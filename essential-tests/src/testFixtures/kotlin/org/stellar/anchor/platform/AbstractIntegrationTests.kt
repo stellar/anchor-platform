@@ -3,6 +3,7 @@ package org.stellar.anchor.platform
 import io.ktor.client.plugins.*
 import io.ktor.http.*
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
@@ -55,6 +56,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
     const val TEST_PAYMENT_DEST_ACCOUNT = "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
     const val TEST_PAYMENT_ASSET_CIRCLE_USDC =
       "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+
     // custody deposit address
     const val CUSTODY_DEST_ACCOUNT = "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
   }
@@ -138,7 +140,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
             .id(op.getId().toString())
             .from(op.from)
             .to(op.to)
-            .amount(AssetHelper.toXdrAmount(op.amount))
+            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(op.amount)))
             .asset(op.asset.toXdr())
             .sourceAccount(op.getSourceAccount())
             .build()
@@ -151,7 +153,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
             .id(op.getId().toString())
             .from(op.from)
             .to(op.to)
-            .amount(AssetHelper.toXdrAmount(op.amount))
+            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(op.amount)))
             .asset(op.asset.toXdr())
             .sourceAccount(op.getSourceAccount())
             .build()

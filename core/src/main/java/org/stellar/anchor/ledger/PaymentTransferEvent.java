@@ -1,5 +1,6 @@
 package org.stellar.anchor.ledger;
 
+import java.math.BigInteger;
 import lombok.Builder;
 import lombok.Data;
 
@@ -25,7 +26,7 @@ public class PaymentTransferEvent {
   String sep11Asset;
 
   /** The XDR amount of the payment transfer. */
-  Long amount;
+  BigInteger amount;
 
   /** The transaction hash of the payment transfer. */
   String txHash;

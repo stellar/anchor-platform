@@ -1,5 +1,6 @@
 package org.stellar.anchor.ledger
 
+import java.math.BigInteger
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -35,7 +36,7 @@ internal class LedgerClientHelperTest {
       "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
       ledgerOperation.paymentOperation.to,
     )
-    assertEquals(1230L, ledgerOperation.paymentOperation.amount)
+    assertEquals(BigInteger.valueOf(1230L), ledgerOperation.paymentOperation.amount)
     assertEquals(
       "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
       ledgerOperation.paymentOperation.sourceAccount,
@@ -64,7 +65,7 @@ internal class LedgerClientHelperTest {
       "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
       ledgerOperation.pathPaymentOperation.to,
     )
-    assertEquals(1230L, ledgerOperation.pathPaymentOperation.amount)
+    assertEquals(BigInteger.valueOf(1230L), ledgerOperation.pathPaymentOperation.amount)
     assertEquals(
       "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
       ledgerOperation.pathPaymentOperation.sourceAccount,

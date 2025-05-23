@@ -2,6 +2,7 @@ package org.stellar.anchor.ledger;
 
 import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
 
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.List;
 import lombok.Builder;
@@ -43,7 +44,7 @@ public class LedgerTransaction {
     String getTo();
 
     // The amount is in the smallest unit of the asset as in 10^-7.
-    Long getAmount();
+    BigInteger getAmount();
 
     Asset getAsset();
 
@@ -56,7 +57,7 @@ public class LedgerTransaction {
     String id;
     String from;
     String to;
-    Long amount;
+    BigInteger amount;
     Asset asset;
     String sourceAccount;
   }
@@ -67,7 +68,7 @@ public class LedgerTransaction {
     String id;
     String from;
     String to;
-    Long amount;
+    BigInteger amount;
     Asset asset;
     String sourceAccount;
   }
@@ -81,7 +82,7 @@ public class LedgerTransaction {
     String id;
     String from;
     String to;
-    Long amount;
+    BigInteger amount;
     Asset asset;
     String sourceAccount;
 
