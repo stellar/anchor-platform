@@ -1,6 +1,8 @@
 package org.stellar.anchor.platform.observer;
 
 import com.google.gson.annotations.SerializedName;
+import java.util.List;
+import java.util.stream.Collectors;
 import lombok.Builder;
 import lombok.Data;
 import org.stellar.anchor.api.asset.AssetInfo;
@@ -9,6 +11,7 @@ import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.AssetTypeCreditAlphaNum;
 import org.stellar.sdk.AssetTypeNative;
 import org.stellar.sdk.Memo;
+import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
 import org.stellar.sdk.responses.operations.PaymentOperationResponse;
 
@@ -129,6 +132,43 @@ public class ObservedPayment {
         .build();
   }
 
+  public static List<ObservedPayment> fromInvokeHostFunctionOperationResponse(
+      InvokeHostFunctionOperationResponse invokeOp) {
+
+    return invokeOp.getAssetBalanceChanges().stream()
+        .map(
+            balanceChange -> {
+              String assetCode = null, assetIssuer = null;
+
+              if (balanceChange.getAsset() instanceof AssetTypeCreditAlphaNum issuedAsset) {
+                assetCode = issuedAsset.getCode();
+                assetIssuer = issuedAsset.getIssuer();
+              } else if (balanceChange.getAsset() instanceof AssetTypeNative) {
+                assetCode = AssetInfo.NATIVE_ASSET_CODE;
+              }
+
+              String assetType = balanceChange.getAssetType();
+
+              return ObservedPayment.builder()
+                  .id(invokeOp.getId().toString())
+                  .type(Type.SAC_TRANSFER)
+                  .from(balanceChange.getFrom())
+                  .to(balanceChange.getTo())
+                  .amount(balanceChange.getAmount())
+                  .assetType(assetType)
+                  .assetCode(assetCode)
+                  .assetIssuer(assetIssuer)
+                  .assetName(balanceChange.getAsset().toString())
+                  .sourceAccount(invokeOp.getSourceAccount())
+                  .createdAt(invokeOp.getCreatedAt())
+                  .transactionHash(invokeOp.getTransactionHash())
+                  // TODO: memos are not currently supported for Soroban transactions
+                  .transactionEnvelope(invokeOp.getTransaction().getEnvelopeXdr())
+                  .build();
+            })
+        .collect(Collectors.toList());
+  }
+
   public enum Type {
     @SerializedName("payment")
     PAYMENT("payment"),
@@ -137,7 +177,10 @@ public class ObservedPayment {
     PATH_PAYMENT("path_payment"),
 
     @SerializedName("circle_transfer")
-    CIRCLE_TRANSFER("circle_transfer");
+    CIRCLE_TRANSFER("circle_transfer"),
+
+    @SerializedName("sac_transfer")
+    SAC_TRANSFER("sac_transfer");
 
     private final String name;
 

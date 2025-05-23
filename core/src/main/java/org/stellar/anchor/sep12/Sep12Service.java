@@ -22,7 +22,7 @@ import org.stellar.anchor.api.platform.GetTransactionResponse;
 import org.stellar.anchor.api.sep.sep12.*;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.apiclient.PlatformApiClient;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.MemoHelper;
@@ -65,7 +65,7 @@ public class Sep12Service {
     }
   }
 
-  public Sep12GetCustomerResponse getCustomer(Sep10Jwt token, Sep12GetCustomerRequest request)
+  public Sep12GetCustomerResponse getCustomer(WebAuthJwt token, Sep12GetCustomerRequest request)
       throws AnchorException {
     populateRequestFromTransactionId(request);
 
@@ -83,7 +83,7 @@ public class Sep12Service {
     return res;
   }
 
-  public Sep12PutCustomerResponse putCustomer(Sep10Jwt token, Sep12PutCustomerRequest request)
+  public Sep12PutCustomerResponse putCustomer(WebAuthJwt token, Sep12PutCustomerRequest request)
       throws AnchorException {
     populateRequestFromTransactionId(request);
 
@@ -129,25 +129,25 @@ public class Sep12Service {
     return Sep12PutCustomerResponse.builder().id(updatedCustomer.getId()).build();
   }
 
-  public void deleteCustomer(Sep10Jwt sep10Jwt, String account, String memo, String memoType)
+  public void deleteCustomer(WebAuthJwt token, String account, String memo, String memoType)
       throws AnchorException {
     boolean isAccountAuthenticated =
-        Stream.of(sep10Jwt.getAccount(), sep10Jwt.getMuxedAccount())
+        Stream.of(token.getAccount(), token.getMuxedAccount())
             .filter(Objects::nonNull)
             .anyMatch(tokenAccount -> Objects.equals(tokenAccount, account));
 
     boolean isMemoMissingAuthentication = false;
-    String muxedAccountId = Objects.toString(sep10Jwt.getMuxedAccountId(), null);
+    String muxedAccountId = Objects.toString(token.getMuxedAccountId(), null);
     if (muxedAccountId != null) {
-      if (!Objects.equals(sep10Jwt.getMuxedAccount(), account)) {
+      if (!Objects.equals(token.getMuxedAccount(), account)) {
         isMemoMissingAuthentication = !Objects.equals(muxedAccountId, memo);
       }
-    } else if (sep10Jwt.getAccountMemo() != null) {
-      isMemoMissingAuthentication = !Objects.equals(sep10Jwt.getAccountMemo(), memo);
+    } else if (token.getAccountMemo() != null) {
+      isMemoMissingAuthentication = !Objects.equals(token.getAccountMemo(), memo);
     }
 
     if (!isAccountAuthenticated || isMemoMissingAuthentication) {
-      infoF("Requester ({}) not authorized to delete account ({})", sep10Jwt.getAccount(), account);
+      infoF("Requester ({}) not authorized to delete account ({})", token.getAccount(), account);
       throw new SepNotAuthorizedException(
           String.format("Not authorized to delete account [%s] with memo [%s]", account, memo));
     }
@@ -171,7 +171,7 @@ public class Sep12Service {
     sep12DeleteCustomerCounter.increment();
   }
 
-  void validateGetOrPutRequest(Sep12CustomerRequestBase requestBase, Sep10Jwt token)
+  void validateGetOrPutRequest(Sep12CustomerRequestBase requestBase, WebAuthJwt token)
       throws SepException {
     if (requestBase.getTransactionId() != null) {
       try {
@@ -196,7 +196,8 @@ public class Sep12Service {
   }
 
   void validateRequestAndTokenAccounts(
-      @NotNull Sep12CustomerRequestBase requestBase, @NotNull Sep10Jwt token) throws SepException {
+      @NotNull Sep12CustomerRequestBase requestBase, @NotNull WebAuthJwt token)
+      throws SepException {
     // Validate request.account - SEP-12 says: This field should match the `sub` value of the
     // decoded SEP-10 JWT.
     String tokenAccount = token.getAccount();
@@ -214,7 +215,7 @@ public class Sep12Service {
     }
   }
 
-  void validateRequestAndTokenMemos(Sep12CustomerRequestBase requestBase, @NotNull Sep10Jwt token)
+  void validateRequestAndTokenMemos(Sep12CustomerRequestBase requestBase, @NotNull WebAuthJwt token)
       throws SepException {
     String tokenSubMemo = token.getAccountMemo();
     String tokenMuxedAccountId = Objects.toString(token.getMuxedAccountId(), null);
@@ -225,7 +226,7 @@ public class Sep12Service {
       return;
     }
 
-    // SEP-12 says: If a memo is present in the decoded SEP-10 JWT's `sub` value, it must match this
+    // SEP-12 says: If a memo is present in the decoded JWT's `sub` value, it must match this
     // parameter value. If a muxed account is used as the JWT's `sub` value, memos sent in requests
     // must match the 64-bit integer subaccount ID of the muxed account. See the Shared Account's
     // section for more information.
@@ -242,7 +243,7 @@ public class Sep12Service {
         "The memo specified does not match the memo ID authorized via SEP-10");
   }
 
-  void updateRequestMemoAndMemoType(@NotNull Sep12CustomerRequestBase requestBase, Sep10Jwt token)
+  void updateRequestMemoAndMemoType(@NotNull Sep12CustomerRequestBase requestBase, WebAuthJwt token)
       throws SepException {
     String memo = requestBase.getMemo();
     if (memo == null) {
@@ -251,7 +252,7 @@ public class Sep12Service {
     }
     String memoTypeId = MemoHelper.memoTypeAsString(MemoType.MEMO_ID);
     String memoType = Objects.toString(requestBase.getMemoType(), memoTypeId);
-    // SEP-12 says: If a memo is present in the decoded SEP-10 JWT's `sub` value, this parameter
+    // SEP-12 says: If a memo is present in the decoded JWT's `sub` value, this parameter
     // (memoType) can be ignored:
     if (token.getAccountMemo() != null || token.getMuxedAccountId() != null) {
       memoType = MemoHelper.memoTypeAsString(MemoType.MEMO_ID);

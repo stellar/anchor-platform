@@ -1,8 +1,10 @@
 package org.stellar.reference.event.processor
 
-import java.math.BigDecimal
 import java.time.Instant
 import java.util.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.runBlocking
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.callback.PutCustomerRequest
@@ -12,20 +14,23 @@ import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
 import org.stellar.anchor.api.rpc.method.RpcMethod
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
 import org.stellar.reference.callbacks.customer.CustomerService
+import org.stellar.reference.client.PaymentClient
 import org.stellar.reference.client.PlatformClient
 import org.stellar.reference.data.*
 import org.stellar.reference.log
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.transactionWithRetry
-import org.stellar.sdk.*
-import org.stellar.sdk.exception.BadRequestException
-import org.stellar.sdk.operations.PaymentOperation
-import org.stellar.sdk.responses.TransactionResponse
+import org.stellar.sdk.Asset
+import org.stellar.sdk.KeyPair
+import org.stellar.sdk.Server
+import org.stellar.sdk.SorobanServer
 
 class Sep6EventProcessor(
   private val config: Config,
   private val server: Server,
+  private val rpc: SorobanServer,
   private val platformClient: PlatformClient,
+  private val paymentClient: PaymentClient,
   private val customerService: CustomerService,
   private val sepHelper: SepHelper,
   /** Map of transaction ID to Stellar transaction ID. */
@@ -117,8 +122,7 @@ class Sep6EventProcessor(
         } else {
           transactionWithRetry {
             stellarTxnId =
-              submitStellarTransaction(
-                keypair.accountId,
+              paymentClient.send(
                 transaction.destinationAccount,
                 Asset.create(transaction.amountExpected.asset.toAssetId()),
                 // If no amount was specified at transaction initialization, assume the user
@@ -149,14 +153,27 @@ class Sep6EventProcessor(
           ),
         )
       PENDING_STELLAR ->
-        sepHelper.rpcAction(
-          RpcMethod.NOTIFY_ONCHAIN_FUNDS_SENT.toString(),
-          NotifyOnchainFundsSentRequest(
-            transactionId = transaction.id,
-            message = "Funds sent to user",
-            stellarTransactionId = onchainPayments[transaction.id]!!,
-          ),
-        )
+        // SAC transfers submitted to RPC are asynchronous, we will need to retry
+        // until the RPC returns a success response
+        flow<Unit> {
+            sepHelper.rpcAction(
+              RpcMethod.NOTIFY_ONCHAIN_FUNDS_SENT.toString(),
+              NotifyOnchainFundsSentRequest(
+                transactionId = transaction.id,
+                message = "Funds sent to user",
+                stellarTransactionId = onchainPayments[transaction.id]!!,
+              ),
+            )
+          }
+          .retryWhen { _, attempt ->
+            if (attempt < 5) {
+              delay(5_000)
+              return@retryWhen true
+            } else {
+              return@retryWhen false
+            }
+          }
+          .collect {}
       COMPLETED -> {
         log.info { "Transaction ${transaction.id} completed" }
       }
@@ -389,13 +406,17 @@ class Sep6EventProcessor(
     }
   }
 
-  private fun verifyKyc(sep10Account: String, sep10AccountMemo: String?, kind: Kind): List<String> {
+  private fun verifyKyc(
+    webAuthAccount: String,
+    webAuthAccountMemo: String?,
+    kind: Kind,
+  ): List<String> {
     val customer = runBlocking {
       customerService.getCustomer(
         GetCustomerRequest.builder()
-          .account(sep10Account)
-          .memo(sep10AccountMemo)
-          .memoType(if (sep10AccountMemo != null) "id" else null)
+          .account(webAuthAccount)
+          .memo(webAuthAccountMemo)
+          .memoType(if (webAuthAccountMemo != null) "id" else null)
           .build()
       )
     }
@@ -447,7 +468,7 @@ class Sep6EventProcessor(
             transactionId = event.payload.transaction.id,
             message = "Please update your info",
             customerId = existingCustomerId,
-            customerType = "sep6"
+            customerType = "sep6",
           ),
         )
       }
@@ -461,39 +482,6 @@ class Sep6EventProcessor(
       2 -> parts[1]
       else -> throw RuntimeException("Invalid asset format: $this")
     }
-  }
-
-  private fun submitStellarTransaction(
-    source: String,
-    destination: String,
-    asset: Asset,
-    amount: String,
-  ): String {
-    // TODO: use Kotlin wallet SDK
-    val account = server.accounts().account(source)
-    val transaction =
-      TransactionBuilder(account, Network.TESTNET)
-        .setBaseFee(100)
-        .addPreconditions(
-          TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(60)).build()
-        )
-        .addOperation(
-          PaymentOperation.builder()
-            .destination(destination)
-            .asset(asset)
-            .amount(BigDecimal(amount))
-            .build()
-        )
-        .build()
-    transaction.sign(KeyPair.fromSecretSeed(config.appSettings.paymentSigningSeed))
-    val txnResponse: TransactionResponse
-    try {
-      txnResponse = server.submitTransaction(transaction)
-    } catch (e: BadRequestException) {
-      throw RuntimeException("Error submitting transaction: ${e.problem?.extras?.resultCodes}")
-    }
-    assert(txnResponse.successful)
-    return txnResponse.hash
   }
 
   private suspend fun patchTransaction(data: PlatformTransactionData) {

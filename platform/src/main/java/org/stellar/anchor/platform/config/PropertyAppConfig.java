@@ -23,6 +23,9 @@ public class PropertyAppConfig implements AppConfig, Validator {
   @Value("${stellar_network.horizon_url}")
   private String horizonUrl;
 
+  @Value("${stellar_network.rpc_url}")
+  private String rpcUrl;
+
   @Value("${languages}")
   private List<String> languages;
 
@@ -68,6 +71,18 @@ public class PropertyAppConfig implements AppConfig, Validator {
             String.format(
                 "The stellar_network.horizon_url:%s is not in valid format.",
                 config.getHorizonUrl()));
+      }
+    }
+
+    if (isEmpty(config.getRpcUrl())) {
+      // TODO: this can only be empty when SEP-45 is disabled
+    } else {
+      if (!NetUtil.isUrlValid(config.getRpcUrl())) {
+        errors.rejectValue(
+            "rpcUrl",
+            "rpc-url-invalid",
+            String.format(
+                "The stellar_network.rpc_url:%s is not in valid format.", config.getRpcUrl()));
       }
     }
   }

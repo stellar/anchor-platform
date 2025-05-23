@@ -51,13 +51,13 @@ public class Sep24TransactionBuilder {
     return this;
   }
 
-  public Sep24TransactionBuilder sep10Account(String sep10Account) {
-    txn.setSep10Account(sep10Account);
+  public Sep24TransactionBuilder webAuthAccount(String webAuthAccount) {
+    txn.setWebAuthAccount(webAuthAccount);
     return this;
   }
 
-  public Sep24TransactionBuilder sep10AccountMemo(String sep10AccountMemo) {
-    txn.setSep10AccountMemo(sep10AccountMemo);
+  public Sep24TransactionBuilder webAuthAccountMemo(String webAuthAccountMemo) {
+    txn.setWebAuthAccountMemo(webAuthAccountMemo);
     return this;
   }
 

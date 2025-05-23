@@ -5,7 +5,7 @@ import org.stellar.anchor.api.sep.sep6.InfoResponse
 import org.stellar.anchor.api.sep.sep6.StartDepositResponse
 import org.stellar.anchor.api.sep.sep6.StartWithdrawResponse
 
-class Sep6Client(private val endpoint: String, private val jwt: String) : SepClient() {
+class Sep6Client(private val endpoint: String, var jwt: String) : SepClient() {
   fun getInfo(): InfoResponse {
     val responseBody = httpGet("$endpoint/info")
     return gson.fromJson(responseBody, InfoResponse::class.java)
