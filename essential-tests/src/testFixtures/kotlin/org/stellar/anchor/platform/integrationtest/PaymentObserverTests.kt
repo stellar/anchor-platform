@@ -138,7 +138,7 @@ class PaymentObserverTests {
     assertEquals(1, toEvent?.size)
     assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
     assertEquals(walletContractId, toEvent!![0].to)
-    assertEquals(AssetHelper.toXdrAmount("0.0000002"), fromEvent[0].amount)
+    assertEquals(BigInteger.valueOf(AssetHelper.toXdrAmount("0.0000002")), fromEvent[0].amount)
     assertEquals(Asset.createNativeAsset().toString(), fromEvent[0].sep11Asset)
     assertEquals(fromEvent, toEvent)
 
@@ -163,7 +163,7 @@ class PaymentObserverTests {
     assertEquals(1, toEvent2?.size)
     assertEquals(walletContractId, fromEvent2!![0].from)
     assertEquals(fromKeyPair.accountId, toEvent2!![0].to)
-    assertEquals(AssetHelper.toXdrAmount("0.0000001"), fromEvent2[0].amount)
+    assertEquals(BigInteger.valueOf(AssetHelper.toXdrAmount("0.0000001")), fromEvent2[0].amount)
     assertEquals(fromEvent2, toEvent2)
   }
 
@@ -300,7 +300,10 @@ class PaymentObserverTests {
     assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
     assertEquals(toKeyPair.accountId, fromEvent[0].to)
     val paymentOperation: PaymentOperation = txn.operations[0] as PaymentOperation
-    assertEquals(AssetHelper.toXdrAmount(paymentOperation.amount.toString()), fromEvent[0].amount)
+    assertEquals(
+      BigInteger.valueOf(AssetHelper.toXdrAmount(paymentOperation.amount.toString())),
+      fromEvent[0].amount
+    )
     assertEquals(
       AssetHelper.getSep11AssetName(paymentOperation.asset.toXdr()),
       fromEvent[0].sep11Asset,
@@ -320,7 +323,7 @@ class PaymentObserverTests {
     val paymentOperation: PathPaymentStrictSendOperation =
       txn.operations[0] as PathPaymentStrictSendOperation
     assertEquals(
-      AssetHelper.toXdrAmount(paymentOperation.sendAmount.toString()),
+      BigInteger.valueOf(AssetHelper.toXdrAmount(paymentOperation.sendAmount.toString())),
       fromEvent[0].amount,
     )
     assertEquals(
