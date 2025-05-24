@@ -13,6 +13,7 @@ import java.util.List;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.TOID;
+import org.stellar.sdk.scval.Scv;
 import org.stellar.sdk.xdr.*;
 
 public class LedgerClientHelper {
@@ -120,9 +121,6 @@ public class LedgerClientHelper {
         SCVal from = hostFunction.getInvokeContract().getArgs()[0];
         SCVal to = hostFunction.getInvokeContract().getArgs()[1];
         SCVal amount = hostFunction.getInvokeContract().getArgs()[2];
-        BigInteger high = BigInteger.valueOf(amount.getI128().getHi().getInt64());
-        BigInteger low = amount.getI128().getLo().getUint64().getNumber();
-        BigInteger amountValue = high.shiftLeft(64).add(low);
 
         yield LedgerOperation.builder()
             .type(INVOKE_HOST_FUNCTION)
@@ -131,7 +129,7 @@ public class LedgerClientHelper {
                     .contractId(contractId)
                     .hostFunction("transfer")
                     .id(operationId)
-                    .amount(amountValue)
+                    .amount(Scv.fromInt128(amount))
                     .from(getAddressOrContractId(from.getAddress()))
                     .to(getAddressOrContractId(to.getAddress()))
                     .sourceAccount(sourceAccount)
