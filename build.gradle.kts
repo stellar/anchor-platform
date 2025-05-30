@@ -60,7 +60,7 @@ tasks.register("runEssentialTests") {
   description = "Run the essential tests."
   dependsOn(":essential-tests:test")
   
-  doFirst {
+  doLast {
     if (!isPortActive(port = 8080)) {
       println("************************************************************")
       println(
