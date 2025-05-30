@@ -113,6 +113,7 @@ val dockerCreateAnchorTest by
       dependsOn(dockerPullAnchorTest)
       targetImageId { dockerPullAnchorTest.image.get() }
       
+      doLast {
       // These values need to be captured during configuration time to set up the container properly
       val homeDomain = System.getenv("TEST_HOME_DOMAIN") ?: "http://host.docker.internal:8080"
       val seps = System.getenv().getOrDefault("TEST_SEPS", "1,6,10,12,24,31,38").split(",")
@@ -129,7 +130,6 @@ val dockerCreateAnchorTest by
 
       cmd.set(cmdList)
       
-      doLast {
         println("Creating the docker container.")
         println("TEST_HOME_DOMAIN=$homeDomain")
         println("TEST_SEPS=$seps")
