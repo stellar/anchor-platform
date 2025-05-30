@@ -39,10 +39,13 @@ application { mainClass.set("org.stellar.anchor.platform.ServiceRunner") }
 
 /** Start all the servers based on the `default` test configuration. */
 tasks.register<JavaExec>("startAllServers") {
-  println("Starting all servers based on the `default` test configuration.")
   group = "application"
   classpath = sourceSets["main"].runtimeClasspath
   mainClass.set("org.stellar.anchor.platform.run_profiles.RunAllServers")
+  
+  doLast {
+    println("Starting all servers based on the `default` test configuration.")
+  }
 }
 
 /**
@@ -50,19 +53,24 @@ tasks.register<JavaExec>("startAllServers") {
  * envionrment variable.
  */
 tasks.register<JavaExec>("startServersWithTestProfile") {
-  println(
-      "Starting the servers based on the test configuration specified by the TEST_PROFILE_NAME environment variable.")
   group = "application"
   classpath = sourceSets["main"].runtimeClasspath
   mainClass.set("org.stellar.anchor.platform.run_profiles.RunTestProfile")
+  
+  doLast {
+    println("Starting the servers based on the test configuration specified by the TEST_PROFILE_NAME environment variable.")
+  }
 }
 
 /** Run docker compose up to start Postgres, Kafka, etc. */
 tasks.register<JavaExec>("dockerComposeStart") {
-  println("Running docker compose to start Postgres, Kafka ,etc.")
   group = "application"
   classpath = sourceSets["main"].runtimeClasspath
   mainClass.set("org.stellar.anchor.platform.run_profiles.RunDockerDevStackNoWait")
+  
+  doLast {
+    println("Running docker compose to start Postgres, Kafka ,etc.")
+  }
 }
 
 tasks.register<Exec>("dockerComposeStop") {
@@ -91,25 +99,25 @@ tasks.register<Exec>("dockerComposeStop") {
 
 val dockerPullAnchorTest by
     tasks.register<DockerPullImage>("pullDockerImage") {
-      println("Pulling the docker image.")
       group = "docker"
       image.set("stellar/anchor-tests:latest")
+      
+      doLast {
+        println("Pulling the docker image.")
+      }
     }
 
 val dockerCreateAnchorTest by
     tasks.register<DockerCreateContainer>("dockerCreatePullAnchorTest") {
-      println("Creating the docker container.")
       group = "docker"
-
       dependsOn(dockerPullAnchorTest)
       targetImageId { dockerPullAnchorTest.image.get() }
-
+      
+      // These values need to be captured during configuration time to set up the container properly
       val homeDomain = System.getenv("TEST_HOME_DOMAIN") ?: "http://host.docker.internal:8080"
-      println("TEST_HOME_DOMAIN=$homeDomain")
       val seps = System.getenv().getOrDefault("TEST_SEPS", "1,6,10,12,24,31,38").split(",")
-      println("TEST_SEPS=$seps")
-
       val configPath = "${project.projectDir}/../platform/src/test/resources"
+      
       hostConfig.autoRemove.set(true)
       hostConfig.binds.set(mutableMapOf(configPath to "/config"))
       hostConfig.network.set("host")
@@ -120,24 +128,34 @@ val dockerCreateAnchorTest by
           listOf("--sep-config", "/config/stellar-anchor-tests-sep-config.json", "--verbose"))
 
       cmd.set(cmdList)
+      
+      doLast {
+        println("Creating the docker container.")
+        println("TEST_HOME_DOMAIN=$homeDomain")
+        println("TEST_SEPS=$seps")
+      }
     }
 
 val dockerStartAnchorTest by
     tasks.register<DockerStartContainer>("dockerStartAnchorTest") {
-      println("Starting the docker container.")
       group = "docker"
-
       dependsOn(dockerCreateAnchorTest)
       targetContainerId(dockerCreateAnchorTest.containerId)
+      
+      doLast {
+        println("Starting the docker container.")
+      }
     }
 
 val anchorTest by
     tasks.register<DockerLogsContainer>("anchorTest") {
-      println("Running the docker container.")
       group = "docker"
-
       dependsOn(dockerStartAnchorTest)
       targetContainerId(dockerCreateAnchorTest.containerId)
       follow.set(true)
       tailAll.set(true)
+      
+      doLast {
+        println("Running the docker container.")
+      }
     }
