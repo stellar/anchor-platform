@@ -192,16 +192,14 @@ class Sep10ServiceIntegrationTests : AbstractIntegrationTests(TestConfig()) {
   ) {
     // 1 ------ Mock client account and its response from horizon
     // The public key of the client that exists thanks to a mockk
-    // GDFWZYGUNUFW4H3PP3DSNGTDFBUHO6NUFPQ6FAPMCKEJ6EHDKX2CV2IM
-    val clientKP =
-      KeyPair.fromSecretSeed("SAUNXQPM7VDH3WMDRHJ2WIN27KD23XD4AZPE62V76Q2SJPXR3DQWEOPX")
+    val clientKP = KeyPair.random()
     val mockHorizon = MockWebServer()
     mockHorizon.start()
 
     mockHorizon.enqueue(
       MockResponse()
         .addHeader("Content-Type", "application/json")
-        .setBody(testAccountWithNonCompliantSigner)
+        .setBody(testAccountWithNonCompliantSigner.replace("%ACCOUNT_ID%", clientKP.accountId))
     )
     val mockHorizonUrl = mockHorizon.url("").toString()
 
@@ -210,7 +208,6 @@ class Sep10ServiceIntegrationTests : AbstractIntegrationTests(TestConfig()) {
     // serverKP does not exist in the network.
     val serverWebAuthDomain = TEST_WEB_AUTH_DOMAIN
     val serverHomeDomain = TEST_HOME_DOMAIN
-    // GDFWZYGUNUFW4H3PP3DSNGTDFBUHO6NUFPQ6FAPMCKEJ6EHDKX2CV2IM
     val serverKP = KeyPair.random()
 
     // clientDomainKP does not exist in the network. It refers to the wallet (like Lobstr's)

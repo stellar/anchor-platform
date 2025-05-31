@@ -511,8 +511,7 @@ internal class Sep10ServiceTest {
   //
 
   private val clientDomain = "test-wallet.stellar.org"
-  private val domainKp =
-    SigningKeyPair.fromSecret("SCYVDFYEHNDNTB2UER2FCYSZAYQFAAZ6BDYXL3BWRQWNL327GZUXY7D7")
+  private val domainKp = SigningKeyPair(KeyPair.random())
   // Signing with a domain signer
   private val domainSigner =
     object : DefaultAuthHeaderSigner() {
@@ -530,8 +529,7 @@ internal class Sep10ServiceTest {
       }
     }
   private val custodialSigner = DefaultAuthHeaderSigner()
-  private val custodialKp =
-    SigningKeyPair.fromSecret("SBPPLU2KO3PDBLSDFIWARQSW5SAOIHTJDUQIWN3BQS7KPNMVUDSU37QO")
+  private val custodialKp = SigningKeyPair(KeyPair.random())
   private val custodialMemo = "1234567"
   private val authEndpoint = "https://$TEST_WEB_AUTH_DOMAIN/auth"
 
