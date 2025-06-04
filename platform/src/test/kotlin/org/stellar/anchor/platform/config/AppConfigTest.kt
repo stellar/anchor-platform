@@ -31,6 +31,7 @@ class AppConfigTest {
     config.validateConfig(config, errors)
     assertErrorCode(errors, "horizon-url-empty")
   }
+
   @ParameterizedTest
   @ValueSource(
     strings = ["https://horizon-testnet.stellar.org", "https://horizon-testnet.stellar.org:8080"]
@@ -42,11 +43,19 @@ class AppConfigTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["https://horizon-testnet.stellar. org", "stellar.org", "abc"])
+  @ValueSource(strings = ["https ://horizon-testnet.stellar. org", "stellar.org", "abc"])
   fun `test invalid horizon_url`(url: String) {
     config.horizonUrl = url
     config.validateConfig(config, errors)
     assertErrorCode(errors, "horizon-url-invalid")
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["https ://soroban-testnet.stellar.org", "stellar.org", "abc"])
+  fun `test invalid rpc_url`(url: String) {
+    config.rpcUrl = url
+    config.validateConfig(config, errors)
+    assertErrorCode(errors, "rpc-url-invalid")
   }
 
   @ParameterizedTest
@@ -71,6 +80,7 @@ class AppConfigTest {
     fun validLanguages(): Stream<List<String>> {
       return Stream.of(listOf(), listOf("en", "en-us", "EN", "EN-US"), listOf("zh-tw", "zh"))
     }
+
     @JvmStatic
     fun invalidLanguages(): Stream<List<String>> {
       return Stream.of(listOf("1234", "EN", "EN-US"))

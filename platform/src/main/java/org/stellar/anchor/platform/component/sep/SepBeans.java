@@ -17,7 +17,7 @@ import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.*;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.filter.Sep10JwtFilter;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.platform.condition.OnAnySepsEnabled;
 import org.stellar.anchor.platform.config.*;
@@ -144,11 +144,11 @@ public class SepBeans {
       AppConfig appConfig,
       SecretConfig secretConfig,
       Sep10Config sep10Config,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       JwtService jwtService,
       ClientFinder clientFinder) {
     return new Sep10Service(
-        appConfig, secretConfig, sep10Config, horizon, jwtService, clientFinder);
+        appConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder);
   }
 
   @Bean
