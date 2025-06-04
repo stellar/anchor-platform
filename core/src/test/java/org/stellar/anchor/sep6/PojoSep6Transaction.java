@@ -31,8 +31,8 @@ public class PojoSep6Transaction implements Sep6Transaction {
   String amountFee;
   String amountFeeAsset;
   String amountExpected;
-  String sep10Account;
-  String sep10AccountMemo;
+  String webAuthAccount;
+  String webAuthAccountMemo;
   String withdrawAnchorAccount;
   String fromAccount;
   String toAccount;

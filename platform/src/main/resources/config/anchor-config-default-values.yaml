@@ -40,6 +40,9 @@ stellar_network:
   # The horizon server endpoint.
   horizon_url: https://horizon-testnet.stellar.org
 
+  # The rpc server endpoint.
+  rpc_url: https://soroban-testnet.stellar.org
+
 ##############################
 # Callback API Configuration
 ##############################
@@ -410,8 +413,51 @@ sep38:
   # Whether to enable SEP-38
   #
   enabled: false
-  # Whether to enforce SEP-10 authentication for SEP-38 /info, /price, /prices endpoints.
+  # (Deprecated) Whether to enforce SEP-10 authentication for SEP-38 /info, /price, /prices endpoints.
   sep10_enforced: false
+  # Whether to enforce SEP-10/SEP-45 authentication for SEP-38 /info, /price, /prices endpoints.
+  auth_enforced: false
+
+######################
+# SEP-45 Configuration
+######################
+sep45:
+  # Whether to enable SEP-45
+  # If `enabled` is set to True, the following two secrets must be set via the environment
+  # variables and `stellar_network.rpc_url` must be set.
+  # `secret.sep45_jwt_secret`: The JWT encryption key.
+  #
+  enabled: false
+  # The `web_auth_domain` property of SEP-45. https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0045.md
+  # The `web_auth_domain` is optional and will be set to the value of the `home_domains` if "home_domains" can only be translated to one domain.
+  # 1) web_auth_domain is optional:
+  #    Ex: home_domains: ap.stellar.org
+  # 2) web_auth_domain is required:
+  #    Ex: home_domains: ap.stellar.org, sdp.stellar.org
+  #    Ex: home_domains: *.sdp.stellar.org
+  #
+  web_auth_domain:
+  # The contract address of a SEP-45 web auth contract. https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0045.md#web-authentication-contract
+  # This is the contract the server will use to authenticate the client and is required.
+  #
+  web_auth_contract_id:
+  # The `home_domains` property of SEP-45. This is a list of domains and/or wildcard patterns that the client can use to authenticate.
+  # https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0045.md
+  # Please also set web_auth_domain if you have more than one home domain in this list.
+  # The following lists are examples:
+  # Ex: home_domains: [ap.stellar.org, *.sdp.stellar.org]
+  # Ex: home_domains: ap.stellar.org, *.sdp.stellar.org
+  #
+  home_domains: localhost:8080
+  # Set the authentication challenge transaction timeout in seconds. An expired signed transaction will be rejected.
+  # This is the timeout period the client must finish the authentication process. (ie: sign and respond the challenge
+  # transaction).
+  #
+  auth_timeout: 900
+  # Set the timeout in seconds of the authenticated JSON Web Token. An expired JWT will be rejected.
+  # This is the timeout period after the client has authenticated.
+  #
+  jwt_timeout: 86400
 
 ######################
 ## Custody Server configuration

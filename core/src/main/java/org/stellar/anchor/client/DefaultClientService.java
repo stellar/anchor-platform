@@ -113,9 +113,9 @@ public class DefaultClientService implements ClientService {
   }
 
   @Override
-  public ClientConfig getClientConfigByDomainAndSep10Account(String domain, String sep10Account) {
+  public ClientConfig getClientConfigByDomainAndAccount(String domain, String account) {
     ClientConfig clientByDomain = getClientConfigByDomain(domain);
-    ClientConfig clientByAccount = getClientConfigBySigningKey(sep10Account);
+    ClientConfig clientByAccount = getClientConfigBySigningKey(account);
     return clientByDomain != null ? clientByDomain : clientByAccount;
   }
 }

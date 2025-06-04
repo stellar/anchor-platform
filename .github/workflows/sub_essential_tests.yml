@@ -16,6 +16,7 @@ jobs:
 
       # Test secrets
       TEST_CLIENT_WALLET_SECRET: ${{ vars.TEST_CLIENT_WALLET_SECRET }}
+      TEST_CLIENT_SMART_WALLET_ACCOUNT: ${{ vars.TEST_CLIENT_SMART_WALLET_ACCOUNT }}
       TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET: ${{ vars.TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET }}
       TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET: ${{ vars.TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET }}
       TEST_WITHDRAW_FUND_CLIENT_SECRET_1: ${{ vars.TEST_WITHDRAW_FUND_CLIENT_SECRET_1 }}
@@ -83,6 +84,8 @@ jobs:
           SEP1_TOML_VALUE: /home/runner/anchor-platform/service-runner/src/main/resources/config/stellar.host.docker.internal.toml
           SEP10_WEB_AUTH_DOMAIN: host.docker.internal:8080
           SEP10_HOME_DOMAINS: host.docker.internal:8080,*.stellar.org
+          SEP45_WEB_AUTH_DOMAIN: host.docker.internal:8080
+          SEP45_HOME_DOMAINS: host.docker.internal:8080,*.stellar.org
           TOML_PATH: /home/runner/anchor-platform/wallet-reference-server/src/main/resources/toml
         run: |
           cp /home/runner/anchor-platform/service-runner/build/libs/anchor-platform-runner-*.jar /home/runner/anchor-platform-runner.jar

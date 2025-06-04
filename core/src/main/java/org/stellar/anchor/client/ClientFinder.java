@@ -4,7 +4,7 @@ import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.stellar.anchor.api.exception.SepNotAuthorizedException;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.config.Sep10Config;
 
 /** Finds the client name for a SEP-10 JWT. */
@@ -48,7 +48,7 @@ public class ClientFinder {
   }
 
   @Nullable
-  public String getClientName(Sep10Jwt token) throws SepNotAuthorizedException {
+  public String getClientName(WebAuthJwt token) throws SepNotAuthorizedException {
     return getClientName(token.getClientDomain(), token.getAccount());
   }
 

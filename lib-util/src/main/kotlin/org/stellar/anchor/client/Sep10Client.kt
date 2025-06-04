@@ -24,18 +24,28 @@ class Sep10Client(
     signingSeed: String
   ) : this(endpoint, serverAccount, walletAccount, arrayOf(signingSeed))
 
-  fun auth(homeDomain: String): String {
+  fun auth(homeDomain: String, memo: String? = null): String {
     // Call to get challenge
-    val challenge = challenge(homeDomain)
+    val challenge = challenge(homeDomain, memo)
     // Sign challenge
     val txn = sign(challenge, signingKeys, serverAccount, homeDomain)
     // Get token from challenge
     return validate(ValidationRequest.of(txn))!!.token
   }
 
-  fun challenge(homeDomain: String? = ""): ChallengeResponse {
-    val url =
-      String.format("%s?account=%s&home_domain=%s", this.endpoint, walletAccount, homeDomain)
+  fun challenge(homeDomain: String? = "", memo: String? = ""): ChallengeResponse {
+    var url =
+      String.format(
+        "%s?account=%s",
+        this.endpoint,
+        walletAccount,
+      )
+    if (homeDomain.orEmpty().isNotEmpty()) {
+      url += "&home_domain=$homeDomain"
+    }
+    if (memo.orEmpty().isNotEmpty()) {
+      url += "&memo=$memo"
+    }
     val responseBody = httpGet(url)
     return gson.fromJson(responseBody, ChallengeResponse::class.java)
   }
