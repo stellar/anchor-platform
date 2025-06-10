@@ -130,7 +130,10 @@ public class TransactionMapper {
     String amountOutAsset = makeAsset(txn.getAmountOutAsset(), assetService, txn);
     String amountExpectedAsset = makeAsset(null, assetService, txn);
     StellarId customer =
-        StellarId.builder().account(txn.getSep10Account()).memo(txn.getSep10AccountMemo()).build();
+        StellarId.builder()
+            .account(txn.getWebAuthAccount())
+            .memo(txn.getWebAuthAccountMemo())
+            .build();
 
     return GetTransactionResponse.builder()
         .id(txn.getId())
@@ -173,8 +176,8 @@ public class TransactionMapper {
         .customers(Customers.builder().sender(customer).receiver(customer).build())
         .creator(
             StellarId.builder()
-                .account(txn.getSep10Account())
-                .memo(txn.getSep10AccountMemo())
+                .account(txn.getWebAuthAccount())
+                .memo(txn.getWebAuthAccountMemo())
                 .build())
         .build();
   }
@@ -191,7 +194,10 @@ public class TransactionMapper {
     String amountExpectedAsset = makeAsset(null, assetService, txn);
 
     StellarId customer =
-        StellarId.builder().account(txn.getSep10Account()).memo(txn.getSep10AccountMemo()).build();
+        StellarId.builder()
+            .account(txn.getWebAuthAccount())
+            .memo(txn.getWebAuthAccountMemo())
+            .build();
     String sourceAccount = txn.getFromAccount();
 
     return GetTransactionResponse.builder()
@@ -233,8 +239,8 @@ public class TransactionMapper {
         .customers(Customers.builder().sender(customer).receiver(customer).build())
         .creator(
             StellarId.builder()
-                .account(txn.getSep10Account())
-                .memo(txn.getSep10AccountMemo())
+                .account(txn.getWebAuthAccount())
+                .memo(txn.getWebAuthAccountMemo())
                 .build())
         .quoteId(txn.getQuoteId())
         .build();

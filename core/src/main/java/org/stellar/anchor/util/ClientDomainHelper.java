@@ -1,4 +1,4 @@
-package org.stellar.anchor.sep10;
+package org.stellar.anchor.util;
 
 import static org.stellar.anchor.util.Log.debugF;
 import static org.stellar.anchor.util.Log.infoF;
@@ -9,10 +9,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.exception.SepException;
-import org.stellar.anchor.util.Sep1Helper;
 import org.stellar.sdk.KeyPair;
 
-public class Sep10Helper {
+public class ClientDomainHelper {
 
   /**
    * Fetch SIGNING_KEY from clint_domain by reading the stellar.toml content.
@@ -25,7 +24,7 @@ public class Sep10Helper {
   public static String fetchSigningKeyFromClientDomain(String clientDomain, boolean allowHttpRetry)
       throws SepException {
     String clientSigningKey = "";
-    String url = "https://" + clientDomain + "/.well-known/stellar.toml";
+    String url = "http://" + clientDomain + "/.well-known/stellar.toml";
     try {
       Sep1Helper.TomlContent toml = tryRead(url, allowHttpRetry);
       clientSigningKey = toml.getString("SIGNING_KEY");

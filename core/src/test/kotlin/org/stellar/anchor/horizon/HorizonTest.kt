@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.config.AppConfig
+import org.stellar.anchor.network.Horizon
 import org.stellar.sdk.Asset
 import org.stellar.sdk.AssetTypeCreditAlphaNum
 import org.stellar.sdk.Server

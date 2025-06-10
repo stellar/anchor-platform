@@ -54,8 +54,9 @@ import org.stellar.anchor.config.AppConfig
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
-import org.stellar.anchor.horizon.Horizon
+import org.stellar.anchor.network.Horizon
 import org.stellar.anchor.setupMock
+import org.stellar.anchor.util.ClientDomainHelper
 import org.stellar.anchor.util.FileUtil
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.NetUtil
@@ -77,7 +78,7 @@ internal class TestSigner(
   @SerializedName("key") val key: String,
   @SerializedName("type") val type: String,
   @SerializedName("weight") val weight: Int,
-  @SerializedName("sponsor") val sponsor: String
+  @SerializedName("sponsor") val sponsor: String,
 ) {
   fun toSigner(): AccountResponse.Signer {
     val gson = GsonUtils.getInstance()
@@ -107,7 +108,7 @@ internal class Sep10ServiceTest {
     fun stellarNetworks(): Stream<Arguments> {
       return Stream.of(
         Arguments.of("https://horizon-testnet.stellar.org", TESTNET),
-        //        Arguments.of("https://horizon-futurenet.stellar.org", FUTURENET)
+        Arguments.of("https://horizon-futurenet.stellar.org", FUTURENET),
       )
     }
 
@@ -150,7 +151,7 @@ internal class Sep10ServiceTest {
   fun createTestChallenge(
     clientDomain: String,
     homeDomain: String,
-    signWithClientDomain: Boolean
+    signWithClientDomain: Boolean,
   ): String {
     val now = System.currentTimeMillis() / 1000L
     val signer = KeyPair.fromSecretSeed(TEST_SIGNING_SEED)
@@ -166,7 +167,7 @@ internal class Sep10ServiceTest {
           TimeBounds(now, now + 900),
           clientDomain,
           if (clientDomain.isEmpty()) "" else clientDomainKeyPair.accountId,
-          memo
+          memo,
         )
     txn.sign(clientKeyPair)
     if (clientDomain.isNotEmpty() && signWithClientDomain) {
@@ -177,11 +178,7 @@ internal class Sep10ServiceTest {
 
   @ParameterizedTest
   @ValueSource(
-    strings =
-      [
-        "https://horizon-testnet.stellar.org"
-        //      "https://horizon-futurenet.stellar.org"
-      ]
+    strings = ["https://horizon-testnet.stellar.org", "https://horizon-futurenet.stellar.org"]
   )
   fun `test challenge with non existent account and client domain`(horizonUrl: String) {
     // 1 ------ Create Test Transaction
@@ -366,7 +363,7 @@ internal class Sep10ServiceTest {
         any(),
         clientDomain ?: "",
         any(),
-        any()
+        any(),
       )
     }
   }
@@ -399,7 +396,7 @@ internal class Sep10ServiceTest {
     val mockSigners =
       listOf(
         TestSigner(clientKeyPair.accountId, "ed25519_public_key", 1, "").toSigner(),
-        TestSigner(clientDomainKeyPair.accountId, "ed25519_public_key", 1, "").toSigner()
+        TestSigner(clientDomainKeyPair.accountId, "ed25519_public_key", 1, "").toSigner(),
       )
 
     val accountResponse =
@@ -634,7 +631,7 @@ internal class Sep10ServiceTest {
             .clientDomain(TEST_CLIENT_DOMAIN)
             .build(),
           MemoId(1234567890),
-          null
+          null,
         )
       }
     // Then
@@ -648,12 +645,12 @@ internal class Sep10ServiceTest {
       "       NETWORK_PASSPHRASE=\"Public Global Stellar Network ; September 2015\"\n"
 
     assertThrows<SepException> {
-      Sep10Helper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
+      ClientDomainHelper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
     }
 
     every { NetUtil.fetch(any()) } answers { throw IOException("Cannot connect") }
     assertThrows<SepException> {
-      Sep10Helper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
+      ClientDomainHelper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
     }
 
     every { NetUtil.fetch(any()) } returns
@@ -664,7 +661,7 @@ internal class Sep10ServiceTest {
       SIGNING_KEY="BADKEY"
       """
     assertThrows<SepException> {
-      Sep10Helper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
+      ClientDomainHelper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
     }
   }
 
@@ -708,7 +705,7 @@ internal class Sep10ServiceTest {
   @MethodSource("stellarNetworks")
   fun `test the challenge with existent account, multisig, and client domain`(
     horizonUrl: String,
-    network: Network
+    network: Network,
   ) {
     // 1 ------ Create Test Transaction
 
@@ -825,7 +822,7 @@ internal class Sep10ServiceTest {
       override suspend fun createToken(
         claims: Map<String, String>,
         clientDomain: String?,
-        issuer: AccountKeyPair?
+        issuer: AccountKeyPair?,
       ): String {
         val timeExp = Instant.ofEpochSecond(Clock.System.now().plus(expiration).epochSeconds)
         val builder = createBuilder(timeExp, claims)
@@ -873,7 +870,7 @@ internal class Sep10ServiceTest {
         custodialKp,
         authEndpoint.replace("https", "http"),
         params,
-        authHeaderSigner = custodialSigner
+        authHeaderSigner = custodialSigner,
       )
 
     val req = ChallengeRequest.builder().account(custodialKp.address).memo(custodialMemo).build()
@@ -915,7 +912,7 @@ internal class Sep10ServiceTest {
         SigningKeyPair(KeyPair.random()),
         authEndpoint,
         params,
-        authHeaderSigner = domainSigner
+        authHeaderSigner = domainSigner,
       )
 
     val req =
@@ -937,7 +934,7 @@ internal class Sep10ServiceTest {
         custodialKp,
         "https://wrongdomain.com/auth",
         params,
-        authHeaderSigner = custodialSigner
+        authHeaderSigner = custodialSigner,
       )
 
     val req = ChallengeRequest.builder().account(custodialKp.address).memo(custodialMemo).build()
@@ -992,7 +989,7 @@ internal class Sep10ServiceTest {
       mutableMapOf(
         "account" to custodialKp.address,
         "memo" to custodialMemo,
-        "home_domain" to "testdomain.com"
+        "home_domain" to "testdomain.com",
       )
     token = createAuthSignToken(custodialKp, authEndpoint, params, authHeaderSigner = domainSigner)
     req =
@@ -1011,7 +1008,7 @@ internal class Sep10ServiceTest {
         "account" to custodialKp.address,
         "memo" to custodialMemo,
         "home_domain" to "testdomain.com",
-        "client_domain" to clientDomain
+        "client_domain" to clientDomain,
       )
     token = createAuthSignToken(custodialKp, authEndpoint, params, authHeaderSigner = domainSigner)
     req =
@@ -1056,12 +1053,12 @@ internal class Sep10ServiceTest {
 fun Sep10Service.validateAuthorizationToken(
   request: ChallengeRequest,
   authorization: String?,
-  clientSigningKey: String?
+  clientSigningKey: String?,
 ) {
   this.validateAuthorization(
     request,
     authorization?.run { "Bearer $authorization" },
-    clientSigningKey
+    clientSigningKey,
   )
 }
 
