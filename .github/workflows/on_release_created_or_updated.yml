@@ -49,7 +49,7 @@ jobs:
         uses: docker/build-push-action@v4.0.0
         with:
           push: true
-          tags: stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }} # TODO: remove when merged to develop
+          tags: stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }},stellar/anchor-platform:latest
           file: Dockerfile
 
   complete:
