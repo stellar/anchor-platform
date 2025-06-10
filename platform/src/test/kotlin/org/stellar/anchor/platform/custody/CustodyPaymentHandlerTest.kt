@@ -10,6 +10,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.platform.data.JdbcCustodyTransaction
 import org.stellar.anchor.platform.data.JdbcCustodyTransactionRepo
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.Log.info
 
 class CustodyPaymentHandlerTest {
 
@@ -17,11 +18,11 @@ class CustodyPaymentHandlerTest {
   class CustodyPaymentHandlerTestImpl(custodyTransactionRepo: JdbcCustodyTransactionRepo) :
     CustodyPaymentHandler(custodyTransactionRepo) {
     override fun onReceived(txn: JdbcCustodyTransaction?, payment: CustodyPayment?) {
-      println("Test implementation")
+      info("Test implementation")
     }
 
     override fun onSent(txn: JdbcCustodyTransaction?, payment: CustodyPayment?) {
-      println("Test implementation")
+      info("Test implementation")
     }
   }
 

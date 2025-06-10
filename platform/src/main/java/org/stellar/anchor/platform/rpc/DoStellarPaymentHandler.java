@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.Set;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
+import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException;
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind;
@@ -24,7 +25,7 @@ import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.*;
 import org.stellar.anchor.platform.validator.RequestValidator;
@@ -38,7 +39,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
   private final CustodyService custodyService;
   private final CustodyConfig custodyConfig;
   private final JdbcTransactionPendingTrustRepo transactionPendingTrustRepo;
-  private final Horizon horizon;
+  private final LedgerClient ledgerClient;
 
   public DoStellarPaymentHandler(
       Sep6TransactionStore txn6Store,
@@ -46,7 +47,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
       CustodyConfig custodyConfig,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       AssetService assetService,
       CustodyService custodyService,
       EventService eventService,
@@ -63,7 +64,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
         DoStellarPaymentRequest.class);
     this.custodyService = custodyService;
     this.custodyConfig = custodyConfig;
-    this.horizon = horizon;
+    this.ledgerClient = ledgerClient;
     this.transactionPendingTrustRepo = transactionPendingTrustRepo;
   }
 
@@ -93,17 +94,17 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
         case SEP_6:
           JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
           trustlineConfigured =
-              horizon.isTrustlineConfigured(txn6.getToAccount(), txn6.getAmountOutAsset());
+              ledgerClient.hasTrustline(txn6.getToAccount(), txn6.getAmountOutAsset());
           break;
         case SEP_24:
           JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
           trustlineConfigured =
-              horizon.isTrustlineConfigured(txn24.getToAccount(), txn24.getAmountOutAsset());
+              ledgerClient.hasTrustline(txn24.getToAccount(), txn24.getAmountOutAsset());
           break;
         default:
           break;
       }
-    } catch (NetworkException ex) {
+    } catch (LedgerException ex) {
       // assume trustline is not configured
     }
 
@@ -149,7 +150,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
 
         try {
           trustlineConfigured =
-              horizon.isTrustlineConfigured(txn6.getToAccount(), txn6.getAmountOutAsset());
+              ledgerClient.hasTrustline(txn6.getToAccount(), txn6.getAmountOutAsset());
         } catch (NetworkException ex) {
           trustlineConfigured = false;
         }
@@ -171,7 +172,7 @@ public class DoStellarPaymentHandler extends RpcTransactionStatusHandler<DoStell
 
         try {
           trustlineConfigured =
-              horizon.isTrustlineConfigured(txn24.getToAccount(), txn24.getAmountOutAsset());
+              ledgerClient.hasTrustline(txn24.getToAccount(), txn24.getAmountOutAsset());
         } catch (NetworkException ex) {
           trustlineConfigured = false;
         }

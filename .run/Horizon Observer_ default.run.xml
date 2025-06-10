@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Stellar Observer: default" type="JetRunConfigurationType" folderName="Run Single Server">
+  <configuration default="false" name="Horizon Observer: default" type="JetRunConfigurationType" folderName="Run Single Server">
     <option name="MAIN_CLASS_NAME" value="org.stellar.anchor.platform.run_profiles.RunStellarObserver" />
     <module name="anchor-platform.service-runner.main" />
     <shortenClasspath name="ARGS_FILE" />
