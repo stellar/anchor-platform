@@ -8,3 +8,4 @@ sources:
   - https://github.com/stellar/anchor-platform
 name: ap-secret-store
 version: 0.1.0
+icon: https://github.com/stellar/anchor-platform/blob/develop/icon.png
