@@ -5,6 +5,7 @@ package org.stellar.anchor.platform.observer.stellar
 import com.google.gson.reflect.TypeToken
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
+import javax.net.ssl.SSLProtocolException
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
@@ -20,7 +21,6 @@ import org.stellar.sdk.requests.SSEStream
 import org.stellar.sdk.responses.Page
 import org.stellar.sdk.responses.gson.GsonSingleton
 import org.stellar.sdk.responses.operations.OperationResponse
-import javax.net.ssl.SSLProtocolException
 
 class StellarPaymentObserverTest {
   companion object {

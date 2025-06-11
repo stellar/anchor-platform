@@ -6,6 +6,9 @@ import com.google.gson.annotations.SerializedName
 import io.jsonwebtoken.Jwts
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
+import java.io.IOException
+import java.time.Instant
+import java.util.stream.Stream
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import okhttp3.OkHttpClient
@@ -56,9 +59,6 @@ import org.stellar.walletsdk.auth.createAuthSignToken
 import org.stellar.walletsdk.horizon.AccountKeyPair
 import org.stellar.walletsdk.horizon.SigningKeyPair
 import org.stellar.walletsdk.util.toJava
-import java.io.IOException
-import java.time.Instant
-import java.util.stream.Stream
 
 @Suppress("unused")
 internal class TestSigner(
@@ -518,8 +518,6 @@ internal class Sep10ServiceTest {
     assertDoesNotThrow { sep10Service.createChallenge(cr) }
     verify(exactly = 2) { sep10Config.knownCustodialAccountList }
   }
-
-
 
   // ----------------------
   // Signature header tests

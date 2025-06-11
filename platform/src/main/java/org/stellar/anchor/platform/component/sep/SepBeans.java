@@ -274,7 +274,7 @@ public class SepBeans {
       LedgerClient ledgerClient,
       NonceManager nonceManager,
       JwtService jwtService) {
-    assert(ledgerClient instanceof StellarRpc);
+    assert (ledgerClient instanceof StellarRpc);
     return new Sep45Service(
         appConfig, secretConfig, sep45Config, (StellarRpc) ledgerClient, nonceManager, jwtService);
   }

@@ -5,6 +5,9 @@ import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.spyk
+import java.security.SecureRandom
+import java.util.concurrent.TimeUnit
+import java.util.stream.Stream
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.mockwebserver.MockResponse
@@ -36,9 +39,6 @@ import org.stellar.sdk.Network.FUTURENET
 import org.stellar.sdk.Network.TESTNET
 import org.stellar.sdk.operations.ManageDataOperation
 import org.stellar.sdk.operations.SetOptionsOperation
-import java.security.SecureRandom
-import java.util.concurrent.TimeUnit
-import java.util.stream.Stream
 
 class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
   companion object {
