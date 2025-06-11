@@ -210,8 +210,8 @@ class TransactionMapperTest {
         refundMemoType = "text"
         clientDomain = "clientDomain"
         clientName = "clientName"
-        sep10Account = "sep10Account"
-        sep10AccountMemo = "sep10AccountMemo"
+        webAuthAccount = "webAuthAccount"
+        webAuthAccountMemo = "webAuthAccount"
         withdrawAnchorAccount = "withdrawAnchorAccount"
         claimableBalanceSupported = true
         requestAssetCode = "USDC"
@@ -268,11 +268,11 @@ class TransactionMapperTest {
             .clientName(sepTxn.clientName)
             .customers(
               Customers.builder()
-                .sender(StellarId(null, sepTxn.sep10Account, sepTxn.sep10AccountMemo))
-                .receiver(StellarId(null, sepTxn.sep10Account, sepTxn.sep10AccountMemo))
+                .sender(StellarId(null, sepTxn.webAuthAccount, sepTxn.webAuthAccountMemo))
+                .receiver(StellarId(null, sepTxn.webAuthAccount, sepTxn.webAuthAccountMemo))
                 .build()
             )
-            .creator(StellarId(null, sepTxn.sep10Account, sepTxn.sep10AccountMemo))
+            .creator(StellarId(null, sepTxn.webAuthAccount, sepTxn.webAuthAccountMemo))
             .instructions(null)
             .build()
         )
@@ -327,8 +327,8 @@ class TransactionMapperTest {
         refundMemoType = "text"
         clientDomain = "clientDomain"
         clientName = "clientName"
-        sep10Account = "sep10Account"
-        sep10AccountMemo = "sep10AccountMemo"
+        webAuthAccount = "webAuthAccount"
+        webAuthAccountMemo = "webAuthAccountMemo"
         withdrawAnchorAccount = "withdrawAnchorAccount"
         requestAssetCode = "USDC"
         requestAssetIssuer = "issuer"
@@ -378,11 +378,11 @@ class TransactionMapperTest {
         .clientName(sepTxn.clientName)
         .customers(
           Customers.builder()
-            .sender(StellarId(null, sepTxn.sep10Account, sepTxn.sep10AccountMemo))
-            .receiver(StellarId(null, sepTxn.sep10Account, sepTxn.sep10AccountMemo))
+            .sender(StellarId(null, sepTxn.webAuthAccount, sepTxn.webAuthAccountMemo))
+            .receiver(StellarId(null, sepTxn.webAuthAccount, sepTxn.webAuthAccountMemo))
             .build()
         )
-        .creator(StellarId(null, sepTxn.sep10Account, sepTxn.sep10AccountMemo))
+        .creator(StellarId(null, sepTxn.webAuthAccount, sepTxn.webAuthAccountMemo))
         .build()
 
     val jsonString = gson.toJson(platformTxn)

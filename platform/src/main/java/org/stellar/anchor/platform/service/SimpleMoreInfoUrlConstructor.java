@@ -36,12 +36,12 @@ public abstract class SimpleMoreInfoUrlConstructor implements MoreInfoUrlConstru
   public String construct(
       String clientDomain,
       String memo,
-      String sep10Account,
+      String webAuthAccount,
       String transactionId,
       SepTransaction txn,
       String lang) {
 
-    MoreInfoUrlJwt token = getBaseToken(clientDomain, memo, sep10Account, transactionId);
+    MoreInfoUrlJwt token = getBaseToken(clientDomain, memo, webAuthAccount, transactionId);
 
     // add lang to token
     Map<String, String> data = new HashMap<>();
@@ -66,5 +66,5 @@ public abstract class SimpleMoreInfoUrlConstructor implements MoreInfoUrlConstru
   }
 
   public abstract MoreInfoUrlJwt getBaseToken(
-      String clientDomain, String sep10Account, String sep10AccountMemo, String transactionId);
+      String clientDomain, String webAuthAccount, String webAuthAccountMemo, String transactionId);
 }

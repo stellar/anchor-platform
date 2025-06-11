@@ -17,8 +17,9 @@ extra["enableTestConcurrency"] =
     // Set default parallel mode for classes to concurrent. All test classes are run in parallel.
     test.systemProperty("junit.jupiter.execution.parallel.mode.classes.default", "concurrent")
 
-    test.maxParallelForks =
-      (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1).also {
-        println("$test setting maxParallelForks to $it")
-      }
+    val parallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+    test.maxParallelForks = parallelForks
+    test.doFirst {
+      println("$test setting maxParallelForks to $parallelForks")
+    }
   }

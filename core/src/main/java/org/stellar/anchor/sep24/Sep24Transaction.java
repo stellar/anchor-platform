@@ -59,22 +59,22 @@ public interface Sep24Transaction extends SepTransaction {
   void setAmountExpected(String amount);
 
   /**
-   * The Stellar account used to authenticate SEP-10;.
+   * The Stellar account used to authenticate SEP-10 or SEP-45.
    *
-   * @return the stellar account.
+   * @return the web auth account.
    */
-  String getSep10Account();
+  String getWebAuthAccount();
 
-  void setSep10Account(String sep10Account);
+  void setWebAuthAccount(String webAuthAccount);
 
   /**
-   * The Stellar account memo used to authenticate SEP-10;.
+   * The Stellar account memo used to authenticate SEP-10 or SEP-45.
    *
-   * @return the stellar account memo
+   * @return the web auth account memo
    */
-  String getSep10AccountMemo();
+  String getWebAuthAccountMemo();
 
-  void setSep10AccountMemo(String sep10Account);
+  void setWebAuthAccountMemo(String webAuthAccountMemo);
 
   /**
    * If this is a withdrawal, this is the anchor's Stellar account that the user transferred (or

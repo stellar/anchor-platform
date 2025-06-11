@@ -21,44 +21,34 @@ import org.stellar.anchor.api.sep.sep31.Sep31GetTransactionResponse
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
-import org.stellar.anchor.client.Sep12Client
-import org.stellar.anchor.client.Sep31Client
-import org.stellar.anchor.client.Sep38Client
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.*
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.integrationtest.Sep12Tests.Companion.testCustomer1Json
 import org.stellar.anchor.platform.integrationtest.Sep12Tests.Companion.testCustomer2Json
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.info
-import org.stellar.anchor.util.MemoHelper
 import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.reference.wallet.WalletServerClient
-import org.stellar.walletsdk.anchor.MemoType
-import org.stellar.walletsdk.anchor.customer
+import org.stellar.sdk.Asset
+import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.asset.IssuedAssetId
-import org.stellar.walletsdk.horizon.SigningKeyPair
-import org.stellar.walletsdk.horizon.sign
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
+open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
 
   private val gson = GsonUtils.getInstance()
-  private val walletSecretKey = System.getenv("WALLET_SECRET_KEY") ?: CLIENT_WALLET_SECRET
-  private val keypair = SigningKeyPair.fromSecret(walletSecretKey)
   private val maxTries = 60
   private val anchorReferenceServerClient =
     AnchorReferenceServerClient(Url(config.env["reference.server.url"]!!))
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
-  private val sep12Client = Sep12Client(toml.getString("KYC_SERVER"), token.token)
-  private val sep31Client = Sep31Client(toml.getString("DIRECT_PAYMENT_SERVER"), token.token)
-  private val sep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), token.token)
   private val platformApiClient =
     PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
+  private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
 
   private fun assertEvents(
     actualEvents: List<SendEventRequest>?,
-    expectedStatuses: List<Pair<AnchorEvent.Type, SepTransactionStatus>>
+    expectedStatuses: List<Pair<AnchorEvent.Type, SepTransactionStatus>>,
   ) {
     assertNotNull(actualEvents)
     actualEvents?.let {
@@ -78,7 +68,7 @@ open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
 
   private fun assertCallbacks(
     actualCallbacks: List<Sep31GetTransactionResponse>?,
-    expectedStatuses: List<Pair<AnchorEvent.Type, SepTransactionStatus>>
+    expectedStatuses: List<Pair<AnchorEvent.Type, SepTransactionStatus>>,
   ) {
     assertNotNull(actualCallbacks)
     actualCallbacks?.let {
@@ -99,17 +89,18 @@ open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
     val amount = "5"
 
     walletServerClient.clearCallbacks()
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, null, toml)
 
     val senderCustomerRequest =
       gson.fromJson(testCustomer1Json, Sep12PutCustomerRequest::class.java)
-    val senderCustomer = sep12Client.putCustomer(senderCustomerRequest)
+    val senderCustomer = wallet.sep12.putCustomer(senderCustomerRequest)
 
     // Create receiver customer
     val receiverCustomerRequest =
       gson.fromJson(testCustomer2Json, Sep12PutCustomerRequest::class.java)
-    val receiverCustomer = sep12Client.putCustomer(receiverCustomerRequest)
+    val receiverCustomer = wallet.sep12.putCustomer(receiverCustomerRequest)
 
-    val quote = sep38Client.postQuote(asset.sep38, amount, FIAT_USD)
+    val quote = wallet.sep38.postQuote(asset.sep38, amount, FIAT_USD)
 
     // POST Sep31 transaction
     val txnRequest = gson.fromJson(postSep31TxnRequest, Sep31PostTransactionRequest::class.java)
@@ -117,58 +108,41 @@ open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
     txnRequest.receiverId = receiverCustomer!!.id
     txnRequest.quoteId = quote.id
     txnRequest.fundingMethod = "SWIFT"
-    val postTxResponse = sep31Client.postTransaction(txnRequest)
+    val postTxResponse = wallet.sep31.postTransaction(txnRequest)
     info("POST /transaction initiated ${postTxResponse.id}")
 
     // Get transaction status and make sure it is PENDING_SENDER
     waitStatus(postTxResponse.id, SepTransactionStatus.PENDING_SENDER)
-    val transaction = sep31Client.getTransaction(postTxResponse.id).transaction
-
-    val memoType: MemoType =
-      when (transaction.stellarMemoType) {
-        MemoHelper.memoTypeAsString(org.stellar.sdk.xdr.MemoType.MEMO_ID) -> {
-          MemoType.ID
-        }
-        MemoHelper.memoTypeAsString(org.stellar.sdk.xdr.MemoType.MEMO_HASH) -> {
-          MemoType.HASH
-        }
-        else -> {
-          MemoType.TEXT
-        }
-      }
+    val transaction = wallet.sep31.getTransaction(postTxResponse.id).transaction
 
     // Submit transfer transaction
     info("Transferring $amount $asset to ${transaction.stellarAccountId}")
     transactionWithRetry {
-      val transfer =
-        wallet
-          .stellar()
-          .transaction(keypair)
-          .transfer(transaction.stellarAccountId, asset, amount)
-          .setMemo(Pair(memoType, transaction.stellarMemo))
-          .build()
-      transfer.sign(keypair)
-      wallet.stellar().submitTransaction(transfer)
+      wallet.send(
+        transaction.stellarAccountId,
+        Asset.create(asset.id),
+        amount,
+        transaction.stellarMemo,
+        transaction.stellarMemoType,
+      )
     }
     info("Transfer complete")
     waitStatus(postTxResponse.id, SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE)
 
     // Supply missing KYC info to continue with the transaction
     val additionalRequiredFields =
-      anchor
-        .customer(token)
-        .get(transactionId = postTxResponse.id, type = "sep31-receiver")
+      wallet.sep12
+        .getCustomer(receiverCustomer.id, "sep31-receiver", postTxResponse.id)!!
         .fields
         ?.filter { it.key != null && it.value?.optional == false }
         ?.map { it.key!! }
         .orEmpty()
-    anchor
-      .customer(token)
-      .add(
-        transactionId = postTxResponse.id,
-        type = "sep31-receiver",
-        sep9Info = additionalRequiredFields.associateWith { receiverKycInfo[it]!! }
+    wallet.sep12.putCustomer(
+      gson.fromJson(
+        gson.toJson(additionalRequiredFields.associateWith { receiverKycInfo[it]!! }),
+        Sep12PutCustomerRequest::class.java,
       )
+    )
     info("Submitting additional KYC info $additionalRequiredFields")
 
     // Wait for the status to change to COMPLETED
@@ -185,7 +159,7 @@ open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
 
   private suspend fun waitForWalletServerCallbacks(
     txnId: String,
-    count: Int
+    count: Int,
   ): List<Sep31GetTransactionResponse>? {
     var retries = 30
     var callbacks: List<Sep31GetTransactionResponse>? = null
@@ -194,7 +168,7 @@ open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
         walletServerClient.getTransactionCallbacks(
           "sep31",
           txnId,
-          Sep31GetTransactionResponse::class.java
+          Sep31GetTransactionResponse::class.java,
         )
       if (callbacks.size == count) {
         return callbacks
@@ -207,7 +181,7 @@ open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
 
   private suspend fun waitForBusinessServerEvents(
     txnId: String,
-    count: Int
+    count: Int,
   ): List<SendEventRequest>? {
     var retries = 30
     var events: List<SendEventRequest>? = null
@@ -257,7 +231,7 @@ open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
         TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_RECEIVER,
         TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE,
         TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_RECEIVER,
-        TRANSACTION_STATUS_CHANGED to SepTransactionStatus.COMPLETED
+        TRANSACTION_STATUS_CHANGED to SepTransactionStatus.COMPLETED,
       )
   }
 
