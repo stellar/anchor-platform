@@ -48,7 +48,6 @@ import org.stellar.anchor.config.Sep10Config
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.ClientDomainHelper
-import org.stellar.anchor.util.FileUtil
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.NetUtil
 import org.stellar.sdk.*
@@ -89,9 +88,6 @@ internal class Sep10ServiceTest {
         Arguments.of("https://horizon-futurenet.stellar.org", FUTURENET),
       )
     }
-
-    val testAccountWithNonCompliantSigner: String =
-      FileUtil.getResourceFileAsString("test_account_with_noncompliant_signer.json")
   }
 
   @MockK(relaxed = true) lateinit var appConfig: AppConfig

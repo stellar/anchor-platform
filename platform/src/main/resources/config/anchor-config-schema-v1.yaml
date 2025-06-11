@@ -125,7 +125,6 @@ sep_server.context_path:
 sep_server.management_server_port:
 sep_server.port:
 stellar_network.horizon_url:
-stellar_network.rpc_url:
 stellar_network.network:
 stellar_network.network_passphrase:
 stellar_network.rpc_url:
