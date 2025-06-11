@@ -83,7 +83,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @ParameterizedTest
   @MethodSource("depositAssetsAndAmounts")
-  fun `test typical deposit end-to-end flow`(
+  fun `test classic deposit end-to-end flow`(
     walletSecretKey: String,
     asset: StellarAssetId,
     amount: String,
@@ -233,7 +233,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @ParameterizedTest
   @MethodSource("withdrawAssetsAndAmounts")
-  fun `test typical withdraw end-to-end flow`(
+  fun `test classic withdraw end-to-end flow`(
     walletSecretKey: String,
     asset: StellarAssetId,
     amount: String,
@@ -429,7 +429,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @ParameterizedTest
   @MethodSource("historyAssetsAndAmounts")
-  fun `test created transactions show up in the get history call`(
+  fun `test created sep-24 transactions show up in the get history call`(
     walletSecretKey: String,
     asset: StellarAssetId,
     amount: String,

@@ -57,7 +57,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical deposit end-to-end flow`() = runBlocking {
+  fun `test classic asset deposit end-to-end flow`() = runBlocking {
     val memo = (10000..20000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
@@ -200,7 +200,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical deposit-exchange without quote end-to-end flow`() = runBlocking {
+  fun `test classic asset deposit-exchange without quote end-to-end flow`() = runBlocking {
     val memo = (20000..30000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
@@ -347,7 +347,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical withdraw end-to-end flow`() = runBlocking {
+  fun `test classic asset withdraw end-to-end flow`() = runBlocking {
     val memo = (40000..50000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
@@ -490,7 +490,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical withdraw-exchange without quote end-to-end flow`() = runBlocking {
+  fun `test classic asset withdraw-exchange without quote end-to-end flow`() = runBlocking {
     val memo = (50000..60000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
