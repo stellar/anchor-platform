@@ -1,5 +1,8 @@
 package org.stellar.anchor.platform.integrationtest
 
+import java.math.BigDecimal
+import java.math.BigInteger
+import java.time.Instant
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerClientHelper.waitForTransactionAvailable
@@ -20,9 +23,6 @@ import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
 import org.stellar.sdk.xdr.OperationType
 import org.stellar.sdk.xdr.TransactionEnvelope
-import java.math.BigDecimal
-import java.math.BigInteger
-import java.time.Instant
 
 private lateinit var testPaymentValues: List<Pair<String, String>>
 

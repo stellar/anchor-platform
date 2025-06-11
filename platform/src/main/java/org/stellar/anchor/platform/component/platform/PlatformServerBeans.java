@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.component.platform;
 
 import jakarta.servlet.Filter;
+import java.util.Optional;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,8 +35,6 @@ import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.sep6.Sep6DepositInfoGenerator;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
-
-import java.util.Optional;
 
 @Configuration
 public class PlatformServerBeans {

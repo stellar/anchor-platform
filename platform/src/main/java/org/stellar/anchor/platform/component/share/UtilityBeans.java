@@ -1,7 +1,10 @@
 package org.stellar.anchor.platform.component.share;
 
+import static org.stellar.anchor.util.StringHelper.isNotEmpty;
+
 import com.google.gson.Gson;
 import jakarta.validation.Validator;
+import java.util.List;
 import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -24,10 +27,6 @@ import org.stellar.anchor.platform.service.Sep24MoreInfoUrlConstructor;
 import org.stellar.anchor.platform.service.Sep6MoreInfoUrlConstructor;
 import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.util.GsonUtils;
-
-import java.util.List;
-
-import static org.stellar.anchor.util.StringHelper.isNotEmpty;
 
 @Configuration
 public class UtilityBeans {
@@ -106,15 +105,10 @@ public class UtilityBeans {
 
   @Bean
   @SneakyThrows
-  public LedgerClient horizon(AppConfig appConfig) {
+  public LedgerClient ledgerClient(AppConfig appConfig) {
     if (isNotEmpty(appConfig.getRpcUrl())) return new StellarRpc(appConfig);
     else if (isNotEmpty(appConfig.getHorizonUrl())) return new Horizon(appConfig);
     throw new NotSupportedException("No horizon_url or rpc_url is defined.");
-  }
-
-  @Bean
-  public StellarRpc rpc(AppConfig appConfig) {
-    return new StellarRpc(appConfig);
   }
 
   @Bean
