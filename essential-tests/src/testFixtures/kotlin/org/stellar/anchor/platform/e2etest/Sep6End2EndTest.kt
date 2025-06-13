@@ -168,7 +168,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         mapOf(
           "asset_code" to USDC.code,
           "account" to CLIENT_SMART_WALLET_ACCOUNT,
-          "amount" to "1",
+          "amount" to "10",
           "type" to "SWIFT",
         )
       )
