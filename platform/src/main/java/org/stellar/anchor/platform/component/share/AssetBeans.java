@@ -1,14 +1,16 @@
 package org.stellar.anchor.platform.component.share;
 
-import java.io.IOException;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.asset.DefaultAssetService;
+import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.AssetsConfig;
 import org.stellar.anchor.platform.config.PropertyAssetsConfig;
+import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
+import org.stellar.sdk.SorobanServer;
 
 @Configuration
 public class AssetBeans {
@@ -19,7 +21,12 @@ public class AssetBeans {
   }
 
   @Bean
-  AssetService assetService(AssetsConfig assetsConfig) throws InvalidConfigException, IOException {
+  AssetService assetService(AssetsConfig assetsConfig) throws InvalidConfigException {
     return DefaultAssetService.fromAssetConfig(assetsConfig);
+  }
+
+  @Bean
+  SacToAssetMapper sacToAssetMapper(AppConfig appConfig) {
+    return new SacToAssetMapper(new SorobanServer(appConfig.getRpcUrl()));
   }
 }

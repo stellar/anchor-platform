@@ -29,7 +29,8 @@ public class PaymentObserverBeans {
       StellarPaymentStreamerCursorStore stellarPaymentStreamerCursorStore,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
       AppConfig appConfig,
-      PaymentObserverConfig paymentObserverConfig) {
+      PaymentObserverConfig paymentObserverConfig,
+      SacToAssetMapper sacToAssetMapper) {
     // validate assetService
     if (assetService == null || assetService.getAssets() == null) {
       throw new ServerErrorException("Asset service cannot be empty.");
@@ -76,7 +77,8 @@ public class PaymentObserverBeans {
               paymentObserverConfig.getStellar(),
               paymentListeners,
               paymentObservingAccountsManager,
-              stellarPaymentStreamerCursorStore);
+              stellarPaymentStreamerCursorStore,
+              sacToAssetMapper);
     } else if (isNotEmpty(appConfig.getHorizonUrl())) {
       paymentObserver =
           new HorizonPaymentObserver(
