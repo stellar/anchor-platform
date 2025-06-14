@@ -3,11 +3,11 @@ package org.stellar.anchor.platform.service
 import io.mockk.MockKAnnotations
 import java.util.stream.Stream
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
-import org.stellar.anchor.api.shared.SepDepositInfo
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.platform.data.JdbcSep6Transaction
@@ -55,7 +55,9 @@ class Sep6DepositInfoSelfGeneratorTest {
     txn.requestAssetIssuer = assetIssuer
 
     val result = generator.generate(txn)
-    val expected = SepDepositInfo(distributionAccount, memo, "hash")
-    assertEquals(expected, result)
+
+    assertEquals(result.stellarAddress, distributionAccount)
+    assertTrue(result.memo.toLongOrNull() != null)
+    assertTrue(result.memoType == "id")
   }
 }

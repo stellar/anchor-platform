@@ -15,10 +15,7 @@ import org.junit.jupiter.api.Test
 import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
-import org.stellar.anchor.platform.observer.stellar.HorizonPaymentObserver
-import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager
-import org.stellar.anchor.platform.observer.stellar.StellarPaymentStreamerCursorStore
-import org.stellar.anchor.platform.observer.stellar.StellarRpcPaymentObserver
+import org.stellar.anchor.platform.observer.stellar.*
 import org.stellar.anchor.util.AssetHelper
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.info
@@ -52,6 +49,7 @@ class PaymentObserverTests {
     private lateinit var horizonPaymentObserver: HorizonPaymentObserver
     private lateinit var stellarRpcPaymentObserver: StellarRpcPaymentObserver
     private val stellarRpc = SorobanServer("https://soroban-testnet.stellar.org")
+    private val sacToAssetMapper = SacToAssetMapper(stellarRpc)
 
     @JvmStatic
     @BeforeAll
@@ -96,6 +94,7 @@ class PaymentObserverTests {
           listOf(eventCaptureListenerStellarRpc),
           paymentObservingAccountManager,
           TestCursorStore(),
+          sacToAssetMapper
         )
       stellarRpcPaymentObserver.start()
     }

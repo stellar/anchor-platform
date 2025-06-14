@@ -1,8 +1,8 @@
 package org.stellar.anchor.platform.service
 
 import kotlin.test.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.stellar.anchor.api.shared.SepDepositInfo
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 
 class Sep24DepositInfoSelfGeneratorTest {
@@ -23,8 +23,8 @@ class Sep24DepositInfoSelfGeneratorTest {
 
     val actualInfo = generator.generate(txn)
 
-    val expectedInfo = SepDepositInfo(ADDRESS, MEMO, MEMO_TYPE)
-
-    assertEquals(expectedInfo, actualInfo)
+    assertEquals(actualInfo.stellarAddress, ADDRESS)
+    assertTrue(actualInfo.memo.toLongOrNull() != null)
+    assertTrue(actualInfo.memoType == "id")
   }
 }

@@ -36,6 +36,7 @@ class Sep24MoreInfoUrlConstructorTest {
 
   private lateinit var jwtService: JwtService
   private lateinit var clientService: DefaultClientService
+
   @BeforeEach
   fun setup() {
     MockKAnnotations.init(this, relaxUnitFun = true)
@@ -70,7 +71,7 @@ class Sep24MoreInfoUrlConstructorTest {
     val constructor = Sep24MoreInfoUrlConstructor(assetService, clientService, config, jwtService)
     val txn = gson.fromJson(TXN_JSON, JdbcSep24Transaction::class.java)
     txn.clientDomain = "unknown.com"
-    txn.sep10AccountMemo = null
+    txn.webAuthAccountMemo = null
 
     val url = constructor.construct(txn, LANG)
     val params = UriComponentsBuilder.fromUriString(url).build().queryParams
@@ -89,7 +90,7 @@ class Sep24MoreInfoUrlConstructorTest {
     val config = gson.fromJson(SIMPLE_CONFIG_JSON, MoreInfoUrlConfig::class.java)
     val constructor = Sep24MoreInfoUrlConstructor(assetService, clientService, config, jwtService)
     val txn = gson.fromJson(TXN_JSON, JdbcSep24Transaction::class.java)
-    txn.sep10Account = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    txn.webAuthAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     txn.clientDomain = null
 
     val url = constructor.construct(txn, LANG)
@@ -135,8 +136,8 @@ private const val TXN_JSON =
   "kind" : "deposit",
   "amount_in": "100",
   "amount_in_asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-  "sep10_account": "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO",
-  "sep10_account_memo": "1234",
+  "web_auth_account": "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO",
+  "web_auth_account_memo": "1234",
   "client_domain": "lobstr.co"
 }  
 """

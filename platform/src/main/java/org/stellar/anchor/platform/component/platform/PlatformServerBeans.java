@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
+import org.stellar.anchor.auth.NonceStore;
 import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.config.Sep31Config;
@@ -23,6 +24,7 @@ import org.stellar.anchor.platform.config.PlatformApiConfig;
 import org.stellar.anchor.platform.config.PlatformServerConfig;
 import org.stellar.anchor.platform.config.PropertyCustodyConfig;
 import org.stellar.anchor.platform.data.JdbcTransactionPendingTrustRepo;
+import org.stellar.anchor.platform.job.NonceCleanupJob;
 import org.stellar.anchor.platform.job.TrustlineCheckJob;
 import org.stellar.anchor.platform.rpc.NotifyTrustSetHandler;
 import org.stellar.anchor.platform.service.*;
@@ -172,5 +174,10 @@ public class PlatformServerBeans {
     } else {
       return null;
     }
+  }
+
+  @Bean
+  public NonceCleanupJob nonceCleanupJob(NonceStore nonceStore) {
+    return new NonceCleanupJob(nonceStore);
   }
 }

@@ -20,6 +20,7 @@ import org.stellar.anchor.platform.observer.stellar.*
 
 class PaymentObservingAccountsBeansTest {
   @MockK private lateinit var paymentStreamerCursorStore: StellarPaymentStreamerCursorStore
+
   @MockK private lateinit var paymentObservingAccountStore: PaymentObservingAccountStore
 
   @BeforeEach
@@ -37,7 +38,7 @@ class PaymentObservingAccountsBeansTest {
     // assetService is null
     var ex =
       assertThrows<ServerErrorException> {
-        paymentObserverBeans.stellarPaymentObserver(null, null, null, null, null, null)
+        paymentObserverBeans.stellarPaymentObserver(null, null, null, null, null, null, mockk())
       }
     assertInstanceOf(ServerErrorException::class.java, ex)
     assertEquals("Asset service cannot be empty.", ex.message)
@@ -53,6 +54,7 @@ class PaymentObservingAccountsBeansTest {
         null,
         null,
         null,
+        mockk<SacToAssetMapper>()
       )
     }
     assertInstanceOf(ServerErrorException::class.java, ex)
@@ -70,6 +72,7 @@ class PaymentObservingAccountsBeansTest {
         null,
         null,
         null,
+        mockk()
       )
     }
     assertInstanceOf(ServerErrorException::class.java, ex)
@@ -77,14 +80,30 @@ class PaymentObservingAccountsBeansTest {
 
     // paymentListeners is null
     ex = assertThrows {
-      paymentObserverBeans.stellarPaymentObserver(assetService, null, null, null, null, null)
+      paymentObserverBeans.stellarPaymentObserver(
+        assetService,
+        null,
+        null,
+        null,
+        null,
+        null,
+        mockk()
+      )
     }
     assertInstanceOf(ServerErrorException::class.java, ex)
     assertEquals("The stellar payment observer service needs at least one listener.", ex.message)
 
     // paymentListeners is empty
     ex = assertThrows {
-      paymentObserverBeans.stellarPaymentObserver(assetService, listOf(), null, null, null, null)
+      paymentObserverBeans.stellarPaymentObserver(
+        assetService,
+        listOf(),
+        null,
+        null,
+        null,
+        null,
+        mockk()
+      )
     }
     assertInstanceOf(ServerErrorException::class.java, ex)
     assertEquals("The stellar payment observer service needs at least one listener.", ex.message)
@@ -98,6 +117,7 @@ class PaymentObservingAccountsBeansTest {
         null,
         null,
         null,
+        mockk()
       )
     }
     assertInstanceOf(ServerErrorException::class.java, ex)
@@ -113,6 +133,7 @@ class PaymentObservingAccountsBeansTest {
         null,
         null,
         null,
+        mockk()
       )
     }
     assertInstanceOf(ServerErrorException::class.java, ex)
@@ -147,6 +168,7 @@ class PaymentObservingAccountsBeansTest {
           paymentObservingAccountsManager,
           mockAppConfig,
           mockPaymentObserverConfig,
+          mockk()
         )
       assertNotNull(paymentObserver)
       assertTrue(paymentObserver is HorizonPaymentObserver)
@@ -163,6 +185,7 @@ class PaymentObservingAccountsBeansTest {
           paymentObservingAccountsManager,
           mockAppConfig,
           mockPaymentObserverConfig,
+          mockk()
         )
       assertNotNull(paymentObserver)
       assertTrue(paymentObserver is StellarRpcPaymentObserver)
@@ -179,6 +202,7 @@ class PaymentObservingAccountsBeansTest {
         paymentObservingAccountsManager,
         mockAppConfig,
         mockPaymentObserverConfig,
+        mockk()
       )
     }
   }

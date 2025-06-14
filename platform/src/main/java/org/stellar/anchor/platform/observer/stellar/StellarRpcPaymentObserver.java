@@ -44,11 +44,12 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       StellarPaymentObserverConfig config,
       List<PaymentListener> paymentListeners,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
-      StellarPaymentStreamerCursorStore paymentStreamerCursorStore) {
+      StellarPaymentStreamerCursorStore paymentStreamerCursorStore,
+      SacToAssetMapper sacToAssetMapper) {
     super(config, paymentListeners, paymentObservingAccountsManager, paymentStreamerCursorStore);
     this.stellarRpc = new StellarRpc(rpcUrl);
     this.sorobanServer = stellarRpc.getSorobanServer();
-    this.sacToAssetMapper = new SacToAssetMapper(this.sorobanServer);
+    this.sacToAssetMapper = sacToAssetMapper;
   }
 
   @Override

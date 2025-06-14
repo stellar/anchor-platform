@@ -28,7 +28,7 @@ import org.stellar.walletsdk.horizon.AccountKeyPair
 import org.stellar.walletsdk.horizon.SigningKeyPair
 import org.stellar.walletsdk.horizon.sign
 
-class Sep10Tests : AbstractIntegrationTests(TestConfig()) {
+class Sep10Tests : IntegrationTestBase(TestConfig()) {
   lateinit var sep10Client: Sep10Client
   lateinit var sep10ClientMultiSig: Sep10Client
   lateinit var webAuthDomain: String

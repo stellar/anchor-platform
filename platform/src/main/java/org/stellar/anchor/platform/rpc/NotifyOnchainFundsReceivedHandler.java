@@ -32,6 +32,7 @@ import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep31Transaction;
 import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
+import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
 import org.stellar.anchor.platform.utils.AssetValidationUtils;
 import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
@@ -42,6 +43,7 @@ public class NotifyOnchainFundsReceivedHandler
     extends RpcTransactionStatusHandler<NotifyOnchainFundsReceivedRequest> {
 
   private final LedgerClient ledgerClient;
+  private final SacToAssetMapper sacToAssetMapper;
 
   public NotifyOnchainFundsReceivedHandler(
       Sep6TransactionStore txn6Store,
@@ -51,7 +53,8 @@ public class NotifyOnchainFundsReceivedHandler
       LedgerClient ledgerClient,
       AssetService assetService,
       EventService eventService,
-      MetricsService metricsService) {
+      MetricsService metricsService,
+      SacToAssetMapper sacToAssetMapper) {
     super(
         txn6Store,
         txn24Store,
@@ -62,6 +65,7 @@ public class NotifyOnchainFundsReceivedHandler
         metricsService,
         NotifyOnchainFundsReceivedRequest.class);
     this.ledgerClient = ledgerClient;
+    this.sacToAssetMapper = sacToAssetMapper;
   }
 
   @Override
@@ -162,7 +166,7 @@ public class NotifyOnchainFundsReceivedHandler
         throw new NotFoundException(String.format("Transaction (hash=%s) not found", stellarTxnId));
       }
 
-      addStellarTransaction(ledgerTxn, txn);
+      addStellarTransaction(sacToAssetMapper, ledgerTxn, txn);
 
       if (Sep.SEP_31.equals(Sep.from(txn.getProtocol()))) {
         JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;

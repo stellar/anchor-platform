@@ -58,13 +58,17 @@ tasks.register("runBuild") {
 tasks.register("runEssentialTests") {
   group = "github"
   description = "Run the essential tests."
-  if (!isPortActive(port = 8080)) {
-    println("************************************************************")
-    println(
-        "ERROR: The AnchorPlatform server is not running. Please start the server before running the tests.")
-    throw GradleException("AnchorPlatform server is not running.")
-  }
   dependsOn(":essential-tests:test")
+  
+  doLast {
+    if (!isPortActive(port = 8080)) {
+      println("************************************************************")
+      println(
+          "ERROR: The AnchorPlatform server is not running. Please start the server before running the tests.")
+      throw GradleException("AnchorPlatform server is not running.")
+    }
+  }
+  
   subprojects {
     if (name == "essential-tests") {
       skipNonCriticalTasks(tasks)
@@ -74,7 +78,11 @@ tasks.register("runEssentialTests") {
 
 // The printVersionName task is used to print the version name of the project. This
 // is useful for CI/CD pipelines to get the version string of the project.
-tasks.register("printVersionName") { println(rootProject.version.toString()) }
+tasks.register("printVersionName") { 
+  doLast {
+    println(rootProject.version.toString()) 
+  }
+}
 
 // The updateGitHook task is used to copy the pre-commit.sh file to the .git/hooks
 // directory. This is part of the efforts to force the Java/Kotlin code to be formatted

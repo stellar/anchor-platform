@@ -16,11 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.NullSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.skyscreamer.jsonassert.JSONAssert
-import org.stellar.anchor.api.callback.CustomerIntegration
-import org.stellar.anchor.api.callback.GetCustomerRequest
-import org.stellar.anchor.api.callback.GetCustomerResponse
-import org.stellar.anchor.api.callback.PutCustomerRequest
-import org.stellar.anchor.api.callback.PutCustomerResponse
+import org.stellar.anchor.api.callback.*
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.*
 import org.stellar.anchor.api.platform.GetTransactionResponse
@@ -36,12 +32,15 @@ import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.Sep10Jwt
+import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.util.StringHelper.json
 
 class Sep12ServiceTest {
   companion object {
     private const val TEST_ACCOUNT = "GBFZNZTFSI6TWLVAID7VOLCIFX2PMUOS2X7U6H4TNK4PAPSHPWMMUIZG"
+    private const val TEST_CONTRACT_ACCOUNT =
+      "CCAASCQKVVBSLREPEUGPOTQZ4BC2NDBY2MW7B2LGIGFUPIY4Z3XUZRVTX"
     private const val TEST_MEMO = "123456"
     private const val TEST_MUXED_ACCOUNT =
       "MBFZNZTFSI6TWLVAID7VOLCIFX2PMUOS2X7U6H4TNK4PAPSHPWMMUAAAAAAAAAPCIA2IM"
@@ -115,6 +114,37 @@ class Sep12ServiceTest {
     sep12Service = Sep12Service(customerIntegration, platformApiClient, eventService)
   }
 
+  @ValueSource(strings = [TEST_ACCOUNT, TEST_CONTRACT_ACCOUNT, TEST_MUXED_ACCOUNT])
+  @ParameterizedTest
+  fun `test get for all account types succeed`(account: String) {
+    val jwtToken = createJwtToken(account)
+    val request =
+      Sep12GetCustomerRequest.builder()
+        .memo(if (account == TEST_MUXED_ACCOUNT) TEST_MEMO else null)
+        .build()
+    assertDoesNotThrow { sep12Service.getCustomer(jwtToken, request) }
+  }
+
+  @ValueSource(strings = [TEST_ACCOUNT, TEST_CONTRACT_ACCOUNT, TEST_MUXED_ACCOUNT])
+  @ParameterizedTest
+  fun `test put for all account types succeed`(account: String) {
+    val jwtToken = createJwtToken(account)
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .memo(if (account == TEST_MUXED_ACCOUNT) TEST_MEMO else null)
+        .build()
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+  }
+
+  @ValueSource(strings = [TEST_ACCOUNT, TEST_CONTRACT_ACCOUNT, TEST_MUXED_ACCOUNT])
+  @ParameterizedTest
+  fun `test delete for all account types succeed`(account: String) {
+    val jwtToken = createJwtToken(account)
+    val memo = if (account == TEST_MUXED_ACCOUNT) TEST_MEMO else null
+    val memoType = if (account == TEST_MUXED_ACCOUNT) "id" else null
+    assertDoesNotThrow { sep12Service.deleteCustomer(jwtToken, account, memo, memoType) }
+  }
+
   @Test
   fun `test validate request and token accounts`() {
     val mockRequestBase = mockk<Sep12CustomerRequestBase>(relaxed = true)
@@ -144,6 +174,11 @@ class Sep12ServiceTest {
     // request account succeeds when the same as token's base account when using "account:memo"
     jwtToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
     every { mockRequestBase.account } returns TEST_ACCOUNT
+    assertDoesNotThrow { sep12Service.validateRequestAndTokenAccounts(mockRequestBase, jwtToken) }
+
+    // request account succeeds for contract accounts
+    jwtToken = createJwtToken(TEST_CONTRACT_ACCOUNT)
+    every { mockRequestBase.account } returns TEST_CONTRACT_ACCOUNT
     assertDoesNotThrow { sep12Service.validateRequestAndTokenAccounts(mockRequestBase, jwtToken) }
   }
 
@@ -572,7 +607,7 @@ class Sep12ServiceTest {
     assertEquals(wantDeleteCustomerId, deleteCustomerIdSlot.captured)
   }
 
-  private fun createJwtToken(subject: String): Sep10Jwt {
-    return Sep10Jwt.of("$TEST_HOST_URL/auth", subject, issuedAt, expiresAt, "", CLIENT_DOMAIN)
+  private fun createJwtToken(subject: String): WebAuthJwt {
+    return Sep10Jwt.of("$TEST_HOST_URL/auth", subject, issuedAt, expiresAt, "", CLIENT_DOMAIN, null)
   }
 }

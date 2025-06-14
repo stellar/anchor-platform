@@ -98,6 +98,7 @@ public class LedgerClientHelper {
                 })
             .pathPaymentOperation(
                 LedgerPathPaymentOperation.builder()
+                    .type(op.getBody().getDiscriminant())
                     .id(operationId)
                     .asset(asset)
                     .amount(BigInteger.valueOf(amount))

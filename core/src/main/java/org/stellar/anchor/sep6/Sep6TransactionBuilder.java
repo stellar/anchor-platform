@@ -109,13 +109,13 @@ public class Sep6TransactionBuilder {
     return this;
   }
 
-  public Sep6TransactionBuilder sep10Account(String sep10Account) {
-    txn.setSep10Account(sep10Account);
+  public Sep6TransactionBuilder webAuthAccount(String webAuthAccount) {
+    txn.setWebAuthAccount(webAuthAccount);
     return this;
   }
 
-  public Sep6TransactionBuilder sep10AccountMemo(String sep10AccountMemo) {
-    txn.setSep10AccountMemo(sep10AccountMemo);
+  public Sep6TransactionBuilder webAuthAccountMemo(String webAuthAccount) {
+    txn.setWebAuthAccountMemo(webAuthAccount);
     return this;
   }
 

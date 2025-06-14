@@ -57,12 +57,12 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
     List<Sep6Transaction> txns;
     if (accountMemo == null) {
       txns =
-          transactionRepo.findBySep10AccountAndRequestAssetCodeOrderByStartedAtDesc(
+          transactionRepo.findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
               accountId, request.getAssetCode());
     } else {
       txns =
           transactionRepo
-              .findBySep10AccountAndSep10AccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
+              .findByWebAuthAccountAndWebAuthAccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
                   accountId, accountMemo, request.getAssetCode());
     }
 
@@ -127,5 +127,12 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
       String withdrawAnchorAccount, String memo, String status) {
     return transactionRepo.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         withdrawAnchorAccount, memo, status);
+  }
+
+  @Override
+  public JdbcSep6Transaction findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
+      String withdrawAnchorAccount, String fromAccount, String status) {
+    return transactionRepo.findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
+        withdrawAnchorAccount, fromAccount, status);
   }
 }

@@ -4,5 +4,5 @@ package org.stellar.anchor.config;
 public interface Sep38Config {
   boolean isEnabled();
 
-  boolean isSep10Enforced();
+  boolean isAuthEnforced();
 }

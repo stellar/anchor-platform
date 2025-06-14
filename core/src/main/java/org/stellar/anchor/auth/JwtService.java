@@ -42,6 +42,7 @@ public class JwtService {
 
   String sep6MoreInfoUrlJwtSecret;
   String sep10JwtSecret;
+  String sep45JwtSecret;
   String sep24InteractiveUrlJwtSecret;
   String sep24MoreInfoUrlJwtSecret;
   String callbackAuthSecret;
@@ -53,6 +54,7 @@ public class JwtService {
     this(
         secretConfig.getSep6MoreInfoUrlJwtSecret(),
         secretConfig.getSep10JwtSecretKey(),
+        secretConfig.getSep45JwtSecretKey(),
         secretConfig.getSep24InteractiveUrlJwtSecret(),
         secretConfig.getSep24MoreInfoUrlJwtSecret(),
         secretConfig.getCallbackAuthSecret(),
@@ -63,6 +65,7 @@ public class JwtService {
   public JwtService(
       String sep6MoreInfoUrlJwtSecret,
       String sep10JwtSecret,
+      String sep45JwtSecret,
       String sep24InteractiveUrlJwtSecret,
       String sep24MoreInfoUrlJwtSecret,
       String callbackAuthSecret,
@@ -70,6 +73,7 @@ public class JwtService {
       String custodyAuthSecret) {
     this.sep6MoreInfoUrlJwtSecret = sep6MoreInfoUrlJwtSecret;
     this.sep10JwtSecret = sep10JwtSecret;
+    this.sep45JwtSecret = sep45JwtSecret;
     this.sep24InteractiveUrlJwtSecret = sep24InteractiveUrlJwtSecret;
     this.sep24MoreInfoUrlJwtSecret = sep24MoreInfoUrlJwtSecret;
     this.callbackAuthSecret = callbackAuthSecret;
@@ -80,7 +84,7 @@ public class JwtService {
     Security.addProvider(new BouncyCastleProvider());
   }
 
-  public String encode(Sep10Jwt token) {
+  public <T extends WebAuthJwt> String encode(T token) {
     Instant timeExp = Instant.ofEpochSecond(token.getExp());
     Instant timeIat = Instant.ofEpochSecond(token.getIat());
 
@@ -101,7 +105,11 @@ public class JwtService {
       builder.claim(HOME_DOMAIN, token.getHomeDomain());
     }
 
-    return signJWT(builder, sep10JwtSecret);
+    if (token instanceof Sep45Jwt) {
+      return signJWT(builder, sep45JwtSecret);
+    } else {
+      return signJWT(builder, sep10JwtSecret);
+    }
   }
 
   public String encode(MoreInfoUrlJwt token) throws InvalidConfigException {
@@ -184,6 +192,8 @@ public class JwtService {
       secret = sep6MoreInfoUrlJwtSecret;
     } else if (cls.equals(Sep10Jwt.class)) {
       secret = sep10JwtSecret;
+    } else if (cls.equals(Sep45Jwt.class)) {
+      secret = sep45JwtSecret;
     } else if (cls.equals(Sep24InteractiveUrlJwt.class)) {
       secret = sep24InteractiveUrlJwtSecret;
     } else if (cls.equals(Sep24MoreInfoUrlJwt.class)) {
@@ -205,6 +215,8 @@ public class JwtService {
       return (T) Sep6MoreInfoUrlJwt.class.getConstructor(Jwt.class).newInstance(jwt);
     } else if (cls.equals(Sep10Jwt.class)) {
       return (T) Sep10Jwt.class.getConstructor(Jwt.class).newInstance(jwt);
+    } else if (cls.equals(Sep45Jwt.class)) {
+      return (T) Sep45Jwt.class.getConstructor(Jwt.class).newInstance(jwt);
     } else if (cls.equals(Sep24InteractiveUrlJwt.class)) {
       return (T) Sep24InteractiveUrlJwt.class.getConstructor(Jwt.class).newInstance(jwt);
     } else if (cls.equals(Sep24MoreInfoUrlJwt.class)) {

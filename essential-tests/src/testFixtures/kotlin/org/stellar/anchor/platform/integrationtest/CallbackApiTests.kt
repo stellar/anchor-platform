@@ -3,11 +3,9 @@ package org.stellar.anchor.platform.integrationtest
 import com.google.gson.Gson
 import io.mockk.every
 import io.mockk.mockk
-import java.util.*
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import org.junit.jupiter.api.*
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
 import org.skyscreamer.jsonassert.JSONAssert
@@ -22,7 +20,7 @@ import org.stellar.anchor.auth.ApiAuthJwt.CallbackAuthJwt
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.client.Sep12Client
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.callback.RestCustomerIntegration
 import org.stellar.anchor.platform.callback.RestRateIntegration
@@ -31,7 +29,7 @@ import org.stellar.anchor.util.GsonUtils
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Execution(ExecutionMode.SAME_THREAD)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
-class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
+class CallbackApiTests : IntegrationTestBase(TestConfig()) {
 
   companion object {
     private const val JWT_EXPIRATION_MILLISECONDS: Long = 10000
@@ -53,6 +51,7 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
     JwtService(
       config.env["secret.sep6.more_info_url.jwt_secret"],
       config.env["secret.sep10.jwt_secret"]!!,
+      config.env["secret.sep45.jwt_secret"]!!,
       config.env["secret.sep24.interactive_url.jwt_secret"]!!,
       config.env["secret.sep24.more_info_url.jwt_secret"]!!,
       config.env["secret.callback_api.auth_secret"]!!,
@@ -65,7 +64,7 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
       "Authorization",
       platformToAnchorJwtService,
       JWT_EXPIRATION_MILLISECONDS,
-      CallbackAuthJwt::class.java
+      CallbackAuthJwt::class.java,
     )
 
   private val gson: Gson = GsonUtils.getInstance()
@@ -79,7 +78,7 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
       httpClient,
       authHelper,
       gson,
-      mockAssetService
+      mockAssetService,
     )
 
   @BeforeAll
@@ -89,7 +88,7 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
       listOf(
           AssetInfo.Schema.STELLAR,
           "USDC",
-          "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+          "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
         )
         .joinToString { ":" }
     usdc.significantDecimals = 4

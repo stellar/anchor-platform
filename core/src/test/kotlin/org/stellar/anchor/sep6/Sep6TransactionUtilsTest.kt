@@ -22,6 +22,7 @@ class Sep6TransactionUtilsTest {
   companion object {
     val gson: Gson = GsonUtils.getInstance()
   }
+
   @MockK(relaxed = true) lateinit var sep6MoreInfoUrlConstructor: MoreInfoUrlConstructor
 
   @BeforeEach
@@ -151,8 +152,8 @@ class Sep6TransactionUtilsTest {
         amountOutAsset = "USDC"
         feeDetails = FeeDetails("1.00", "USD", null)
         amountExpected = "100.00"
-        sep10Account = TEST_ACCOUNT
-        sep10AccountMemo = TEST_MEMO
+        webAuthAccount = TEST_ACCOUNT
+        webAuthAccountMemo = TEST_MEMO
         withdrawAnchorAccount = TEST_ASSET_ISSUER_ACCOUNT_ID
         fromAccount = "1234"
         toAccount = TEST_ASSET_ISSUER_ACCOUNT_ID
@@ -181,7 +182,7 @@ class Sep6TransactionUtilsTest {
                   .fee(Amount("0", "USD"))
                   .requestedAt(Instant.ofEpochMilli(1))
                   .refundedAt(Instant.ofEpochMilli(3))
-                  .build()
+                  .build(),
               )
           }
         refundMemo = "some refund memo"
@@ -194,7 +195,7 @@ class Sep6TransactionUtilsTest {
     JSONAssert.assertEquals(
       apiTxn,
       gson.toJson(Sep6TransactionUtils.fromTxn(databaseTxn, sep6MoreInfoUrlConstructor, null)),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
   }
 }

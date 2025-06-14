@@ -16,6 +16,7 @@ import org.stellar.anchor.platform.config.PropertyCustodyConfig;
 import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.JdbcTransactionPendingTrustRepo;
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager;
+import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
 import org.stellar.anchor.platform.rpc.*;
 import org.stellar.anchor.platform.service.RpcService;
 import org.stellar.anchor.platform.service.TransactionService;
@@ -229,7 +230,8 @@ public class RpcActionBeans {
       LedgerClient ledgerClient,
       AssetService assetService,
       EventService eventService,
-      MetricsService metricsService) {
+      MetricsService metricsService,
+      SacToAssetMapper sacToAssetMapper) {
     return new NotifyOnchainFundsReceivedHandler(
         txn6Store,
         txn24Store,
@@ -238,7 +240,8 @@ public class RpcActionBeans {
         ledgerClient,
         assetService,
         eventService,
-        metricsService);
+        metricsService,
+        sacToAssetMapper);
   }
 
   @Bean
@@ -250,7 +253,8 @@ public class RpcActionBeans {
       LedgerClient ledgerClient,
       AssetService assetService,
       EventService eventService,
-      MetricsService metricsService) {
+      MetricsService metricsService,
+      SacToAssetMapper sacToAssetMapper) {
     return new NotifyOnchainFundsSentHandler(
         txn6Store,
         txn24Store,
@@ -259,7 +263,8 @@ public class RpcActionBeans {
         ledgerClient,
         assetService,
         eventService,
-        metricsService);
+        metricsService,
+        sacToAssetMapper);
   }
 
   @Bean

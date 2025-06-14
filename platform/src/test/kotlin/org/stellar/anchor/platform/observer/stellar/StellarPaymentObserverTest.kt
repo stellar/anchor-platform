@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.platform.HealthCheckStatus.RED
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
+import org.stellar.anchor.platform.observer.PaymentListener
 import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.ObserverStatus
 import org.stellar.sdk.Server
 import org.stellar.sdk.exception.NetworkException
@@ -28,6 +29,7 @@ class StellarPaymentObserverTest {
 
   @MockK lateinit var paymentStreamerCursorStore: StellarPaymentStreamerCursorStore
   @MockK lateinit var paymentObservingAccountsManager: PaymentObservingAccountsManager
+  @MockK lateinit var paymentListener: PaymentListener
 
   private val stellarPaymentObserverConfig = StellarPaymentObserverConfig(1, 5, 1, 1, 2, 1, 2)
 

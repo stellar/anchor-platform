@@ -15,9 +15,7 @@ import org.stellar.sdk.*;
 import org.stellar.sdk.Asset;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TrustLineAsset;
-import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse;
-import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse;
-import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse;
+import org.stellar.sdk.responses.sorobanrpc.*;
 import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
@@ -188,5 +186,13 @@ public class StellarRpc implements LedgerClient {
         .createdAt(Instant.ofEpochSecond(txnResponse.getCreatedAt()))
         .operations(operations)
         .build();
+  }
+
+  public SimulateTransactionResponse simulateTransaction(Transaction transaction) {
+    return sorobanServer.simulateTransaction(transaction);
+  }
+
+  public GetLatestLedgerResponse getLatestLedger() {
+    return sorobanServer.getLatestLedger();
   }
 }

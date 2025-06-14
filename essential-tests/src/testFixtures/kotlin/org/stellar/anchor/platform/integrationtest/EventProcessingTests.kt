@@ -3,13 +3,13 @@ package org.stellar.anchor.platform.integrationtest
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.config.PropertyEventConfig
 import org.stellar.anchor.platform.event.DefaultEventService
 import org.stellar.anchor.util.GsonUtils
 
-class EventProcessingServerTests : AbstractIntegrationTests(TestConfig()) {
+class EventProcessingServerTests : IntegrationTestBase(TestConfig()) {
   companion object {
     val eventConfig =
       GsonUtils.getInstance().fromJson(eventConfigJson, PropertyEventConfig::class.java)!!
