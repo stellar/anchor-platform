@@ -16,10 +16,10 @@ metadata:
   name: {{ .Values.ingress.name }}
   namespace: {{ .Values.namespace }}
   annotations:
-    nginx.ingress.kubernetes.io/server-snippet: |
-      location = /nginx_status {
-        deny all;
-      }
+{{/*    nginx.ingress.kubernetes.io/server-snippet: |*/}}
+{{/*      location = /nginx_status {*/}}
+{{/*        deny all;*/}}
+{{/*      }*/}}
     {{- $annotations := dict "nginx.ingress.kubernetes.io/custom-headers" (printf "%s/%s-configmap" .Values.namespace .Values.ingress.name) }}
     {{- if .Values.ingress.annotations }}
       {{- $annotations = merge $annotations .Values.ingress.annotations }}
