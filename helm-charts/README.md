@@ -54,11 +54,25 @@ helm install kafka bitnami/kafka --version 27.1.2 --set sasl.existingSecret=ap-k
 
 This should only be run one time.
 
+## Install External Secrets Operator and CRDs
+You can install the External Secrets Operator, and it will include the necessary CRDs:
+```bash
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo update
+helm upgrade --install external-secrets external-secrets/external-secrets \
+  --namespace external-secrets \
+  --create-namespace
+```
+
+This will:
+- Install External Secrets Operator in the `external-secrets` namespace
+- Install all required CRDs including `ClusterSecretStore`
+
 ## Install and check the secret store `fake-secret-store`
 
 ```bash
 source ../.env
-helm upgrade --install fake-secret-store ./secret-store/ --set sep10_signing_seed=$SECRET_SEP10_SIGNING_SEED --set sentry_auth_token=$SENTRY_AUTH_TOKEN --set payment_signing_seed=${APP__PAYMENT_SIGNING_SEED}
+helm upgrade --install fake-secret-store ./secret-store/ --set sep10_signing_seed=$SECRET_SEP10_SIGNING_SEED --set sentry_auth_token=$SENTRY_AUTH_TOKEN --set payment_signing_seed=$APP__PAYMENT_SIGNING_SEED
 ```
 
 To show if the secret store is running, run the following command:
