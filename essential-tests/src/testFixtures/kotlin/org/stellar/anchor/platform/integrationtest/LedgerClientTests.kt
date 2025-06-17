@@ -146,9 +146,9 @@ private val expectedAccount =
 {
   "accountId": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
   "thresholds": {
-    "low": 0,
-    "medium": 0,
-    "high": 0
+    "low": 1,
+    "medium": 1,
+    "high": 1
   },
   "signers": [
     {
