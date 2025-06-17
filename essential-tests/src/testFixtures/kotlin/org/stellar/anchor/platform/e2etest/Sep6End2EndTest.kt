@@ -6,8 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.*
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
@@ -27,6 +26,7 @@ import org.stellar.walletsdk.anchor.customer
 import org.stellar.walletsdk.asset.IssuedAssetId
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   private val maxTries = 30
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
@@ -57,6 +57,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  @Order(10)
   fun `test classic asset deposit end-to-end flow`() = runBlocking {
     val memo = (10000..20000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
@@ -153,7 +154,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical deposit to contract account end-to-end`() = runBlocking {
+  @Order(11)
+  fun `test contract account deposit end-to-end`() = runBlocking {
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -200,6 +202,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  @Order(12)
   fun `test classic asset deposit-exchange without quote end-to-end flow`() = runBlocking {
     val memo = (20000..30000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
@@ -298,7 +301,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical deposit-exchange to contract account end-to-end`() = runBlocking {
+  @Order(13)
+  fun `test contract account deposit-exchange end-to-end`() = runBlocking {
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -347,6 +351,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  @Order(20)
   fun `test classic asset withdraw end-to-end flow`() = runBlocking {
     val memo = (40000..50000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
@@ -432,7 +437,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical withdraw to contract account end-to-end`() = runBlocking {
+  @Order(21)
+  fun `test contract account withdraw end-to-end`() = runBlocking {
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -490,6 +496,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  @Order(22)
   fun `test classic asset withdraw-exchange without quote end-to-end flow`() = runBlocking {
     val memo = (50000..60000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
@@ -581,7 +588,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test withdraw-exchange to contract account end-to-end`() = runBlocking {
+  @Order(23)
+  fun `test contract account withdraw-exchange end-to-end`() = runBlocking {
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =

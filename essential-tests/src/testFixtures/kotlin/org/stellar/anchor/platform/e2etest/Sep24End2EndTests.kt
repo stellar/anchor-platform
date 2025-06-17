@@ -11,9 +11,8 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
@@ -56,6 +55,7 @@ import org.stellar.walletsdk.horizon.SigningKeyPair
 import org.stellar.walletsdk.horizon.sign
 
 @TestInstance(PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   private val client = HttpClient {
     install(HttpTimeout) {
@@ -83,6 +83,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @ParameterizedTest
   @MethodSource("depositAssetsAndAmounts")
+  @Order(10)
   fun `test classic deposit end-to-end flow`(
     walletSecretKey: String,
     asset: StellarAssetId,
@@ -122,6 +123,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  @Order(11)
   fun `test deposit to contract address end-to-end flow`() = runBlocking {
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
@@ -233,6 +235,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @ParameterizedTest
   @MethodSource("withdrawAssetsAndAmounts")
+  @Order(20)
   fun `test classic withdraw end-to-end flow`(
     walletSecretKey: String,
     asset: StellarAssetId,
@@ -299,6 +302,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  @Order(21)
   fun `test withdraw from contract address end-to-end flow`() = runBlocking {
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
@@ -429,6 +433,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @ParameterizedTest
   @MethodSource("historyAssetsAndAmounts")
+  @Order(30)
   fun `test created sep-24 transactions show up in the get history call`(
     walletSecretKey: String,
     asset: StellarAssetId,
