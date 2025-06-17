@@ -54,8 +54,7 @@ helm install kafka bitnami/kafka --version 27.1.2 --set sasl.existingSecret=ap-k
 
 This should only be run one time.
 
-## Install External Secrets Operator and CRDs
-You can install the External Secrets Operator, and it will include the necessary CRDs:
+## Install External Secrets
 ```bash
 helm repo add external-secrets https://charts.external-secrets.io
 helm repo update
@@ -63,10 +62,6 @@ helm upgrade --install external-secrets external-secrets/external-secrets \
   --namespace external-secrets \
   --create-namespace
 ```
-
-This will:
-- Install External Secrets Operator in the `external-secrets` namespace
-- Install all required CRDs including `ClusterSecretStore`
 
 ## Install and check the secret store `fake-secret-store`
 
