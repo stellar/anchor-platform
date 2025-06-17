@@ -25,6 +25,7 @@ minikube start
 
 ```bash
 helm repo add external-secrets https://charts.external-secrets.io
+helm repo update
 helm install external-secrets \
    external-secrets/external-secrets \
     -n external-secrets \
@@ -53,15 +54,6 @@ helm install kafka bitnami/kafka --version 27.1.2 --set sasl.existingSecret=ap-k
 ```
 
 This should only be run one time.
-
-## Install External Secrets
-```bash
-helm repo add external-secrets https://charts.external-secrets.io
-helm repo update
-helm upgrade --install external-secrets external-secrets/external-secrets \
-  --namespace external-secrets \
-  --create-namespace
-```
 
 ## Install and check the secret store `fake-secret-store`
 
