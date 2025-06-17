@@ -10,6 +10,7 @@ container:
 config:
   app:
     horizonEndpoint: https://horizon-testnet.stellar.org
+    rpcEndpoint: https://soroban-testnet.stellar.org
     platformApiEndpoint: http://anchor-platform-svc-platform:8085
   data:
     url: postgresql-ref:5432
