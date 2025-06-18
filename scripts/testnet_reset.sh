@@ -98,15 +98,6 @@ setup_trustlines() {
         log_warning "Failed to create Anchor USDC trustline for $account_var"
       fi
 
-      if stellar tx new change-trust \
-        --source-account "$account_secret" \
-        --network testnet \
-        --line "USDC:$circle_usdc_issuer"; then
-        log_success "Circle USDC trustline created for $account_var"
-      else
-        log_warning "Failed to create Circle USDC trustline for $account_var"
-      fi
-
       # Create SRT trustline only for TESTANCHOR_DISTRIBUTION_SECRET
       if [[ "$account_var" == "TESTANCHOR_DISTRIBUTION_SECRET" ]]; then
         if stellar tx new change-trust \
@@ -116,6 +107,15 @@ setup_trustlines() {
           log_success "SRT trustline created for $account_var"
         else
           log_warning "Failed to create SRT trustline for $account_var"
+        fi
+
+        if stellar tx new change-trust \
+          --source-account "$account_secret" \
+          --network testnet \
+          --line "USDC:$circle_usdc_issuer"; then
+          log_success "Circle USDC trustline created for $account_var"
+        else
+          log_warning "Failed to create Circle USDC trustline for $account_var"
         fi
       fi
     fi
