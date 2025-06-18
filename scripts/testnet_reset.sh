@@ -56,6 +56,8 @@ fund_test_accounts() {
     "TEST_WITHDRAW_FUND_CLIENT_SECRET_2:GASI56WX7UKIDFPZRCQEI4OQE3V3QBGXEOB4ZY6ZMU5MZXPHQHIDA7JU"
     "TEST_DEPOSIT_FUND_CLIENT_SECRET_1:GD4C2QRT7YL4WJFJPYQCYRXEDBB7ERHC3XZGWR6KXKRHPEFXXNXIVNFY"
     "TEST_DEPOSIT_FUND_CLIENT_SECRET_2:GC56VTOVOJDRQAJRYLZW6DLQGVTQSYDTZU7ISNIZ2VJIE3FYWI2HMD5G"
+    "SRT_ISSUER_SECRET:GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B"
+    "TESTANCHOR_DISTRIBUTION_SECRET:GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP"
   )
 
   for account_info in "${accounts[@]}"; do
@@ -69,31 +71,52 @@ fund_test_accounts() {
 }
 
 setup_trustlines() {
-  log_info "Setting up USDC trustlines..."
+  log_info "Setting up trustlines..."
   local usdc_issuer="${USDC_ISSUER_PUBLIC:-GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP}"
   local circle_usdc_issuer="GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+  local srt_issuer="${SRT_ISSUER_PUBLIC:-GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B}"
   local accounts=(
     "TEST_CLIENT_WALLET_SECRET"
     "TEST_WITHDRAW_FUND_CLIENT_SECRET_1"
     "TEST_WITHDRAW_FUND_CLIENT_SECRET_2"
     "TEST_DEPOSIT_FUND_CLIENT_SECRET_1"
     "TEST_DEPOSIT_FUND_CLIENT_SECRET_2"
+    "TESTANCHOR_DISTRIBUTION_SECRET"
   )
 
   for account_var in "${accounts[@]}"; do
     local account_secret="${!account_var}"
     if [[ -n "$account_secret" ]]; then
-      stellar tx new change-trust \
+      # Create USDC trustlines
+      if stellar tx new change-trust \
         --source-account "$account_secret" \
         --network testnet \
-        --line "USDC:$usdc_issuer" >/dev/null 2>&1
-      log_success "Anchor USDC trustline created for $account_var"
+        --line "USDC:$usdc_issuer"; then
+        log_success "Anchor USDC trustline created for $account_var"
+      else
+        log_warning "Failed to create Anchor USDC trustline for $account_var"
+      fi
 
-      stellar tx new change-trust \
+      if stellar tx new change-trust \
         --source-account "$account_secret" \
         --network testnet \
-        --line "USDC:$circle_usdc_issuer" >/dev/null 2>&1
-      log_success "Circle USDC trustline created for $account_var"
+        --line "USDC:$circle_usdc_issuer"; then
+        log_success "Circle USDC trustline created for $account_var"
+      else
+        log_warning "Failed to create Circle USDC trustline for $account_var"
+      fi
+
+      # Create SRT trustline only for TESTANCHOR_DISTRIBUTION_SECRET
+      if [[ "$account_var" == "TESTANCHOR_DISTRIBUTION_SECRET" ]]; then
+        if stellar tx new change-trust \
+          --source-account "$account_secret" \
+          --network testnet \
+          --line "SRT:$srt_issuer"; then
+          log_success "SRT trustline created for $account_var"
+        else
+          log_warning "Failed to create SRT trustline for $account_var"
+        fi
+      fi
     fi
     sleep 1
   done
@@ -104,8 +127,10 @@ issue_and_fund_usdc() {
   local usdc_issuer_secret="$USDC_ISSUER_SECRET"
   local usdc_issuer_public="${USDC_ISSUER_PUBLIC:-GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP}"
 
+  # Fund USDC issuer
   fund_account "$usdc_issuer_public"
 
+  # Fund USDC to test accounts
   local recipient_accounts=(
     "TEST_CLIENT_WALLET_SECRET:GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
     "TEST_WITHDRAW_FUND_CLIENT_SECRET_1:GDC2U5GRKUSPGV5XENLBWKQZH2C4PG7ZEVMQOUA2QZKIRXE5FYYEMEF7"
@@ -135,6 +160,30 @@ issue_and_fund_usdc() {
       log_warning "Skipping $account_var (no secret key found)"
     fi
   done
+
+}
+
+issue_and_fund_srt() {
+  log_info "Issuing SRT and funding test anchor distribution account..."
+  local srt_issuer_secret="$SRT_ISSUER_SECRET"
+  local srt_issuer_public="${SRT_ISSUER_PUBLIC:-GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B}"
+  
+  # Fund SRT issuer
+  fund_account "$srt_issuer_public"
+
+  # Fund SRT to test anchor distribution account
+  local anchor_dist_public="${TESTANCHOR_DISTRIBUTION_PUBLIC:-GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP}"
+  log_info "Sending 1000000 SRT to test anchor distribution account..."
+  if stellar tx new payment \
+    --source-account "$srt_issuer_secret" \
+    --destination "$anchor_dist_public" \
+    --asset "SRT:$srt_issuer_public" \
+    --amount 10000000000000 \
+    --network testnet; then
+    log_success "Sent 1000000 SRT to test anchor distribution account"
+  else
+    log_warning "Failed to send SRT to test anchor distribution account"
+  fi
 }
 
 reset_multisig() {
@@ -228,6 +277,7 @@ main() {
   reset_multisig
   setup_trustlines
   issue_and_fund_usdc
+  issue_and_fund_srt
   deploy_contracts
   log_success "✨ Testnet setup completed!"
 }
