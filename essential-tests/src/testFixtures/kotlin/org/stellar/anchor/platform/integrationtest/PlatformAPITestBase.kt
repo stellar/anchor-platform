@@ -12,10 +12,11 @@ import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.util.AssetHelper
+import org.stellar.anchor.util.AssetHelper.fromXdrAmount
 import org.stellar.anchor.util.Log.info
 import org.stellar.anchor.util.MemoHelper
+import org.stellar.anchor.util.StringHelper.isNotEmpty
 import org.stellar.sdk.*
-import org.stellar.sdk.operations.Operation.fromXdrAmount
 import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.requests.RequestBuilder
 import org.stellar.sdk.responses.operations.OperationResponse
@@ -61,11 +62,11 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
 
   private fun getTestPaymentValues(): List<Pair<String, String>> {
     if (!::testPaymentValues.isInitialized || testPaymentValues.isEmpty()) {
-      if (config.get("stellar_network.rpc_url") != null) {
+      if (isNotEmpty(config.get("stellar_network.rpc_url"))) {
         val ledgerClient = StellarRpc(config.get("stellar_network.rpc_url")!!)
         val ledgerTxn = sendTestPayment(ledgerClient)
         setTestPaymentsValues(ledgerTxn!!)
-      } else if (config.get("stellar_network.horizon_url") != null) {
+      } else if (isNotEmpty(config.get("stellar_network.horizon_url"))) {
         val horizonServer = Server(config.get("stellar_network.horizon_url")!!)
         // not the most optimized way to do this, but it works
         val payment = fetchTestPaymentFromHorizon(horizonServer)
