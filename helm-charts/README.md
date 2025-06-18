@@ -38,6 +38,7 @@ To install `postgresql` and `postgresql-ref`, run the following commands:
 
 ```bash
 helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
 helm install postgresql-ref bitnami/postgresql --version 15.1.2 --set global.postgresql.auth.postgresPassword=123456789
 helm install postgresql bitnami/postgresql --version 15.1.2 --set global.postgresql.auth.postgresPassword=123456789
 ```
