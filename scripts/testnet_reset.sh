@@ -48,6 +48,7 @@ fund_account() {
 fund_test_accounts() {
   log_info "Funding test accounts..."
   local accounts=(
+    "SECRET__KEY:GAJ3JPQH3ISAZBMRUPKQ6ZQLRXIROCKJKBIYMGPFUEETQEDGFAW4IQ5H"
     "SECRET_SEP10_SIGNING_SEED:GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
     "TEST_CLIENT_WALLET_SECRET:GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
     "TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET:GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
@@ -65,6 +66,7 @@ fund_test_accounts() {
   for account_info in "${accounts[@]}"; do
     local secret_var="${account_info%%:*}"
     local public_key="${account_info##*:}"
+
     if [[ -n "${!secret_var}" ]]; then
       fund_account "$public_key"
     fi
