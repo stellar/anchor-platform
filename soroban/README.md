@@ -34,7 +34,7 @@ stellar contract deploy \
 --salt 616e63686f722d706c6174666f726d \
 -- \
 --admin ${MY_ACCOUNT} \
---signer ${MY_ACCOUNT_PUBLIC_KEY_BYTES}
+--signer ${MY_ACCOUNT_PUBLIC_KEY_BYTES} # you can get this by calling KeyPair#rawPublicKey using the JS SDK
 
 # Deploy the web auth contract
 stellar contract deploy \
