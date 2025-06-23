@@ -54,12 +54,14 @@ class PaymentObserverTests {
     @JvmStatic
     @BeforeAll
     fun start() {
-      fromKeyPair = createAndFundAccount()
-      toKeyPair = createAndFundAccount()
-      fromKeyPair2 = createAndFundAccount()
-      toKeyPair2 = createAndFundAccount()
+      fromKeyPair = createAndFundAccount(KeyPair.random())
+      toKeyPair = createAndFundAccount(KeyPair.random())
+      fromKeyPair2 = createAndFundAccount(KeyPair.random())
+      toKeyPair2 = createAndFundAccount(KeyPair.random())
+
       // the wasmId is the wasm hash of the contract under soroban/contracts/account.
-      val wasmId = "a4f2bbf00e661546a2db6de1922dc638ee94e0b52c48adb051dad42329e866fb"
+      // https://stellar.expert/explorer/testnet/contract/CAYXY6QGTPOCZ676MLGT5JFESVROJ6OJF7VW3LLXMTC2RQIZTP5JYNEL
+      val wasmId = "ae95eb9d4bab6a01022af3bda941cf7603809adb173f82d46f70bd22b005c068"
       walletContractId =
         createContractWithWasmIdAndGetContractId(
           stellarRpc,
@@ -442,8 +444,7 @@ internal class EventCapturingListener : PaymentListener {
   }
 }
 
-internal fun createAndFundAccount(): KeyPair {
-  val keyPair = KeyPair.random()
+internal fun createAndFundAccount(keyPair: KeyPair): KeyPair {
   val friendBotUrl = "https://friendbot.stellar.org/?addr=${keyPair.accountId}"
   try {
     java.net.URL(friendBotUrl).openStream()
@@ -489,7 +490,7 @@ internal fun createContractWithWasmId(
   sourceAccount: KeyPair,
   constructorArgs: List<SCVal>,
 ): String {
-  val source = sorobanServer.getAccount(sourceAccount.getAccountId())
+  val source = sorobanServer.getAccount(sourceAccount.accountId)
 
   val invokeHostFunctionOperation: InvokeHostFunctionOperation =
     InvokeHostFunctionOperation.createContractOperationBuilder(
