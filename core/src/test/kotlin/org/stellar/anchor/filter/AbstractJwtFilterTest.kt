@@ -52,7 +52,7 @@ class AbstractJwtFilterTest {
     filter.doFilter(request, response, filterChain)
     verify(exactly = 1) {
       response.setStatus(HttpStatus.SC_FORBIDDEN)
-      response.contentType = Sep10JwtFilter.APPLICATION_JSON_VALUE
+      response.contentType = WebAuthJwtFilter.APPLICATION_JSON_VALUE
     }
     verify { filterChain wasNot Called }
   }

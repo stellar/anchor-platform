@@ -29,6 +29,7 @@ import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
+import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
 import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
@@ -38,6 +39,7 @@ public class NotifyOnchainFundsSentHandler
     extends RpcTransactionStatusHandler<NotifyOnchainFundsSentRequest> {
 
   private final LedgerClient ledgerClient;
+  private final SacToAssetMapper sacToAssetMapper;
 
   public NotifyOnchainFundsSentHandler(
       Sep6TransactionStore txn6Store,
@@ -47,7 +49,8 @@ public class NotifyOnchainFundsSentHandler
       LedgerClient ledgerClient,
       AssetService assetService,
       EventService eventService,
-      MetricsService metricsService) {
+      MetricsService metricsService,
+      SacToAssetMapper sacToAssetMapper) {
     super(
         txn6Store,
         txn24Store,
@@ -58,6 +61,7 @@ public class NotifyOnchainFundsSentHandler
         metricsService,
         NotifyOnchainFundsSentRequest.class);
     this.ledgerClient = ledgerClient;
+    this.sacToAssetMapper = sacToAssetMapper;
   }
 
   @Override
@@ -112,7 +116,7 @@ public class NotifyOnchainFundsSentHandler
         throw new InternalErrorException(
             String.format("Failed to retrieve Stellar transaction by ID[%s]", stellarTxnId));
       }
-      addStellarTransaction(ledgerTxn, txn);
+      addStellarTransaction(sacToAssetMapper, ledgerTxn, txn);
     } catch (LedgerException ex) {
       errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
       throw new InternalErrorException(

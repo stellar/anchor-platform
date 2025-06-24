@@ -29,7 +29,7 @@ import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.StellarRpc
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.sep10.Sep10Service
 import org.stellar.anchor.util.FileUtil
@@ -40,7 +40,7 @@ import org.stellar.sdk.Network.TESTNET
 import org.stellar.sdk.operations.ManageDataOperation
 import org.stellar.sdk.operations.SetOptionsOperation
 
-class Sep10ServiceIntegrationTests : AbstractIntegrationTests(TestConfig()) {
+class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
   companion object {
     const val TEST_WEB_AUTH_DOMAIN = "test.stellar.org"
     const val TEST_HOME_DOMAIN = "test.stellar.org"

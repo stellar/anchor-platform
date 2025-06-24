@@ -6,7 +6,6 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MathHelper.formatAmount;
-import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.micrometer.core.instrument.Metrics;
 import java.io.IOException;
@@ -72,7 +71,15 @@ public class DefaultPaymentListener implements PaymentListener {
               .getPathPaymentOperation()
               .getId()
               .equals(String.valueOf(paymentTransferEvent.getOperationId()))) {
-            ledgerPayment = operation.getPaymentOperation();
+            ledgerPayment = operation.getPathPaymentOperation();
+          }
+          break;
+        case INVOKE_HOST_FUNCTION:
+          if (operation
+              .getInvokeHostFunctionOperation()
+              .getId()
+              .equals(String.valueOf(paymentTransferEvent.getOperationId()))) {
+            ledgerPayment = operation.getInvokeHostFunctionOperation();
           }
           break;
         default:
@@ -117,10 +124,16 @@ public class DefaultPaymentListener implements PaymentListener {
 
     // Find a transaction matching the memo, assumes transactions are unique to account+memo
     try {
+      // TODO: replace the query with this when SAC memo is supported.
+      //      JdbcSep24Transaction sep24Txn =
+      //          sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+      //              ledgerPayment.getTo(),
+      //              memo,
+      //              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       JdbcSep24Transaction sep24Txn =
-          sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+          sep24TransactionStore.findOneByToAccountAndFromAccountAndStatus(
               ledgerPayment.getTo(),
-              memo,
+              ledgerPayment.getFrom(),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       if (sep24Txn != null) {
         try {
@@ -138,11 +151,19 @@ public class DefaultPaymentListener implements PaymentListener {
     // Find a transaction matching the memo, assumes transactions are unique to account+memo
 
     try {
+      // TODO: replace the query with this when SAC memo is supported.
+      //      JdbcSep6Transaction sep6Txn =
+      //          sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      //              ledgerPayment.getTo(),
+      //              memo,
+      //              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+
       JdbcSep6Transaction sep6Txn =
-          sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+          sep6TransactionStore.findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
               ledgerPayment.getTo(),
-              memo,
+              ledgerPayment.getFrom(),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+
       if (sep6Txn != null) {
         try {
           handleSep6Transaction(ledgerTransaction, ledgerPayment, sep6Txn);
@@ -260,16 +281,18 @@ public class DefaultPaymentListener implements PaymentListener {
   }
 
   boolean validate(LedgerTransaction ledgerTransaction, LedgerPayment ledgerPayment) {
-    if (isEmpty(ledgerTransaction.getHash())
-        || ledgerTransaction.getMemo() == null
-        || isEmpty(MemoHelper.xdrMemoToString(ledgerTransaction.getMemo()))) {
-      // The transaction do not have a hash or memo.
-      // We do not process it.
-      debugF(
-          "Transaction {} does not have a hash or memo. This indicates a potential bug from stellar network events.",
-          ledgerTransaction.getHash());
-      return false;
-    }
+    // TODO: Enable this validation when SAC memo is supported.
+    //    if (isEmpty(ledgerTransaction.getHash())
+    //        || ledgerTransaction.getMemo() == null
+    //        || isEmpty(MemoHelper.xdrMemoToString(ledgerTransaction.getMemo()))) {
+    //      // The transaction do not have a hash or memo.
+    //      // We do not process it.
+    //      debugF(
+    //          "Transaction {} does not have a hash or memo. This indicates a potential bug from
+    // stellar network events.",
+    //          ledgerTransaction.getHash());
+    //      return false;
+    //    }
 
     if (!List.of(
             AssetType.ASSET_TYPE_NATIVE,

@@ -1,6 +1,6 @@
 package org.stellar.anchor.ledger;
 
-import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
+import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus;
 
 import java.math.BigInteger;
 import java.time.Instant;
@@ -37,6 +37,8 @@ public class LedgerTransaction {
   }
 
   public interface LedgerPayment {
+    OperationType getType();
+
     String getId();
 
     String getFrom();
@@ -60,11 +62,17 @@ public class LedgerTransaction {
     BigInteger amount;
     Asset asset;
     String sourceAccount;
+
+    @Override
+    public OperationType getType() {
+      return OperationType.PAYMENT;
+    }
   }
 
   @Builder
   @Data
   public static class LedgerPathPaymentOperation implements LedgerPayment {
+    OperationType type;
     String id;
     String from;
     String to;
@@ -85,6 +93,11 @@ public class LedgerTransaction {
     BigInteger amount;
     Asset asset;
     String sourceAccount;
+
+    @Override
+    public OperationType getType() {
+      return OperationType.INVOKE_HOST_FUNCTION;
+    }
 
     public Asset getAsset() {
       if (asset == null) {

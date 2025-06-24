@@ -11,3 +11,4 @@ target/
 *.tgz
 .vscode
 .env
+.DS_Store

@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 import org.stellar.anchor.api.sep.sep12.*;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.sep12.Sep12Service;
 import org.stellar.anchor.util.GsonUtils;
@@ -55,7 +55,7 @@ public class Sep12Controller {
         memoType,
         transactionId,
         lang);
-    Sep10Jwt sep10Jwt = Sep10Helper.getSep10Token(request);
+    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
     Sep12GetCustomerRequest getCustomerRequest =
         Sep12GetCustomerRequest.builder()
             .type(type)
@@ -67,7 +67,7 @@ public class Sep12Controller {
             .lang(lang)
             .build();
 
-    return sep12Service.getCustomer(sep10Jwt, getCustomerRequest);
+    return sep12Service.getCustomer(webAuthJwt, getCustomerRequest);
   }
 
   @SneakyThrows
@@ -81,8 +81,8 @@ public class Sep12Controller {
   public Sep12PutCustomerResponse putCustomer(
       HttpServletRequest request, @RequestBody Sep12PutCustomerRequest putCustomerRequest) {
     debug("PUT /customer details:", putCustomerRequest);
-    Sep10Jwt sep10Jwt = Sep10Helper.getSep10Token(request);
-    return sep12Service.putCustomer(sep10Jwt, putCustomerRequest);
+    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
+    return sep12Service.putCustomer(webAuthJwt, putCustomerRequest);
   }
 
   @SneakyThrows
@@ -118,8 +118,8 @@ public class Sep12Controller {
       }
     }
 
-    Sep10Jwt sep10Jwt = Sep10Helper.getSep10Token(request);
-    return sep12Service.putCustomer(sep10Jwt, putCustomerRequest);
+    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
+    return sep12Service.putCustomer(webAuthJwt, putCustomerRequest);
   }
 
   @SneakyThrows
@@ -134,7 +134,7 @@ public class Sep12Controller {
       HttpServletRequest request,
       @PathVariable String account,
       @RequestBody(required = false) Sep12DeleteCustomerRequest body) {
-    Sep10Jwt sep10Jwt = Sep10Helper.getSep10Token(request);
+    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
     String memo = body != null ? body.getMemo() : null;
     String memoType = body != null ? body.getMemoType() : null;
     debugF(
@@ -142,7 +142,7 @@ public class Sep12Controller {
         request.getRequestURI(),
         account,
         body);
-    sep12Service.deleteCustomer(sep10Jwt, account, memo, memoType);
+    sep12Service.deleteCustomer(webAuthJwt, account, memo, memoType);
   }
 
   @SneakyThrows
@@ -158,8 +158,8 @@ public class Sep12Controller {
       @PathVariable String account,
       @RequestParam(required = false) String memo,
       @RequestParam(required = false, name = "memo_type") String memoType) {
-    Sep10Jwt sep10Jwt = Sep10Helper.getSep10Token(request);
+    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
     debugF("DELETE /customer requestURI={} account={}", request.getRequestURI(), account);
-    sep12Service.deleteCustomer(sep10Jwt, account, memo, memoType);
+    sep12Service.deleteCustomer(webAuthJwt, account, memo, memoType);
   }
 }

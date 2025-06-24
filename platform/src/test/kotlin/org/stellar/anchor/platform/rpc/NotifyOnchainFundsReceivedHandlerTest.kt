@@ -43,6 +43,7 @@ import org.stellar.anchor.metrics.MetricsService
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep31Transaction
 import org.stellar.anchor.platform.data.JdbcSep6Transaction
+import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper
 import org.stellar.anchor.platform.service.AnchorMetrics.PLATFORM_RPC_TRANSACTION
 import org.stellar.anchor.platform.utils.toRate
 import org.stellar.anchor.platform.validator.RequestValidator
@@ -139,7 +140,8 @@ class NotifyOnchainFundsReceivedHandlerTest {
         ledgerClient,
         assetService,
         eventService,
-        metricsService
+        metricsService,
+        mockk<SacToAssetMapper>()
       )
   }
 

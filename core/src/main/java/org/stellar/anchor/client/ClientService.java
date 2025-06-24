@@ -15,5 +15,5 @@ public interface ClientService {
 
   NonCustodialClient getClientConfigByDomain(String domain);
 
-  ClientConfig getClientConfigByDomainAndSep10Account(String domain, String sep10Account);
+  ClientConfig getClientConfigByDomainAndAccount(String domain, String account);
 }

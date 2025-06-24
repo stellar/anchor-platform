@@ -3,8 +3,9 @@ package org.stellar.anchor.config;
 public interface SecretConfig {
   String getSep6MoreInfoUrlJwtSecret();
 
-  @Deprecated // TODO: ANCHOR-667
   String getSep10JwtSecretKey();
+
+  String getSep45JwtSecretKey();
 
   String getSep10SigningSeed();
 

@@ -19,8 +19,8 @@ import org.stellar.anchor.api.callback.PutCustomerRequest;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
-import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientConfig;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.platform.config.PropertySep24Config;
@@ -52,7 +52,7 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
   @Override
   @SneakyThrows
   public String construct(
-      Sep24Transaction txn, Map<String, String> request, AssetInfo asset, Sep10Jwt jwt) {
+      Sep24Transaction txn, Map<String, String> request, AssetInfo asset, WebAuthJwt jwt) {
     // If there are KYC fields in the request, they will be forwarded to PUT /customer before
     // returning the token.
     forwardKycFields(request, jwt);
@@ -80,8 +80,8 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
   String constructToken(
       Sep24Transaction txn, Map<String, String> request, AssetInfo asset, String homeDomain) {
     ClientConfig clientConfig =
-        clientsService.getClientConfigByDomainAndSep10Account(
-            txn.getClientDomain(), txn.getSep10Account());
+        clientsService.getClientConfigByDomainAndAccount(
+            txn.getClientDomain(), txn.getWebAuthAccount());
 
     debugF(
         "Resolving configs for token construct. Got config: {}, all configs: {}",
@@ -110,7 +110,7 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
     return jwtService.encode(token);
   }
 
-  void forwardKycFields(Map<String, String> request, Sep10Jwt jwt) throws AnchorException {
+  void forwardKycFields(Map<String, String> request, WebAuthJwt jwt) throws AnchorException {
     if (sep24Config.getKycFieldsForwarding().isEnabled()) {
       // Get sep-9 fields from request
       Map<String, String> sep9 = extractSep9Fields(request);

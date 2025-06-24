@@ -39,4 +39,9 @@ public class DataBeans {
   public PaymentObservingAccountStore observingAccountStore(PaymentObservingAccountRepo repo) {
     return new PaymentObservingAccountStore(repo);
   }
+
+  @Bean
+  JdbcNonceStore nonceStore(JdbcNonceRepo nonceRepo) {
+    return new JdbcNonceStore(nonceRepo);
+  }
 }

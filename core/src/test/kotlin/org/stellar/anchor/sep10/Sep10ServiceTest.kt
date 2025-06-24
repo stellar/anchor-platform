@@ -20,6 +20,7 @@ import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.params.provider.ValueSource
@@ -46,11 +47,11 @@ import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.setupMock
+import org.stellar.anchor.util.ClientDomainHelper
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.NetUtil
 import org.stellar.sdk.*
-import org.stellar.sdk.Network.PUBLIC
-import org.stellar.sdk.Network.TESTNET
+import org.stellar.sdk.Network.*
 import org.stellar.sdk.exception.InvalidSep10ChallengeException
 import org.stellar.walletsdk.auth.DefaultAuthHeaderSigner
 import org.stellar.walletsdk.auth.createAuthSignToken
@@ -78,6 +79,14 @@ internal class Sep10ServiceTest {
     @JvmStatic
     fun homeDomains(): Stream<String> {
       return Stream.of(null, TEST_HOME_DOMAIN)
+    }
+
+    @JvmStatic
+    fun stellarNetworks(): Stream<Arguments> {
+      return Stream.of(
+        Arguments.of("https://horizon-testnet.stellar.org", TESTNET),
+        Arguments.of("https://horizon-futurenet.stellar.org", FUTURENET),
+      )
     }
   }
 
@@ -450,12 +459,12 @@ internal class Sep10ServiceTest {
       "       NETWORK_PASSPHRASE=\"Public Global Stellar Network ; September 2015\"\n"
 
     assertThrows<SepException> {
-      Sep10Helper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
+      ClientDomainHelper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
     }
 
     every { NetUtil.fetch(any()) } answers { throw IOException("Cannot connect") }
     assertThrows<SepException> {
-      Sep10Helper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
+      ClientDomainHelper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
     }
 
     every { NetUtil.fetch(any()) } returns
@@ -466,7 +475,7 @@ internal class Sep10ServiceTest {
       SIGNING_KEY="BADKEY"
       """
     assertThrows<SepException> {
-      Sep10Helper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
+      ClientDomainHelper.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN, false)
     }
   }
 
