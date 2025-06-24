@@ -121,6 +121,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
         builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE)
         builder.pathPaymentOperation(
           LedgerTransaction.LedgerPathPaymentOperation.builder()
+            .type(OperationType.PATH_PAYMENT_STRICT_RECEIVE)
             .id(op.getId().toString())
             .from(op.from)
             .to(op.to)
