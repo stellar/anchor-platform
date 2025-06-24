@@ -23,22 +23,22 @@ One time deployment instructions. If you need to make changes to a previously
 deployed contract, upgrade it instead (see below).
 
 ```bash
-# Build the contracts
+# Build the contracts under ${PROJECT_DIR}/soroban directory.
 stellar contract build
 
 # Deploy the account contract
 stellar contract deploy \
---wasm target/wasm32-unknown-unknown/release/account.wasm \
+--wasm target/wasm32v1-none/release/account.wasm \
 --source-account ${MY_ACCOUNT} \
 --network testnet \
 --salt 616e63686f722d706c6174666f726d \
 -- \
---admin ${MY_ACCOUNT}
+--admin ${MY_ACCOUNT} \
 --signer ${MY_ACCOUNT_PUBLIC_KEY_BYTES} # you can get this by calling KeyPair#rawPublicKey using the JS SDK
 
 # Deploy the web auth contract
 stellar contract deploy \
---wasm target/wasm32-unknown-unknown/release/web_auth.wasm \
+--wasm target/wasm32v1-none/release/web_auth.wasm \
 --source-account ${MY_ACCOUNT} \
 --network testnet \
 --salt 616e63686f722d706c6174666f726d \
@@ -52,7 +52,7 @@ stellar contract deploy \
 # Install the account wasm on the network
 stellar contract upload \
 --source ${MY_ACCOUNT} \
---wasm target/wasm32-unknown-unknown/release/account.wasm \
+--wasm target/wasm32v1-none/release/account.wasm \
 --network testnet
 
 # Update the account contract with the new Wasm
@@ -71,7 +71,7 @@ stellar contract invoke \
 # Install the account wasm on the network
 stellar contract upload \
 --source ${MY_ACCOUNT} \
---wasm target/wasm32-unknown-unknown/release/web_auth.wasm \
+--wasm target/wasm32v1-none/release/web_auth.wasm \
 --network testnet
 
 # Update the account contract with the new Wasm
