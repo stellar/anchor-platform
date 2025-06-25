@@ -29,4 +29,7 @@ public interface Sep6TransactionStore {
 
   Sep6Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
       String withdrawAnchorAccount, String memo, String status);
+
+  Sep6Transaction findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
+      String withdrawAnchorAccount, String fromAccount, String status);
 }

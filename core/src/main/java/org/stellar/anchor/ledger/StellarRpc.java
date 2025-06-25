@@ -1,10 +1,10 @@
 package org.stellar.anchor.ledger;
 
-import static org.stellar.anchor.ledger.LedgerClientHelper.fromGetTransactionResponse;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.*;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -15,9 +15,7 @@ import org.stellar.sdk.*;
 import org.stellar.sdk.Asset;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TrustLineAsset;
-import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse;
-import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse;
-import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse;
+import org.stellar.sdk.responses.sorobanrpc.*;
 import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
@@ -111,20 +109,6 @@ public class StellarRpc implements LedgerClient {
         .build();
   }
 
-  @SneakyThrows
-  public static AccountEntry getAccountEntry(SorobanServer sorobanServer, String accountId) {
-    KeyPair kp = KeyPair.fromAccountId(accountId);
-    List<LedgerKey> ledgerKeys =
-        Collections.singletonList(
-            LedgerKey.builder()
-                .account(LedgerKeyAccount.builder().accountID(kp.getXdrAccountId()).build())
-                .discriminant(LedgerEntryType.ACCOUNT)
-                .build());
-    GetLedgerEntriesResponse response = sorobanServer.getLedgerEntries(ledgerKeys);
-    return LedgerEntry.LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr())
-        .getAccount();
-  }
-
   private TrustLineEntry getTrustlineRpc(String accountId, String asset) throws LedgerException {
     KeyPair kp = KeyPair.fromAccountId(accountId);
 
@@ -166,5 +150,49 @@ public class StellarRpc implements LedgerClient {
     LedgerEntryData ledgerEntryData =
         LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr());
     return ledgerEntryData.getAccount();
+  }
+
+  /**
+   * Convert a GetTransactionResponse to a LedgerTransaction.
+   *
+   * @param txnResponse the GetTransactionResponse to convert
+   * @return the converted LedgerTransaction
+   * @throws LedgerException if the transaction is null or malformed
+   */
+  public static LedgerTransaction fromGetTransactionResponse(GetTransactionResponse txnResponse)
+      throws LedgerException {
+    TransactionEnvelope txnEnv;
+    try {
+      txnEnv = TransactionEnvelope.fromXdrBase64(txnResponse.getEnvelopeXdr());
+    } catch (IOException ioex) {
+      throw new LedgerException("Unable to parse transaction envelope", ioex);
+    }
+    Integer applicationOrder = txnResponse.getApplicationOrder();
+    Long sequenceNumber = txnResponse.getLedger();
+    LedgerClientHelper.ParseResult parseResult =
+        LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txnResponse.getTxHash());
+    if (parseResult == null) return null;
+    List<LedgerTransaction.LedgerOperation> operations =
+        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
+
+    return LedgerTransaction.builder()
+        .hash(txnResponse.getTxHash())
+        .ledger(txnResponse.getLedger())
+        .applicationOrder(txnResponse.getApplicationOrder())
+        .sourceAccount(parseResult.sourceAccount())
+        .envelopeXdr(txnResponse.getEnvelopeXdr())
+        .memo(parseResult.memo())
+        .sequenceNumber(sequenceNumber)
+        .createdAt(Instant.ofEpochSecond(txnResponse.getCreatedAt()))
+        .operations(operations)
+        .build();
+  }
+
+  public SimulateTransactionResponse simulateTransaction(Transaction transaction) {
+    return sorobanServer.simulateTransaction(transaction);
+  }
+
+  public GetLatestLedgerResponse getLatestLedger() {
+    return sorobanServer.getLatestLedger();
   }
 }

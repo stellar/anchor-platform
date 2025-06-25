@@ -6,11 +6,13 @@ import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.EVENT;
 import static org.stellar.anchor.util.Log.*;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import lombok.Getter;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
@@ -30,20 +32,24 @@ import org.stellar.sdk.requests.sorobanrpc.GetTransactionsRequest;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionsResponse;
 import org.stellar.sdk.xdr.OperationType;
+import org.stellar.sdk.xdr.TransactionEnvelope;
 
 public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
-  final StellarRpc stellarRpc;
-  final SorobanServer sorobanServer;
+  @Getter final StellarRpc stellarRpc;
+  @Getter final SorobanServer sorobanServer;
+  final SacToAssetMapper sacToAssetMapper;
 
   public StellarRpcPaymentObserver(
       String rpcUrl,
       StellarPaymentObserverConfig config,
       List<PaymentListener> paymentListeners,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
-      StellarPaymentStreamerCursorStore paymentStreamerCursorStore) {
+      StellarPaymentStreamerCursorStore paymentStreamerCursorStore,
+      SacToAssetMapper sacToAssetMapper) {
     super(config, paymentListeners, paymentObservingAccountsManager, paymentStreamerCursorStore);
     this.stellarRpc = new StellarRpc(rpcUrl);
     this.sorobanServer = stellarRpc.getSorobanServer();
+    this.sacToAssetMapper = sacToAssetMapper;
   }
 
   @Override
@@ -110,7 +116,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       for (GetTransactionsResponse.Transaction txn : response.getTransactions()) {
         // Process the transaction
         try {
-          LedgerTransaction ledgerTxn = LedgerClientHelper.fromStellarRpcTransaction(txn);
+          LedgerTransaction ledgerTxn = fromStellarRpcTransaction(txn);
           if (ledgerTxn == null) {
             continue;
           }
@@ -148,7 +154,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     if (!EnumSet.of(
             OperationType.PAYMENT,
             OperationType.PATH_PAYMENT_STRICT_SEND,
-            OperationType.PATH_PAYMENT_STRICT_RECEIVE)
+            OperationType.PATH_PAYMENT_STRICT_RECEIVE,
+            OperationType.INVOKE_HOST_FUNCTION)
         .contains(operation.getType())) {
       return false;
     }
@@ -164,6 +171,15 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
         yield paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getFrom())
             || paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getTo());
       }
+      case INVOKE_HOST_FUNCTION -> {
+        LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
+            operation.getInvokeHostFunctionOperation();
+        debug(
+            "Received invoke host function operation: {}",
+            GsonUtils.getInstance().toJson(invokeOp));
+        yield paymentObservingAccountsManager.lookupAndUpdate(invokeOp.getFrom())
+            || paymentObservingAccountsManager.lookupAndUpdate(invokeOp.getTo());
+      }
       default -> false;
     };
   }
@@ -177,7 +193,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             yield PaymentTransferEvent.builder()
                 .from(paymentOp.getFrom())
                 .to(paymentOp.getTo())
-                .sep11Asset(AssetHelper.getSep11AssetName(op.getPaymentOperation().getAsset()))
+                .sep11Asset(AssetHelper.getSep11AssetName(paymentOp.getAsset()))
                 .amount(paymentOp.getAmount())
                 .txHash(ledgerTxn.getHash())
                 .operationId(paymentOp.getId())
@@ -185,14 +201,28 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                 .build();
           }
           case PATH_PAYMENT_STRICT_SEND, PATH_PAYMENT_STRICT_RECEIVE -> {
-            LedgerPathPaymentOperation paymentOp = op.getPathPaymentOperation();
+            LedgerPathPaymentOperation pathPaymentOp = op.getPathPaymentOperation();
             yield PaymentTransferEvent.builder()
-                .from(paymentOp.getFrom())
-                .to(paymentOp.getTo())
-                .sep11Asset(AssetHelper.getSep11AssetName(op.getPaymentOperation().getAsset()))
-                .amount(paymentOp.getAmount())
+                .from(pathPaymentOp.getFrom())
+                .to(pathPaymentOp.getTo())
+                .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset()))
+                .amount(pathPaymentOp.getAmount())
                 .txHash(ledgerTxn.getHash())
-                .operationId(paymentOp.getId())
+                .operationId(pathPaymentOp.getId())
+                .ledgerTransaction(ledgerTxn)
+                .build();
+          }
+          case INVOKE_HOST_FUNCTION -> {
+            LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
+                op.getInvokeHostFunctionOperation();
+            invokeOp.setAsset(sacToAssetMapper.getAssetFromSac(invokeOp.getContractId()));
+            yield PaymentTransferEvent.builder()
+                .from(invokeOp.getFrom())
+                .to(invokeOp.getTo())
+                .sep11Asset(AssetHelper.getSep11AssetName(invokeOp.getAsset()))
+                .amount(invokeOp.getAmount())
+                .txHash(ledgerTxn.getHash())
+                .operationId(invokeOp.getId())
                 .ledgerTransaction(ledgerTxn)
                 .build();
           }
@@ -216,5 +246,41 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   private Long getLatestLedger() {
     GetLatestLedgerResponse response = sorobanServer.getLatestLedger();
     return response.getSequence().longValue();
+  }
+
+  /**
+   * Converting from Stellar RPC transaction to LedgerTransaction. TODO: This function will be
+   * removed after migrating to getEvents methods.
+   *
+   * @param txn the Stellar RPC transaction to convert
+   * @return the converted LedgerTransaction
+   * @throws LedgerException if the transaction is null or malformed
+   */
+  LedgerTransaction fromStellarRpcTransaction(GetTransactionsResponse.Transaction txn)
+      throws LedgerException {
+    TransactionEnvelope txnEnv;
+    try {
+      txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
+    } catch (IOException ioex) {
+      throw new LedgerException("Unable to parse transaction envelope", ioex);
+    }
+    Integer applicationOrder = txn.getApplicationOrder();
+    Long sequenceNumber = txn.getLedger();
+    LedgerClientHelper.ParseResult parseResult =
+        LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txn.getTxHash());
+    if (parseResult == null) return null;
+    List<LedgerTransaction.LedgerOperation> operations =
+        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
+    return LedgerTransaction.builder()
+        .hash(txn.getTxHash())
+        .ledger(txn.getLedger())
+        .applicationOrder(txn.getApplicationOrder())
+        .sourceAccount(parseResult.sourceAccount())
+        .envelopeXdr(txn.getEnvelopeXdr())
+        .memo(parseResult.memo())
+        .sequenceNumber(sequenceNumber)
+        .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
+        .operations(operations)
+        .build();
   }
 }

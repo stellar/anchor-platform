@@ -13,7 +13,7 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.Sep31CustomerInfoNeededException;
 import org.stellar.anchor.api.exception.Sep31MissingFieldException;
 import org.stellar.anchor.api.sep.sep31.*;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.sep31.Sep31Service;
 
@@ -47,9 +47,9 @@ public class Sep31Controller {
   public Sep31PostTransactionResponse postTransaction(
       HttpServletRequest servletRequest, @RequestBody Sep31PostTransactionRequest request)
       throws AnchorException {
-    Sep10Jwt sep10Jwt = Sep10Helper.getSep10Token(servletRequest);
+    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(servletRequest);
     debugF("POST /transactions request={}", request);
-    return sep31Service.postTransaction(sep10Jwt, request);
+    return sep31Service.postTransaction(webAuthJwt, request);
   }
 
   @CrossOrigin(origins = "*")

@@ -49,6 +49,8 @@ spec:
               value: {{ .Values.config.app.platformApiEndpoint }}
             - name: APP.HORIZON_ENDPOINT
               value: {{ .Values.config.app.horizonEndpoint }}
+            - name: APP.RPC_ENDPOINT
+              value: {{ .Values.config.app.rpcEndpoint }}
             - name: DATA.URL
               value: {{ .Values.config.data.url }}
             - name: DATA.USER

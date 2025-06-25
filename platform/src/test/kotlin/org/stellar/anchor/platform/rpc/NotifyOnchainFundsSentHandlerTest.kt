@@ -4,6 +4,7 @@ import com.google.gson.reflect.TypeToken
 import io.micrometer.core.instrument.Counter
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
+import java.math.BigInteger
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -42,6 +43,7 @@ import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation
 import org.stellar.anchor.metrics.MetricsService
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep6Transaction
+import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper
 import org.stellar.anchor.platform.service.AnchorMetrics.PLATFORM_RPC_TRANSACTION
 import org.stellar.anchor.platform.validator.RequestValidator
 import org.stellar.anchor.sep24.Sep24TransactionStore
@@ -84,7 +86,7 @@ class NotifyOnchainFundsSentHandlerTest {
               .paymentOperation(
                 LedgerPaymentOperation.builder()
                   .id("12345")
-                  .amount(150000000)
+                  .amount(BigInteger.valueOf(150000000))
                   .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
                   .from("testFrom")
                   .to("testTo")
@@ -131,7 +133,8 @@ class NotifyOnchainFundsSentHandlerTest {
         horizon,
         assetService,
         eventService,
-        metricsService
+        metricsService,
+        mockk<SacToAssetMapper>()
       )
   }
 

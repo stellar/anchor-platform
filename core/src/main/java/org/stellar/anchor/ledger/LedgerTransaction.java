@@ -1,7 +1,8 @@
 package org.stellar.anchor.ledger;
 
-import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.*;
+import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus;
 
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.List;
 import lombok.Builder;
@@ -32,16 +33,20 @@ public class LedgerTransaction {
     OperationType type;
     LedgerPaymentOperation paymentOperation;
     LedgerPathPaymentOperation pathPaymentOperation;
+    LedgerInvokeHostFunctionOperation invokeHostFunctionOperation;
   }
 
   public interface LedgerPayment {
+    OperationType getType();
+
     String getId();
 
     String getFrom();
 
     String getTo();
 
-    Long getAmount();
+    // The amount is in the smallest unit of the asset as in 10^-7.
+    BigInteger getAmount();
 
     Asset getAsset();
 
@@ -54,20 +59,57 @@ public class LedgerTransaction {
     String id;
     String from;
     String to;
-    Long amount;
+    BigInteger amount;
+    Asset asset;
+    String sourceAccount;
+
+    @Override
+    public OperationType getType() {
+      return OperationType.PAYMENT;
+    }
+  }
+
+  @Builder
+  @Data
+  public static class LedgerPathPaymentOperation implements LedgerPayment {
+    OperationType type;
+    String id;
+    String from;
+    String to;
+    BigInteger amount;
     Asset asset;
     String sourceAccount;
   }
 
   @Builder
   @Data
-  public static class LedgerPathPaymentOperation implements LedgerPayment {
+  public static class LedgerInvokeHostFunctionOperation implements LedgerPayment {
+    String contractId;
+    String hostFunction;
+
     String id;
     String from;
     String to;
-    Long amount;
+    BigInteger amount;
     Asset asset;
     String sourceAccount;
+
+    @Override
+    public OperationType getType() {
+      return OperationType.INVOKE_HOST_FUNCTION;
+    }
+
+    public Asset getAsset() {
+      if (asset == null) {
+        if (contractId != null) {
+          // The SAC to Asset conversion requires a network call to the ledger. This should be
+          // converted before using the operation.
+          throw new IllegalStateException(
+              "Please convert stellarAssetContractId to Asset before calling getAsset()");
+        }
+      }
+      return asset;
+    }
   }
 
   @Builder

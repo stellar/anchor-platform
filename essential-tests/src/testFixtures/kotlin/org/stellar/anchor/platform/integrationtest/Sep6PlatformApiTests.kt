@@ -1788,7 +1788,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "message": "test message 1",
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "YWEyNDVlMjgtZGIyYS00YmRjLThkODgtYzExYmJhM2Y=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -1845,7 +1845,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               ],
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "YWEyNDVlMjgtZGIyYS00YmRjLThkODgtYzExYmJhM2Y=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -1904,7 +1904,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "external_transaction_id": "ext-123456",
               "memo": "YWEyNDVlMjgtZGIyYS00YmRjLThkODgtYzExYmJhM2Y=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -1949,7 +1949,7 @@ private const val SEP_6_WITHDRAW_EXCHANGE_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "message": "test message 1",
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "MjMwYzFlNjgtZTc3MC00ZTI5LTlhNDktNWM3OGJmZGY=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2006,7 +2006,7 @@ private const val SEP_6_WITHDRAW_EXCHANGE_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               ],
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "MjMwYzFlNjgtZTc3MC00ZTI5LTlhNDktNWM3OGJmZGY=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2065,7 +2065,7 @@ private const val SEP_6_WITHDRAW_EXCHANGE_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "external_transaction_id": "ext-123456",
               "memo": "MjMwYzFlNjgtZTc3MC00ZTI5LTlhNDktNWM3OGJmZGY=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2170,7 +2170,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
               "message": "test message 1",
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "MTIxYmNmNjctN2IxYy00N2IwLTg1NDktZWU0ZGY4ODg=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2227,7 +2227,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
               ],
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "MTIxYmNmNjctN2IxYy00N2IwLTg1NDktZWU0ZGY4ODg=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2285,7 +2285,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "external_transaction_id": "ext-123456",
               "memo": "MTIxYmNmNjctN2IxYy00N2IwLTg1NDktZWU0ZGY4ODg=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2344,7 +2344,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "external_transaction_id": "ext-123456",
               "memo": "MTIxYmNmNjctN2IxYy00N2IwLTg1NDktZWU0ZGY4ODg=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2448,7 +2448,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RESP
               "message": "test message 1",
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "MjJkMmM1MjEtMmQ4MS00ZmIxLWE0ZGItZjhjMDdiZjg=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2505,7 +2505,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RESP
               ],
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "MjJkMmM1MjEtMmQ4MS00ZmIxLWE0ZGItZjhjMDdiZjg=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2563,7 +2563,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RESP
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "external_transaction_id": "ext-123456",
               "memo": "MjJkMmM1MjEtMmQ4MS00ZmIxLWE0ZGItZjhjMDdiZjg=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2622,7 +2622,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RESP
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "external_transaction_id": "ext-123456",
               "memo": "MjJkMmM1MjEtMmQ4MS00ZmIxLWE0ZGItZjhjMDdiZjg=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2728,7 +2728,7 @@ private const val SEP_6_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "message": "test message 1",
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "ZGU5YmVmZGMtOGFlNy00ZWJkLWFkYWYtNGE5YjcxOWI=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2785,7 +2785,7 @@ private const val SEP_6_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               ],
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "ZGU5YmVmZGMtOGFlNy00ZWJkLWFkYWYtNGE5YjcxOWI=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
@@ -2867,7 +2867,7 @@ private const val SEP_6_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               ],
               "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "memo": "ZGU5YmVmZGMtOGFlNy00ZWJkLWFkYWYtNGE5YjcxOWI=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {

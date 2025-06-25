@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.custody.fireblocks
 
 import io.mockk.*
+import java.math.BigInteger
 import java.security.Signature
 import java.util.*
 import kotlin.test.assertEquals
@@ -473,7 +474,7 @@ class FireblocksEventServiceTest {
             .id("12345")
             .from("testFrom")
             .to("testTo")
-            .amount(150000000)
+            .amount(BigInteger.valueOf(150000000))
             .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
             .sourceAccount("testSourceAccount")
             .build()
@@ -491,7 +492,7 @@ class FireblocksEventServiceTest {
             .id("12345")
             .from("testFrom")
             .to("testTo")
-            .amount(150000000)
+            .amount(BigInteger.valueOf(150000000))
             .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
             .sourceAccount("testSourceAccount")
             .build()

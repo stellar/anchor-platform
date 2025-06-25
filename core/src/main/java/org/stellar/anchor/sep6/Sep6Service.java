@@ -20,22 +20,20 @@ import org.stellar.anchor.api.sep.sep6.*;
 import org.stellar.anchor.api.sep.sep6.InfoResponse.*;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.Sep6Config;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator.Amounts;
-import org.stellar.anchor.util.MetricConstants;
-import org.stellar.anchor.util.SepHelper;
-import org.stellar.anchor.util.TransactionMapper;
+import org.stellar.anchor.util.*;
+import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts;
 import org.stellar.sdk.Memo;
 
 public class Sep6Service {
   private final AppConfig appConfig;
   private final Sep6Config sep6Config;
   private final AssetService assetService;
-  private final RequestValidator requestValidator;
+  private final SepRequestValidator requestValidator;
   private final ClientFinder clientFinder;
   private final Sep6TransactionStore txnStore;
   private final ExchangeAmountsCalculator exchangeAmountsCalculator;
@@ -71,7 +69,7 @@ public class Sep6Service {
       AppConfig appConfig,
       Sep6Config sep6Config,
       AssetService assetService,
-      RequestValidator requestValidator,
+      SepRequestValidator requestValidator,
       ClientFinder clientFinder,
       Sep6TransactionStore txnStore,
       ExchangeAmountsCalculator exchangeAmountsCalculator,
@@ -94,7 +92,7 @@ public class Sep6Service {
     return infoResponse;
   }
 
-  public StartDepositResponse deposit(Sep10Jwt token, StartDepositRequest request)
+  public StartDepositResponse deposit(WebAuthJwt token, StartDepositRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
@@ -140,8 +138,8 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token));
@@ -169,7 +167,7 @@ public class Sep6Service {
         .build();
   }
 
-  public StartDepositResponse depositExchange(Sep10Jwt token, StartDepositExchangeRequest request)
+  public StartDepositResponse depositExchange(WebAuthJwt token, StartDepositExchangeRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
@@ -234,15 +232,15 @@ public class Sep6Service {
             .amountInAsset(amounts.getAmountInAsset())
             .amountOut(amounts.getAmountOut())
             .amountOutAsset(amounts.getAmountOutAsset())
-            .feeDetails(amounts.feeDetails)
+            .feeDetails(amounts.getFeeDetails())
             .amountExpected(request.getAmount())
             .startedAt(Instant.now())
             .userActionRequiredBy(
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
@@ -271,7 +269,7 @@ public class Sep6Service {
         .build();
   }
 
-  public StartWithdrawResponse withdraw(Sep10Jwt token, StartWithdrawRequest request)
+  public StartWithdrawResponse withdraw(WebAuthJwt token, StartWithdrawRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
@@ -319,8 +317,8 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
@@ -343,7 +341,7 @@ public class Sep6Service {
   }
 
   public StartWithdrawResponse withdrawExchange(
-      Sep10Jwt token, StartWithdrawExchangeRequest request) throws AnchorException {
+      WebAuthJwt token, StartWithdrawExchangeRequest request) throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
     // Pre-validation
@@ -415,8 +413,8 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
@@ -439,7 +437,7 @@ public class Sep6Service {
     return StartWithdrawResponse.builder().id(txn.getId()).build();
   }
 
-  public GetTransactionsResponse findTransactions(Sep10Jwt token, GetTransactionsRequest request)
+  public GetTransactionsResponse findTransactions(WebAuthJwt token, GetTransactionsRequest request)
       throws SepException {
     // Pre-validation
     if (token == null) {
@@ -470,7 +468,7 @@ public class Sep6Service {
     return new GetTransactionsResponse(responses);
   }
 
-  public GetTransactionResponse findTransaction(Sep10Jwt token, GetTransactionRequest request)
+  public GetTransactionResponse findTransaction(WebAuthJwt token, GetTransactionRequest request)
       throws AnchorException {
     // Pre-validation
     if (token == null) {
@@ -497,10 +495,10 @@ public class Sep6Service {
     if (txn == null) {
       throw new NotFoundException("transaction not found");
     }
-    if (!Objects.equals(txn.getSep10Account(), token.getAccount())) {
+    if (!Objects.equals(txn.getWebAuthAccount(), token.getAccount())) {
       throw new NotFoundException("account does not match token");
     }
-    if (!Objects.equals(txn.getSep10AccountMemo(), token.getAccountMemo())) {
+    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
       throw new NotFoundException("account memo does not match token");
     }
 

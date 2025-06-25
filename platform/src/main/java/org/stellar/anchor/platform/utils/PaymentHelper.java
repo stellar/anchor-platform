@@ -18,6 +18,7 @@ import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep31Transaction;
 import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
+import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
 import org.stellar.anchor.util.AssetHelper;
 
 public class PaymentHelper {
@@ -27,11 +28,13 @@ public class PaymentHelper {
       case PAYMENT -> ledgerOperation.getPaymentOperation();
       case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND ->
           ledgerOperation.getPathPaymentOperation();
+      case INVOKE_HOST_FUNCTION -> ledgerOperation.getInvokeHostFunctionOperation();
       default -> null;
     };
   }
 
-  public static void addStellarTransaction(LedgerTransaction ledgerTxn, JdbcSepTransaction sepTxn) {
+  public static void addStellarTransaction(
+      SacToAssetMapper sacToAssetMapper, LedgerTransaction ledgerTxn, JdbcSepTransaction sepTxn) {
     String memo = null;
     String memoType = null;
 
@@ -69,9 +72,24 @@ public class PaymentHelper {
                             StellarPayment.builder()
                                 .id(payment.getId())
                                 .amount(
-                                    new Amount(
-                                        AssetHelper.fromXdrAmount(payment.getAmount()),
-                                        AssetHelper.getSep11AssetName(payment.getAsset())))
+                                    switch (payment.getType()) {
+                                      case PAYMENT,
+                                              PATH_PAYMENT_STRICT_RECEIVE,
+                                              PATH_PAYMENT_STRICT_SEND ->
+                                          new Amount(
+                                              AssetHelper.fromXdrAmount(payment.getAmount()),
+                                              AssetHelper.getSep11AssetName(payment.getAsset()));
+                                      case INVOKE_HOST_FUNCTION ->
+                                          new Amount(
+                                              AssetHelper.fromXdrAmount(payment.getAmount()),
+                                              AssetHelper.getSep11AssetName(
+                                                  sacToAssetMapper.getAssetFromSac(
+                                                      ((LedgerTransaction
+                                                                  .LedgerInvokeHostFunctionOperation)
+                                                              payment)
+                                                          .getContractId())));
+                                      default -> null;
+                                    })
                                 .sourceAccount(payment.getFrom())
                                 .destinationAccount(payment.getTo())
                                 .paymentType(

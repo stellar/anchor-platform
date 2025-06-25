@@ -12,7 +12,7 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
-import org.stellar.anchor.filter.Sep10JwtFilter.APPLICATION_JSON_VALUE
+import org.stellar.anchor.filter.WebAuthJwtFilter.APPLICATION_JSON_VALUE
 
 internal class ApiKeyFilterTest {
   companion object {

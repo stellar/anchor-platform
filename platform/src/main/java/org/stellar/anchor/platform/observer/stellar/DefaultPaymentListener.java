@@ -6,7 +6,6 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MathHelper.formatAmount;
-import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.micrometer.core.instrument.Metrics;
 import java.io.IOException;
@@ -56,6 +55,7 @@ public class DefaultPaymentListener implements PaymentListener {
         "Received payment transfer event: {}",
         GsonUtils.getInstance().toJson(paymentTransferEvent));
     LedgerTransaction ledgerTransaction = paymentTransferEvent.getLedgerTransaction();
+    LedgerPayment ledgerPayment = null;
     for (LedgerTransaction.LedgerOperation operation : ledgerTransaction.getOperations()) {
       switch (operation.getType()) {
         case PAYMENT:
@@ -63,7 +63,7 @@ public class DefaultPaymentListener implements PaymentListener {
               .getPaymentOperation()
               .getId()
               .equals(String.valueOf(paymentTransferEvent.getOperationId()))) {
-            processAndDispatchLedgerPayment(ledgerTransaction, operation.getPaymentOperation());
+            ledgerPayment = operation.getPaymentOperation();
           }
           break;
         case PATH_PAYMENT_STRICT_RECEIVE, PATH_PAYMENT_STRICT_SEND:
@@ -71,13 +71,27 @@ public class DefaultPaymentListener implements PaymentListener {
               .getPathPaymentOperation()
               .getId()
               .equals(String.valueOf(paymentTransferEvent.getOperationId()))) {
-            processAndDispatchLedgerPayment(ledgerTransaction, operation.getPathPaymentOperation());
+            ledgerPayment = operation.getPathPaymentOperation();
+          }
+          break;
+        case INVOKE_HOST_FUNCTION:
+          if (operation
+              .getInvokeHostFunctionOperation()
+              .getId()
+              .equals(String.valueOf(paymentTransferEvent.getOperationId()))) {
+            ledgerPayment = operation.getInvokeHostFunctionOperation();
           }
           break;
         default:
           // Ignore other operation types
           break;
       }
+    }
+    if (ledgerPayment != null) {
+      // Check if the payment is to or from an account we are observing
+      if (paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getTo())
+          || paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getFrom()))
+        processAndDispatchLedgerPayment(ledgerTransaction, ledgerPayment);
     }
   }
 
@@ -110,10 +124,16 @@ public class DefaultPaymentListener implements PaymentListener {
 
     // Find a transaction matching the memo, assumes transactions are unique to account+memo
     try {
+      // TODO: replace the query with this when SAC memo is supported.
+      //      JdbcSep24Transaction sep24Txn =
+      //          sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+      //              ledgerPayment.getTo(),
+      //              memo,
+      //              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       JdbcSep24Transaction sep24Txn =
-          sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+          sep24TransactionStore.findOneByToAccountAndFromAccountAndStatus(
               ledgerPayment.getTo(),
-              memo,
+              ledgerPayment.getFrom(),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       if (sep24Txn != null) {
         try {
@@ -131,11 +151,19 @@ public class DefaultPaymentListener implements PaymentListener {
     // Find a transaction matching the memo, assumes transactions are unique to account+memo
 
     try {
+      // TODO: replace the query with this when SAC memo is supported.
+      //      JdbcSep6Transaction sep6Txn =
+      //          sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      //              ledgerPayment.getTo(),
+      //              memo,
+      //              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+
       JdbcSep6Transaction sep6Txn =
-          sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+          sep6TransactionStore.findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
               ledgerPayment.getTo(),
-              memo,
+              ledgerPayment.getFrom(),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+
       if (sep6Txn != null) {
         try {
           handleSep6Transaction(ledgerTransaction, ledgerPayment, sep6Txn);
@@ -155,7 +183,7 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    warnIfAssetOrAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
 
     platformApiClient.notifyOnchainFundsReceived(
         sepTransaction.getId(),
@@ -173,7 +201,7 @@ public class DefaultPaymentListener implements PaymentListener {
             AnchorMetrics.PAYMENT_RECEIVED.toString(),
             "asset",
             getSep11AssetName(ledgerPayment.getAsset()))
-        .increment(ledgerPayment.getAmount());
+        .increment(ledgerPayment.getAmount().doubleValue());
   }
 
   void handleSep24Transaction(
@@ -182,7 +210,7 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    warnIfAssetOrAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
     JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) sepTransaction;
 
     if (DEPOSIT.getKind().equals(sep24Txn.getKind())) {
@@ -210,7 +238,7 @@ public class DefaultPaymentListener implements PaymentListener {
             AnchorMetrics.PAYMENT_RECEIVED.toString(),
             "asset",
             getSep11AssetName(ledgerPayment.getAsset()))
-        .increment(ledgerPayment.getAmount());
+        .increment(ledgerPayment.getAmount().doubleValue());
   }
 
   void handleSep6Transaction(
@@ -219,7 +247,7 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    warnIfAssetOrAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
 
     JdbcSep6Transaction sep6Txn = (JdbcSep6Transaction) sepTransaction;
     if (DEPOSIT.getKind().equals(sep6Txn.getKind())
@@ -249,20 +277,22 @@ public class DefaultPaymentListener implements PaymentListener {
             AnchorMetrics.PAYMENT_RECEIVED.toString(),
             "asset",
             getSep11AssetName(ledgerPayment.getAsset()))
-        .increment(ledgerPayment.getAmount());
+        .increment(ledgerPayment.getAmount().doubleValue());
   }
 
   boolean validate(LedgerTransaction ledgerTransaction, LedgerPayment ledgerPayment) {
-    if (isEmpty(ledgerTransaction.getHash())
-        || ledgerTransaction.getMemo() == null
-        || isEmpty(MemoHelper.xdrMemoToString(ledgerTransaction.getMemo()))) {
-      // The transaction do not have a hash or memo.
-      // We do not process it.
-      debugF(
-          "Transaction {} does not have a hash or memo. This indicates a potential bug from stellar network events.",
-          ledgerTransaction.getHash());
-      return false;
-    }
+    // TODO: Enable this validation when SAC memo is supported.
+    //    if (isEmpty(ledgerTransaction.getHash())
+    //        || ledgerTransaction.getMemo() == null
+    //        || isEmpty(MemoHelper.xdrMemoToString(ledgerTransaction.getMemo()))) {
+    //      // The transaction do not have a hash or memo.
+    //      // We do not process it.
+    //      debugF(
+    //          "Transaction {} does not have a hash or memo. This indicates a potential bug from
+    // stellar network events.",
+    //          ledgerTransaction.getHash());
+    //      return false;
+    //    }
 
     if (!List.of(
             AssetType.ASSET_TYPE_NATIVE,
@@ -278,7 +308,7 @@ public class DefaultPaymentListener implements PaymentListener {
     return true;
   }
 
-  void warnIfAssetOrAmountMismatch(
+  void checkAndWarnAssetAmountMismatch(
       LedgerTransaction ledgerTransaction,
       LedgerPayment ledgerPayment,
       JdbcSepTransaction sepTransaction) {

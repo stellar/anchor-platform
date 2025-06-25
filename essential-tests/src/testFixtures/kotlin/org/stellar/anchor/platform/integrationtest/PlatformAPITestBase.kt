@@ -1,42 +1,33 @@
-package org.stellar.anchor.platform
+package org.stellar.anchor.platform.integrationtest
 
-import io.ktor.client.plugins.*
-import io.ktor.http.*
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.time.Instant
-import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.retryWhen
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
-import org.stellar.anchor.ledger.LedgerClientHelper.toLedgerOperation
 import org.stellar.anchor.ledger.LedgerClientHelper.waitForTransactionAvailable
 import org.stellar.anchor.ledger.LedgerTransaction
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.ledger.StellarRpc
-import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
+import org.stellar.anchor.platform.IntegrationTestBase
+import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.util.AssetHelper
+import org.stellar.anchor.util.AssetHelper.fromXdrAmount
+import org.stellar.anchor.util.Log.info
 import org.stellar.anchor.util.MemoHelper
-import org.stellar.anchor.util.Sep1Helper.TomlContent
-import org.stellar.anchor.util.Sep1Helper.parse
+import org.stellar.anchor.util.StringHelper.isNotEmpty
 import org.stellar.sdk.*
-import org.stellar.sdk.operations.Operation.fromXdrAmount
 import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.requests.RequestBuilder
 import org.stellar.sdk.responses.operations.OperationResponse
+import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse
+import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.sdk.xdr.OperationType
 import org.stellar.sdk.xdr.TransactionEnvelope
-import org.stellar.walletsdk.ApplicationConfiguration
-import org.stellar.walletsdk.StellarConfiguration
-import org.stellar.walletsdk.Wallet
-import org.stellar.walletsdk.anchor.auth
-import org.stellar.walletsdk.auth.AuthToken
-import org.stellar.walletsdk.horizon.SigningKeyPair
 
 private lateinit var testPaymentValues: List<Pair<String, String>>
 
-abstract class AbstractIntegrationTests(val config: TestConfig) {
+open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config) {
   companion object {
     const val JSON_RPC_VERSION = "2.0"
 
@@ -54,20 +45,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
     const val CUSTODY_DEST_ACCOUNT = "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
   }
 
-  var toml: TomlContent =
-    parse(resourceAsString("${config.env["anchor.domain"]}/.well-known/stellar.toml"))
-  var wallet =
-    Wallet(
-      StellarConfiguration.Testnet,
-      ApplicationConfiguration { defaultRequest { url { protocol = URLProtocol.HTTP } } },
-    )
-  var walletKeyPair = SigningKeyPair.fromSecret(CLIENT_WALLET_SECRET)
-  var anchor = wallet.anchor(config.env["anchor.domain"]!!)
-  var token: AuthToken
-
-  private val submissionLock = Mutex()
-  private val testPaymentKey: KeyPair =
-    KeyPair.fromSecretSeed(config.get("secret.sep10.signing.seed"))
+  private lateinit var testPaymentValues: List<Pair<String, String>>
 
   fun inject(target: String, vararg replacements: Pair<String, String>): String {
     var result = target
@@ -84,11 +62,11 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
 
   private fun getTestPaymentValues(): List<Pair<String, String>> {
     if (!::testPaymentValues.isInitialized || testPaymentValues.isEmpty()) {
-      if (config.get("stellar_network.rpc_url") != null) {
+      if (isNotEmpty(config.get("stellar_network.rpc_url"))) {
         val ledgerClient = StellarRpc(config.get("stellar_network.rpc_url")!!)
         val ledgerTxn = sendTestPayment(ledgerClient)
         setTestPaymentsValues(ledgerTxn!!)
-      } else if (config.get("stellar_network.horizon_url") != null) {
+      } else if (isNotEmpty(config.get("stellar_network.horizon_url"))) {
         val horizonServer = Server(config.get("stellar_network.horizon_url")!!)
         // not the most optimized way to do this, but it works
         val payment = fetchTestPaymentFromHorizon(horizonServer)
@@ -122,6 +100,44 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
       .build()
   }
 
+  private fun toLedgerOperation(op: OperationResponse): LedgerOperation? {
+    val builder = LedgerOperation.builder()
+    // TODO: Capture muxed account events
+    when (op) {
+      is PaymentOperationResponse -> {
+        builder.type(OperationType.PAYMENT)
+        builder.paymentOperation(
+          LedgerTransaction.LedgerPaymentOperation.builder()
+            .id(op.getId().toString())
+            .from(op.from)
+            .to(op.to)
+            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(op.amount)))
+            .asset(op.asset.toXdr())
+            .sourceAccount(op.getSourceAccount())
+            .build()
+        )
+      }
+      is PathPaymentBaseOperationResponse -> {
+        builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE)
+        builder.pathPaymentOperation(
+          LedgerTransaction.LedgerPathPaymentOperation.builder()
+            .type(OperationType.PATH_PAYMENT_STRICT_RECEIVE)
+            .id(op.getId().toString())
+            .from(op.from)
+            .to(op.to)
+            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(op.amount)))
+            .asset(op.asset.toXdr())
+            .sourceAccount(op.getSourceAccount())
+            .build()
+        )
+      }
+      else -> {
+        return null
+      }
+    }
+    return builder.build()
+  }
+
   private fun sendTestPayment(ledgerClient: LedgerClient): LedgerTransaction? {
     val destAccount = TEST_PAYMENT_DEST_ACCOUNT
 
@@ -130,7 +146,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
       Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
         as AssetTypeCreditAlphaNum
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
-    println(
+    info(
       "Create test payment transaction: 1 USDC from distribution account to the test receiver account"
     )
     val accountId = sourceKey.accountId
@@ -210,7 +226,7 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
         as AssetTypeCreditAlphaNum
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
 
-    println(
+    info(
       "Create test payment transaction: 1 USDC from distribution account to the test receiver account"
     )
     // Load the source account's current state
@@ -242,29 +258,9 @@ abstract class AbstractIntegrationTests(val config: TestConfig) {
 
     // Check the result
     if (response.successful) {
-      println("Payment transaction successful. Transaction hash: ${response.hash}")
+      info("Payment transaction successful. Transaction hash: ${response.hash}")
     } else {
-      println("Payment failed. ${response.resultXdr}")
+      info("Payment failed. ${response.resultXdr}")
     }
-  }
-
-  suspend fun transactionWithRetry(
-    maxAttempts: Int = 5,
-    delay: Int = 5,
-    transactionLogic: suspend () -> Unit,
-  ) =
-    flow<Unit> { submissionLock.withLock { transactionLogic() } }
-      .retryWhen { _, attempt ->
-        if (attempt < maxAttempts) {
-          delay((delay + (1..5).random()).seconds)
-          return@retryWhen true
-        } else {
-          return@retryWhen false
-        }
-      }
-      .collect {}
-
-  init {
-    runBlocking { token = anchor.auth().authenticate(walletKeyPair) }
   }
 }

@@ -35,7 +35,7 @@ class SepBeansTest {
 
   @Test
   fun `test info, price, prices endpoints were included in filter when auth required`() {
-    every { sep38Config.isSep10Enforced } returns true
+    every { sep38Config.isAuthEnforced } returns true
     val sep10TokenFilter = sepBeans.sep10TokenFilter(jwtService, sep38Config)
     assert(sep10TokenFilter.urlPatterns.contains("/sep38/info"))
     assert(sep10TokenFilter.urlPatterns.contains("/sep38/price"))

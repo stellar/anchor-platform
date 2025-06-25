@@ -29,7 +29,7 @@ import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.StellarRpc
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.sep10.Sep10Service
 import org.stellar.anchor.util.FileUtil
@@ -40,7 +40,7 @@ import org.stellar.sdk.Network.TESTNET
 import org.stellar.sdk.operations.ManageDataOperation
 import org.stellar.sdk.operations.SetOptionsOperation
 
-class Sep10ServiceIntegrationTests : AbstractIntegrationTests(TestConfig()) {
+class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
   companion object {
     const val TEST_WEB_AUTH_DOMAIN = "test.stellar.org"
     const val TEST_HOME_DOMAIN = "test.stellar.org"
@@ -192,16 +192,14 @@ class Sep10ServiceIntegrationTests : AbstractIntegrationTests(TestConfig()) {
   ) {
     // 1 ------ Mock client account and its response from horizon
     // The public key of the client that exists thanks to a mockk
-    // GDFWZYGUNUFW4H3PP3DSNGTDFBUHO6NUFPQ6FAPMCKEJ6EHDKX2CV2IM
-    val clientKP =
-      KeyPair.fromSecretSeed("SAUNXQPM7VDH3WMDRHJ2WIN27KD23XD4AZPE62V76Q2SJPXR3DQWEOPX")
+    val clientKP = KeyPair.random()
     val mockHorizon = MockWebServer()
     mockHorizon.start()
 
     mockHorizon.enqueue(
       MockResponse()
         .addHeader("Content-Type", "application/json")
-        .setBody(testAccountWithNonCompliantSigner)
+        .setBody(testAccountWithNonCompliantSigner.replace("%ACCOUNT_ID%", clientKP.accountId))
     )
     val mockHorizonUrl = mockHorizon.url("").toString()
 
@@ -210,7 +208,6 @@ class Sep10ServiceIntegrationTests : AbstractIntegrationTests(TestConfig()) {
     // serverKP does not exist in the network.
     val serverWebAuthDomain = TEST_WEB_AUTH_DOMAIN
     val serverHomeDomain = TEST_HOME_DOMAIN
-    // GDFWZYGUNUFW4H3PP3DSNGTDFBUHO6NUFPQ6FAPMCKEJ6EHDKX2CV2IM
     val serverKP = KeyPair.random()
 
     // clientDomainKP does not exist in the network. It refers to the wallet (like Lobstr's)

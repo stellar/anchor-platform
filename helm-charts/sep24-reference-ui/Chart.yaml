@@ -8,3 +8,4 @@ sources:
   - https://github.com/stellar/sep24-reference-ui
 name: sep24-reference-ui
 version: 0.1.0
+icon: https://github.com/stellar/anchor-platform/blob/develop/icon.png
