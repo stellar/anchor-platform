@@ -111,7 +111,7 @@ public class PaymentObservingAccountsManager {
    * Look up if the account is being observed. If the account is being observed, the lastObserved
    * timestamp of the observing account will be updated.
    *
-   * @param account The account to be checked.
+   * @param account The account to be checked. The account can be a muxed account or a G-account.
    * @return true if the account is being observed. false, otherwise.
    */
   public boolean lookupAndUpdate(String account) {
@@ -120,8 +120,13 @@ public class PaymentObservingAccountsManager {
     }
 
     // MuxedAccount handles both muxed and non-muxed accounts
-    MuxedAccount muxedAccount = new MuxedAccount(account);
-    ObservingAccount acct = allAccounts.get(muxedAccount.getAccountId());
+    if (account.startsWith("M")) {
+      // If the account is a muxed account, we need to extract the G-account ID
+      MuxedAccount muxedAccount = new MuxedAccount(account);
+      account = muxedAccount.getAccountId();
+    }
+
+    ObservingAccount acct = allAccounts.get(account);
     if (acct == null) return false;
     acct.lastObserved = Instant.now();
     return true;
