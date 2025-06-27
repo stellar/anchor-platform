@@ -184,7 +184,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     };
   }
 
-  private void processOperation(LedgerTransaction ledgerTxn, LedgerOperation op)
+  void processOperation(LedgerTransaction ledgerTxn, LedgerOperation op)
       throws IOException, AnchorException {
     PaymentTransferEvent event =
         switch (op.getType()) {
