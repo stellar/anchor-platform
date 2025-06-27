@@ -50,13 +50,13 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
   SSEStream<OperationResponse> stream;
 
   public HorizonPaymentObserver(
-      String horizonUrl,
+      Horizon horizon,
       StellarPaymentObserverConfig config,
       List<PaymentListener> paymentListeners,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
       StellarPaymentStreamerCursorStore paymentStreamerCursorStore) {
     super(config, paymentListeners, paymentObservingAccountsManager, paymentStreamerCursorStore);
-    this.horizon = new Horizon(horizonUrl);
+    this.horizon = horizon;
   }
 
   /** Start the observer. */

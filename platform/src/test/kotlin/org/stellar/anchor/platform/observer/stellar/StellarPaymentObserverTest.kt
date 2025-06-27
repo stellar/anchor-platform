@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.platform.HealthCheckStatus.RED
+import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
 import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.ObserverStatus
@@ -45,7 +46,7 @@ class StellarPaymentObserverTest {
     var stellarObserver =
       spyk(
         HorizonPaymentObserver(
-          TEST_HORIZON_URI,
+          Horizon(TEST_HORIZON_URI),
           stellarPaymentObserverConfig,
           null,
           paymentObservingAccountsManager,
@@ -64,7 +65,7 @@ class StellarPaymentObserverTest {
     mockkConstructor(Server::class)
     stellarObserver =
       HorizonPaymentObserver(
-        TEST_HORIZON_URI,
+        Horizon(TEST_HORIZON_URI),
         stellarPaymentObserverConfig,
         null,
         paymentObservingAccountsManager,
@@ -153,7 +154,7 @@ class StellarPaymentObserverTest {
     val observer =
       spyk(
         HorizonPaymentObserver(
-          TEST_HORIZON_URI,
+          Horizon(TEST_HORIZON_URI),
           stellarPaymentObserverConfig,
           null,
           paymentObservingAccountsManager,
