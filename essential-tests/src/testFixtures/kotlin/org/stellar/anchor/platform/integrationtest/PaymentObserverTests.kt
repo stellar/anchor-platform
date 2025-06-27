@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
@@ -81,7 +82,7 @@ class PaymentObserverTests {
 
       horizonPaymentObserver =
         HorizonPaymentObserver(
-          "https://horizon-testnet.stellar.org",
+          Horizon("https://horizon-testnet.stellar.org"),
           StellarPaymentObserverConfig(5, 90, 5, 5, 300, 5, 300),
           listOf(eventCaptureListenerHorizon),
           paymentObservingAccountManager,
@@ -96,7 +97,7 @@ class PaymentObserverTests {
           listOf(eventCaptureListenerStellarRpc),
           paymentObservingAccountManager,
           TestCursorStore(),
-          sacToAssetMapper
+          sacToAssetMapper,
         )
       stellarRpcPaymentObserver.start()
     }
@@ -303,7 +304,7 @@ class PaymentObserverTests {
     val paymentOperation: PaymentOperation = txn.operations[0] as PaymentOperation
     assertEquals(
       AssetHelper.toXdrAmount(paymentOperation.amount.toString()).toBigInteger(),
-      fromEvent[0].amount
+      fromEvent[0].amount,
     )
     assertEquals(
       AssetHelper.getSep11AssetName(paymentOperation.asset.toXdr()),
@@ -464,7 +465,7 @@ internal fun createContractWithWasmIdAndGetContractId(
   sourceAccount: KeyPair,
   constructorArgs: List<SCVal>,
 ): String {
-  val txHash: String? =
+  val txHash: String =
     createContractWithWasmId(sorobanServer, network, wasmId, sourceAccount, constructorArgs)
 
   // Wait until the transaction is created
