@@ -9,8 +9,8 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.ReflectionUtil.getField;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
+import static org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse.*;
 
-import java.math.BigInteger;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -34,6 +34,7 @@ import org.stellar.sdk.requests.PaymentsRequestBuilder;
 import org.stellar.sdk.requests.RequestBuilder;
 import org.stellar.sdk.requests.SSEStream;
 import org.stellar.sdk.responses.Page;
+import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
 import org.stellar.sdk.responses.operations.PaymentOperationResponse;
@@ -219,12 +220,6 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
    * @throws LedgerException if there is an error fetching the transaction
    */
   PaymentTransferEvent toPaymentTransferEvent(OperationResponse operation) throws LedgerException {
-    if (!(operation instanceof PaymentOperationResponse
-        || operation instanceof PathPaymentBaseOperationResponse)) {
-      // only fetch transaction if the operation is a payment operation
-      return null;
-    }
-
     if (operation instanceof PaymentOperationResponse paymentOp) {
       if (paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getTo())
           || paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getFrom())) {
@@ -232,7 +227,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
             .from(paymentOp.getFrom())
             .to(paymentOp.getTo())
             .sep11Asset(AssetHelper.getSep11AssetName(paymentOp.getAsset().toXdr()))
-            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(paymentOp.getAmount())))
+            .amount(AssetHelper.toXdrAmount(paymentOp.getAmount()).toBigInteger())
             .operationId(String.valueOf(operation.getId()))
             .txHash(paymentOp.getTransactionHash())
             .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
@@ -240,15 +235,14 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
       } else {
         return null;
       }
-    } else {
-      PathPaymentBaseOperationResponse pathPaymentOp = (PathPaymentBaseOperationResponse) operation;
+    } else if (operation instanceof PathPaymentBaseOperationResponse pathPaymentOp) {
       if (paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getTo())
           || paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getFrom())) {
         return PaymentTransferEvent.builder()
             .from(pathPaymentOp.getFrom())
             .to(pathPaymentOp.getTo())
+            .amount(AssetHelper.toXdrAmount(pathPaymentOp.getAmount()).toBigInteger())
             .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset().toXdr()))
-            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(pathPaymentOp.getAmount())))
             .operationId(String.valueOf(operation.getId()))
             .txHash(pathPaymentOp.getTransactionHash())
             .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
@@ -256,6 +250,22 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
       } else {
         return null;
       }
+    } else if (operation instanceof InvokeHostFunctionOperationResponse invokeOp) {
+      if (invokeOp.getFunction().equals("transfer")) {
+        AssetContractBalanceChange assetBalanceChange = invokeOp.getAssetBalanceChanges().get(0);
+        return PaymentTransferEvent.builder()
+            .from(assetBalanceChange.getFrom())
+            .to(assetBalanceChange.getTo())
+            .sep11Asset(AssetHelper.getSep11AssetName(assetBalanceChange.getAsset().toXdr()))
+            .amount(AssetHelper.toXdrAmount(assetBalanceChange.getAmount()).toBigInteger())
+            .txHash(invokeOp.getTransactionHash())
+            .operationId(String.valueOf(invokeOp.getId()))
+            .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
+            .build();
+      }
+      return null;
+    } else {
+      return null;
     }
   }
 
