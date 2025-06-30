@@ -21,6 +21,10 @@ public class SacToAssetMapper {
     this.sorobanServer = sorobanServer;
   }
 
+  public Asset test(String sac) {
+    return null;
+  }
+
   /**
    * Maps a Stellar Asset Contract ID to an Asset object.
    *

@@ -1,7 +1,6 @@
 package org.stellar.anchor.platform.integrationtest
 
 import java.math.BigDecimal
-import java.math.BigInteger
 import java.time.Instant
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
@@ -25,8 +24,6 @@ import org.stellar.sdk.responses.operations.PaymentOperationResponse
 import org.stellar.sdk.xdr.OperationType
 import org.stellar.sdk.xdr.TransactionEnvelope
 
-private lateinit var testPaymentValues: List<Pair<String, String>>
-
 open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config) {
   companion object {
     const val JSON_RPC_VERSION = "2.0"
@@ -41,6 +38,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     const val TEST_PAYMENT_DEST_ACCOUNT = "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
     const val TEST_PAYMENT_ASSET_CIRCLE_USDC =
       "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+
     // custody deposit address
     const val CUSTODY_DEST_ACCOUNT = "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
   }
@@ -111,7 +109,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
             .id(op.getId().toString())
             .from(op.from)
             .to(op.to)
-            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(op.amount)))
+            .amount(AssetHelper.toXdrAmount(op.amount).toBigInteger())
             .asset(op.asset.toXdr())
             .sourceAccount(op.getSourceAccount())
             .build()
@@ -125,7 +123,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
             .id(op.getId().toString())
             .from(op.from)
             .to(op.to)
-            .amount(BigInteger.valueOf(AssetHelper.toXdrAmount(op.amount)))
+            .amount(AssetHelper.toXdrAmount(op.amount).toBigInteger())
             .asset(op.asset.toXdr())
             .sourceAccount(op.getSourceAccount())
             .build()

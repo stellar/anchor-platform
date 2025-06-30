@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
@@ -81,7 +82,7 @@ class PaymentObserverTests {
 
       horizonPaymentObserver =
         HorizonPaymentObserver(
-          "https://horizon-testnet.stellar.org",
+          Horizon("https://horizon-testnet.stellar.org"),
           StellarPaymentObserverConfig(5, 90, 5, 5, 300, 5, 300),
           listOf(eventCaptureListenerHorizon),
           paymentObservingAccountManager,
@@ -96,7 +97,7 @@ class PaymentObserverTests {
           listOf(eventCaptureListenerStellarRpc),
           paymentObservingAccountManager,
           TestCursorStore(),
-          sacToAssetMapper
+          sacToAssetMapper,
         )
       stellarRpcPaymentObserver.start()
     }
@@ -139,7 +140,7 @@ class PaymentObserverTests {
     assertEquals(1, toEvent?.size)
     assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
     assertEquals(walletContractId, toEvent!![0].to)
-    assertEquals(BigInteger.valueOf(AssetHelper.toXdrAmount("0.0000002")), fromEvent[0].amount)
+    assertEquals(AssetHelper.toXdrAmount("0.0000002").toBigInteger(), fromEvent[0].amount)
     assertEquals(Asset.createNativeAsset().toString(), fromEvent[0].sep11Asset)
     assertEquals(fromEvent, toEvent)
 
@@ -164,7 +165,7 @@ class PaymentObserverTests {
     assertEquals(1, toEvent2?.size)
     assertEquals(walletContractId, fromEvent2!![0].from)
     assertEquals(fromKeyPair.accountId, toEvent2!![0].to)
-    assertEquals(BigInteger.valueOf(AssetHelper.toXdrAmount("0.0000001")), fromEvent2[0].amount)
+    assertEquals(AssetHelper.toXdrAmount("0.0000001").toBigInteger(), fromEvent2[0].amount)
     assertEquals(fromEvent2, toEvent2)
   }
 
@@ -302,8 +303,8 @@ class PaymentObserverTests {
     assertEquals(toKeyPair.accountId, fromEvent[0].to)
     val paymentOperation: PaymentOperation = txn.operations[0] as PaymentOperation
     assertEquals(
-      BigInteger.valueOf(AssetHelper.toXdrAmount(paymentOperation.amount.toString())),
-      fromEvent[0].amount
+      AssetHelper.toXdrAmount(paymentOperation.amount.toString()).toBigInteger(),
+      fromEvent[0].amount,
     )
     assertEquals(
       AssetHelper.getSep11AssetName(paymentOperation.asset.toXdr()),
@@ -324,7 +325,7 @@ class PaymentObserverTests {
     val paymentOperation: PathPaymentStrictSendOperation =
       txn.operations[0] as PathPaymentStrictSendOperation
     assertEquals(
-      BigInteger.valueOf(AssetHelper.toXdrAmount(paymentOperation.sendAmount.toString())),
+      AssetHelper.toXdrAmount(paymentOperation.sendAmount.toString()).toBigInteger(),
       fromEvent[0].amount,
     )
     assertEquals(
@@ -464,7 +465,7 @@ internal fun createContractWithWasmIdAndGetContractId(
   sourceAccount: KeyPair,
   constructorArgs: List<SCVal>,
 ): String {
-  val txHash: String? =
+  val txHash: String =
     createContractWithWasmId(sorobanServer, network, wasmId, sourceAccount, constructorArgs)
 
   // Wait until the transaction is created

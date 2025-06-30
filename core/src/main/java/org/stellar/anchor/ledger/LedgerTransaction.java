@@ -5,8 +5,10 @@ import static org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendT
 import java.math.BigInteger;
 import java.time.Instant;
 import java.util.List;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.stellar.sdk.xdr.Asset;
 import org.stellar.sdk.xdr.Memo;
 import org.stellar.sdk.xdr.OperationType;
@@ -29,6 +31,8 @@ public class LedgerTransaction {
 
   @Builder
   @Data
+  @AllArgsConstructor
+  @NoArgsConstructor
   public static class LedgerOperation {
     OperationType type;
     LedgerPaymentOperation paymentOperation;
@@ -55,6 +59,8 @@ public class LedgerTransaction {
 
   @Builder
   @Data
+  @AllArgsConstructor
+  @NoArgsConstructor
   public static class LedgerPaymentOperation implements LedgerPayment {
     String id;
     String from;
@@ -71,6 +77,8 @@ public class LedgerTransaction {
 
   @Builder
   @Data
+  @AllArgsConstructor
+  @NoArgsConstructor
   public static class LedgerPathPaymentOperation implements LedgerPayment {
     OperationType type;
     String id;
@@ -83,6 +91,8 @@ public class LedgerTransaction {
 
   @Builder
   @Data
+  @AllArgsConstructor
+  @NoArgsConstructor
   public static class LedgerInvokeHostFunctionOperation implements LedgerPayment {
     String contractId;
     String hostFunction;
