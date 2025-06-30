@@ -93,10 +93,16 @@ class TestProfileExecutor(val config: TestConfig) {
 
       envMap["assets.value"] = getResourceFile(envMap["assets.value"]!!).absolutePath
       if (envMap["clients.value"] != null) {
-        envMap["clients.value"] = getResourceFile(envMap["clients.value"]!!).absolutePath
+        // If clients.value not found, try to load it from resources
+        if (!File(envMap["clients.value"]!!).exists()) {
+          envMap["clients.value"] = getResourceFile(envMap["clients.value"]!!).absolutePath
+        }
       }
       if (envMap["sep1.toml.type"] != "url" && envMap["sep1.toml.type"] != "string") {
-        envMap["sep1.toml.value"] = getResourceFile(envMap["sep1.toml.value"]!!).absolutePath
+        // If sep1.toml.value not found, try to load it from resources
+        if (!File(envMap["sep1.toml.value"]!!).exists()) {
+          envMap["sep1.toml.value"] = getResourceFile(envMap["sep1.toml.value"]!!).absolutePath
+        }
       }
       // Start servers
       val jobs = mutableListOf<Job>()
