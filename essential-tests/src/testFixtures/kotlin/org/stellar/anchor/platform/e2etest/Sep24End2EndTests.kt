@@ -13,6 +13,7 @@ import kotlinx.coroutines.runBlocking
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
@@ -40,6 +41,7 @@ import org.stellar.anchor.platform.WalletClient
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.Log.info
+import org.stellar.anchor.util.StringHelper.isNotEmpty
 import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
@@ -124,7 +126,12 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @Test
   @Order(11)
-  fun `test deposit to contract address end-to-end flow`() = runBlocking {
+  fun `test contract account deposit`() = runBlocking {
+    assumeTrue(
+      isNotEmpty(config.get("stellar_network.rpc_url")),
+      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+    )
+
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val request =
@@ -303,7 +310,12 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @Test
   @Order(21)
-  fun `test withdraw from contract address end-to-end flow`() = runBlocking {
+  fun `test contract account withdraw`() = runBlocking {
+    assumeTrue(
+      isNotEmpty(config.get("stellar_network.rpc_url")),
+      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+    )
+
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val request =
