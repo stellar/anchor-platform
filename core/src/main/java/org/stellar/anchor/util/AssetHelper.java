@@ -194,11 +194,11 @@ public class AssetHelper {
    * @param amount the string representation of the amount
    * @return the amount in XDR format
    */
-  public static Long toXdrAmount(String amount) {
+  public static BigDecimal toXdrAmount(String amount) {
     if (amount == null || amount.isEmpty()) {
       return null;
     }
     // The rounding mode is set to DOWN because the XDR_SCALE_FACTOR is also 7 digits.
-    return new BigDecimal(amount).multiply(XDR_SCALE_FACTOR).setScale(0, DOWN).longValue();
+    return new BigDecimal(amount).multiply(XDR_SCALE_FACTOR).setScale(0, DOWN);
   }
 }

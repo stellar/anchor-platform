@@ -11,6 +11,7 @@ import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.platform.config.PaymentObserverConfig;
 import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.JdbcSep24TransactionStore;
@@ -82,7 +83,7 @@ public class PaymentObserverBeans {
     } else if (isNotEmpty(appConfig.getHorizonUrl())) {
       paymentObserver =
           new HorizonPaymentObserver(
-              appConfig.getHorizonUrl(),
+              new Horizon(appConfig.getHorizonUrl()),
               paymentObserverConfig.getStellar(),
               paymentListeners,
               paymentObservingAccountsManager,
