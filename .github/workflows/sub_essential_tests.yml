@@ -135,7 +135,7 @@ jobs:
           ANCHOR_DOMAIN: http://host.docker.internal:8080
         run: |
           cd /home/runner/anchor-platform
-          ./gradlew runEssentialTests
+          ./gradlew clean runEssentialTests
       # do not call "kill -9 $PID" to continue running the servers for Stellar Validation Tool
 
       #
