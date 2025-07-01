@@ -73,7 +73,7 @@ jobs:
       #
       - name: Start `default-horizon` configuration
         env:
-          TEST_PROFILE_NAME: default
+          TEST_PROFILE_NAME: default-horizon
           SEP1_TOML_VALUE: /home/runner/anchor-platform/service-runner/src/main/resources/config/stellar.host.docker.internal.toml
           SEP10_WEB_AUTH_DOMAIN: host.docker.internal:8080
           SEP10_HOME_DOMAINS: host.docker.internal:8080,*.stellar.org
