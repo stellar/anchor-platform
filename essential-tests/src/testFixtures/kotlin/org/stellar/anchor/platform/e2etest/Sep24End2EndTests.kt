@@ -125,14 +125,10 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   @Test
   @Order(11)
   fun `test contract account deposit`() = runBlocking {
-<<<<<<< HEAD
     assumeTrue(
       isNotEmpty(config.get("stellar_network.rpc_url")),
       "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
     )
-
-=======
->>>>>>> sdf/feature/stellar-rpc
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val request =
@@ -305,14 +301,11 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   @Test
   @Order(21)
   fun `test contract account withdraw`() = runBlocking {
-<<<<<<< HEAD
     assumeTrue(
       isNotEmpty(config.get("stellar_network.rpc_url")),
       "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
     )
 
-=======
->>>>>>> sdf/feature/stellar-rpc
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val request =
