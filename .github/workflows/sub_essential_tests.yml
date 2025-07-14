@@ -103,9 +103,6 @@ jobs:
           ./gradlew runEssentialTests
           kill -9 $PID  
 
-      #
-      # Test `default` configuration
-      #
       - name: Start `default` configuration
         env:
           TEST_PROFILE_NAME: default
@@ -138,16 +135,10 @@ jobs:
           ./gradlew clean runEssentialTests
       # do not call "kill -9 $PID" to continue running the servers for Stellar Validation Tool
 
-      #
-      # Run Stellar Validation Tool
-      #
       - name: Run Stellar validation tool
         run: |
           docker run --network host -v /home/runner/anchor-platform/platform/src/test/resources://config stellar/anchor-tests:v0.6.20 --home-domain http://host.docker.internal:8080 --seps 1 6 10 12 24 31 38 --sep-config //config/stellar-anchor-tests-sep-config.json --verbose
 
-      #
-      # Upload Essential Tests report
-      #
       - name: Upload Essential Tests report
         if: always()
         uses: actions/upload-artifact@v4
