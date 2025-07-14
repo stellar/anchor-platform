@@ -117,6 +117,7 @@ public class SepBeans {
   Sep6Service sep6Service(
       AppConfig appConfig,
       Sep6Config sep6Config,
+      Sep38Config sep38Config,
       AssetService assetService,
       ClientFinder clientFinder,
       Sep6TransactionStore txnStore,
@@ -129,6 +130,7 @@ public class SepBeans {
     return new Sep6Service(
         appConfig,
         sep6Config,
+        sep38Config,
         assetService,
         requestValidator,
         clientFinder,
