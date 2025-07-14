@@ -40,15 +40,15 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
   private val gson = GsonUtils.getInstance()
   private val maxTries = 60
   private val anchorReferenceServerClient =
-      AnchorReferenceServerClient(Url(config.env["reference.server.url"]!!))
+    AnchorReferenceServerClient(Url(config.env["reference.server.url"]!!))
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
   private val platformApiClient =
-      PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
+    PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
 
   private fun assertEvents(
-      actualEvents: List<SendEventRequest>?,
-      expectedStatuses: List<Pair<AnchorEvent.Type, SepTransactionStatus>>,
+    actualEvents: List<SendEventRequest>?,
+    expectedStatuses: List<Pair<AnchorEvent.Type, SepTransactionStatus>>,
   ) {
     assertNotNull(actualEvents)
     actualEvents?.let {
@@ -67,8 +67,8 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
   }
 
   private fun assertCallbacks(
-      actualCallbacks: List<Sep31GetTransactionResponse>?,
-      expectedStatuses: List<Pair<AnchorEvent.Type, SepTransactionStatus>>,
+    actualCallbacks: List<Sep31GetTransactionResponse>?,
+    expectedStatuses: List<Pair<AnchorEvent.Type, SepTransactionStatus>>,
   ) {
     assertNotNull(actualCallbacks)
     actualCallbacks?.let {
@@ -92,12 +92,12 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, null, toml)
 
     val senderCustomerRequest =
-        gson.fromJson(testCustomer1Json, Sep12PutCustomerRequest::class.java)
+      gson.fromJson(testCustomer1Json, Sep12PutCustomerRequest::class.java)
     val senderCustomer = wallet.sep12.putCustomer(senderCustomerRequest)
 
     // Create receiver customer
     val receiverCustomerRequest =
-        gson.fromJson(testCustomer2Json, Sep12PutCustomerRequest::class.java)
+      gson.fromJson(testCustomer2Json, Sep12PutCustomerRequest::class.java)
     val receiverCustomer = wallet.sep12.putCustomer(receiverCustomerRequest)
 
     val quote = wallet.sep38.postQuote(asset.sep38, amount, FIAT_USD)
@@ -119,11 +119,11 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     info("Transferring $amount $asset to ${transaction.stellarAccountId}")
     transactionWithRetry {
       wallet.send(
-          transaction.stellarAccountId,
-          Asset.create(asset.id),
-          amount,
-          transaction.stellarMemo,
-          transaction.stellarMemoType,
+        transaction.stellarAccountId,
+        Asset.create(asset.id),
+        amount,
+        transaction.stellarMemo,
+        transaction.stellarMemoType,
       )
     }
     // When the Sep31End2EndTests are run the second time without cleaning up the database, the
@@ -131,24 +131,26 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     // registered in the previous tests.
     info("Transfer complete")
     waitStatuses(
-        postTxResponse.id,
-        listOf(SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE, SepTransactionStatus.COMPLETED))
+      postTxResponse.id,
+      listOf(SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE, SepTransactionStatus.COMPLETED)
+    )
 
     transaction = wallet.sep31.getTransaction(postTxResponse.id).transaction
     if (transaction.status == SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE.status) {
       // Supply missing KYC info to continue with the transaction
       val additionalRequiredFields =
-          wallet.sep12
-              .getCustomer(receiverCustomer.id, "sep31-receiver", postTxResponse.id)!!
-              .fields
-              ?.filter { it.key != null && it.value?.optional == false }
-              ?.map { it.key!! }
-              .orEmpty()
+        wallet.sep12
+          .getCustomer(receiverCustomer.id, "sep31-receiver", postTxResponse.id)!!
+          .fields
+          ?.filter { it.key != null && it.value?.optional == false }
+          ?.map { it.key!! }
+          .orEmpty()
       wallet.sep12.putCustomer(
-          gson.fromJson(
-              gson.toJson(additionalRequiredFields.associateWith { receiverKycInfo[it]!! }),
-              Sep12PutCustomerRequest::class.java,
-          ))
+        gson.fromJson(
+          gson.toJson(additionalRequiredFields.associateWith { receiverKycInfo[it]!! }),
+          Sep12PutCustomerRequest::class.java,
+        )
+      )
       info("Submitting additional KYC info $additionalRequiredFields")
 
       // Wait for the status to change to COMPLETED
@@ -156,43 +158,48 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
 
       // Check the events sent to the reference server are recorded correctly
       val actualEvents =
-          waitForBusinessServerEvents(
-              postTxResponse.id, expectedStatusesWithPendingCustomerInfo.size)
+        waitForBusinessServerEvents(postTxResponse.id, expectedStatusesWithPendingCustomerInfo.size)
       assertEvents(actualEvents, expectedStatusesWithPendingCustomerInfo)
 
       // Check the callbacks sent to the wallet reference server are recorded correctly
       val actualCallbacks =
-          waitForWalletServerCallbacks(
-              postTxResponse.id, expectedStatusesWithPendingCustomerInfo.size)
+        waitForWalletServerCallbacks(
+          postTxResponse.id,
+          expectedStatusesWithPendingCustomerInfo.size
+        )
       assertCallbacks(actualCallbacks, expectedStatusesWithPendingCustomerInfo)
     } else {
       // Check the events sent to the reference server are recorded correctly
       val actualEvents =
-          waitForBusinessServerEvents(
-              postTxResponse.id, expectedStatusesWithoutPendingCustomerInfo.size)
+        waitForBusinessServerEvents(
+          postTxResponse.id,
+          expectedStatusesWithoutPendingCustomerInfo.size
+        )
       assertEvents(actualEvents, expectedStatusesWithoutPendingCustomerInfo)
 
       // Check the callbacks sent to the wallet reference server are recorded correctly
       val actualCallbacks =
-          waitForWalletServerCallbacks(
-              postTxResponse.id, expectedStatusesWithoutPendingCustomerInfo.size)
+        waitForWalletServerCallbacks(
+          postTxResponse.id,
+          expectedStatusesWithoutPendingCustomerInfo.size
+        )
       assertCallbacks(actualCallbacks, expectedStatusesWithoutPendingCustomerInfo)
     }
   }
 
   private suspend fun waitForWalletServerCallbacks(
-      txnId: String,
-      count: Int,
+    txnId: String,
+    count: Int,
   ): List<Sep31GetTransactionResponse>? {
     var retries = 30
     var callbacks: List<Sep31GetTransactionResponse>? = null
     while (retries > 0) {
       callbacks =
-          walletServerClient.getTransactionCallbacks(
-              "sep31",
-              txnId,
-              Sep31GetTransactionResponse::class.java,
-          )
+        walletServerClient.getTransactionCallbacks(
+          "sep31",
+          txnId,
+          Sep31GetTransactionResponse::class.java,
+        )
       if (callbacks.size == count) {
         return callbacks
       }
@@ -203,8 +210,8 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
   }
 
   private suspend fun waitForBusinessServerEvents(
-      txnId: String,
-      count: Int,
+    txnId: String,
+    count: Int,
   ): List<SendEventRequest>? {
     var retries = 30
     var events: List<SendEventRequest>? = null
@@ -249,36 +256,36 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
 
   companion object {
     private val USDC =
-        IssuedAssetId("USDC", "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP")
+      IssuedAssetId("USDC", "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP")
     private const val FIAT_USD = "iso4217:USD"
     private val expectedStatusesWithPendingCustomerInfo =
-        listOf(
-            TRANSACTION_CREATED to SepTransactionStatus.PENDING_RECEIVER,
-            TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_SENDER,
-            TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_RECEIVER,
-            TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE,
-            TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_RECEIVER,
-            TRANSACTION_STATUS_CHANGED to SepTransactionStatus.COMPLETED,
-        )
+      listOf(
+        TRANSACTION_CREATED to SepTransactionStatus.PENDING_RECEIVER,
+        TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_SENDER,
+        TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_RECEIVER,
+        TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE,
+        TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_RECEIVER,
+        TRANSACTION_STATUS_CHANGED to SepTransactionStatus.COMPLETED,
+      )
     private val expectedStatusesWithoutPendingCustomerInfo =
-        listOf(
-            TRANSACTION_CREATED to SepTransactionStatus.PENDING_RECEIVER,
-            TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_SENDER,
-            TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_RECEIVER,
-            TRANSACTION_STATUS_CHANGED to SepTransactionStatus.COMPLETED,
-        )
+      listOf(
+        TRANSACTION_CREATED to SepTransactionStatus.PENDING_RECEIVER,
+        TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_SENDER,
+        TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_RECEIVER,
+        TRANSACTION_STATUS_CHANGED to SepTransactionStatus.COMPLETED,
+      )
   }
 
   private val receiverKycInfo =
-      mapOf(
-          "bank_account_number" to "13719713158835300",
-          "bank_account_type" to "checking",
-          "bank_number" to "123",
-          "bank_branch_number" to "121122676",
-      )
+    mapOf(
+      "bank_account_number" to "13719713158835300",
+      "bank_account_type" to "checking",
+      "bank_number" to "123",
+      "bank_branch_number" to "121122676",
+    )
 
   private val postSep31TxnRequest =
-      """{
+    """{
     "amount": "5",
     "asset_code": "USDC",
     "asset_issuer": "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
