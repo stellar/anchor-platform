@@ -523,8 +523,7 @@ public class Sep6Service {
         Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang));
   }
 
-  private InfoResponse buildInfoResponse() {
-
+  InfoResponse buildInfoResponse() {
     InfoResponse response =
         InfoResponse.builder()
             .deposit(new HashMap<>())
