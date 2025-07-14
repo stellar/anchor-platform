@@ -3,7 +3,8 @@ package org.stellar.anchor.sep6;
 import static io.micrometer.core.instrument.Metrics.counter;
 import static org.stellar.anchor.util.AssetHelper.isDepositEnabled;
 import static org.stellar.anchor.util.AssetHelper.isWithdrawEnabled;
-import static org.stellar.anchor.util.MemoHelper.*;
+import static org.stellar.anchor.util.MemoHelper.makeMemo;
+import static org.stellar.anchor.util.MemoHelper.memoType;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 
 import com.google.common.collect.ImmutableMap;
@@ -23,6 +24,7 @@ import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.Sep38Config;
 import org.stellar.anchor.config.Sep6Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep6.ExchangeAmountsCalculator.Amounts;
@@ -34,6 +36,7 @@ import org.stellar.sdk.Memo;
 public class Sep6Service {
   private final AppConfig appConfig;
   private final Sep6Config sep6Config;
+  private final Sep38Config sep38Config;
   private final AssetService assetService;
   private final RequestValidator requestValidator;
   private final ClientFinder clientFinder;
@@ -70,6 +73,7 @@ public class Sep6Service {
   public Sep6Service(
       AppConfig appConfig,
       Sep6Config sep6Config,
+      Sep38Config sep38Config,
       AssetService assetService,
       RequestValidator requestValidator,
       ClientFinder clientFinder,
@@ -79,6 +83,7 @@ public class Sep6Service {
       MoreInfoUrlConstructor moreInfoUrlConstructor) {
     this.appConfig = appConfig;
     this.sep6Config = sep6Config;
+    this.sep38Config = sep38Config;
     this.assetService = assetService;
     this.requestValidator = requestValidator;
     this.clientFinder = clientFinder;
@@ -511,6 +516,7 @@ public class Sep6Service {
   }
 
   private InfoResponse buildInfoResponse() {
+
     InfoResponse response =
         InfoResponse.builder()
             .deposit(new HashMap<>())
@@ -552,9 +558,10 @@ public class Sep6Service {
                 .fundingMethods(methods)
                 .fields(ImmutableMap.of("type", type))
                 .build();
-
         response.getDeposit().put(asset.getCode(), deposit);
-        response.getDepositExchange().put(asset.getCode(), deposit);
+        if (sep38Config.isEnabled()) {
+          response.getDepositExchange().put(asset.getCode(), deposit);
+        }
       }
 
       if (isWithdrawEnabled(asset.getSep6())) {
@@ -574,7 +581,9 @@ public class Sep6Service {
                 .build();
 
         response.getWithdraw().put(asset.getCode(), withdraw);
-        response.getWithdrawExchange().put(asset.getCode(), withdraw);
+        if (sep38Config.isEnabled()) {
+          response.getWithdrawExchange().put(asset.getCode(), withdraw);
+        }
       }
     }
     return response;
