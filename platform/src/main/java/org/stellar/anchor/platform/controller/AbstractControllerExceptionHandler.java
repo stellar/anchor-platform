@@ -60,7 +60,7 @@ public abstract class AbstractControllerExceptionHandler {
   }
 
   @ResponseStatus(HttpStatus.NOT_IMPLEMENTED)
-  @ExceptionHandler({NotSupportedException.class})
+  @ExceptionHandler({SepNotImplementedException.class, NotSupportedException.class})
   public SepExceptionResponse handleNotImplementedError(Exception ex) {
     errorF("Not implemented: {}", ex.getMessage());
     captureException(ex);

@@ -184,6 +184,10 @@ public class Sep6Service {
     if (request == null) {
       throw new SepValidationException("missing request");
     }
+    if (!sep38Config.isEnabled()) {
+      throw new SepNotImplementedException(
+          "SEP-38 is not enabled. Please enable SEP-38 to use deposit-exchange.");
+    }
 
     AssetInfo sellAsset = assetService.getAssetById(request.getSourceAsset());
     if (sellAsset == null) {
@@ -357,6 +361,10 @@ public class Sep6Service {
     }
     if (request == null) {
       throw new SepValidationException("missing request");
+    }
+    if (!sep38Config.isEnabled()) {
+      throw new SepNotImplementedException(
+          "SEP-38 is not enabled. Please enable SEP-38 to use withdraw-exchange.");
     }
 
     AssetInfo buyAsset = assetService.getAssetById(request.getDestinationAsset());
