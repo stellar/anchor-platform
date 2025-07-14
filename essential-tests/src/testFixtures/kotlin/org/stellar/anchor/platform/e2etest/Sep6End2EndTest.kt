@@ -62,7 +62,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
 
   @Test
   @Order(10)
-  fun `test classic asset deposit end-to-end flow`() = runBlocking {
+  fun `test classic asset deposit`() = runBlocking {
     val memo = (10000..20000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
@@ -212,7 +212,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
 
   @Test
   @Order(12)
-  fun `test classic asset deposit-exchange without quote end-to-end flow`() = runBlocking {
+  fun `test classic asset deposit-exchange without quote`() = runBlocking {
     val memo = (20000..30000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
@@ -366,7 +366,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
 
   @Test
   @Order(20)
-  fun `test classic asset withdraw end-to-end flow`() = runBlocking {
+  fun `test classic asset withdraw`() = runBlocking {
     val memo = (40000..50000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 
@@ -457,7 +457,6 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
       isNotEmpty(config.get("stellar_network.rpc_url")),
       "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
     )
-
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -516,7 +515,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
 
   @Test
   @Order(22)
-  fun `test classic asset withdraw-exchange without quote end-to-end flow`() = runBlocking {
+  fun `test classic asset withdraw-exchange without quote`() = runBlocking {
     val memo = (50000..60000).random().toULong()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
 

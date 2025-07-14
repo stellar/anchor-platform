@@ -84,7 +84,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical receive end to end flow`() = runBlocking {
+  fun `test classic asset receive`() = runBlocking {
     val asset = USDC
     val amount = "5"
 
