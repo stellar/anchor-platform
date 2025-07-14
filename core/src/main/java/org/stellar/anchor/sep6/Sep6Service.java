@@ -186,7 +186,7 @@ public class Sep6Service {
     }
     if (!sep38Config.isEnabled()) {
       throw new SepNotImplementedException(
-          "SEP-38 is not enabled. Please enable SEP-38 to use deposit-exchange.");
+          "The deposit-exchange is not supported because sep38.enabled is set to false.");
     }
 
     AssetInfo sellAsset = assetService.getAssetById(request.getSourceAsset());
@@ -364,7 +364,7 @@ public class Sep6Service {
     }
     if (!sep38Config.isEnabled()) {
       throw new SepNotImplementedException(
-          "SEP-38 is not enabled. Please enable SEP-38 to use withdraw-exchange.");
+          "The withdraw-exchange is not supported because sep38.enabled is set to false.");
     }
 
     AssetInfo buyAsset = assetService.getAssetById(request.getDestinationAsset());
