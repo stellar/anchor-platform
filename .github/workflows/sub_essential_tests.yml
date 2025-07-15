@@ -103,9 +103,16 @@ jobs:
           ./gradlew runEssentialTests
           kill -9 $PID  
 
+      - name: Tear down Kafka, Postgres, and Sep24 UI with docker compose
+        run: docker compose -f /home/runner/anchor-platform/service-runner/src/main/resources/docker-compose-test.yaml down
+
       #
       # Test `default` configuration
       #
+
+      - name: Run Kafka, Postgres, and Sep24 UI with docker compose
+        run: docker compose -f /home/runner/anchor-platform/service-runner/src/main/resources/docker-compose-test.yaml up -d --build
+        
       - name: Start `default` configuration
         env:
           TEST_PROFILE_NAME: default
