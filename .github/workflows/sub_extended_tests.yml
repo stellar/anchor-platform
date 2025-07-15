@@ -64,6 +64,32 @@ jobs:
       - name: Run Kafka, Postgres, and Sep24 UI with docker compose
         run: docker compose -f /home/runner/anchor-platform/service-runner/src/main/resources/docker-compose-test.yaml up -d --build
 
+      # `default-horizon` Tests
+      - name: Start `default-horizon` configuration
+        env:
+          TEST_PROFILE_NAME: default-horizon
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
+        run: |
+          cd /home/runner/anchor-platform
+          ./gradlew startServersWithTestProfile &
+          echo "PID=$!" >> $GITHUB_ENV
+
+      - name: Wait for the sep server to start and get ready
+        uses: mydea/action-wait-for-api@v1
+        with:
+          url: "http://localhost:8080/.well-known/stellar.toml"
+          interval: "1"
+
+      - name: Run `custody` configuration tests
+        env:
+          TEST_PROFILE_NAME: default-horizon
+        run: |
+          cd /home/runner/anchor-platform
+          ./gradlew :service-runner:clean :extended-tests:clean :extended-tests:test --tests org.stellar.anchor.platform.suite.End2EndTestSuite
+          kill -9 $PID
+
+
+
       # `custody` Tests
       - name: Start `custody` configuration
         env:
