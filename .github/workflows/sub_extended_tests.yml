@@ -226,7 +226,7 @@ jobs:
           url: "http://localhost:8080/.well-known/stellar.toml"
           interval: "1"
 
-      - name: Run `custody` configuration tests
+      - name: Run limited `end-2-end` tests
         env:
           TEST_PROFILE_NAME: default-horizon
         run: |
