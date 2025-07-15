@@ -4,12 +4,9 @@ import io.ktor.http.*
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
-import org.junit.jupiter.api.fail
 import org.stellar.anchor.api.callback.SendEventRequest
 import org.stellar.anchor.api.callback.SendEventRequestPayload
 import org.stellar.anchor.api.event.AnchorEvent
@@ -83,7 +80,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     }
   }
 
-  @Test
+  @RepeatedTest(2)
   fun `test classic asset receive`() = runBlocking {
     val asset = USDC
     val amount = "5"
