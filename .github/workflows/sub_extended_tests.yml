@@ -7,7 +7,7 @@ on:
 jobs:
   extended_tests:
     name: Run Extended Tests
-    runs-on: ubuntu-latest-16-cores
+    runs-on: ubuntu-latest
     env:
       # Anchor Platform secrets
       SECRET_SEP10_SIGNING_SEED: ${{ vars.SECRET_SEP10_SIGNING_SEED }}
