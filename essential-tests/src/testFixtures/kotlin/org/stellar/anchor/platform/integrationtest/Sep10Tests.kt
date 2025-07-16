@@ -7,11 +7,11 @@ import io.ktor.client.plugins.*
 import io.ktor.http.*
 import java.io.IOException
 import java.util.*
+import java.util.Base64
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.*
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
@@ -20,8 +20,7 @@ import org.stellar.anchor.platform.*
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_EXTRA_SIGNER_1_SECRET
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_EXTRA_SIGNER_2_SECRET
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
-import org.stellar.sdk.KeyPair
-import org.stellar.sdk.Transaction
+import org.stellar.sdk.*
 import org.stellar.walletsdk.auth.DefaultAuthHeaderSigner
 import org.stellar.walletsdk.auth.DomainAuthHeaderSigner
 import org.stellar.walletsdk.auth.WalletSigner

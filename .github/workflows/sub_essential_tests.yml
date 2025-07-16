@@ -7,7 +7,7 @@ on:
 jobs:
   essential_tests:
     name: Run Essential Tests (Integration Tests, Faster End-2-End Tests, Unit Tests, and Stellar Validation Tools)
-    runs-on: ubuntu-latest-8-cores
+    runs-on: ubuntu-latest
     env:
       # Anchor Platform secrets
       SECRET_SEP10_SIGNING_SEED: ${{ vars.SECRET_SEP10_SIGNING_SEED }}
@@ -66,58 +66,38 @@ jobs:
         run: docker pull stellar/anchor-tests:latest &
 
       - name: Run Kafka, Postgres, and Sep24 UI with docker compose
-        env:
-          TEST_PROFILE_NAME: default
         run: docker compose -f /home/runner/anchor-platform/service-runner/src/main/resources/docker-compose-test.yaml up -d --build
 
-      - name: Run sep server, platform server, observer, and reference servers for integration tests
+      - name: Start `default` configuration
         env:
-          RUN_DOCKER: false
-          RUN_ALL_SERVERS: false
-          RUN_SEP_SERVER: true
-          RUN_PLATFORM_SERVER: true
-          RUN_OBSERVER: true
-          RUN_KOTLIN_REFERENCE_SERVER: true
-          RUN_EVENT_PROCESSING_SERVER: true
-          RUN_WALLET_SERVER: true
-          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
+          TEST_PROFILE_NAME: default
           SEP1_TOML_VALUE: /home/runner/anchor-platform/service-runner/src/main/resources/config/stellar.host.docker.internal.toml
           SEP10_WEB_AUTH_DOMAIN: host.docker.internal:8080
           SEP10_HOME_DOMAINS: host.docker.internal:8080,*.stellar.org
           SEP45_WEB_AUTH_DOMAIN: host.docker.internal:8080
           SEP45_HOME_DOMAINS: host.docker.internal:8080,*.stellar.org
           TOML_PATH: /home/runner/anchor-platform/wallet-reference-server/src/main/resources/toml
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
         run: |
-          cp /home/runner/anchor-platform/service-runner/build/libs/anchor-platform-runner-*.jar /home/runner/anchor-platform-runner.jar
-          java -jar /home/runner/anchor-platform-runner.jar -t &
+          cd /home/runner/anchor-platform
+          ./gradlew startServersWithTestProfile &
           echo "PID=$!" >> $GITHUB_ENV
 
       - name: Wait for the sep server to start and get ready
         uses: mydea/action-wait-for-api@v1
         with:
-          url: "http://localhost:8080/.well-known/stellar.toml"
-          expected-status: "200"
-          timeout: "300"
+          url: "http://host.docker.internal:8080/.well-known/stellar.toml"
           interval: "1"
 
-      - name: Wait for the wallet server to start and get ready
-        uses: mydea/action-wait-for-api@v1
-        with:
-          url: "http://localhost:8092/.well-known/stellar.toml"
-          expected-status: "200"
-          timeout: "300"
-          interval: "1"
-
-      #
-      # Run Essential Tests
-      #
       - name: Run Essential Tests
         env:
+          TEST_PROFILE_NAME: default
           RUN_DOCKER: false
           ANCHOR_DOMAIN: http://host.docker.internal:8080
         run: |
           cd /home/runner/anchor-platform
-          ./gradlew runEssentialTests
+          ./gradlew clean runEssentialTests
+      # do not call "kill -9 $PID" to continue running the servers for Stellar Validation Tool
 
       - name: Run Stellar validation tool
         run: |
@@ -129,8 +109,4 @@ jobs:
         with:
           name: essential-tests-report
           path: |
-            /home/runner/anchor-platform/api-schema/build/reports/
-            /home/runner/anchor-platform/core/build/reports/
-            /home/runner/anchor-platform/platform/build/reports/
             /home/runner/anchor-platform/essential-tests/build/reports/
-        

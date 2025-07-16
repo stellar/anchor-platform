@@ -20,8 +20,8 @@ import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.*;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.filter.WebAuthJwtFilter;
-import org.stellar.anchor.network.Horizon;
-import org.stellar.anchor.network.StellarRpc;
+import org.stellar.anchor.ledger.LedgerClient;
+import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.platform.condition.OnAnySepsEnabled;
 import org.stellar.anchor.platform.config.*;
@@ -103,7 +103,7 @@ public class SepBeans {
     registrationBean.addUrlPatterns("/sep31/transactions/*");
     registrationBean.addUrlPatterns("/sep38/quote");
     registrationBean.addUrlPatterns("/sep38/quote/*");
-    if (sep38Config.isSep10Enforced() || sep38Config.isAuthEnforced()) {
+    if (sep38Config.isAuthEnforced()) {
       registrationBean.addUrlPatterns("/sep38/info");
       registrationBean.addUrlPatterns("/sep38/price");
       registrationBean.addUrlPatterns("/sep38/prices");
@@ -168,11 +168,11 @@ public class SepBeans {
       AppConfig appConfig,
       SecretConfig secretConfig,
       Sep10Config sep10Config,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       JwtService jwtService,
       ClientFinder clientFinder) {
     return new Sep10Service(
-        appConfig, secretConfig, sep10Config, horizon, jwtService, clientFinder);
+        appConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder);
   }
 
   @Bean
@@ -271,10 +271,11 @@ public class SepBeans {
       AppConfig appConfig,
       SecretConfig secretConfig,
       Sep45Config sep45Config,
-      StellarRpc stellarRpc,
+      LedgerClient ledgerClient,
       NonceManager nonceManager,
       JwtService jwtService) {
+    assert (ledgerClient instanceof StellarRpc);
     return new Sep45Service(
-        appConfig, secretConfig, sep45Config, stellarRpc, nonceManager, jwtService);
+        appConfig, secretConfig, sep45Config, (StellarRpc) ledgerClient, nonceManager, jwtService);
   }
 }

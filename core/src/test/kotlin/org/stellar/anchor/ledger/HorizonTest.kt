@@ -1,15 +1,15 @@
-package org.stellar.anchor.horizon
+package org.stellar.anchor.ledger
 
 import io.mockk.every
 import io.mockk.mockk
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.config.AppConfig
-import org.stellar.anchor.network.Horizon
 import org.stellar.sdk.Asset
 import org.stellar.sdk.AssetTypeCreditAlphaNum
 import org.stellar.sdk.Server
@@ -17,61 +17,58 @@ import org.stellar.sdk.TrustLineAsset
 import org.stellar.sdk.requests.AccountsRequestBuilder
 import org.stellar.sdk.responses.AccountResponse
 import org.stellar.sdk.responses.AccountResponse.Balance
+import org.stellar.sdk.responses.SubmitTransactionAsyncResponse.TransactionStatus
+import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus.*
+import org.stellar.sdk.xdr.SignerKeyType.*
 
 internal class HorizonTest {
   companion object {
-    const val TEST_HORIZON_URI = "https://horizon-testnet.stellar.org/"
-    const val TEST_HORIZON_PASSPHRASE = "Test SDF Network ; September 2015"
+    private const val TEST_HORIZON_URI = "https://horizon-testnet.stellar.org/"
+    private const val TEST_HORIZON_PASSPHRASE = "Test SDF Network ; September 2015"
+    val appConfig = mockk<AppConfig>()
+
+    @JvmStatic
+    @BeforeAll
+    fun setup() {
+      every { appConfig.horizonUrl } returns TEST_HORIZON_URI
+      every { appConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
+    }
   }
 
   @Test
   fun `test the correctness of Horizon creation`() {
-    val appConfig = mockk<AppConfig>()
-    every { appConfig.horizonUrl } returns TEST_HORIZON_URI
-    every { appConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
-
     val horizon = Horizon(appConfig)
 
     assertNotNull(horizon.server)
-    assertEquals(TEST_HORIZON_URI, horizon.horizonUrl)
-    assertEquals(TEST_HORIZON_PASSPHRASE, horizon.stellarNetworkPassphrase)
   }
 
   @Test
-  fun test_isTrustlineConfigured_native() {
-    val appConfig = mockk<AppConfig>()
-    every { appConfig.horizonUrl } returns TEST_HORIZON_URI
-    every { appConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
-
+  fun test_hasTrustline_native() {
     val horizon = Horizon(appConfig)
 
     val account = "testAccount"
-    val asset = "stellar:native"
+    val asset = "native"
 
-    assertTrue(horizon.isTrustlineConfigured(account, asset))
+    assertTrue(horizon.hasTrustline(account, asset))
   }
 
   @Test
-  fun test_isTrustlineConfigured_horizonError() {
-    val appConfig = mockk<AppConfig>()
+  fun test_hasTrustline_horizonError() {
     val server = mockk<Server>()
     val account = "testAccount"
     val asset = "stellar:USDC:issuerAccount"
 
-    every { appConfig.horizonUrl } returns TEST_HORIZON_URI
-    every { appConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
     every { server.accounts() } throws RuntimeException("Horizon error")
 
     val horizon = mockk<Horizon>()
     every { horizon.server } returns server
-    every { horizon.isTrustlineConfigured(account, asset) } answers { callOriginal() }
+    every { horizon.hasTrustline(account, asset) } answers { callOriginal() }
 
-    assertThrows<RuntimeException> { horizon.isTrustlineConfigured(account, asset) }
+    assertThrows<RuntimeException> { horizon.hasTrustline(account, asset) }
   }
 
   @Test
-  fun test_isTrustlineConfigured_present() {
-    val appConfig = mockk<AppConfig>()
+  fun test_hasTrustline_present() {
     val server = mockk<Server>()
     val account = "testAccount"
     val asset = "stellar:USDC:issuerAccount1"
@@ -82,8 +79,6 @@ internal class HorizonTest {
     val asset1: AssetTypeCreditAlphaNum = mockk()
     val asset2: AssetTypeCreditAlphaNum = mockk()
 
-    every { appConfig.horizonUrl } returns TEST_HORIZON_URI
-    every { appConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
     every { server.accounts() } returns accountsRequestBuilder
     every { accountsRequestBuilder.account(account) } returns accountResponse
 
@@ -100,13 +95,12 @@ internal class HorizonTest {
 
     val horizon = mockk<Horizon>()
     every { horizon.server } returns server
-    every { horizon.isTrustlineConfigured(account, asset) } answers { callOriginal() }
-    assertTrue(horizon.isTrustlineConfigured(account, asset))
+    every { horizon.hasTrustline(account, asset) } answers { callOriginal() }
+    assertTrue(horizon.hasTrustline(account, asset))
   }
 
   @Test
-  fun test_isTrustlineConfigured_absent() {
-    val appConfig = mockk<AppConfig>()
+  fun test_hasTrustline_absent() {
     val server = mockk<Server>()
     val account = "testAccount"
     val asset = "stellar:USDC:issuerAccount1"
@@ -135,12 +129,38 @@ internal class HorizonTest {
 
     every { accountResponse.balances } returns listOf(balance1, balance2, balance3)
 
-    every { appConfig.horizonUrl } returns TEST_HORIZON_URI
-    every { appConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
-
     val horizon = mockk<Horizon>()
     every { horizon.server } returns server
-    every { horizon.isTrustlineConfigured(account, asset) } answers { callOriginal() }
-    assertFalse(horizon.isTrustlineConfigured(account, asset))
+    every { horizon.hasTrustline(account, asset) } answers { callOriginal() }
+    assertFalse(horizon.hasTrustline(account, asset))
+  }
+
+  @Test
+  fun `test convert() with transaction status`() {
+    assertEquals(PENDING, Horizon.toSendTranscationStatus(TransactionStatus.PENDING))
+    assertEquals(ERROR, Horizon.toSendTranscationStatus(TransactionStatus.ERROR))
+    assertEquals(DUPLICATE, Horizon.toSendTranscationStatus(TransactionStatus.DUPLICATE))
+    assertEquals(
+      TRY_AGAIN_LATER,
+      Horizon.toSendTranscationStatus(TransactionStatus.TRY_AGAIN_LATER),
+    )
+  }
+
+  @Test
+  fun `test getKeyTypeDiscriminant with valid types`() {
+    assertEquals(SIGNER_KEY_TYPE_ED25519, Horizon.getKeyTypeDiscriminant("ed25519_public_key"))
+    assertEquals(SIGNER_KEY_TYPE_PRE_AUTH_TX, Horizon.getKeyTypeDiscriminant("preauth_tx"))
+    assertEquals(SIGNER_KEY_TYPE_HASH_X, Horizon.getKeyTypeDiscriminant("sha256_hash"))
+    assertEquals(
+      SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD,
+      Horizon.getKeyTypeDiscriminant("ed25519_signed_payload"),
+    )
+  }
+
+  @Test
+  fun `test getKeyTypeDiscriminant with invalid type`() {
+    val exception =
+      assertThrows<IllegalArgumentException> { Horizon.getKeyTypeDiscriminant("invalid_type") }
+    kotlin.test.assertEquals("Invalid signer key type: invalid_type", exception.message)
   }
 }

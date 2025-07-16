@@ -18,7 +18,7 @@ import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.filter.ApiKeyFilter;
 import org.stellar.anchor.filter.NoneFilter;
 import org.stellar.anchor.filter.PlatformAuthJwtFilter;
-import org.stellar.anchor.network.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.platform.apiclient.CustodyApiClient;
 import org.stellar.anchor.platform.config.PlatformApiConfig;
 import org.stellar.anchor.platform.config.PlatformServerConfig;
@@ -164,13 +164,13 @@ public class PlatformServerBeans {
 
   @Bean
   TrustlineCheckJob trustlineCheckJob(
-      Horizon horizon,
+      LedgerClient ledgerClient,
       JdbcTransactionPendingTrustRepo transactionPendingTrustRepo,
       PropertyCustodyConfig custodyConfig,
       NotifyTrustSetHandler notifyTrustSetHandler) {
     if (custodyConfig.isCustodyIntegrationEnabled()) {
       return new TrustlineCheckJob(
-          horizon, transactionPendingTrustRepo, custodyConfig, notifyTrustSetHandler);
+          ledgerClient, transactionPendingTrustRepo, custodyConfig, notifyTrustSetHandler);
     } else {
       return null;
     }

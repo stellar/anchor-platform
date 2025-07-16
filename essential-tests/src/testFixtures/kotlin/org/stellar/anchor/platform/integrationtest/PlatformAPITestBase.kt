@@ -1,12 +1,28 @@
 package org.stellar.anchor.platform.integrationtest
 
 import java.math.BigDecimal
+import java.time.Instant
+import org.stellar.anchor.ledger.Horizon
+import org.stellar.anchor.ledger.LedgerClient
+import org.stellar.anchor.ledger.LedgerClientHelper.waitForTransactionAvailable
+import org.stellar.anchor.ledger.LedgerTransaction
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
+import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.util.AssetHelper
+import org.stellar.anchor.util.AssetHelper.fromXdrAmount
+import org.stellar.anchor.util.Log.info
+import org.stellar.anchor.util.MemoHelper
+import org.stellar.anchor.util.StringHelper.isNotEmpty
 import org.stellar.sdk.*
 import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.requests.RequestBuilder
+import org.stellar.sdk.responses.operations.OperationResponse
+import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.sdk.xdr.OperationType
+import org.stellar.sdk.xdr.TransactionEnvelope
 
 open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config) {
   companion object {
@@ -22,6 +38,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     const val TEST_PAYMENT_DEST_ACCOUNT = "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
     const val TEST_PAYMENT_ASSET_CIRCLE_USDC =
       "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+
     // custody deposit address
     const val CUSTODY_DEST_ACCOUNT = "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
   }
@@ -41,18 +58,150 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     return result.trimIndent()
   }
 
-  fun getTestPaymentValues(): List<Pair<String, String>> {
+  private fun getTestPaymentValues(): List<Pair<String, String>> {
     if (!::testPaymentValues.isInitialized || testPaymentValues.isEmpty()) {
-      fetchTestPayment()
+      if (isNotEmpty(config.get("stellar_network.rpc_url"))) {
+        val ledgerClient = StellarRpc(config.get("stellar_network.rpc_url")!!)
+        val ledgerTxn = sendTestPayment(ledgerClient)
+        setTestPaymentsValues(ledgerTxn!!)
+      } else if (isNotEmpty(config.get("stellar_network.horizon_url"))) {
+        val horizonServer = Server(config.get("stellar_network.horizon_url")!!)
+        // not the most optimized way to do this, but it works
+        val payment = fetchTestPaymentFromHorizon(horizonServer)
+        val ledgerTxn: LedgerTransaction? =
+          if (payment != null) {
+            toLedgerTransaction(payment)
+          } else {
+            val ledgerClient = Horizon(config.get("stellar_network.horizon_url")!!)
+            sendTestPayment(ledgerClient)
+          }
+        setTestPaymentsValues(ledgerTxn!!)
+      } else {
+        throw Exception("None of stellar_network.rpc_url or stellar_network.horizon_url is not set")
+      }
     }
     return testPaymentValues
   }
 
-  // fetch the test payment from the testnet
-  private fun fetchTestPayment() {
-    val destAccount = TEST_PAYMENT_DEST_ACCOUNT
-    val horizonServer = Server("https://horizon-testnet.stellar.org")
+  private fun toLedgerTransaction(operationResponse: OperationResponse): LedgerTransaction {
+    val txnResponse = operationResponse.transaction
+    return LedgerTransaction.builder()
+      .hash(txnResponse.hash)
+      .ledger(txnResponse.ledger)
+      .applicationOrder(TOID.fromInt64(txnResponse.pagingToken.toLong()).transactionOrder)
+      .sourceAccount(txnResponse.sourceAccount)
+      .envelopeXdr(txnResponse.envelopeXdr)
+      .memo(MemoHelper.toXdr(txnResponse.memo))
+      .sequenceNumber(txnResponse.sourceAccountSequence)
+      .createdAt(Instant.parse(txnResponse.createdAt))
+      .operations(listOf(toLedgerOperation(operationResponse)))
+      .build()
+  }
 
+  private fun toLedgerOperation(op: OperationResponse): LedgerOperation? {
+    val builder = LedgerOperation.builder()
+    // TODO: Capture muxed account events
+    when (op) {
+      is PaymentOperationResponse -> {
+        builder.type(OperationType.PAYMENT)
+        builder.paymentOperation(
+          LedgerTransaction.LedgerPaymentOperation.builder()
+            .id(op.getId().toString())
+            .from(op.from)
+            .to(op.to)
+            .amount(AssetHelper.toXdrAmount(op.amount).toBigInteger())
+            .asset(op.asset.toXdr())
+            .sourceAccount(op.getSourceAccount())
+            .build()
+        )
+      }
+      is PathPaymentBaseOperationResponse -> {
+        builder.type(OperationType.PATH_PAYMENT_STRICT_RECEIVE)
+        builder.pathPaymentOperation(
+          LedgerTransaction.LedgerPathPaymentOperation.builder()
+            .type(OperationType.PATH_PAYMENT_STRICT_RECEIVE)
+            .id(op.getId().toString())
+            .from(op.from)
+            .to(op.to)
+            .amount(AssetHelper.toXdrAmount(op.amount).toBigInteger())
+            .asset(op.asset.toXdr())
+            .sourceAccount(op.getSourceAccount())
+            .build()
+        )
+      }
+      else -> {
+        return null
+      }
+    }
+    return builder.build()
+  }
+
+  private fun sendTestPayment(ledgerClient: LedgerClient): LedgerTransaction? {
+    val destAccount = TEST_PAYMENT_DEST_ACCOUNT
+
+    // send test payment of 1 USDC from distribution account to the test receiver account
+    val usdcAsset =
+      Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+        as AssetTypeCreditAlphaNum
+    val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
+    info(
+      "Create test payment transaction: 1 USDC from distribution account to the test receiver account"
+    )
+    val accountId = sourceKey.accountId
+    val account = ledgerClient.getAccount(accountId)
+    val txn =
+      TransactionBuilder(Account(accountId, account.sequenceNumber), Network.TESTNET)
+        .addOperation(
+          PaymentOperation.builder()
+            .sourceAccount(sourceKey.accountId)
+            .destination(destAccount)
+            .asset(usdcAsset)
+            .amount(BigDecimal("0.0002"))
+            .build()
+        )
+        .addMemo(Memo.text(TEST_PAYMENT_MEMO)) // Add memo
+        .addPreconditions(
+          TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(180)).build()
+        )
+        .setBaseFee(Transaction.MIN_BASE_FEE)
+        .build()
+    // Sign the transaction
+    txn.sign(sourceKey)
+
+    val response = ledgerClient.submitTransaction(txn)
+    return waitForTransactionAvailable(ledgerClient, response.hash)
+  }
+
+  private fun setTestPaymentsValues(ledgerTxn: LedgerTransaction) {
+    val txnEnv = TransactionEnvelope.fromXdrBase64(ledgerTxn.envelopeXdr)
+    val paymentOp = txnEnv.v1.tx.operations[0].body.paymentOp
+    if (paymentOp != null) {
+      // initialize the test payment value pairs for injection
+      testPaymentValues =
+        listOf(
+          Pair(
+            "%TESTPAYMENT_ID%",
+            TOID(ledgerTxn.ledger.toInt(), ledgerTxn.applicationOrder, 1).toInt64().toString(),
+          ),
+          Pair("%TESTPAYMENT_AMOUNT%", fromXdrAmount(paymentOp.amount.int64).toString()),
+          Pair("%TESTPAYMENT_TXN_HASH%", ledgerTxn.hash),
+          Pair("%TESTPAYMENT_SRC_ACCOUNT%", ledgerTxn.operations[0].paymentOperation.from),
+          Pair(
+            "%TESTPAYMENT_DEST_ACCOUNT%",
+            StrKey.encodeEd25519PublicKey(paymentOp.destination.ed25519.uint256),
+          ),
+          Pair("%TESTPAYMENT_ASSET_CIRCLE_USDC%", TEST_PAYMENT_ASSET_CIRCLE_USDC),
+          Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT),
+        )
+    }
+  }
+
+  private fun fetchTestPaymentFromHorizon(horizonServer: Server): OperationResponse? {
+    if (config.get("stellar_network.horizon_url") == null) {
+      throw Exception("stellar_network.horizon_url is not set")
+    }
+
+    val destAccount = TEST_PAYMENT_DEST_ACCOUNT
     val payments =
       horizonServer
         .payments()
@@ -63,55 +212,19 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
         .execute()
         .records
 
-    if (payments.isEmpty()) {
-      sendTestPayment(horizonServer)
-    }
-
-    for (payment in payments) {
-      if (payment is PaymentOperationResponse) {
-        if (payment.transaction.memo.toString() == TEST_PAYMENT_MEMO) {
-          println("Found test payment")
-          // initialize the test payment value pairs for injection
-          testPaymentValues =
-            listOf(
-              Pair("%TESTPAYMENT_ID%", payment.id.toString()),
-              Pair("%TESTPAYMENT_AMOUNT%", payment.amount),
-              Pair("%TESTPAYMENT_TXN_HASH%", payment.transactionHash),
-              Pair("%TESTPAYMENT_SRC_ACCOUNT%", payment.from),
-              Pair("%TESTPAYMENT_DEST_ACCOUNT%", payment.to),
-              Pair("%TESTPAYMENT_ASSET_CIRCLE_USDC%", TEST_PAYMENT_ASSET_CIRCLE_USDC),
-              Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT),
-            )
-
-          return
-        }
-      }
-    }
-
-    println("\n*** STOP ***")
-    println("Cannot find test payment")
-    println(
-      "Please visit the testnet reset script: https://github.com/stellar/useful-scripts to create the test payment"
-    )
-    throw Exception("Cannot find test payment")
+    // use the most recent one.
+    if (payments.isEmpty()) return null
+    return payments.first()
   }
 
-  private fun horizon(): Server {
-    if (config.get("stellar_network.horizon_url") == null) {
-      throw Exception("stellar_network.horizon_url is not set")
-    }
-
-    return Server(config.get("stellar_network.horizon_url")!!)
-  }
-
-  private fun sendTestPayment(server: Server) {
+  private fun sendTestPaymentToHorizon(server: Server) {
     // send test payment of 1 USDC from distribution account to the test receiver account
     val usdcAsset =
       Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
         as AssetTypeCreditAlphaNum
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
 
-    println(
+    info(
       "Create test payment transaction: 1 USDC from distribution account to the test receiver account"
     )
     // Load the source account's current state
@@ -143,9 +256,9 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
 
     // Check the result
     if (response.successful) {
-      println("Payment transaction successful. Transaction hash: ${response.hash}")
+      info("Payment transaction successful. Transaction hash: ${response.hash}")
     } else {
-      println("Payment failed. ${response.resultXdr}")
+      info("Payment failed. ${response.resultXdr}")
     }
   }
 }

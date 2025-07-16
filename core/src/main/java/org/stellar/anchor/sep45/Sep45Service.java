@@ -21,7 +21,7 @@ import org.stellar.anchor.auth.Sep45Jwt;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
-import org.stellar.anchor.network.StellarRpc;
+import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.util.ClientDomainHelper;
 import org.stellar.anchor.xdr.SorobanAuthorizationEntryList;
 import org.stellar.sdk.*;
@@ -101,7 +101,7 @@ public class Sep45Service {
 
       return ChallengeResponse.builder()
           .authorizationEntries(authEntriesXdr)
-          .networkPassphrase(stellarRpc.getRpc().getNetwork().getPassphrase())
+          .networkPassphrase(stellarRpc.getSorobanServer().getNetwork().getPassphrase())
           .build();
     } catch (IOException e) {
       throw new InternalServerErrorException("Failed to encode auth entries");
@@ -347,7 +347,7 @@ public class Sep45Service {
     if (sep45Config.getHomeDomains().stream()
         .noneMatch(
             homeDomain -> {
-              URI expected = URI.create("http://" + homeDomain);
+              URI expected = URI.create("https://" + homeDomain);
               URI given = URI.create(argsMap.get(KEY_HOME_DOMAIN));
 
               return expected.getAuthority().equals(given.getAuthority());
