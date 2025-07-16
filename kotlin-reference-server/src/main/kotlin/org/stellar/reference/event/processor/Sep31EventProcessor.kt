@@ -98,13 +98,16 @@ class Sep31EventProcessor(
 
   private fun notifyCustomerUpdated(transaction: GetTransactionResponse) {
     runBlocking {
-      sepHelper.rpcAction(
-        RpcMethod.NOTIFY_CUSTOMER_INFO_UPDATED.toString(),
-        NotifyCustomerInfoUpdatedRequest(
-          transactionId = transaction.id,
-          message = "Customer info updated",
-        ),
-      )
+      if (verifyKyc(transaction).isEmpty()) {
+        // KYC is complete
+        sepHelper.rpcAction(
+          RpcMethod.NOTIFY_CUSTOMER_INFO_UPDATED.toString(),
+          NotifyCustomerInfoUpdatedRequest(
+            transactionId = transaction.id,
+            message = "Customer info updated",
+          ),
+        )
+      }
     }
   }
 
@@ -140,7 +143,7 @@ class Sep31EventProcessor(
     }
   }
 
-  private suspend fun sendExternal(transactionId: String) {
+  private fun sendExternal(transactionId: String) {
     runBlocking {
       sepHelper.rpcAction(
         "notify_offchain_funds_sent",

@@ -7,6 +7,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.*
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
@@ -14,11 +15,14 @@ import org.stellar.anchor.api.sep.sep12.Sep12Status
 import org.stellar.anchor.api.sep.sep6.GetTransactionResponse
 import org.stellar.anchor.api.shared.InstructionField
 import org.stellar.anchor.client.Sep6Client
-import org.stellar.anchor.platform.*
+import org.stellar.anchor.platform.IntegrationTestBase
+import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
+import org.stellar.anchor.platform.WalletClient
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
+import org.stellar.anchor.util.StringHelper.isNotEmpty
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
@@ -156,6 +160,11 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   @Order(11)
   fun `test contract account deposit`() = runBlocking {
+    assumeTrue(
+      isNotEmpty(config.get("stellar_network.rpc_url")),
+      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+    )
+
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -303,6 +312,11 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   @Order(13)
   fun `test contract account deposit-exchange`() = runBlocking {
+    assumeTrue(
+      isNotEmpty(config.get("stellar_network.rpc_url")),
+      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+    )
+
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -439,6 +453,10 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   @Order(21)
   fun `test contract account withdraw`() = runBlocking {
+    assumeTrue(
+      isNotEmpty(config.get("stellar_network.rpc_url")),
+      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+    )
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -590,6 +608,10 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   @Order(23)
   fun `test contract account withdraw-exchange`() = runBlocking {
+    assumeTrue(
+      isNotEmpty(config.get("stellar_network.rpc_url")),
+      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+    )
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =

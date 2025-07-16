@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.gson
+import org.stellar.anchor.util.Log.info
 import org.stellar.anchor.util.StringHelper.isNotEmpty
 
 class StellarObserverTests : IntegrationTestBase(TestConfig()) {
@@ -30,10 +31,16 @@ class StellarObserverTests : IntegrationTestBase(TestConfig()) {
         .header("Content-Type", "application/json")
         .get()
         .build()
+
+    info("Sending request to Stellar Observer health endpoint: ${httpRequest.url}")
+
     val response = httpClient.newCall(httpRequest).execute()
     assertEquals(200, response.code)
+    val responseBodyStr = response.body!!.string()
 
-    val responseBody = gson.fromJson(response.body!!.string(), HashMap::class.java)
+    info("Received response from Stellar Observer health endpoint: $responseBodyStr")
+
+    val responseBody = gson.fromJson(responseBodyStr, HashMap::class.java)
     assertEquals(5, responseBody.size)
     assertNotNull(responseBody["started_at"])
     assertNotNull(responseBody["elapsed_time_ms"])
