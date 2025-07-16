@@ -7,7 +7,7 @@ on:
 jobs:
   essential_tests:
     name: Run Essential Tests (Integration Tests, Faster End-2-End Tests, Unit Tests, and Stellar Validation Tools)
-    runs-on: ubuntu-latest-8-cores
+    runs-on: ubuntu-latest
     env:
       # Anchor Platform secrets
       SECRET_SEP10_SIGNING_SEED: ${{ vars.SECRET_SEP10_SIGNING_SEED }}
