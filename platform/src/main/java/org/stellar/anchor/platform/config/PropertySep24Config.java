@@ -18,7 +18,6 @@ import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
@@ -41,14 +40,11 @@ public class PropertySep24Config implements Sep24Config, Validator {
   Features features;
   DepositInfoGeneratorType depositInfoGeneratorType;
   Long initialUserDeadlineSeconds;
-  CustodyConfig custodyConfig;
   KycFieldsForwarding kycFieldsForwarding;
   AssetService assetService;
 
-  public PropertySep24Config(
-      SecretConfig secretConfig, CustodyConfig custodyConfig, AssetService assetService) {
+  public PropertySep24Config(SecretConfig secretConfig, AssetService assetService) {
     this.secretConfig = secretConfig;
-    this.custodyConfig = custodyConfig;
     this.assetService = assetService;
   }
 
@@ -87,7 +83,6 @@ public class PropertySep24Config implements Sep24Config, Validator {
     if (enabled) {
       validateInteractiveUrlConfig(errors);
       validateMoreInfoUrlConfig(errors);
-      validateFeaturesConfig(errors);
       validateDepositInfoGeneratorType(errors);
     }
   }
@@ -184,39 +179,7 @@ public class PropertySep24Config implements Sep24Config, Validator {
     }
   }
 
-  void validateFeaturesConfig(Errors errors) {
-    if (custodyConfig.isCustodyIntegrationEnabled()) {
-      if (features.getAccountCreation()) {
-        errors.rejectValue(
-            "features.accountCreation",
-            "sep24-features-account_creation-not-supported",
-            "Custody service doesn't support creating accounts for users requesting deposits");
-      }
-      if (features.getClaimableBalances()) {
-        errors.rejectValue(
-            "features.claimableBalances",
-            "sep24-features-claimable_balances-not-supported",
-            "Custody service doesn't support sending deposit funds as claimable balances");
-      }
-    }
-  }
-
   void validateDepositInfoGeneratorType(Errors errors) {
-    if (custodyConfig.isCustodyIntegrationEnabled() && CUSTODY != depositInfoGeneratorType) {
-      errors.rejectValue(
-          "depositInfoGeneratorType",
-          "sep24-deposit-info-generator-type",
-          String.format(
-              "[%s] deposit info generator type is not supported when custody integration is enabled",
-              depositInfoGeneratorType.toString().toLowerCase()));
-    } else if (!custodyConfig.isCustodyIntegrationEnabled()
-        && CUSTODY == depositInfoGeneratorType) {
-      errors.rejectValue(
-          "depositInfoGeneratorType",
-          "sep24-deposit-info-generator-type",
-          "[custody] deposit info generator type is not supported when custody integration is disabled");
-    }
-
     if (SELF == depositInfoGeneratorType) {
       for (StellarAssetInfo asset : assetService.getStellarAssets()) {
         if (!asset.getCode().equals("native") && isEmpty(asset.getDistributionAccount())) {

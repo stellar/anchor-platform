@@ -71,22 +71,20 @@ public class UtilityBeans {
 
   @Bean
   @ConfigurationProperties(prefix = "sep31")
-  Sep31Config sep31Config(CustodyConfig custodyConfig, AssetService assetService) {
-    return new PropertySep31Config(custodyConfig, assetService);
+  Sep31Config sep31Config(AssetService assetService) {
+    return new PropertySep31Config(assetService);
   }
 
   @Bean
   @ConfigurationProperties(prefix = "sep24")
-  PropertySep24Config sep24Config(
-      SecretConfig secretConfig, CustodyConfig custodyConfig, AssetService assetService) {
-    return new PropertySep24Config(secretConfig, custodyConfig, assetService);
+  PropertySep24Config sep24Config(SecretConfig secretConfig, AssetService assetService) {
+    return new PropertySep24Config(secretConfig, assetService);
   }
 
   @Bean
   @ConfigurationProperties(prefix = "sep6")
-  PropertySep6Config sep6Config(
-      CustodyConfig custodyConfig, AssetService assetService, SecretConfig secretConfig) {
-    return new PropertySep6Config(custodyConfig, assetService, secretConfig);
+  PropertySep6Config sep6Config(AssetService assetService, SecretConfig secretConfig) {
+    return new PropertySep6Config(assetService, secretConfig);
   }
 
   /**********************************

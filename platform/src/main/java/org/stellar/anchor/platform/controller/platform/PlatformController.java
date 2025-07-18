@@ -12,11 +12,9 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.stellar.anchor.api.custody.CreateTransactionPaymentResponse;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.platform.*;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
-import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.platform.service.TransactionService;
 import org.stellar.anchor.util.TransactionsParams;
 
@@ -24,11 +22,9 @@ import org.stellar.anchor.util.TransactionsParams;
 public class PlatformController {
 
   private final TransactionService transactionService;
-  private final CustodyService custodyService;
 
-  PlatformController(TransactionService transactionService, CustodyService custodyService) {
+  PlatformController(TransactionService transactionService) {
     this.transactionService = transactionService;
-    this.custodyService = custodyService;
   }
 
   @Deprecated // ANCHOR-641 Use Rpc method GET_TRANSACTION instead
@@ -41,19 +37,6 @@ public class PlatformController {
   public GetTransactionResponse getTransaction(@PathVariable(name = "id") String txnId)
       throws AnchorException {
     return transactionService.findTransaction(txnId);
-  }
-
-  @Deprecated // ANCHOR-641
-  @CrossOrigin(origins = "*")
-  @RequestMapping(
-      value = "/transactions/{id}/payments",
-      method = {RequestMethod.POST},
-      consumes = {MediaType.APPLICATION_JSON_VALUE},
-      produces = {MediaType.APPLICATION_JSON_VALUE})
-  public CreateTransactionPaymentResponse createCustodyTransactionPayment(
-      @PathVariable(name = "id") String txnId, @RequestBody String requestBody)
-      throws AnchorException {
-    return custodyService.createTransactionPayment(txnId, requestBody);
   }
 
   @Deprecated // ANCHOR-641 Use corresponding Rpc method to update transaction/**/

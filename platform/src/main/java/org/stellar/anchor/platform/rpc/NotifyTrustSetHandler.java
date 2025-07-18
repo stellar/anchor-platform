@@ -20,10 +20,8 @@ import org.stellar.anchor.api.rpc.method.NotifyTrustSetRequest;
 import org.stellar.anchor.api.rpc.method.RpcMethod;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.metrics.MetricsService;
-import org.stellar.anchor.platform.config.PropertyCustodyConfig;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
@@ -33,10 +31,6 @@ import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
 
 public class NotifyTrustSetHandler extends RpcTransactionStatusHandler<NotifyTrustSetRequest> {
-
-  private final PropertyCustodyConfig custodyConfig;
-  private final CustodyService custodyService;
-
   public NotifyTrustSetHandler(
       Sep6TransactionStore txn6Store,
       Sep24TransactionStore txn24Store,
@@ -44,9 +38,7 @@ public class NotifyTrustSetHandler extends RpcTransactionStatusHandler<NotifyTru
       RequestValidator requestValidator,
       AssetService assetService,
       EventService eventService,
-      MetricsService metricsService,
-      PropertyCustodyConfig custodyConfig,
-      CustodyService custodyService) {
+      MetricsService metricsService) {
     super(
         txn6Store,
         txn24Store,
@@ -56,8 +48,6 @@ public class NotifyTrustSetHandler extends RpcTransactionStatusHandler<NotifyTru
         eventService,
         metricsService,
         NotifyTrustSetRequest.class);
-    this.custodyConfig = custodyConfig;
-    this.custodyService = custodyService;
   }
 
   @Override
@@ -74,7 +64,7 @@ public class NotifyTrustSetHandler extends RpcTransactionStatusHandler<NotifyTru
   @Override
   protected SepTransactionStatus getNextStatus(
       JdbcSepTransaction txn, NotifyTrustSetRequest request) {
-    if (!custodyConfig.isCustodyIntegrationEnabled() || !request.isSuccess()) {
+    if (request.isSuccess()) {
       return PENDING_ANCHOR;
     } else {
       return PENDING_STELLAR;
@@ -104,9 +94,5 @@ public class NotifyTrustSetHandler extends RpcTransactionStatusHandler<NotifyTru
 
   @Override
   protected void updateTransactionWithRpcRequest(
-      JdbcSepTransaction txn, NotifyTrustSetRequest request) throws AnchorException {
-    if (custodyConfig.isCustodyIntegrationEnabled() && request.isSuccess()) {
-      custodyService.createTransactionPayment(txn.getId(), null);
-    }
-  }
+      JdbcSepTransaction txn, NotifyTrustSetRequest request) throws AnchorException {}
 }

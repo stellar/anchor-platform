@@ -48,7 +48,6 @@ import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.client.CustodialClient;
 import org.stellar.anchor.config.AppConfig;
-import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
@@ -73,7 +72,6 @@ public class Sep24Service {
   final EventService.Session eventSession;
   final InteractiveUrlConstructor interactiveUrlConstructor;
   final MoreInfoUrlConstructor moreInfoUrlConstructor;
-  final CustodyConfig custodyConfig;
   final ExchangeAmountsCalculator exchangeAmountsCalculator;
   final Counter sep24TransactionRequestedCounter =
       counter(MetricConstants.SEP24_TRANSACTION_REQUESTED);
@@ -101,7 +99,6 @@ public class Sep24Service {
       EventService eventService,
       InteractiveUrlConstructor interactiveUrlConstructor,
       MoreInfoUrlConstructor moreInfoUrlConstructor,
-      CustodyConfig custodyConfig,
       ExchangeAmountsCalculator exchangeAmountsCalculator) {
     debug("appConfig:", appConfig);
     debug("sep24Config:", sep24Config);
@@ -116,7 +113,6 @@ public class Sep24Service {
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.interactiveUrlConstructor = interactiveUrlConstructor;
     this.moreInfoUrlConstructor = moreInfoUrlConstructor;
-    this.custodyConfig = custodyConfig;
     this.exchangeAmountsCalculator = exchangeAmountsCalculator;
     info("Sep24Service initialized.");
   }
@@ -216,30 +212,12 @@ public class Sep24Service {
 
     if (memo != null) {
       debug("transaction memo detected.", memo);
-
-      if (!CustodyUtils.isMemoTypeSupported(
-          custodyConfig.getType(), memoTypeString(memoType(memo)))) {
-        throw new SepValidationException(
-            String.format(
-                "Memo type[%s] is not supported for custody type[%s]",
-                memoTypeString(memoType(memo)), custodyConfig.getType()));
-      }
-
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
     }
 
     if (refundMemo != null) {
       debug("refund memo detected.", refundMemo);
-
-      if (!CustodyUtils.isMemoTypeSupported(
-          custodyConfig.getType(), memoTypeString(memoType(refundMemo)))) {
-        throw new SepValidationException(
-            String.format(
-                "Refund memo type[%s] is not supported for custody type[%s]",
-                memoTypeString(memoType(refundMemo)), custodyConfig.getType()));
-      }
-
       builder.refundMemo(refundMemo.toString());
       builder.refundMemoType(memoTypeString(memoType(refundMemo)));
     }
@@ -404,15 +382,6 @@ public class Sep24Service {
 
     if (memo != null) {
       debug("transaction memo detected.", memo);
-
-      if (!CustodyUtils.isMemoTypeSupported(
-          custodyConfig.getType(), memoTypeString(memoType(memo)))) {
-        throw new SepValidationException(
-            String.format(
-                "Memo type[%s] is not supported for custody type[%s]",
-                memoTypeString(memoType(memo)), custodyConfig.getType()));
-      }
-
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
     }
