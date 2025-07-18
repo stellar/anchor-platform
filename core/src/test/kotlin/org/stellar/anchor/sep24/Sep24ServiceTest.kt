@@ -116,8 +116,6 @@ internal class Sep24ServiceTest {
 
   @MockK(relaxed = true) lateinit var moreInfoUrlConstructor: MoreInfoUrlConstructor
 
-  @MockK(relaxed = true) lateinit var custodyConfig: CustodyConfig
-
   @MockK(relaxed = true) lateinit var sep38QuoteStore: Sep38QuoteStore
 
   @MockK(relaxed = true) lateinit var clientService: ClientService
@@ -180,7 +178,6 @@ internal class Sep24ServiceTest {
         eventService,
         interactiveUrlConstructor,
         moreInfoUrlConstructor,
-        custodyConfig,
         calculator,
       )
     depositQuote = gson.fromJson(DEPOSIT_QUOTE_JSON, PojoSep38Quote::class.java)

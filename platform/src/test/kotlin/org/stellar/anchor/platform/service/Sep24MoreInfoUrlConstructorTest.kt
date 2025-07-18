@@ -110,7 +110,7 @@ class Sep24MoreInfoUrlConstructorTest {
     assertEquals("txn_123", jwt.jti as String)
     Assertions.assertTrue(Instant.ofEpochSecond(jwt.exp).isAfter(Instant.now()))
 
-    val data = jwt.claims["data"] as Map<String, String>
+    val data = jwt.claims["data"] as Map<*, *>
     assertEquals(LANG, data["lang"] as String)
   }
 }

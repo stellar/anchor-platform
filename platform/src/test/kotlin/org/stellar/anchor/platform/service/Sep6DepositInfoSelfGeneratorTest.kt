@@ -23,9 +23,9 @@ class Sep6DepositInfoSelfGeneratorTest {
           "USDC",
           "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
           "GBJDTHT4562X2H37JMOE6IUTZZSDU6RYGYUNFYCHVFG3J4MYJIMU33HK",
-          "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMHRlc3RJZDE="
+          "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMHRlc3RJZDE=",
         ),
-        Arguments.of("testId2", "USD", null, null, "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMHRlc3RJZDI=")
+        Arguments.of("testId2", "USD", null, null, "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMHRlc3RJZDI="),
       )
     }
   }
@@ -47,7 +47,6 @@ class Sep6DepositInfoSelfGeneratorTest {
     assetCode: String,
     assetIssuer: String?,
     distributionAccount: String?,
-    memo: String
   ) {
     val txn = JdbcSep6Transaction()
     txn.id = txnId
