@@ -21,19 +21,9 @@ abstract class AbstractAuthIntegrationTest {
     const val GET_TRANSACTIONS_MY_ID_ENDPOINT = "GET,/transactions/my_id"
     const val GET_EXCHANGE_QUOTES_ENDPOINT = "GET,/exchange/quotes"
     const val GET_EXCHANGE_QUOTES_ID_ENDPOINT = "GET,/exchange/quotes/id"
-    const val POST_CUSTODY_TRANSACTION_ENDPOINT = "POST,/transactions"
 
     private val jwtService =
-      JwtService(
-        null,
-        null,
-        null,
-        null,
-        null,
-        PLATFORM_TO_ANCHOR_SECRET,
-        ANCHOR_TO_PLATFORM_SECRET,
-        PLATFORM_TO_CUSTODY_SECRET,
-      )
+      JwtService(null, null, null, null, null, PLATFORM_TO_ANCHOR_SECRET, ANCHOR_TO_PLATFORM_SECRET)
     private val jwtWrongKeyService =
       JwtService(
         null,
@@ -42,8 +32,7 @@ abstract class AbstractAuthIntegrationTest {
         null,
         null,
         (PLATFORM_TO_ANCHOR_SECRET + "bad"),
-        (ANCHOR_TO_PLATFORM_SECRET + "bad"),
-        (PLATFORM_TO_CUSTODY_SECRET + "bad"),
+        (ANCHOR_TO_PLATFORM_SECRET + "bad")
       )
 
     internal val platformJwtAuthHelper =

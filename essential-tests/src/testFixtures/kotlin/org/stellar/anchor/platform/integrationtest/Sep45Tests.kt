@@ -42,8 +42,7 @@ class Sep45Tests : IntegrationTestBase(TestConfig()) {
       config.env["secret.sep24.interactive_url.jwt_secret"]!!,
       config.env["secret.sep24.more_info_url.jwt_secret"]!!,
       config.env["secret.callback_api.auth_secret"]!!,
-      config.env["secret.platform_api.auth_secret"]!!,
-      null,
+      config.env["secret.platform_api.auth_secret"]!!
     )
 
   private var webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
