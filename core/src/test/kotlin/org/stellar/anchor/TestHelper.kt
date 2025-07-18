@@ -4,7 +4,6 @@ import io.mockk.every
 import javax.crypto.SecretKey
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.WebAuthJwt
-import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.util.KeyUtil
 import org.stellar.anchor.util.KeyUtil.toSecretKeySpecOrNull
@@ -62,10 +61,4 @@ fun SecretConfig.setupMock(block: (() -> Any)? = null) {
     "platform_auth_secret_key____________________________".also { KeyUtil.validateJWTSecret(it) }
 
   block?.invoke()
-}
-
-fun CustodySecretConfig.setupMock() {
-  val cfg = this
-  every { cfg.custodyAuthSecret } returns
-    "custody_auth_secret_key_________________________".also { KeyUtil.validateJWTSecret(it) }
 }

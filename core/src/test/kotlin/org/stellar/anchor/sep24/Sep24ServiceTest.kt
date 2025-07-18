@@ -102,7 +102,6 @@ internal class Sep24ServiceTest {
   @MockK(relaxed = true) lateinit var appConfig: AppConfig
 
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
-  @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
 
   @MockK(relaxed = true) lateinit var sep24Config: Sep24Config
 
@@ -139,7 +138,7 @@ internal class Sep24ServiceTest {
     every { txnStore.newInstance() } returns PojoSep24Transaction()
 
     requestValidator = spyk(SepRequestValidator(assetService))
-    jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
+    jwtService = spyk(JwtService(secretConfig))
     testInteractiveUrlJwt = createTestInteractiveJwt(null)
     val strToken = jwtService.encode(testInteractiveUrlJwt)
     every { interactiveUrlConstructor.construct(any(), any(), any(), any()) } returns

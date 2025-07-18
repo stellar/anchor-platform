@@ -96,9 +96,8 @@ public class UtilityBeans {
   }
 
   @Bean
-  public JwtService jwtService(SecretConfig secretConfig, CustodySecretConfig custodySecretConfig)
-      throws NotSupportedException {
-    return new JwtService(secretConfig, custodySecretConfig);
+  public JwtService jwtService(SecretConfig secretConfig) throws NotSupportedException {
+    return new JwtService(secretConfig);
   }
 
   @Bean

@@ -4,7 +4,6 @@ import java.util.Calendar;
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.auth.ApiAuthJwt.CallbackAuthJwt;
-import org.stellar.anchor.auth.ApiAuthJwt.CustodyAuthJwt;
 import org.stellar.anchor.auth.ApiAuthJwt.PlatformAuthJwt;
 import org.stellar.anchor.util.AuthHeader;
 
@@ -112,9 +111,6 @@ public interface AuthHelper {
         return jwtService.encode(token);
       } else if (jwtClass == PlatformAuthJwt.class) {
         PlatformAuthJwt token = new PlatformAuthJwt(issuedAt, expirationTime);
-        return jwtService.encode(token);
-      } else if (jwtClass == CustodyAuthJwt.class) {
-        CustodyAuthJwt token = new CustodyAuthJwt(issuedAt, expirationTime);
         return jwtService.encode(token);
       } else {
         throw new InvalidConfigException("Invalid JWT class: " + jwtClass);
