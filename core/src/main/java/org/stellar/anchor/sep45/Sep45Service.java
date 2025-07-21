@@ -21,7 +21,7 @@ import org.stellar.anchor.auth.Sep45Jwt;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
-import org.stellar.anchor.network.StellarRpc;
+import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.util.ClientDomainHelper;
 import org.stellar.anchor.xdr.SorobanAuthorizationEntryList;
 import org.stellar.sdk.*;
@@ -101,7 +101,7 @@ public class Sep45Service {
 
       return ChallengeResponse.builder()
           .authorizationEntries(authEntriesXdr)
-          .networkPassphrase(stellarRpc.getRpc().getNetwork().getPassphrase())
+          .networkPassphrase(stellarRpc.getSorobanServer().getNetwork().getPassphrase())
           .build();
     } catch (IOException e) {
       throw new InternalServerErrorException("Failed to encode auth entries");

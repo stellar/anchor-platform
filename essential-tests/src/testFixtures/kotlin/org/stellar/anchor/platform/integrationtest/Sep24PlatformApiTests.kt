@@ -1206,7 +1206,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -1238,7 +1238,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
                   "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -1256,7 +1256,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "2"
@@ -1289,7 +1289,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
                   "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -1308,7 +1308,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "external_transaction_id": "ext-123456",
               "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "3"
@@ -1405,7 +1405,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -1437,7 +1437,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
                   "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -1455,7 +1455,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "2"
@@ -1487,7 +1487,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
                   "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -1506,7 +1506,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "external_transaction_id": "ext-123456",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "3"
@@ -1539,7 +1539,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
                   "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -1558,7 +1558,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "external_transaction_id": "ext-123456",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "4"
@@ -1595,7 +1595,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -1627,7 +1627,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
                   "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -1645,7 +1645,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "2"
@@ -1677,7 +1677,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
                   "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -1696,7 +1696,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "external_transaction_id": "ext-123456",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "3"
@@ -1729,7 +1729,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
                   "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -1748,7 +1748,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "external_transaction_id": "ext-123456",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "4"
@@ -1905,7 +1905,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -1937,7 +1937,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
                   "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -1955,7 +1955,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "2"
@@ -2012,7 +2012,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
                   "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -2030,7 +2030,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
               "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
               "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
-              "memo_type": "hash",
+              "memo_type": "id",
               "client_name": "referenceCustodial"
             },
             "id": "3"

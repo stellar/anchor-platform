@@ -74,9 +74,7 @@ public class PropertyAppConfig implements AppConfig, Validator {
       }
     }
 
-    if (isEmpty(config.getRpcUrl())) {
-      // TODO: this can only be empty when SEP-45 is disabled
-    } else {
+    if (!isEmpty(config.getRpcUrl())) {
       if (!NetUtil.isUrlValid(config.getRpcUrl())) {
         errors.rejectValue(
             "rpcUrl",

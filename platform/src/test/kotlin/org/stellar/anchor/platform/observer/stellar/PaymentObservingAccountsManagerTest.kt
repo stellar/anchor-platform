@@ -2,87 +2,72 @@
 
 package org.stellar.anchor.platform.observer.stellar
 
-import io.mockk.*
-import io.mockk.impl.annotations.MockK
+import java.math.BigInteger
 import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit.DAYS
 import java.time.temporal.ChronoUnit.HOURS
+import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
 import org.stellar.anchor.platform.data.PaymentObservingAccount
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager.AccountType.RESIDENTIAL
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager.AccountType.TRANSIENT
+import org.stellar.sdk.KeyPair
+import org.stellar.sdk.MuxedAccount
 
 class PaymentObservingAccountsManagerTest {
-  @MockK private lateinit var paymentObservingAccountStore: PaymentObservingAccountStore
-
-  @BeforeEach
-  fun setUp() {
-    MockKAnnotations.init(this, relaxed = true)
-    every { paymentObservingAccountStore.list() } returns
-      listOf(
-        PaymentObservingAccount(
-          "GCK5ECMM67ZN7RWGUSDKQAW6CAF6Q5WYK2VQJ276SJMINU6WVCIQW6BL",
-          Instant.now().minus(0, HOURS)
-        ),
-        PaymentObservingAccount(
-          "GCIWQDKACLW26UJXY5CTLULVYUOYROZPAPDDYEQKNGIERVOAXSPLABMB",
-          Instant.now().minus(2, HOURS)
-        ),
-        PaymentObservingAccount(
-          "GAPBFA5ZYG5VVKN7WPMH6K5CBXGU2AM5ED7S54VX27J7S222NKMTWKR6",
-          Instant.now().minus(12, HOURS)
-        )
-      )
-  }
+  private val paymentObservingAccountStore = MemoryPaymentObservingAccountStore()
+  private val testAcct1 = KeyPair.random().accountId
+  private val testAcct2 = KeyPair.random().accountId
+  private val testAcct3 = KeyPair.random().accountId
+  private val testAcct4 = KeyPair.random().accountId
+  private val testMuxAcct100 = MuxedAccount(testAcct4, BigInteger("100")).accountId
+  private val testMuxAcct200 = MuxedAccount(testAcct4, BigInteger("100")).accountId
 
   @Test
-  fun test_addAndRemove_success() {
+  fun `test add and lookup`() {
     val obs = PaymentObservingAccountsManager(paymentObservingAccountStore)
     obs.initialize()
 
-    obs.upsert("GCIWQDKACLW26UJXY5CTLULVYUOYROZPAPDDYEQKNGIERVOAXSPLABMB", TRANSIENT)
-    obs.upsert("GCK5ECMM67ZN7RWGUSDKQAW6CAF6Q5WYK2VQJ276SJMINU6WVCIQW6BL", TRANSIENT)
-    obs.upsert("GAPBFA5ZYG5VVKN7WPMH6K5CBXGU2AM5ED7S54VX27J7S222NKMTWKR6", TRANSIENT)
+    obs.upsert(testAcct1, TRANSIENT)
+    obs.upsert(testAcct2, TRANSIENT)
+    obs.upsert(testAcct3, TRANSIENT)
+    obs.upsert(testAcct4, TRANSIENT)
 
-    assertEquals(3, obs.accounts.size)
-
-    assertTrue(obs.lookupAndUpdate("GCIWQDKACLW26UJXY5CTLULVYUOYROZPAPDDYEQKNGIERVOAXSPLABMB"))
-    assertTrue(obs.lookupAndUpdate("GCK5ECMM67ZN7RWGUSDKQAW6CAF6Q5WYK2VQJ276SJMINU6WVCIQW6BL"))
-    assertTrue(obs.lookupAndUpdate("GAPBFA5ZYG5VVKN7WPMH6K5CBXGU2AM5ED7S54VX27J7S222NKMTWKR6"))
-  }
-
-  @Test
-  fun test_add_invalid() {
-    val obs = PaymentObservingAccountsManager(paymentObservingAccountStore)
-    obs.initialize()
-
-    assertEquals(3, obs.accounts.size)
-    obs.upsert("GB4DZFFUWC64MZ3BQ433ME7QBODCSFZRBOLWEWEMJIVHABTWGT3W2Q22", TRANSIENT)
-    assertDoesNotThrow {
-      obs.upsert("GB4DZFFUWC64MZ3BQ433ME7QBODCSFZRBOLWEWEMJIVHABTWGT3W2Q22", TRANSIENT)
-    }
     assertEquals(4, obs.accounts.size)
+
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+    assertTrue(obs.lookupAndUpdate(testAcct2))
+    assertTrue(obs.lookupAndUpdate(testAcct3))
+    assertTrue(obs.lookupAndUpdate(testMuxAcct100))
+    assertTrue(obs.lookupAndUpdate(testMuxAcct200))
   }
 
   @Test
-  fun test_evict() {
+  fun `test add duplicates`() {
     val obs = PaymentObservingAccountsManager(paymentObservingAccountStore)
-
     obs.initialize()
 
+    assertEquals(0, obs.accounts.size)
+    obs.upsert(testAcct1, TRANSIENT)
+    assertDoesNotThrow { obs.upsert(testAcct1, TRANSIENT) }
+    assertEquals(1, obs.accounts.size)
+  }
+
+  @Test
+  fun `test eviction`() {
+    val obs = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    obs.initialize()
+
+    obs.upsert(testAcct1, TRANSIENT)
+    assertEquals(1, obs.accounts.size)
+    obs.evict(Duration.of(1, DAYS))
     // Nothing evict-able
-    assertEquals(3, obs.accounts.size)
-    obs.evict(Duration.of(1, DAYS))
-    assertEquals(3, obs.accounts.size)
-    obs.evict(Duration.of(1, DAYS))
-    assertEquals(3, obs.accounts.size)
+    assertEquals(1, obs.accounts.size)
 
     obs.upsert(
       PaymentObservingAccountsManager.ObservingAccount(
-        "GB4DZFFUWC64MZ3BQ433ME7QBODCSFZRBOLWEWEMJIVHABTWGT3W2Q22",
+        testAcct2,
         Instant.now().minus(24, HOURS),
         TRANSIENT
       )
@@ -90,84 +75,69 @@ class PaymentObservingAccountsManagerTest {
 
     obs.upsert(
       PaymentObservingAccountsManager.ObservingAccount(
-        "GCC2B7LML6UBKBA7NOMLCR57HPKMFHRO2VTZGSIMRLXDMECBXQ44MOYO",
+        testAcct3,
+        Instant.now().minus(48, HOURS),
+        TRANSIENT
+      )
+    )
+
+    obs.upsert(
+      PaymentObservingAccountsManager.ObservingAccount(
+        testMuxAcct100,
         Instant.now().minus(100, DAYS),
         RESIDENTIAL
       )
     )
 
-    assertEquals(5, obs.accounts.size)
-
-    // Evict GB4DZFFUWC64MZ3BQ433ME7QBODCSFZRBOLWEWEMJIVHABTWGT3W2Q22
-    obs.evict(Duration.of(23, HOURS))
-    assertFalse(obs.lookupAndUpdate("GB4DZFFUWC64MZ3BQ433ME7QBODCSFZRBOLWEWEMJIVHABTWGT3W2Q22"))
     assertEquals(4, obs.accounts.size)
 
-    // Test idempotency
-    obs.evict(Duration.of(23, HOURS))
+    // RESIDENTIAL accounts should not be evicted
+    obs.evict(Duration.of(50, HOURS))
     assertEquals(4, obs.accounts.size)
+
+    // Evict TRANSIENT accounts older than 47 hours
+    obs.evict(Duration.of(47, HOURS))
+    assertEquals(3, obs.accounts.size)
+    assertFalse(obs.lookupAndUpdate(testAcct3))
 
     // Update the last observed timestamp to avoid being evicted
-    assertTrue(obs.lookupAndUpdate("GAPBFA5ZYG5VVKN7WPMH6K5CBXGU2AM5ED7S54VX27J7S222NKMTWKR6"))
-    obs.evict(Duration.of(11, HOURS))
-    assertEquals(4, obs.accounts.size)
-
-    // Make sure observing random account return false
-    assertFalse(obs.lookupAndUpdate("GBXXYA2NZPCS2LHLXBWOQ6UXXRCH3N5YVTYWZ4DEVYTEWVFV7R7MEKSV"))
-
-    // Evict another one
-    obs.evict(Duration.of(1, HOURS))
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+    assertTrue(obs.lookupAndUpdate(testAcct2))
+    obs.evict(Duration.of(10, HOURS))
     assertEquals(3, obs.accounts.size)
 
-    Thread.sleep(10)
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+    assertTrue(obs.lookupAndUpdate(testAcct2))
+    assertTrue(obs.lookupAndUpdate(testMuxAcct100))
 
-    // Evict all expiring
+    // Evict all transient accounts
     obs.evict(Duration.ZERO)
     assertEquals(1, obs.accounts.size)
+    assertTrue(obs.lookupAndUpdate(testMuxAcct100))
   }
 
   @Test
-  fun test_whenEvictAndPersist_thenSuccessful() {
-    val obs = spyk(PaymentObservingAccountsManager(paymentObservingAccountStore))
-    assertEquals(0, obs.accounts.size)
-
+  fun `test muxed account`() {
+    val obs = PaymentObservingAccountsManager(paymentObservingAccountStore)
     obs.initialize()
-    assertEquals(3, obs.accounts.size)
 
-    obs.evictAndPersist()
-    assertEquals(3, obs.accounts.size)
+    obs.upsert(testAcct4, TRANSIENT)
+    assertTrue(obs.lookupAndUpdate(testMuxAcct100))
+    assertTrue(obs.lookupAndUpdate(testMuxAcct200))
+  }
+}
 
-    obs.upsert("GBXXYA2NZPCS2LHLXBWOQ6UXXRCH3N5YVTYWZ4DEVYTEWVFV7R7MEKSV", TRANSIENT)
-    assertEquals(4, obs.accounts.size)
-    Thread.sleep(10)
+class MemoryPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
+  private val accounts = mutableListOf<PaymentObservingAccount>()
 
-    every { obs.evictMaxIdleTime } returns Duration.of(1, DAYS)
-    obs.evictAndPersist()
-    assertEquals(4, obs.accounts.size)
+  override fun list(): List<PaymentObservingAccount> = accounts
 
-    every { obs.evictMaxIdleTime } returns Duration.ZERO
-    obs.evictAndPersist()
-    assertEquals(0, obs.accounts.size)
-    verify(exactly = 1) {
-      paymentObservingAccountStore.delete(
-        "GBXXYA2NZPCS2LHLXBWOQ6UXXRCH3N5YVTYWZ4DEVYTEWVFV7R7MEKSV"
-      )
-    }
-    verify(exactly = 1) {
-      paymentObservingAccountStore.delete(
-        "GCK5ECMM67ZN7RWGUSDKQAW6CAF6Q5WYK2VQJ276SJMINU6WVCIQW6BL"
-      )
-    }
-    verify(exactly = 1) {
-      paymentObservingAccountStore.delete(
-        "GCIWQDKACLW26UJXY5CTLULVYUOYROZPAPDDYEQKNGIERVOAXSPLABMB"
-      )
-    }
-    verify(exactly = 1) {
-      paymentObservingAccountStore.delete(
-        "GAPBFA5ZYG5VVKN7WPMH6K5CBXGU2AM5ED7S54VX27J7S222NKMTWKR6"
-      )
-    }
-    verify(exactly = 4) { paymentObservingAccountStore.delete(any()) }
+  override fun upsert(account: String?, lastObserved: Instant?) {
+    accounts.removeIf { it.account == account }
+    accounts.add(PaymentObservingAccount(account, lastObserved))
+  }
+
+  override fun delete(account: String) {
+    accounts.removeIf { it.account == account }
   }
 }

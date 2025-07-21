@@ -32,13 +32,13 @@
       "templated": true
     }
   },
-  "id": "GDFWZYGUNUFW4H3PP3DSNGTDFBUHO6NUFPQ6FAPMCKEJ6EHDKX2CV2IM",
-  "account_id": "GDFWZYGUNUFW4H3PP3DSNGTDFBUHO6NUFPQ6FAPMCKEJ6EHDKX2CV2IM",
+  "id": "%ACCOUNT_ID%",
+  "account_id": "%ACCOUNT_ID%",
   "sequence": "19018304165252106",
   "sequence_ledger": 41535004,
   "sequence_time": "1656492437",
   "subentry_count": 39,
-  "inflation_destination": "GDCHDRSDOBRMSUDKRE2C4U4KDLNEATJPIHHR2ORFL5BSD56G4DQXL4VW",
+  "inflation_destination": "%ACCOUNT_ID%",
   "home_domain": "lobstr.co",
   "last_modified_ledger": 41535004,
   "last_modified_time": "2022-06-29T08:47:17Z",
@@ -69,11 +69,11 @@
     },
     {
       "weight": 20,
-      "key": "GDFWZYGUNUFW4H3PP3DSNGTDFBUHO6NUFPQ6FAPMCKEJ6EHDKX2CV2IM",
+      "key": "%ACCOUNT_ID%",
       "type": "ed25519_public_key"
     }
   ],
   "num_sponsoring": 3,
   "num_sponsored": 0,
-  "paging_token": "GDFWZYGUNUFW4H3PP3DSNGTDFBUHO6NUFPQ6FAPMCKEJ6EHDKX2CV2IM"
+  "paging_token": "%ACCOUNT_ID%"
 }

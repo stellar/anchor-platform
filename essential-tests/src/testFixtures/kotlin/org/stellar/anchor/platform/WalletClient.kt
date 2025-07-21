@@ -87,8 +87,9 @@ class WalletClient(
     if (destination.isEmpty()) {
       throw Exception("Destination account is required")
     }
+
     return when (account[0]) {
-      'C' -> sendFromContractAccount(destination, asset, amount)
+      'C' -> sendFromContractAccount(destination, asset, amount, memo, memoType)
       'G',
       'M' -> sendFromClassicAccount(destination, asset, amount, memo, memoType)
       else -> throw Exception("Unsupported destination account type")
@@ -141,7 +142,24 @@ class WalletClient(
     return txnResponse.hash
   }
 
-  private fun sendFromContractAccount(destination: String, asset: Asset, amount: String): String {
+  private fun sendFromContractAccount(
+    destination: String,
+    asset: Asset,
+    amount: String,
+    memo: String?,
+    memoType: String?
+  ): String {
+    // TODO: Implement memo handling for contract accounts after SAC memo is supported in Soroban
+    //    var destAddress = destination
+    //    if (memo!= null && memoType != null) {
+    //      if ("id" == memoType) {
+    //        destAddress = MuxedAccount(destination, BigInteger(memo)).address
+    //      } else {
+    //        throw IllegalArgumentException("Illegal memoType: $memoType. When sending from a
+    // contract account, only memoType 'id' is supported.")
+    //      }
+    //    }
+
     val keyPair = KeyPair.fromSecretSeed(signingKey)
     val parameters =
       mutableListOf(
