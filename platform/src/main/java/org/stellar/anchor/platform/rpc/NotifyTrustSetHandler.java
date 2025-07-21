@@ -5,7 +5,6 @@ import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.DEPOS
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.DEPOSIT_EXCHANGE;
 import static org.stellar.anchor.api.rpc.method.RpcMethod.NOTIFY_TRUST_SET;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_ANCHOR;
-import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_STELLAR;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_TRUST;
 
 import com.google.common.collect.ImmutableSet;
@@ -64,11 +63,7 @@ public class NotifyTrustSetHandler extends RpcTransactionStatusHandler<NotifyTru
   @Override
   protected SepTransactionStatus getNextStatus(
       JdbcSepTransaction txn, NotifyTrustSetRequest request) {
-    if (request.isSuccess()) {
-      return PENDING_ANCHOR;
-    } else {
-      return PENDING_STELLAR;
-    }
+    return PENDING_ANCHOR;
   }
 
   @Override
