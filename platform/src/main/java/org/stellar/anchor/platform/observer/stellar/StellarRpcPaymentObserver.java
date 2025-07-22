@@ -3,20 +3,19 @@ package org.stellar.anchor.platform.observer.stellar;
 import static org.stellar.anchor.api.platform.HealthCheckStatus.GREEN;
 import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.ALL;
 import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.EVENT;
+import static org.stellar.anchor.platform.observer.stellar.StellarRpcPaymentObserver.ShouldProcessResult.*;
 import static org.stellar.anchor.util.Log.*;
+import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import java.io.IOException;
-import java.time.Instant;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import lombok.Builder;
 import lombok.Getter;
 import org.stellar.anchor.api.exception.AnchorException;
-import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
-import org.stellar.anchor.ledger.LedgerClientHelper;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation;
@@ -27,12 +26,16 @@ import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentOb
 import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.GsonUtils;
+import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.SorobanServer;
-import org.stellar.sdk.requests.sorobanrpc.GetTransactionsRequest;
+import org.stellar.sdk.requests.sorobanrpc.EventFilterType;
+import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest;
+import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse;
+import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse.EventInfo;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
-import org.stellar.sdk.responses.sorobanrpc.GetTransactionsResponse;
-import org.stellar.sdk.xdr.OperationType;
-import org.stellar.sdk.xdr.TransactionEnvelope;
+import org.stellar.sdk.scval.Scv;
+import org.stellar.sdk.xdr.SCVal;
+import org.stellar.sdk.xdr.SCValType;
 
 public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Getter final StellarRpc stellarRpc;
@@ -55,12 +58,14 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Override
   void startInternal() {
     info("Starting Soroban RPC payment observer");
-    startMockStream();
+    task =
+        executorService.scheduleAtFixedRate(
+            this::fetchEvents, 0, 1, java.util.concurrent.TimeUnit.SECONDS);
   }
 
   @Override
   void shutdownInternal() {
-    shutdownMockStream();
+    task.cancel(true);
   }
 
   @Override
@@ -88,100 +93,145 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
   ScheduledFuture<?> task;
 
-  void startMockStream() {
-    cursor = fetchCursor();
-    task =
-        executorService.scheduleAtFixedRate(
-            this::fetchEvent, 0, 1, java.util.concurrent.TimeUnit.SECONDS);
-  }
-
-  void shutdownMockStream() {
-    task.cancel(true);
-  }
-
-  private void fetchEvent() {
-    String cursor = fetchCursor();
-    GetTransactionsRequest request;
-    if (cursor == null) {
-      request = GetTransactionsRequest.builder().startLedger(getLatestLedger()).build();
-    } else {
-      request =
-          GetTransactionsRequest.builder()
-              .pagination(GetTransactionsRequest.PaginationOptions.builder().cursor(cursor).build())
-              .build();
+  private void fetchEvents() {
+    String cursor = loadCursorFromDatabase();
+    try {
+      GetEventsResponse response = sorobanServer.getEvents(buildEventRequest(cursor));
+      if (response.getEvents() != null && !response.getEvents().isEmpty()) {
+        processEvents(response.getEvents());
+      }
+      // Save the cursor for the next request
+      cursor = response.getCursor();
+      saveCursor(cursor);
+    } catch (IOException ioex) {
+      warnF(
+          "Error fetching latest ledger: {}. ex={}. Wait for next retry.",
+          GsonUtils.getInstance().toJson(ioex),
+          ioex.getMessage());
     }
-    GetTransactionsResponse response = sorobanServer.getTransactions(request);
-    if (response.getTransactions() != null) {
-      debugF("Fetched {} transactions", response.getTransactions().size());
-      for (GetTransactionsResponse.Transaction txn : response.getTransactions()) {
-        // Process the transaction
-        try {
-          LedgerTransaction ledgerTxn = fromStellarRpcTransaction(txn);
-          if (ledgerTxn == null) {
-            continue;
-          }
-          ledgerTxn
-              .getOperations()
-              .forEach(
-                  op -> {
-                    try {
-                      if (shouldProcess(op)) {
-                        processOperation(ledgerTxn, op);
-                      }
-                    } catch (IOException | AnchorException e) {
-                      warnF(
-                          "Skipping a received operation. Error processing operation: {}. ex={}",
-                          GsonUtils.getInstance().toJson(op),
-                          e.getMessage());
-                    }
-                  });
-        } catch (LedgerException lex) {
-          debugF("Error getting transaction: {}. ex={}", txn.getTxHash(), lex.getMessage());
+  }
+
+  private void processEvents(List<EventInfo> events) {
+    if (events == null) return;
+    for (EventInfo event : events) {
+      ShouldProcessResult result = shouldProcess(event);
+      if (result.shouldProcess) {
+        processTransferEvent(result);
+      }
+    }
+  }
+
+  private void processTransferEvent(ShouldProcessResult result) {
+    debug("Processing transfer event: {}", GsonUtils.getInstance().toJson(result.event));
+    try {
+      LedgerTransaction txn = stellarRpc.getTransaction(result.event.getTransactionHash());
+      LedgerOperation op = txn.getOperations().get(result.event.getOperationIndex().intValue());
+      processOperation(txn, op);
+    } catch (Exception ex) {
+      warnF(
+          "Error processing transfer event: {}. ex={}",
+          GsonUtils.getInstance().toJson(result.event),
+          ex.getMessage());
+    }
+  }
+
+  @Builder
+  @Getter
+  static class ShouldProcessResult {
+    EventInfo event;
+    boolean shouldProcess;
+    String fromAddr;
+    String toAddr;
+    String sep11Asset;
+    Long amount;
+  }
+
+  private ShouldProcessResult shouldProcess(EventInfo event) {
+    ShouldProcessResultBuilder builder = builder().event(event).shouldProcess(false);
+    try {
+      if (event.getTopic().size() != 4) {
+        return builder.build();
+      }
+
+      SCVal function = SCVal.fromXdrBase64(event.getTopic().get(0));
+      SCVal from = SCVal.fromXdrBase64(event.getTopic().get(1));
+      SCVal to = SCVal.fromXdrBase64(event.getTopic().get(2));
+      SCVal asset = SCVal.fromXdrBase64(event.getTopic().get(3));
+
+      if (function.getDiscriminant() != SCValType.SCV_SYMBOL
+          || !function.getSym().getSCSymbol().toString().equals("transfer")) {
+        return builder.build();
+      }
+
+      if (from.getDiscriminant() != SCValType.SCV_ADDRESS
+          || to.getDiscriminant() != SCValType.SCV_ADDRESS
+          || asset.getDiscriminant() != SCValType.SCV_STRING) {
+        return builder.build();
+      }
+
+      if (function.getDiscriminant() != SCValType.SCV_SYMBOL
+          || !function.getSym().getSCSymbol().toString().equals("transfer")) {
+        return builder.build();
+      }
+
+      SCVal scValue = SCVal.fromXdrBase64(event.getValue());
+      if (!paymentObservingAccountsManager.lookupAndUpdate(Scv.fromAddress(from).toString())
+          && !paymentObservingAccountsManager.lookupAndUpdate(Scv.fromAddress(to).toString())) {
+        // If neither from nor to accounts are being observed, skip processing this event.
+        return builder.build();
+      }
+
+      builder.fromAddr(Scv.fromAddress(from).toString());
+      builder.toAddr(Scv.fromAddress(to).toString());
+      builder.sep11Asset(asset.getStr().getSCString().toString());
+      // Reference:
+      // https://github.com/stellar/stellar-protocol/blob/master/core/cap-0067.md#emit-a-map-as-the-data-field-in-the-transfer-and-mint-event-if-muxed-information-is-being-emitted-for-the-destination
+      if (scValue.getDiscriminant() == SCValType.SCV_I128) {
+        builder.amount(Scv.fromInt128(scValue).longValue());
+      } else if (scValue.getDiscriminant() == SCValType.SCV_MAP) {
+        builder.amount(Scv.fromInt128(scValue.getMap().getSCMap()[0].getVal()).longValue());
+        if (scValue.getMap().getSCMap()[1].getVal().getDiscriminant() == SCValType.SCV_U64) {
+          // In case the MEMO_ID is present, convert the toAddr to MuxedAccount.
+          // In the cases of the transaction memo being MEMO_TEXT or MEMO_HASH, the toAddr is not
+          // muxed
+          builder.toAddr(
+              new MuxedAccount(
+                      Scv.fromAddress(to).toString(),
+                      Scv.fromUint64(scValue.getMap().getSCMap()[1].getVal()))
+                  .getAddress());
         }
       }
-      saveCursor(response.getCursor());
+
+      return builder().build();
+    } catch (IOException ioex) {
+      warnF(
+          "Skip processing event: {}. ex={}",
+          GsonUtils.getInstance().toJson(event),
+          ioex.getMessage());
+      return builder.build();
     }
   }
 
-  /**
-   * Check if the payment observer should process the operation. This is used to filter out unwanted
-   * operations from StellarRPC
-   *
-   * @param operation the operation to check
-   * @return true if the operation should be processed, false otherwise
-   */
-  boolean shouldProcess(LedgerOperation operation) {
-    if (!EnumSet.of(
-            OperationType.PAYMENT,
-            OperationType.PATH_PAYMENT_STRICT_SEND,
-            OperationType.PATH_PAYMENT_STRICT_RECEIVE,
-            OperationType.INVOKE_HOST_FUNCTION)
-        .contains(operation.getType())) {
-      return false;
+  private GetEventsRequest buildEventRequest(String cursor) throws IOException {
+    GetEventsRequest.EventFilter filter =
+        GetEventsRequest.EventFilter.builder()
+            .type(EventFilterType.CONTRACT)
+            .topic(List.of(Scv.toSymbol("transfer").toXdrBase64(), "**"))
+            .build();
+
+    if (isEmpty(cursor)) {
+      long latestLedger = getLatestLedger();
+      return GetEventsRequest.builder()
+          .filters(List.of(filter))
+          .startLedger(latestLedger - 1)
+          .build();
+    } else {
+      return GetEventsRequest.builder()
+          .filters(List.of(filter))
+          .pagination(
+              GetEventsRequest.PaginationOptions.builder().limit(100L).cursor(cursor).build())
+          .build();
     }
-    return switch (operation.getType()) {
-      case PAYMENT -> {
-        LedgerTransaction.LedgerPaymentOperation paymentOp = operation.getPaymentOperation();
-        yield paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getFrom())
-            || paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getTo());
-      }
-      case PATH_PAYMENT_STRICT_SEND, PATH_PAYMENT_STRICT_RECEIVE -> {
-        LedgerTransaction.LedgerPathPaymentOperation pathPaymentOp =
-            operation.getPathPaymentOperation();
-        yield paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getFrom())
-            || paymentObservingAccountsManager.lookupAndUpdate(pathPaymentOp.getTo());
-      }
-      case INVOKE_HOST_FUNCTION -> {
-        LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
-            operation.getInvokeHostFunctionOperation();
-        debug(
-            "Received invoke host function operation: {}",
-            GsonUtils.getInstance().toJson(invokeOp));
-        yield paymentObservingAccountsManager.lookupAndUpdate(invokeOp.getFrom())
-            || paymentObservingAccountsManager.lookupAndUpdate(invokeOp.getTo());
-      }
-      default -> false;
-    };
   }
 
   void processOperation(LedgerTransaction ledgerTxn, LedgerOperation op)
@@ -233,11 +283,6 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  private String fetchCursor() {
-    // TODO: Implement cursor fetching logic when unified event is available
-    return cursor;
-  }
-
   private void saveCursor(String cursor) {
     // TODO: Implement cursor saving logic when unified event is available
     this.cursor = cursor;
@@ -246,41 +291,5 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   private Long getLatestLedger() {
     GetLatestLedgerResponse response = sorobanServer.getLatestLedger();
     return response.getSequence().longValue();
-  }
-
-  /**
-   * Converting from Stellar RPC transaction to LedgerTransaction. TODO: This function will be
-   * removed after migrating to getEvents methods.
-   *
-   * @param txn the Stellar RPC transaction to convert
-   * @return the converted LedgerTransaction
-   * @throws LedgerException if the transaction is null or malformed
-   */
-  LedgerTransaction fromStellarRpcTransaction(GetTransactionsResponse.Transaction txn)
-      throws LedgerException {
-    TransactionEnvelope txnEnv;
-    try {
-      txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
-    } catch (IOException ioex) {
-      throw new LedgerException("Unable to parse transaction envelope", ioex);
-    }
-    Integer applicationOrder = txn.getApplicationOrder();
-    Long sequenceNumber = txn.getLedger();
-    LedgerClientHelper.ParseResult parseResult =
-        LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txn.getTxHash());
-    if (parseResult == null) return null;
-    List<LedgerTransaction.LedgerOperation> operations =
-        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
-    return LedgerTransaction.builder()
-        .hash(txn.getTxHash())
-        .ledger(txn.getLedger())
-        .applicationOrder(txn.getApplicationOrder())
-        .sourceAccount(parseResult.sourceAccount())
-        .envelopeXdr(txn.getEnvelopeXdr())
-        .memo(parseResult.memo())
-        .sequenceNumber(sequenceNumber)
-        .createdAt(Instant.ofEpochSecond(txn.getCreatedAt()))
-        .operations(operations)
-        .build();
   }
 }

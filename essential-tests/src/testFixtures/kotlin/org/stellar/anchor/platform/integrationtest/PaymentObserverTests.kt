@@ -482,7 +482,14 @@ internal fun createContractWithWasmIdAndGetContractId(
     Thread.sleep(3000)
   }
   return StrKey.encodeContract(
-    getTransactionResponse.parseResultMetaXdr().v3.sorobanMeta.returnValue.address.contractId.hash
+    getTransactionResponse
+      .parseResultMetaXdr()
+      .v3
+      .sorobanMeta
+      .returnValue
+      .address
+      .contractId
+      .toXdrByteArray()
   )
 }
 
