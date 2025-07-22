@@ -8,11 +8,7 @@ import static org.stellar.anchor.api.sep.sep24.InfoResponse.FeeResponse;
 import static org.stellar.anchor.event.EventService.EventQueue.TRANSACTION;
 import static org.stellar.anchor.sep24.Sep24Helper.fromTxn;
 import static org.stellar.anchor.sep24.Sep24Transaction.Kind.*;
-import static org.stellar.anchor.util.Log.debug;
-import static org.stellar.anchor.util.Log.debugF;
-import static org.stellar.anchor.util.Log.info;
-import static org.stellar.anchor.util.Log.infoF;
-import static org.stellar.anchor.util.Log.shorter;
+import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MemoHelper.makeMemo;
 import static org.stellar.anchor.util.MemoHelper.memoType;
@@ -300,7 +296,9 @@ public class Sep24Service {
       throw new SepValidationException("no request");
     }
 
-    infoF(
+    System.out.println("ACCOUNT MEMO: " + token.getAccountMemo());
+
+    warnF(
         "Sep24.deposit. account={}, memo={}", shorter(token.getAccount()), token.getAccountMemo());
     String assetCode = depositRequest.get("asset_code");
     String assetIssuer = depositRequest.get("asset_issuer");
