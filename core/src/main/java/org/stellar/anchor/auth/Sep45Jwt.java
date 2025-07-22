@@ -36,16 +36,16 @@ public class Sep45Jwt extends WebAuthJwt {
 
   @Override
   public String getAccountMemo() {
-    throw new UnsupportedOperationException("SEP-45 does not support account memos");
+    return null;
   }
 
   @Override
   public String getMuxedAccount() {
-    throw new UnsupportedOperationException("SEP-45 does not support muxed accounts");
+    return null;
   }
 
   @Override
   public Long getMuxedAccountId() {
-    throw new UnsupportedOperationException("SEP-45 does not support muxed accounts");
+    return null;
   }
 }
