@@ -339,6 +339,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
 
   enum ObserverStatus {
     // healthy
+    STARTING,
     RUNNING,
     // errors
     DATABASE_ERROR,

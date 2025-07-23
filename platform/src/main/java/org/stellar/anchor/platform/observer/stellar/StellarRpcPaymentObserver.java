@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.observer.stellar;
 
-import static org.stellar.anchor.api.platform.HealthCheckStatus.GREEN;
+import static org.stellar.anchor.api.platform.HealthCheckStatus.*;
+import static org.stellar.anchor.api.platform.HealthCheckStatus.RED;
 import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.ALL;
 import static org.stellar.anchor.healthcheck.HealthCheckable.Tags.EVENT;
 import static org.stellar.anchor.platform.observer.stellar.StellarRpcPaymentObserver.ShouldProcessResult.*;
@@ -16,6 +17,7 @@ import lombok.Builder;
 import lombok.Getter;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
+import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation;
@@ -41,6 +43,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Getter final StellarRpc stellarRpc;
   @Getter final SorobanServer sorobanServer;
   final SacToAssetMapper sacToAssetMapper;
+  ObserverStatus status = ObserverStatus.STARTING;
 
   public StellarRpcPaymentObserver(
       String rpcUrl,
@@ -61,11 +64,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     task =
         executorService.scheduleAtFixedRate(
             this::fetchEvents, 0, 1, java.util.concurrent.TimeUnit.SECONDS);
+    status = ObserverStatus.RUNNING;
   }
 
   @Override
   void shutdownInternal() {
     task.cancel(true);
+    status = ObserverStatus.SHUTDOWN;
   }
 
   @Override
@@ -80,8 +85,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
   @Override
   public HealthCheckResult check() {
-    // TODO: Implement health check for Stellar RPC when futurenet unified event is available
-    return SPOHealthCheckResult.builder().name(getName()).status(GREEN).build();
+    HealthCheckStatus status =
+        switch (this.status) {
+          case RUNNING -> GREEN;
+          case STARTING -> YELLOW;
+          default -> RED;
+        };
+    return SPOHealthCheckResult.builder().name(getName()).status(status).build();
   }
 
   /*****************************************

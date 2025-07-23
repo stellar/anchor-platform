@@ -176,7 +176,6 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     val receiverCustomerRequest =
       gson.fromJson(testCustomer2Json, Sep12PutCustomerRequest::class.java)
     // Ensure unique customer ID
-    receiverCustomerRequest.firstName += "receiver-${System.currentTimeMillis()}"
     receiverCustomerRequest.bankAccountNumber = "13719713158835300"
     receiverCustomerRequest.bankAccountType = "checking"
     receiverCustomerRequest.bankNumber = "123"

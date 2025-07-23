@@ -88,10 +88,7 @@ public class DefaultPaymentListener implements PaymentListener {
       }
     }
     if (ledgerPayment != null) {
-      // Check if the payment is to or from an account we are observing
-      if (paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getTo())
-          || paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getFrom()))
-        processAndDispatchLedgerPayment(ledgerTransaction, ledgerPayment);
+      processAndDispatchLedgerPayment(ledgerTransaction, ledgerPayment);
     }
   }
 

@@ -253,6 +253,11 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
     } else if (operation instanceof InvokeHostFunctionOperationResponse invokeOp) {
       if (invokeOp.getFunction().equals("transfer")) {
         AssetContractBalanceChange assetBalanceChange = invokeOp.getAssetBalanceChanges().get(0);
+        if (assetBalanceChange == null
+            || !paymentObservingAccountsManager.lookupAndUpdate(assetBalanceChange.getFrom())
+            || !paymentObservingAccountsManager.lookupAndUpdate(assetBalanceChange.getTo())) {
+          return null;
+        }
         return PaymentTransferEvent.builder()
             .from(assetBalanceChange.getFrom())
             .to(assetBalanceChange.getTo())
