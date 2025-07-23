@@ -131,7 +131,7 @@ public class DefaultPaymentListener implements PaymentListener {
       //              memo,
       //              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       JdbcSep24Transaction sep24Txn =
-          sep24TransactionStore.findOneByToAccountAndFromAccountAndStatus(
+          sep24TransactionStore.findFirstByToAccountAndFromAccountAndStatusOrderByStartedAtDesc(
               ledgerPayment.getTo(),
               ledgerPayment.getFrom(),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
@@ -324,7 +324,7 @@ public class DefaultPaymentListener implements PaymentListener {
     // Check if the payment contains the expected amount (or greater)
     BigDecimal expectedAmount = decimal(sepTransaction.getAmountExpected());
     BigDecimal gotAmount = decimal(AssetHelper.fromXdrAmount(ledgerPayment.getAmount()));
-    if (gotAmount.compareTo(expectedAmount) >= 0) {
+    if (expectedAmount == null || gotAmount.compareTo(expectedAmount) >= 0) {
       debugF(
           "Incoming payment for SEP-{} transaction. sepTxn.id={}, ledgerTxn.id={}",
           sepTransaction.getProtocol(),

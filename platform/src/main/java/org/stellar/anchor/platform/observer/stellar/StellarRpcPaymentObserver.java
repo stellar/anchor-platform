@@ -162,6 +162,9 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     return switch (operation.getType()) {
       case PAYMENT -> {
         LedgerTransaction.LedgerPaymentOperation paymentOp = operation.getPaymentOperation();
+        System.out.println("==================================");
+        System.out.println(paymentOp.getFrom());
+        System.out.println(paymentOp.getTo());
         yield paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getFrom())
             || paymentObservingAccountsManager.lookupAndUpdate(paymentOp.getTo());
       }

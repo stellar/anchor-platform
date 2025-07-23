@@ -27,6 +27,9 @@ public interface JdbcSep24TransactionRepo
   JdbcSep24Transaction findOneByToAccountAndFromAccountAndStatus(
       String toAccount, String fromAccount, String status);
 
+  JdbcSep24Transaction findFirstByToAccountAndFromAccountAndStatusOrderByStartedAtDesc(
+      String toAccount, String fromAccount, String status);
+
   List<Sep24Transaction> findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
       String webAuthAccount, String assetCode);
 
