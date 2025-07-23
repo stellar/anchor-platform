@@ -208,7 +208,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
       errorEx("Something went wrong in the observer while sending the event", t);
       setStatus(PUBLISHER_ERROR);
     } finally {
-      savePagingToken(operationResponse.getPagingToken());
+      saveCursorToDatabase(operationResponse.getPagingToken());
     }
   }
 

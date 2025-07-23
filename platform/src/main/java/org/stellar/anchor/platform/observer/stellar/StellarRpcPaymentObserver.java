@@ -94,7 +94,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   ScheduledFuture<?> task;
 
   private void fetchEvents() {
-    String cursor = loadCursorFromDatabase();
+    String cursor = (this.cursor != null) ? this.cursor : loadCursorFromDatabase();
+
     try {
       GetEventsResponse response = sorobanServer.getEvents(buildEventRequest(cursor));
       if (response.getEvents() != null && !response.getEvents().isEmpty()) {
@@ -112,7 +113,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   private void processEvents(List<EventInfo> events) {
-    if (events == null) return;
+    if (events == null || events.isEmpty()) return;
+    debugF("Processing {} 'transfer' events", events.size());
     for (EventInfo event : events) {
       ShouldProcessResult result = shouldProcess(event);
       if (result.shouldProcess) {
@@ -169,27 +171,16 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
         return builder.build();
       }
 
-      if (function.getDiscriminant() != SCValType.SCV_SYMBOL
-          || !function.getSym().getSCSymbol().toString().equals("transfer")) {
-        return builder.build();
-      }
-
+      String fromAddr = Scv.fromAddress(from).toString();
+      String toAddr = Scv.fromAddress(to).toString();
+      long amount = 0L;
       SCVal scValue = SCVal.fromXdrBase64(event.getValue());
-      if (!paymentObservingAccountsManager.lookupAndUpdate(Scv.fromAddress(from).toString())
-          && !paymentObservingAccountsManager.lookupAndUpdate(Scv.fromAddress(to).toString())) {
-        // If neither from nor to accounts are being observed, skip processing this event.
-        return builder.build();
-      }
-
-      builder.fromAddr(Scv.fromAddress(from).toString());
-      builder.toAddr(Scv.fromAddress(to).toString());
-      builder.sep11Asset(asset.getStr().getSCString().toString());
       // Reference:
       // https://github.com/stellar/stellar-protocol/blob/master/core/cap-0067.md#emit-a-map-as-the-data-field-in-the-transfer-and-mint-event-if-muxed-information-is-being-emitted-for-the-destination
       if (scValue.getDiscriminant() == SCValType.SCV_I128) {
-        builder.amount(Scv.fromInt128(scValue).longValue());
+        amount = Scv.fromInt128(scValue).longValue();
       } else if (scValue.getDiscriminant() == SCValType.SCV_MAP) {
-        builder.amount(Scv.fromInt128(scValue.getMap().getSCMap()[0].getVal()).longValue());
+        amount = Scv.fromInt128(scValue.getMap().getSCMap()[0].getVal()).longValue();
         if (scValue.getMap().getSCMap()[1].getVal().getDiscriminant() == SCValType.SCV_U64) {
           // In case the MEMO_ID is present, convert the toAddr to MuxedAccount.
           // In the cases of the transaction memo being MEMO_TEXT or MEMO_HASH, the toAddr is not
@@ -202,7 +193,19 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
         }
       }
 
-      return builder().build();
+      if (!paymentObservingAccountsManager.lookupAndUpdate(fromAddr)
+          && !paymentObservingAccountsManager.lookupAndUpdate(toAddr)) {
+        // If neither from nor to accounts are being observed, skip processing this event.
+        return builder.build();
+      }
+
+      return builder
+          .shouldProcess(true)
+          .fromAddr(fromAddr)
+          .toAddr(toAddr)
+          .amount(amount)
+          .sep11Asset(asset.getStr().getSCString().toString())
+          .build();
     } catch (IOException ioex) {
       warnF(
           "Skip processing event: {}. ex={}",
@@ -284,8 +287,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   private void saveCursor(String cursor) {
-    // TODO: Implement cursor saving logic when unified event is available
     this.cursor = cursor;
+    saveCursorToDatabase(cursor);
   }
 
   private Long getLatestLedger() {

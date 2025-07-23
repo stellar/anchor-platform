@@ -293,7 +293,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
    *
    * @param token the last stored cursor
    */
-  void savePagingToken(String token) {
+  void saveCursorToDatabase(String token) {
     traceF("Saving the last stored cursor to database: {}", token);
     paymentStreamerCursorStore.save(token);
     traceF("Resetting the database backoff timer...");
