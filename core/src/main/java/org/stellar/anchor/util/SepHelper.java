@@ -59,8 +59,8 @@ public class SepHelper {
   public static String getAccountMemo(String strAccount) throws InvalidStellarAccountException {
     String[] tokens = strAccount.split(":");
     switch (tokens.length) {
-        // TODO: Should we add a catch here to throw an InvalidStellarAccountException exception in
-        // case of invalid address?
+      // TODO: Should we add a catch here to throw an InvalidStellarAccountException exception in
+      // case of invalid address?
       case 1:
         // Check if the account is a valid G... or M...
         new MuxedAccount(tokens[0]);

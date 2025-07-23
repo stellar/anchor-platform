@@ -129,7 +129,7 @@ class RequestOnchainFundsHandlerTest {
         sep31DepositInfoGenerator,
         paymentObservingAccountsManager,
         eventService,
-        metricsService
+        metricsService,
       )
   }
 
@@ -149,7 +149,7 @@ class RequestOnchainFundsHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[request_onchain_funds] is not supported. Status[incomplete], kind[null], protocol[38], funds received[false]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -274,7 +274,7 @@ class RequestOnchainFundsHandlerTest {
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
     assertEquals(
       "All (amount_out is optional) or none of the amount_in, amount_out, and fee_details should be set",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -501,7 +501,7 @@ class RequestOnchainFundsHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[request_onchain_funds] is not supported. Status[pending_trust], kind[withdrawal], protocol[24], funds received[false]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -525,7 +525,7 @@ class RequestOnchainFundsHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[request_onchain_funds] is not supported. Status[pending_anchor], kind[withdrawal], protocol[24], funds received[true]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -548,7 +548,7 @@ class RequestOnchainFundsHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[request_onchain_funds] is not supported. Status[incomplete], kind[deposit], protocol[24], funds received[false]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -676,7 +676,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep24Txn),
       gson.toJson(sep24TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -697,7 +697,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -711,7 +711,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep24TxnCapture.captured.updatedAt >= startDate)
@@ -735,7 +735,7 @@ class RequestOnchainFundsHandlerTest {
         sep31DepositInfoGenerator,
         paymentObservingAccountsManager,
         eventService,
-        metricsService
+        metricsService,
       )
 
     val request =
@@ -797,7 +797,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep24Txn),
       gson.toJson(sep24TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -818,7 +818,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -832,7 +832,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep24TxnCapture.captured.updatedAt >= startDate)
@@ -901,13 +901,13 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep24Txn),
       gson.toJson(sep24TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep24Txn),
       gson.toJson(sep24CustodyTxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -928,7 +928,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -942,7 +942,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep24TxnCapture.captured.updatedAt >= startDate)
@@ -1012,7 +1012,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep24Txn),
       gson.toJson(sep24TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -1034,7 +1034,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -1048,7 +1048,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep24TxnCapture.captured.updatedAt >= startDate)
@@ -1119,7 +1119,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep24Txn),
       gson.toJson(sep24TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -1140,7 +1140,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -1154,7 +1154,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep24TxnCapture.captured.updatedAt >= startDate)
@@ -1178,7 +1178,7 @@ class RequestOnchainFundsHandlerTest {
         sep31DepositInfoGenerator,
         paymentObservingAccountsManager,
         eventService,
-        metricsService
+        metricsService,
       )
 
     val request =
@@ -1202,10 +1202,8 @@ class RequestOnchainFundsHandlerTest {
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
     assertEquals(
-      "Anchor is not configured to accept memo, memo_type and destination_account. " +
-        "Please set configuration deposit_info_generator_type to 'none' " +
-        "if you want to enable this feature",
-      ex.message
+      """Anchor is not configured to accept memo, memo_type and destination_account. Please set configuration deposit_info_generator_type to 'none' if you want to enable this feature""",
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -1229,7 +1227,7 @@ class RequestOnchainFundsHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[request_onchain_funds] is not supported. Status[pending_trust], kind[$kind], protocol[6], funds received[false]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -1254,7 +1252,7 @@ class RequestOnchainFundsHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[request_onchain_funds] is not supported. Status[pending_anchor], kind[$kind], protocol[6], funds received[true]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -1278,7 +1276,7 @@ class RequestOnchainFundsHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[request_onchain_funds] is not supported. Status[incomplete], kind[$kind], protocol[6], funds received[false]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -1410,13 +1408,13 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
       gson.toJson(sep6TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
       gson.toJson(sep6CustodyTxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -1436,7 +1434,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -1450,7 +1448,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep6TxnCapture.captured.updatedAt >= startDate)
@@ -1475,7 +1473,7 @@ class RequestOnchainFundsHandlerTest {
         sep31DepositInfoGenerator,
         paymentObservingAccountsManager,
         eventService,
-        metricsService
+        metricsService,
       )
 
     val request =
@@ -1535,7 +1533,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
       gson.toJson(sep6TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -1555,7 +1553,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -1569,7 +1567,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep6TxnCapture.captured.updatedAt >= startDate)
@@ -1633,7 +1631,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
       gson.toJson(sep6TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -1653,7 +1651,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -1667,7 +1665,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep6TxnCapture.captured.updatedAt >= startDate)
@@ -1736,7 +1734,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
       gson.toJson(sep6TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -1756,7 +1754,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -1770,7 +1768,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep6TxnCapture.captured.updatedAt >= startDate)
@@ -1795,7 +1793,7 @@ class RequestOnchainFundsHandlerTest {
         sep31DepositInfoGenerator,
         paymentObservingAccountsManager,
         eventService,
-        metricsService
+        metricsService,
       )
 
     val request =
@@ -1819,10 +1817,11 @@ class RequestOnchainFundsHandlerTest {
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
     assertEquals(
-      "Anchor is not configured to accept memo, memo_type and destination_account. " +
-        "Please set configuration deposit_info_generator_type to 'none' " +
-        "if you want to enable this feature",
-      ex.message
+      """
+  Anchor is not configured to accept memo, memo_type and destination_account. Please set configuration deposit_info_generator_type to 'none' if you want to enable this feature
+  """
+        .trimIndent(),
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -1844,7 +1843,7 @@ class RequestOnchainFundsHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[request_onchain_funds] is not supported. Status[pending_trust], kind[receive], protocol[31], funds received[false]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -1867,7 +1866,7 @@ class RequestOnchainFundsHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[request_onchain_funds] is not supported. Status[pending_receiver], kind[receive], protocol[31], funds received[true]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -1933,13 +1932,13 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep31Txn),
       gson.toJson(sep31TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep31Txn),
       gson.toJson(sep31CustodyTxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -1961,7 +1960,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -1975,7 +1974,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep31TxnCapture.captured.updatedAt >= startDate)
@@ -1999,7 +1998,7 @@ class RequestOnchainFundsHandlerTest {
         sep31DepositInfoGenerator,
         paymentObservingAccountsManager,
         eventService,
-        metricsService
+        metricsService,
       )
 
     val request =
@@ -2055,7 +2054,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep31Txn),
       gson.toJson(sep31TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -2077,7 +2076,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -2091,7 +2090,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep31TxnCapture.captured.updatedAt >= startDate)
@@ -2148,7 +2147,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep31Txn),
       gson.toJson(sep31TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -2170,7 +2169,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -2184,7 +2183,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep31TxnCapture.captured.updatedAt >= startDate)
@@ -2247,7 +2246,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep31Txn),
       gson.toJson(sep31TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -2269,7 +2268,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -2283,7 +2282,7 @@ class RequestOnchainFundsHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep31TxnCapture.captured.updatedAt >= startDate)
@@ -2307,7 +2306,7 @@ class RequestOnchainFundsHandlerTest {
         sep31DepositInfoGenerator,
         paymentObservingAccountsManager,
         eventService,
-        metricsService
+        metricsService,
       )
 
     val request =
@@ -2330,10 +2329,11 @@ class RequestOnchainFundsHandlerTest {
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
     assertEquals(
-      "Anchor is not configured to accept memo, memo_type and destination_account. " +
-        "Please set configuration deposit_info_generator_type to 'none' " +
-        "if you want to enable this feature",
-      ex.message
+      """
+  Anchor is not configured to accept memo, memo_type and destination_account. Please set configuration deposit_info_generator_type to 'none' if you want to enable this feature
+  """
+        .trimIndent(),
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }

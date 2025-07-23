@@ -23,6 +23,8 @@ dependencies {
   // Spring dependencies
   testFixturesImplementation("org.springframework.boot:spring-boot-starter-data-jpa")
   testFixturesImplementation("org.springframework.boot:spring-boot-starter-web")
+  testFixturesImplementation(rootProject.libs.google.guava)
+
 
   // project dependencies
   testFixturesImplementation(project(":api-schema"))
