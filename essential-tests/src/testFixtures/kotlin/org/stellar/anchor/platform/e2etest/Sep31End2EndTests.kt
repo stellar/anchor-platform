@@ -92,12 +92,12 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
       gson.fromJson(testCustomer1Json, Sep12PutCustomerRequest::class.java)
     val senderCustomer = wallet.sep12.putCustomer(senderCustomerRequest)
 
+    // Delete the customer to ensure a clean state for the next test
+    wallet.sep12.deleteCustomer(clientWalletAccount)
+
     // Create receiver customer
     val receiverCustomerRequest =
       gson.fromJson(testCustomer2Json, Sep12PutCustomerRequest::class.java)
-    // Ensure unique customer ID
-    receiverCustomerRequest.firstName += "receiver-${System.currentTimeMillis()}"
-
     val receiverCustomer = wallet.sep12.putCustomer(receiverCustomerRequest)
 
     val quote = wallet.sep38.postQuote(asset.sep38, amount, FIAT_USD)
