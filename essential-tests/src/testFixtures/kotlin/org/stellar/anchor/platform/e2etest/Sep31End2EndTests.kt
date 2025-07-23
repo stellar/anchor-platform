@@ -80,14 +80,8 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     }
   }
 
-  /**
-   * The test is repeated twice. In the first run, it creates a new transaction without KYC and go
-   * through the PENDING_CUSTOMER_INFO_UPDATE status. In the second run, the KYC is already
-   * available and the newly created transaction will complete without going through the
-   * PENDING_CUSTOMER_INFO_UPDATE status.
-   */
-  @RepeatedTest(2)
-  fun `test classic asset receive`() = runBlocking {
+  @Test
+  fun `test classic asset receive with PENDING_CUSTOMER_INFO_UDPATE`() = runBlocking {
     val asset = USDC
     val amount = "5"
 
@@ -101,6 +95,9 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     // Create receiver customer
     val receiverCustomerRequest =
       gson.fromJson(testCustomer2Json, Sep12PutCustomerRequest::class.java)
+    // Ensure unique customer ID
+    receiverCustomerRequest.firstName += "receiver-${System.currentTimeMillis()}"
+
     val receiverCustomer = wallet.sep12.putCustomer(receiverCustomerRequest)
 
     val quote = wallet.sep38.postQuote(asset.sep38, amount, FIAT_USD)
@@ -130,61 +127,108 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
       )
     }
     info("Transfer complete")
-    waitStatuses(
-      postTxResponse.id,
-      listOf(SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE, SepTransactionStatus.COMPLETED)
-    )
+    waitStatuses(postTxResponse.id, listOf(SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE))
 
     transaction = wallet.sep31.getTransaction(postTxResponse.id).transaction
-    if (transaction.status == SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE.status) {
-      // Supply missing KYC info to continue with the transaction
-      val additionalRequiredFields =
-        wallet.sep12
-          .getCustomer(receiverCustomer.id, "sep31-receiver", postTxResponse.id)!!
-          .fields
-          ?.filter { it.key != null && it.value?.optional == false }
-          ?.map { it.key!! }
-          .orEmpty()
-      wallet.sep12.putCustomer(
-        gson.fromJson(
-          gson.toJson(additionalRequiredFields.associateWith { receiverKycInfo[it]!! }),
-          Sep12PutCustomerRequest::class.java,
-        )
+    // Supply missing KYC info to continue with the transaction
+    val additionalRequiredFields =
+      wallet.sep12
+        .getCustomer(receiverCustomer.id, "sep31-receiver", postTxResponse.id)!!
+        .fields
+        ?.filter { it.key != null && it.value?.optional == false }
+        ?.map { it.key!! }
+        .orEmpty()
+    wallet.sep12.putCustomer(
+      gson.fromJson(
+        gson.toJson(additionalRequiredFields.associateWith { receiverKycInfo[it]!! }),
+        Sep12PutCustomerRequest::class.java,
       )
-      info("Submitting additional KYC info $additionalRequiredFields")
+    )
+    info("Submitting additional KYC info $additionalRequiredFields")
 
-      // Wait for the status to change to COMPLETED
-      waitStatus(postTxResponse.id, SepTransactionStatus.COMPLETED)
+    // Wait for the status to change to COMPLETED
+    waitStatus(postTxResponse.id, SepTransactionStatus.COMPLETED)
 
-      // Check the events sent to the reference server are recorded correctly
-      val actualEvents =
-        waitForBusinessServerEvents(postTxResponse.id, expectedStatusesWithPendingCustomerInfo.size)
-      assertEvents(actualEvents, expectedStatusesWithPendingCustomerInfo)
+    // Check the events sent to the reference server are recorded correctly
+    val actualEvents =
+      waitForBusinessServerEvents(postTxResponse.id, expectedStatusesWithPendingCustomerInfo.size)
+    assertEvents(actualEvents, expectedStatusesWithPendingCustomerInfo)
 
-      // Check the callbacks sent to the wallet reference server are recorded correctly
-      val actualCallbacks =
-        waitForWalletServerCallbacks(
-          postTxResponse.id,
-          expectedStatusesWithPendingCustomerInfo.size
-        )
-      assertCallbacks(actualCallbacks, expectedStatusesWithPendingCustomerInfo)
-    } else {
-      // Check the events sent to the reference server are recorded correctly
-      val actualEvents =
-        waitForBusinessServerEvents(
-          postTxResponse.id,
-          expectedStatusesWithoutPendingCustomerInfo.size
-        )
-      assertEvents(actualEvents, expectedStatusesWithoutPendingCustomerInfo)
+    // Check the callbacks sent to the wallet reference server are recorded correctly
+    val actualCallbacks =
+      waitForWalletServerCallbacks(postTxResponse.id, expectedStatusesWithPendingCustomerInfo.size)
+    assertCallbacks(actualCallbacks, expectedStatusesWithPendingCustomerInfo)
+  }
 
-      // Check the callbacks sent to the wallet reference server are recorded correctly
-      val actualCallbacks =
-        waitForWalletServerCallbacks(
-          postTxResponse.id,
-          expectedStatusesWithoutPendingCustomerInfo.size
-        )
-      assertCallbacks(actualCallbacks, expectedStatusesWithoutPendingCustomerInfo)
+  @Test
+  fun `test classic asset receive without PENDING_CUSTOMER_INFO_UDPATE`() = runBlocking {
+    val asset = USDC
+    val amount = "5"
+
+    walletServerClient.clearCallbacks()
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, null, toml)
+
+    val senderCustomerRequest =
+      gson.fromJson(testCustomer1Json, Sep12PutCustomerRequest::class.java)
+    val senderCustomer = wallet.sep12.putCustomer(senderCustomerRequest)
+
+    // Create receiver customer
+    val receiverCustomerRequest =
+      gson.fromJson(testCustomer2Json, Sep12PutCustomerRequest::class.java)
+    // Ensure unique customer ID
+    receiverCustomerRequest.firstName += "receiver-${System.currentTimeMillis()}"
+    receiverCustomerRequest.bankAccountNumber = "13719713158835300"
+    receiverCustomerRequest.bankAccountType = "checking"
+    receiverCustomerRequest.bankNumber = "123"
+    receiverCustomerRequest.bankBranchNumber = "121122676"
+    val receiverCustomer = wallet.sep12.putCustomer(receiverCustomerRequest)
+
+    val quote = wallet.sep38.postQuote(asset.sep38, amount, FIAT_USD)
+
+    // POST Sep31 transaction
+    val txnRequest = gson.fromJson(postSep31TxnRequest, Sep31PostTransactionRequest::class.java)
+    txnRequest.senderId = senderCustomer!!.id
+    txnRequest.receiverId = receiverCustomer!!.id
+    txnRequest.quoteId = quote.id
+    txnRequest.fundingMethod = "SWIFT"
+    val postTxResponse = wallet.sep31.postTransaction(txnRequest)
+    info("POST /transaction initiated ${postTxResponse.id}")
+
+    // Get transaction status and make sure it is PENDING_SENDER
+    waitStatus(postTxResponse.id, SepTransactionStatus.PENDING_SENDER)
+    var transaction = wallet.sep31.getTransaction(postTxResponse.id).transaction
+
+    // Submit transfer transaction
+    info("Transferring $amount $asset to ${transaction.stellarAccountId}")
+    transactionWithRetry {
+      wallet.send(
+        transaction.stellarAccountId,
+        Asset.create(asset.id),
+        amount,
+        transaction.stellarMemo,
+        transaction.stellarMemoType,
+      )
     }
+    info("Transfer complete")
+    waitStatuses(postTxResponse.id, listOf(SepTransactionStatus.COMPLETED))
+
+    transaction = wallet.sep31.getTransaction(postTxResponse.id).transaction
+
+    // Check the events sent to the reference server are recorded correctly
+    val actualEvents =
+      waitForBusinessServerEvents(
+        postTxResponse.id,
+        expectedStatusesWithoutPendingCustomerInfo.size,
+      )
+    assertEvents(actualEvents, expectedStatusesWithoutPendingCustomerInfo)
+
+    // Check the callbacks sent to the wallet reference server are recorded correctly
+    val actualCallbacks =
+      waitForWalletServerCallbacks(
+        postTxResponse.id,
+        expectedStatusesWithoutPendingCustomerInfo.size,
+      )
+    assertCallbacks(actualCallbacks, expectedStatusesWithoutPendingCustomerInfo)
   }
 
   private suspend fun waitForWalletServerCallbacks(

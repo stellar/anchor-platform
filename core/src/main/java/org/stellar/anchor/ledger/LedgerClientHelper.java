@@ -157,7 +157,9 @@ public class LedgerClientHelper {
 
   static String getAddressOrContractId(SCAddress address) throws IOException {
     return switch (address.getDiscriminant()) {
-      case SC_ADDRESS_TYPE_ACCOUNT -> StrKey.encodeEd25519PublicKey(address.getAccountId());
+      case SC_ADDRESS_TYPE_ACCOUNT ->
+          StrKey.encodeEd25519PublicKey(
+              address.getAccountId().getAccountID().getEd25519().getUint256());
       case SC_ADDRESS_TYPE_CONTRACT ->
           StrKey.encodeContract(address.getContractId().toXdrByteArray());
       case SC_ADDRESS_TYPE_MUXED_ACCOUNT -> null;
