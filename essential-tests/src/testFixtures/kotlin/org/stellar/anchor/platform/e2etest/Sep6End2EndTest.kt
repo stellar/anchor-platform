@@ -143,7 +143,6 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         PENDING_CUSTOMER_INFO_UPDATE, // request KYC
         PENDING_USR_TRANSFER_START, // provide deposit instructions
         PENDING_ANCHOR, // deposit into user wallet
-        PENDING_STELLAR,
         COMPLETED,
       )
     assertWalletReceivedStatuses(deposit.id, expectedStatuses)
@@ -295,7 +294,6 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         PENDING_CUSTOMER_INFO_UPDATE, // request KYC
         PENDING_USR_TRANSFER_START, // provide deposit instructions
         PENDING_ANCHOR, // deposit into user wallet
-        PENDING_STELLAR,
         COMPLETED,
       )
     assertWalletReceivedStatuses(deposit.id, expectedStatuses)
