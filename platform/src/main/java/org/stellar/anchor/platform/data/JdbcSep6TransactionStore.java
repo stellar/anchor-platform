@@ -130,9 +130,11 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
   }
 
   @Override
-  public JdbcSep6Transaction findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
-      String withdrawAnchorAccount, String fromAccount, String status) {
-    return transactionRepo.findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
-        withdrawAnchorAccount, fromAccount, status);
+  public JdbcSep6Transaction
+      findFirstByWithdrawAnchorAccountAndFromAccountAndStatusOrderByStartedAtDesc(
+          String toAccount, String fromAccount, String status) {
+    return transactionRepo
+        .findFirstByWithdrawAnchorAccountAndFromAccountAndStatusOrderByStartedAtDesc(
+            toAccount, fromAccount, status);
   }
 }

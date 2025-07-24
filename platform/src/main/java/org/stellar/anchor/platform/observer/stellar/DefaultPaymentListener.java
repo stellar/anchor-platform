@@ -154,12 +154,12 @@ public class DefaultPaymentListener implements PaymentListener {
       //              ledgerPayment.getTo(),
       //              memo,
       //              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
-
       JdbcSep6Transaction sep6Txn =
-          sep6TransactionStore.findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
-              ledgerPayment.getTo(),
-              ledgerPayment.getFrom(),
-              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+          sep6TransactionStore
+              .findFirstByWithdrawAnchorAccountAndFromAccountAndStatusOrderByStartedAtDesc(
+                  ledgerPayment.getTo(),
+                  ledgerPayment.getFrom(),
+                  SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
 
       if (sep6Txn != null) {
         try {
