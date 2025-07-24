@@ -362,7 +362,7 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
             .lowThreshold(20)
             .mediumThreshold(20)
             .highThreshold(20)
-            .signer(SignerKey.fromEd25519PublicKey(clientSecondaryKP.accountId))
+            .signer(Signer.ed25519PublicKey(clientSecondaryKP))
             .signerWeight(10)
             .masterKeyWeight(10)
             .build()
