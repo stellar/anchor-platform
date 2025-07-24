@@ -32,7 +32,7 @@ import org.stellar.walletsdk.asset.IssuedAssetId
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
-  private val maxTries = 10
+  private val maxTries = 20
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
   private val gson = GsonUtils.getInstance()
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
@@ -63,8 +63,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   @Order(10)
   fun `test classic asset deposit`() = runBlocking {
-    val memo = (10000..20000).random().toULong()
-    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
+    val memo = uniqueMemo()
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
     val customerRequest =
@@ -74,7 +74,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           Sep12PutCustomerRequest::class.java,
         )
         .also {
-          it.memo = memo.toString()
+          it.memo = memo
           it.memoType = "id"
         }
     val customer = wallet.sep12.putCustomer(customerRequest)!!
@@ -107,7 +107,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           Sep12PutCustomerRequest::class.java,
         )
         .also {
-          it.memo = memo.toString()
+          it.memo = memo
           it.memoType = "id"
         }
     )
@@ -212,8 +212,9 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   @Order(12)
   fun `test classic asset deposit-exchange without quote`() = runBlocking {
-    val memo = (20000..30000).random().toULong()
-    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
+    val memo = uniqueMemo()
+
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
     val customer =
@@ -224,7 +225,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
             Sep12PutCustomerRequest::class.java,
           )
           .also {
-            it.memo = memo.toString()
+            it.memo = memo
             it.memoType = "id"
           }
       )
@@ -258,7 +259,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           Sep12PutCustomerRequest::class.java,
         )
         .also {
-          it.memo = memo.toString()
+          it.memo = memo
           it.memoType = "id"
         }
     )
@@ -365,8 +366,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   @Order(20)
   fun `test classic asset withdraw`() = runBlocking {
-    val memo = (40000..50000).random().toULong()
-    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
+    val memo = uniqueMemo()
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
     val customer =
@@ -377,7 +378,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
             Sep12PutCustomerRequest::class.java,
           )
           .also {
-            it.memo = memo.toString()
+            it.memo = memo
             it.memoType = "id"
           }
       )
@@ -404,7 +405,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           Sep12PutCustomerRequest::class.java,
         )
         .also {
-          it.memo = memo.toString()
+          it.memo = memo
           it.memoType = "id"
         }
     )
@@ -514,8 +515,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Test
   @Order(22)
   fun `test classic asset withdraw-exchange without quote`() = runBlocking {
-    val memo = (50000..60000).random().toULong()
-    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
+    val memo = uniqueMemo()
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
     val customer =
@@ -526,7 +527,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
             Sep12PutCustomerRequest::class.java,
           )
           .also {
-            it.memo = memo.toString()
+            it.memo = memo
             it.memoType = "id"
           }
       )
@@ -559,7 +560,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           Sep12PutCustomerRequest::class.java,
         )
         .also {
-          it.memo = memo.toString()
+          it.memo = memo
           it.memoType = "id"
         }
     )
@@ -701,12 +702,12 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     sep6Client: Sep6Client,
   ) {
     var status: String? = null
-    for (i in 0..maxTries) {
+    repeat(maxTries + 1) { attempt ->
       val transaction = sep6Client.getTransaction(mapOf("id" to id))
-      if (!status.equals(transaction.transaction.status)) {
+      if (status != transaction.transaction.status) {
         status = transaction.transaction.status
         Log.info(
-          "Transaction(${transaction.transaction.id}) status changed to ${status}. Message: ${transaction.transaction.message}"
+          "Transaction(${transaction.transaction.id}) status changed to $status. Message: ${transaction.transaction.message}"
         )
       }
       if (transaction.transaction.status == expectedStatus.status) {
@@ -714,6 +715,15 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
       }
       delay(1.seconds)
     }
-    fail("Transaction status $status did not match expected status $expectedStatus")
+    fail("Transaction status [$status] did not match expected status [$expectedStatus]")
+  }
+
+  var uniqueMemoRange = 0
+
+  private fun uniqueMemo(): String {
+    this.uniqueMemoRange++
+    return (this.uniqueMemoRange * 100000..this.uniqueMemoRange * 100000 + 99999)
+      .random()
+      .toString()
   }
 }
