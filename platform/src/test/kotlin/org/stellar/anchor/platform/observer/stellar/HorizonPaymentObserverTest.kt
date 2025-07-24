@@ -61,6 +61,8 @@ class HorizonPaymentObserverTest {
     every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns true
     every { horizon.getTransaction(any()) } returns mockk()
 
+    println(paymentObservingAccountsManager.lookupAndUpdate("123"))
+
     val event = observer.toPaymentTransferEvent(op)
 
     assertNotNull(event)
@@ -106,6 +108,8 @@ class HorizonPaymentObserverTest {
 
     every { assetBalanceChange.from } returns fromAccount
     every { assetBalanceChange.to } returns toAccount
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns true
+
     every { assetBalanceChange.asset } returns Asset.createNativeAsset()
     every { assetBalanceChange.amount } returns "300.0"
     val invokeOp = mockk<InvokeHostFunctionOperationResponse>()

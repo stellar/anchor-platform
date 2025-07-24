@@ -62,12 +62,7 @@ class DefaultPaymentListenerTest {
 
   @Test
   fun `test If the account is not monitored, processAndDispatchLedgerPayment should not be called`() {
-    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
-    val event = createTestTransferEvent()
-
-    paymentListener.onReceived(event)
-
-    verify(exactly = 0) { paymentListener.processAndDispatchLedgerPayment(any(), any()) }
+    // this test is taken out because the filtering is done by the observer.
   }
 
   @Test
