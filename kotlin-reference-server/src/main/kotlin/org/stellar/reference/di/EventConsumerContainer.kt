@@ -11,8 +11,6 @@ object EventConsumerContainer {
   private val sep6EventProcessor =
     Sep6EventProcessor(
       config,
-      ServiceContainer.horizon,
-      ServiceContainer.rpc,
       ServiceContainer.platform,
       ServiceContainer.paymentClient,
       ServiceContainer.customerService,
