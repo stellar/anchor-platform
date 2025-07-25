@@ -111,7 +111,7 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
       throw new SepException(
           transaction.getClass() + " is not a sub-type of " + JdbcSep6Transaction.class);
     }
-      txn.setUpdatedAt(Instant.now());
+    txn.setUpdatedAt(Instant.now());
 
     return transactionRepo.save(txn);
   }

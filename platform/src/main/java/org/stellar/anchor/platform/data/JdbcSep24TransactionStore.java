@@ -124,7 +124,7 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
       throw new SepException(
           sep24Transaction.getClass() + "  is not a sub-type of " + JdbcSep24Transaction.class);
     }
-      txn.setId(txn.getTransactionId());
+    txn.setId(txn.getTransactionId());
     return txnRepo.save(txn);
   }
 
