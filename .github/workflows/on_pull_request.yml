@@ -15,7 +15,7 @@ jobs:
     uses: ./.github/workflows/sub_essential_tests.yml
 
   extended_tests:
-    needs: [ gradle_build, essential_tests ]
+    needs: [ gradle_build ]
     uses: ./.github/workflows/sub_extended_tests.yml
 
   codeql_analysis:
