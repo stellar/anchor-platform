@@ -6,15 +6,26 @@ import java.util.Map;
 @SuppressWarnings("unused")
 public class MemoryStellarPaymentStreamerCursorStore implements StellarPaymentStreamerCursorStore {
   Map<String, String> mapTokens = new HashMap<>();
-  String cursor = null;
+  String horizonCursor = null;
+  String stellarRpcCursor = null;
 
   @Override
-  public void save(String cursor) {
-    this.cursor = cursor;
+  public void saveHorizonCursor(String cursor) {
+    this.horizonCursor = cursor;
   }
 
   @Override
-  public String load() {
-    return this.cursor;
+  public String loadHorizonCursor() {
+    return this.horizonCursor;
+  }
+
+  @Override
+  public void saveStellarRpcCursor(String cursor) {
+    this.stellarRpcCursor = cursor;
+  }
+
+  @Override
+  public String loadStellarRpcCursor() {
+    return this.stellarRpcCursor;
   }
 }

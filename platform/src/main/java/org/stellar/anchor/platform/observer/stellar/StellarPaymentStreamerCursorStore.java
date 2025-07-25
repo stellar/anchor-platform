@@ -1,7 +1,11 @@
 package org.stellar.anchor.platform.observer.stellar;
 
 public interface StellarPaymentStreamerCursorStore {
-  void save(String cursor);
+  void saveHorizonCursor(String cursor);
 
-  String load();
+  String loadHorizonCursor();
+
+  void saveStellarRpcCursor(String cursor);
+
+  String loadStellarRpcCursor();
 }

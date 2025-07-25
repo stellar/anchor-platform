@@ -403,14 +403,23 @@ class PaymentObserverTests {
 }
 
 internal class TestCursorStore : StellarPaymentStreamerCursorStore {
-  private var cursor: String = ""
+  private var horizonCursor: String = ""
+  private var stellarRpcCursor: String = ""
 
-  override fun save(cursor: String) {
-    this.cursor = cursor
+  override fun saveHorizonCursor(cursor: String) {
+    this.horizonCursor = cursor
   }
 
-  override fun load(): String {
-    return cursor
+  override fun loadHorizonCursor(): String {
+    return horizonCursor
+  }
+
+  override fun saveStellarRpcCursor(cursor: String) {
+    this.stellarRpcCursor = cursor
+  }
+
+  override fun loadStellarRpcCursor(): String {
+    return stellarRpcCursor
   }
 }
 

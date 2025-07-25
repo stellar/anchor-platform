@@ -104,7 +104,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   ScheduledFuture<?> task;
 
   private void fetchEvents() {
-    String cursor = (this.cursor != null) ? this.cursor : loadCursorFromDatabase();
+    String cursor = (this.cursor != null) ? this.cursor : loadStellarRpcCursor();
 
     try {
       GetEventsResponse response = sorobanServer.getEvents(buildEventRequest(cursor));
@@ -298,7 +298,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
   private void saveCursor(String cursor) {
     this.cursor = cursor;
-    saveCursorToDatabase(cursor);
+    saveStellarRpcCursor(cursor);
   }
 
   private Long getLatestLedger() {

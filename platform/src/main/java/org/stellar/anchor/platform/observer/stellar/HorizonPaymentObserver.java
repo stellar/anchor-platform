@@ -141,7 +141,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
    */
   String fetchStreamingCursor() {
     // Use database value, if any.
-    String strLastStored = loadCursorFromDatabase();
+    String strLastStored = loadHorizonCursor();
     String strLatestFromNetwork = fetchLatestCursorFromHorizon();
     Log.infoF("The latest cursor fetched from Stellar network is: {}", strLatestFromNetwork);
     if (isEmpty(strLastStored)) {
@@ -208,7 +208,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
       errorEx("Something went wrong in the observer while sending the event", t);
       setStatus(PUBLISHER_ERROR);
     } finally {
-      saveCursorToDatabase(operationResponse.getPagingToken());
+      saveHorizonCursor(operationResponse.getPagingToken());
     }
   }
 

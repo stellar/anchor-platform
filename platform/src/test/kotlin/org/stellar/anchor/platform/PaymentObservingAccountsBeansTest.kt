@@ -124,7 +124,7 @@ class PaymentObservingAccountsBeansTest {
     assertEquals("Payment streamer cursor store cannot be empty.", ex.message)
 
     // appConfig is null
-    every { paymentStreamerCursorStore.load() } returns null
+    every { paymentStreamerCursorStore.loadHorizonCursor() } returns null
     ex = assertThrows {
       paymentObserverBeans.stellarPaymentObserver(
         assetService,

@@ -272,14 +272,13 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
   }
 
   /**
-   * Load the page token (cursor) from the database. This is used to resume the payment observer
-   * from the last processed block.
+   * Load the page token (cursor) from the database.
    *
    * @return the last stored cursor
    */
-  String loadCursorFromDatabase() {
+  String loadHorizonCursor() {
     info("Loading the last stored cursor from database...");
-    String token = paymentStreamerCursorStore.load();
+    String token = paymentStreamerCursorStore.loadHorizonCursor();
     infoF("The last stored cursor is: {}", token);
     debug("Resetting the database backoff timer...");
     databaseBackoffTimer.reset();
@@ -288,14 +287,40 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
   }
 
   /**
-   * Save the page token (cursor) to the database. This is used to resume the payment observer from
-   * the last processed block.
+   * Load the Stellar RPC cursor from the database.
    *
-   * @param token the last stored cursor
+   * @return the last stored cursor
    */
-  void saveCursorToDatabase(String token) {
+  String loadStellarRpcCursor() {
+    info("Loading the last stored cursor from database...");
+    String token = paymentStreamerCursorStore.loadStellarRpcCursor();
+    infoF("The last stored cursor is: {}", token);
+    debug("Resetting the database backoff timer...");
+    databaseBackoffTimer.reset();
+
+    return token;
+  }
+
+  /**
+   * Save the page token (cursor) to the database.
+   *
+   * @param token the cursor to save
+   */
+  void saveHorizonCursor(String token) {
     traceF("Saving the last stored cursor to database: {}", token);
-    paymentStreamerCursorStore.save(token);
+    paymentStreamerCursorStore.saveHorizonCursor(token);
+    traceF("Resetting the database backoff timer...");
+    databaseBackoffTimer.reset();
+  }
+
+  /**
+   * Save the Stellar RPC cursor to the database.
+   *
+   * @param token the cursor to save
+   */
+  void saveStellarRpcCursor(String token) {
+    traceF("Saving the last stored cursor to database: {}", token);
+    paymentStreamerCursorStore.saveStellarRpcCursor(token);
     traceF("Resetting the database backoff timer...");
     databaseBackoffTimer.reset();
   }
