@@ -264,7 +264,7 @@ internal class Sep10ServiceTest {
   @Test
   fun `Test validate challenge with bad request`() {
     assertThrows<SepValidationException> {
-      sep10Service.validateChallenge(null as? ValidationRequest)
+      sep10Service.validateChallenge(null)
     }
 
     val vr = ValidationRequest()

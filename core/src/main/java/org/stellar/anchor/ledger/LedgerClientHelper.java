@@ -1,6 +1,6 @@
 package org.stellar.anchor.ledger;
 
-import static java.lang.Thread.sleep;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.sdk.xdr.HostFunctionType.HOST_FUNCTION_TYPE_INVOKE_CONTRACT;
@@ -162,9 +162,10 @@ public class LedgerClientHelper {
               address.getAccountId().getAccountID().getEd25519().getUint256());
       case SC_ADDRESS_TYPE_CONTRACT ->
           StrKey.encodeContract(address.getContractId().toXdrByteArray());
-      case SC_ADDRESS_TYPE_MUXED_ACCOUNT -> null;
-      case SC_ADDRESS_TYPE_CLAIMABLE_BALANCE -> null;
-      case SC_ADDRESS_TYPE_LIQUIDITY_POOL -> null;
+      case SC_ADDRESS_TYPE_MUXED_ACCOUNT,
+              SC_ADDRESS_TYPE_CLAIMABLE_BALANCE,
+              SC_ADDRESS_TYPE_LIQUIDITY_POOL ->
+          null;
     };
   }
 
@@ -265,7 +266,7 @@ public class LedgerClientHelper {
         } catch (BadRequestException e) {
           debug("Transaction not yet available: " + e.getMessage());
         }
-        sleep(1000);
+        SECONDS.sleep(1);
       } while (true);
     } catch (InterruptedException e) {
       info("Interrupted while waiting for transaction to complete");

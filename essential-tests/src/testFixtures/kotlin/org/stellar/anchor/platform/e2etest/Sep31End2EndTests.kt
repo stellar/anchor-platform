@@ -129,7 +129,6 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     info("Transfer complete")
     waitStatuses(postTxResponse.id, listOf(SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE))
 
-    transaction = wallet.sep31.getTransaction(postTxResponse.id).transaction
     // Supply missing KYC info to continue with the transaction
     val additionalRequiredFields =
       wallet.sep12
@@ -210,8 +209,6 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     }
     info("Transfer complete")
     waitStatuses(postTxResponse.id, listOf(SepTransactionStatus.COMPLETED))
-
-    transaction = wallet.sep31.getTransaction(postTxResponse.id).transaction
 
     // Check the events sent to the reference server are recorded correctly
     val actualEvents =
