@@ -9,6 +9,7 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import java.io.IOException;
+import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -155,6 +156,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     boolean shouldProcess;
     String fromAddr;
     String toAddr;
+    String eventMemo;
     String sep11Asset;
     Long amount;
   }
@@ -185,6 +187,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       String fromAddr = Scv.fromAddress(from).toString();
       String toAddr = Scv.fromAddress(to).toString();
       long amount = 0L;
+      String eventMemo = null;
       SCVal scValue = SCVal.fromXdrBase64(event.getValue());
       // Reference:
       // https://github.com/stellar/stellar-protocol/blob/master/core/cap-0067.md#emit-a-map-as-the-data-field-in-the-transfer-and-mint-event-if-muxed-information-is-being-emitted-for-the-destination
@@ -192,15 +195,21 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
         amount = Scv.fromInt128(scValue).longValue();
       } else if (scValue.getDiscriminant() == SCValType.SCV_MAP) {
         amount = Scv.fromInt128(scValue.getMap().getSCMap()[0].getVal()).longValue();
-        if (to.getAddress().getDiscriminant() == SCAddressType.SC_ADDRESS_TYPE_MUXED_ACCOUNT) {
-          // In case the MEMO_ID is present, convert the toAddr to MuxedAccount.
-          if (scValue.getMap().getSCMap()[1].getVal().getDiscriminant() == SCValType.SCV_U64) {
-            toAddr =
-                new MuxedAccount(
-                        Scv.fromAddress(to).toString(),
-                        Scv.fromUint64(scValue.getMap().getSCMap()[1].getVal()))
-                    .getAddress();
-          }
+        SCVal value1 = scValue.getMap().getSCMap()[1].getVal();
+        eventMemo =
+            switch (value1.getDiscriminant()) {
+              case SCV_STRING -> value1.getStr().getSCString().toString();
+              case SCV_U64 -> value1.getU64().toString();
+              case SCV_BYTES ->
+                  new String(Base64.getEncoder().encode(value1.getBytes().getSCBytes()));
+              default -> null;
+            };
+        if (scValue.getMap().getSCMap()[1].getVal().getDiscriminant() == SCValType.SCV_U64) {
+          toAddr =
+              new MuxedAccount(
+                      Scv.fromAddress(to).toString(),
+                      Scv.fromUint64(scValue.getMap().getSCMap()[1].getVal()))
+                  .getAddress();
         }
       }
 
@@ -215,6 +224,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           .fromAddr(fromAddr)
           .toAddr(toAddr)
           .amount(amount)
+          .eventMemo(eventMemo)
           .sep11Asset(asset.getStr().getSCString().toString())
           .build();
     } catch (IOException ioex) {
