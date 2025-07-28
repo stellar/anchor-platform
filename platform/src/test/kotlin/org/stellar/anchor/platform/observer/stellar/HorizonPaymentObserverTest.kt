@@ -61,8 +61,6 @@ class HorizonPaymentObserverTest {
     every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns true
     every { horizon.getTransaction(any()) } returns mockk()
 
-    println(paymentObservingAccountsManager.lookupAndUpdate("123"))
-
     val event = observer.toPaymentTransferEvent(op)
 
     assertNotNull(event)

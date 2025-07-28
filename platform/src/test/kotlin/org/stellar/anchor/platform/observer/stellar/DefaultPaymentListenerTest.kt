@@ -61,11 +61,6 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  fun `test If the account is not monitored, processAndDispatchLedgerPayment should not be called`() {
-    // this test is taken out because the filtering is done by the observer.
-  }
-
-  @Test
   // TODO: enable this test when the SAC memo is implemented
   @Disabled
   fun `test validate()`() {

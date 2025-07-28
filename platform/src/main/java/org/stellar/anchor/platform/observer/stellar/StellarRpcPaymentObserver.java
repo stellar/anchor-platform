@@ -36,6 +36,7 @@ import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse.EventInfo;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.scval.Scv;
+import org.stellar.sdk.xdr.SCAddressType;
 import org.stellar.sdk.xdr.SCVal;
 import org.stellar.sdk.xdr.SCValType;
 
@@ -191,15 +192,15 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
         amount = Scv.fromInt128(scValue).longValue();
       } else if (scValue.getDiscriminant() == SCValType.SCV_MAP) {
         amount = Scv.fromInt128(scValue.getMap().getSCMap()[0].getVal()).longValue();
-        if (scValue.getMap().getSCMap()[1].getVal().getDiscriminant() == SCValType.SCV_U64) {
+        if (to.getAddress().getDiscriminant() == SCAddressType.SC_ADDRESS_TYPE_MUXED_ACCOUNT) {
           // In case the MEMO_ID is present, convert the toAddr to MuxedAccount.
-          // In the cases of the transaction memo being MEMO_TEXT or MEMO_HASH, the toAddr is not
-          // muxed
-          builder.toAddr(
-              new MuxedAccount(
-                      Scv.fromAddress(to).toString(),
-                      Scv.fromUint64(scValue.getMap().getSCMap()[1].getVal()))
-                  .getAddress());
+          if (scValue.getMap().getSCMap()[1].getVal().getDiscriminant() == SCValType.SCV_U64) {
+            toAddr =
+                new MuxedAccount(
+                        Scv.fromAddress(to).toString(),
+                        Scv.fromUint64(scValue.getMap().getSCMap()[1].getVal()))
+                    .getAddress();
+          }
         }
       }
 
