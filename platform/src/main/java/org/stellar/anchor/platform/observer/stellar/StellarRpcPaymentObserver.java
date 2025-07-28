@@ -37,7 +37,6 @@ import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse.EventInfo;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.scval.Scv;
-import org.stellar.sdk.xdr.SCAddressType;
 import org.stellar.sdk.xdr.SCVal;
 import org.stellar.sdk.xdr.SCValType;
 
