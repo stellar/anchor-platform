@@ -162,10 +162,13 @@ public class LedgerClientHelper {
               address.getAccountId().getAccountID().getEd25519().getUint256());
       case SC_ADDRESS_TYPE_CONTRACT ->
           StrKey.encodeContract(address.getContractId().toXdrByteArray());
-      case SC_ADDRESS_TYPE_MUXED_ACCOUNT,
-              SC_ADDRESS_TYPE_CLAIMABLE_BALANCE,
-              SC_ADDRESS_TYPE_LIQUIDITY_POOL ->
-          null;
+      case SC_ADDRESS_TYPE_MUXED_ACCOUNT -> {
+        MuxedEd25519Account ma = address.getMuxedAccount();
+        String accountId = StrKey.encodeEd25519PublicKey(ma.getEd25519().getUint256());
+        BigInteger muxedId = ma.getId().getUint64().getNumber();
+        yield new org.stellar.sdk.MuxedAccount(accountId, muxedId).getAddress();
+      }
+      case SC_ADDRESS_TYPE_CLAIMABLE_BALANCE, SC_ADDRESS_TYPE_LIQUIDITY_POOL -> null;
     };
   }
 
