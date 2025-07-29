@@ -1,0 +1,2 @@
+ALTER TABLE stellar_payment_observer_page_token RENAME COLUMN cursor TO horizon_cursor;
+ALTER TABLE stellar_payment_observer_page_token ADD stellar_rpc_cursor VARCHAR(255);

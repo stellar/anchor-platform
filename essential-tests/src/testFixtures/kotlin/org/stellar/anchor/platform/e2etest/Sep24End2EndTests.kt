@@ -45,7 +45,6 @@ import org.stellar.anchor.util.StringHelper.isNotEmpty
 import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
-import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.InteractiveFlowResponse
 import org.stellar.walletsdk.anchor.*
 import org.stellar.walletsdk.anchor.TransactionStatus.*
@@ -81,7 +80,6 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       config.env["secret.platform_api.auth_secret"]!!,
       config.env["secret.custody_server.auth_secret"]!!,
     )
-  private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
 
   @ParameterizedTest
   @MethodSource("depositAssetsAndAmounts")

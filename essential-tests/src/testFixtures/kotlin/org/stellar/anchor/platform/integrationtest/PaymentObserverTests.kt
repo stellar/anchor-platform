@@ -11,7 +11,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.PaymentTransferEvent
@@ -36,7 +35,6 @@ import org.stellar.sdk.xdr.SCVal
 import org.stellar.sdk.xdr.SCValType
 import org.stellar.sdk.xdr.SorobanAuthorizationEntry
 
-@Disabled("This test is broken")
 class PaymentObserverTests {
   companion object {
     private val paymentObservingAccountManager =
@@ -403,14 +401,23 @@ class PaymentObserverTests {
 }
 
 internal class TestCursorStore : StellarPaymentStreamerCursorStore {
-  private var cursor: String = ""
+  private var horizonCursor: String = ""
+  private var stellarRpcCursor: String = ""
 
-  override fun save(cursor: String) {
-    this.cursor = cursor
+  override fun saveHorizonCursor(cursor: String) {
+    this.horizonCursor = cursor
   }
 
-  override fun load(): String {
-    return cursor
+  override fun loadHorizonCursor(): String {
+    return horizonCursor
+  }
+
+  override fun saveStellarRpcCursor(cursor: String) {
+    this.stellarRpcCursor = cursor
+  }
+
+  override fun loadStellarRpcCursor(): String {
+    return stellarRpcCursor
   }
 }
 
@@ -482,7 +489,14 @@ internal fun createContractWithWasmIdAndGetContractId(
     Thread.sleep(3000)
   }
   return StrKey.encodeContract(
-    getTransactionResponse.parseResultMetaXdr().v3.sorobanMeta.returnValue.address.contractId.hash
+    getTransactionResponse
+      .parseResultMetaXdr()
+      .v4
+      .sorobanMeta
+      .returnValue
+      .address
+      .contractId
+      .toXdrByteArray()
   )
 }
 

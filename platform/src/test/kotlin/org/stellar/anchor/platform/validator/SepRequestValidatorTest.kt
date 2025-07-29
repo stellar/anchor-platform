@@ -36,7 +36,11 @@ class SepRequestValidatorTest {
 
     val ex = assertThrows<InvalidParamsException> { requestValidator.validate(request) }
     assertEquals(
-      "violation error message 1\n" + "violation error message 2",
+      """
+  violation error message 1
+  violation error message 2
+  """
+        .trimIndent(),
       ex.message?.trimIndent(),
     )
   }

@@ -263,9 +263,7 @@ internal class Sep10ServiceTest {
   @Suppress("CAST_NEVER_SUCCEEDS")
   @Test
   fun `Test validate challenge with bad request`() {
-    assertThrows<SepValidationException> {
-      sep10Service.validateChallenge(null as? ValidationRequest)
-    }
+    assertThrows<SepValidationException> { sep10Service.validateChallenge(null) }
 
     val vr = ValidationRequest()
     vr.transaction = null

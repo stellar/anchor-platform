@@ -1,15 +1,11 @@
 package org.stellar.reference.event.processor
 
-import java.time.Instant
 import java.util.*
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.runBlocking
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.callback.PutCustomerRequest
 import org.stellar.anchor.api.platform.*
-import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
 import org.stellar.anchor.api.rpc.method.RpcMethod
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
@@ -21,14 +17,9 @@ import org.stellar.reference.log
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.transactionWithRetry
 import org.stellar.sdk.Asset
-import org.stellar.sdk.KeyPair
-import org.stellar.sdk.Server
-import org.stellar.sdk.SorobanServer
 
 class Sep6EventProcessor(
   private val config: Config,
-  private val server: Server,
-  private val rpc: SorobanServer,
   private val platformClient: PlatformClient,
   private val paymentClient: PaymentClient,
   private val customerService: CustomerService,
@@ -112,7 +103,7 @@ class Sep6EventProcessor(
           requestKyc(event)
           return
         }
-        val keypair = KeyPair.fromSecretSeed(config.appSettings.paymentSigningSeed)
+
         lateinit var stellarTxnId: String
         if (config.appSettings.custodyEnabled) {
           sepHelper.rpcAction(
@@ -135,12 +126,26 @@ class Sep6EventProcessor(
               )
           }
           onchainPayments[transaction.id] = stellarTxnId
-          patchTransaction(
-            PlatformTransactionData.builder()
-              .id(transaction.id)
-              .status(PENDING_STELLAR)
-              .updatedAt(Instant.now())
-              .build()
+
+          log.info { "Waiting for transaction $stellarTxnId to be available..." }
+          repeat(3) { attempt ->
+            try {
+              val resp = paymentClient.getTransaction(stellarTxnId)
+              if (resp.successful) return@repeat
+            } catch (e: Exception) {
+              log.warn(e) { "Attempt ${attempt + 1}: Failed to fetch transaction $stellarTxnId" }
+            }
+            delay(5_000)
+          }
+
+          // After the transaction is available, call notify_onchain_funds_sent
+          sepHelper.rpcAction(
+            RpcMethod.NOTIFY_ONCHAIN_FUNDS_SENT.toString(),
+            NotifyOnchainFundsSentRequest(
+              transactionId = transaction.id,
+              message = "Funds sent to user",
+              stellarTransactionId = onchainPayments[transaction.id]!!,
+            ),
           )
         }
       }
@@ -152,28 +157,6 @@ class Sep6EventProcessor(
             message = "Funds received from user",
           ),
         )
-      PENDING_STELLAR ->
-        // SAC transfers submitted to RPC are asynchronous, we will need to retry
-        // until the RPC returns a success response
-        flow<Unit> {
-            sepHelper.rpcAction(
-              RpcMethod.NOTIFY_ONCHAIN_FUNDS_SENT.toString(),
-              NotifyOnchainFundsSentRequest(
-                transactionId = transaction.id,
-                message = "Funds sent to user",
-                stellarTransactionId = onchainPayments[transaction.id]!!,
-              ),
-            )
-          }
-          .retryWhen { _, attempt ->
-            if (attempt < 5) {
-              delay(5_000)
-              return@retryWhen true
-            } else {
-              return@retryWhen false
-            }
-          }
-          .collect {}
       COMPLETED -> {
         log.info { "Transaction ${transaction.id} completed" }
       }
@@ -482,13 +465,5 @@ class Sep6EventProcessor(
       2 -> parts[1]
       else -> throw RuntimeException("Invalid asset format: $this")
     }
-  }
-
-  private suspend fun patchTransaction(data: PlatformTransactionData) {
-    val request =
-      PatchTransactionsRequest.builder()
-        .records(listOf(PatchTransactionRequest.builder().transaction(data).build()))
-        .build()
-    platformClient.patchTransactions(request)
   }
 }

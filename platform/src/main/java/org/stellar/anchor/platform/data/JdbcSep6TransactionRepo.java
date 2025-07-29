@@ -22,11 +22,11 @@ public interface JdbcSep6TransactionRepo
 
   JdbcSep6Transaction findOneByExternalTransactionId(String externalTransactionId);
 
+  JdbcSep6Transaction findFirstByWithdrawAnchorAccountAndFromAccountAndStatusOrderByStartedAtDesc(
+      String withdrawAnchorAccount, String fromAccount, String status);
+
   JdbcSep6Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
       String withdrawAnchorAccount, String memo, String status);
-
-  JdbcSep6Transaction findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
-      String withdrawAnchorAccount, String fromAccount, String status);
 
   List<Sep6Transaction> findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
       String webAuthAccount, String requestAssetCode);

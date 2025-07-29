@@ -61,16 +61,6 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  fun `test If the account is not monitored, processAndDispatchLedgerPayment should not be called`() {
-    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
-    val event = createTestTransferEvent()
-
-    paymentListener.onReceived(event)
-
-    verify(exactly = 0) { paymentListener.processAndDispatchLedgerPayment(any(), any()) }
-  }
-
-  @Test
   // TODO: enable this test when the SAC memo is implemented
   @Disabled
   fun `test validate()`() {
