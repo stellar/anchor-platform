@@ -82,6 +82,7 @@ internal class Sep1ServiceTest {
     every { sep1Config.value } returns "toml_file_path"
     val sep1Service = spyk(Sep1Service(sep1Config))
     every { sep1Service.readTomlFromURL(eq("toml_file_path")) } returns "toml content"
+
     // When, Then
     assertEquals("toml content", sep1Service.toml)
   }

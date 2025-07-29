@@ -59,11 +59,12 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
     return optTxn.orElse(null);
   }
 
-  public JdbcSep24Transaction findOneByToAccountAndFromAccountAndStatus(
+  public JdbcSep24Transaction findFirstByToAccountAndFromAccountAndStatusOrderByStartedAtDesc(
       String toAccount, String fromAccount, String status) {
     Optional<JdbcSep24Transaction> optTxn =
         Optional.ofNullable(
-            txnRepo.findOneByToAccountAndFromAccountAndStatus(toAccount, fromAccount, status));
+            txnRepo.findFirstByToAccountAndFromAccountAndStatusOrderByStartedAtDesc(
+                toAccount, fromAccount, status));
     return optTxn.orElse(null);
   }
 
@@ -119,11 +120,10 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
 
   @Override
   public Sep24Transaction save(Sep24Transaction sep24Transaction) throws SepException {
-    if (!(sep24Transaction instanceof JdbcSep24Transaction)) {
+    if (!(sep24Transaction instanceof JdbcSep24Transaction txn)) {
       throw new SepException(
           sep24Transaction.getClass() + "  is not a sub-type of " + JdbcSep24Transaction.class);
     }
-    JdbcSep24Transaction txn = (JdbcSep24Transaction) sep24Transaction;
     txn.setId(txn.getTransactionId());
     return txnRepo.save(txn);
   }

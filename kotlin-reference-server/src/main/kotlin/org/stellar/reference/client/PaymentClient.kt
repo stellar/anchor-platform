@@ -50,6 +50,14 @@ class PaymentClient(
     }
   }
 
+  fun getTransaction(transactionId: String): TransactionResponse {
+    return try {
+      horizon.transactions().transaction(transactionId)
+    } catch (e: BadRequestException) {
+      throw RuntimeException("Error fetching transaction: ${e.problem?.extras?.resultCodes}")
+    }
+  }
+
   private fun sendToClassicAccount(
     destination: String,
     asset: Asset,

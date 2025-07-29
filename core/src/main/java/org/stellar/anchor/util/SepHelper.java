@@ -26,24 +26,14 @@ public class SepHelper {
   }
 
   public static String memoTypeString(MemoType memoType) {
-    String result = "";
-    switch (memoType) {
-      case MEMO_ID:
-        result = "id";
-        break;
-      case MEMO_HASH:
-        result = "hash";
-        break;
-      case MEMO_TEXT:
-        result = "text";
-        break;
-      case MEMO_NONE:
-        result = "none";
-        break;
-      case MEMO_RETURN:
-        result = "return";
-        break;
-    }
+    String result =
+        switch (memoType) {
+          case MEMO_ID -> "id";
+          case MEMO_HASH -> "hash";
+          case MEMO_TEXT -> "text";
+          case MEMO_NONE -> "none";
+          case MEMO_RETURN -> "return";
+        };
 
     return result;
   }
@@ -59,8 +49,8 @@ public class SepHelper {
   public static String getAccountMemo(String strAccount) throws InvalidStellarAccountException {
     String[] tokens = strAccount.split(":");
     switch (tokens.length) {
-        // TODO: Should we add a catch here to throw an InvalidStellarAccountException exception in
-        // case of invalid address?
+      // TODO: Should we add a catch here to throw an InvalidStellarAccountException exception in
+      // case of invalid address?
       case 1:
         // Check if the account is a valid G... or M...
         new MuxedAccount(tokens[0]);
@@ -181,14 +171,12 @@ public class SepHelper {
    * @return true, if valid. Otherwise false
    */
   public static boolean validateTransactionStatus(SepTransactionStatus status, int sep) {
-    switch (sep) {
-      case 24:
-        return (sep24Statuses.contains(status));
-      case 31:
-        return (sep31Statuses.contains(status));
-      default:
-        return false;
-    }
+    return switch (sep) {
+      case 6 -> (sep6Statuses.contains(status));
+      case 24 -> (sep24Statuses.contains(status));
+      case 31 -> (sep31Statuses.contains(status));
+      default -> false;
+    };
   }
 
   public static final Set<SepTransactionStatus> sep6Statuses =

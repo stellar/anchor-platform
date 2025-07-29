@@ -88,10 +88,7 @@ public class DefaultPaymentListener implements PaymentListener {
       }
     }
     if (ledgerPayment != null) {
-      // Check if the payment is to or from an account we are observing
-      if (paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getTo())
-          || paymentObservingAccountsManager.lookupAndUpdate(ledgerPayment.getFrom()))
-        processAndDispatchLedgerPayment(ledgerTransaction, ledgerPayment);
+      processAndDispatchLedgerPayment(ledgerTransaction, ledgerPayment);
     }
   }
 
@@ -131,7 +128,7 @@ public class DefaultPaymentListener implements PaymentListener {
       //              memo,
       //              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       JdbcSep24Transaction sep24Txn =
-          sep24TransactionStore.findOneByToAccountAndFromAccountAndStatus(
+          sep24TransactionStore.findFirstByToAccountAndFromAccountAndStatusOrderByStartedAtDesc(
               ledgerPayment.getTo(),
               ledgerPayment.getFrom(),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
@@ -157,12 +154,12 @@ public class DefaultPaymentListener implements PaymentListener {
       //              ledgerPayment.getTo(),
       //              memo,
       //              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
-
       JdbcSep6Transaction sep6Txn =
-          sep6TransactionStore.findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
-              ledgerPayment.getTo(),
-              ledgerPayment.getFrom(),
-              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+          sep6TransactionStore
+              .findFirstByWithdrawAnchorAccountAndFromAccountAndStatusOrderByStartedAtDesc(
+                  ledgerPayment.getTo(),
+                  ledgerPayment.getFrom(),
+                  SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
 
       if (sep6Txn != null) {
         try {
@@ -324,7 +321,7 @@ public class DefaultPaymentListener implements PaymentListener {
     // Check if the payment contains the expected amount (or greater)
     BigDecimal expectedAmount = decimal(sepTransaction.getAmountExpected());
     BigDecimal gotAmount = decimal(AssetHelper.fromXdrAmount(ledgerPayment.getAmount()));
-    if (gotAmount.compareTo(expectedAmount) >= 0) {
+    if (expectedAmount == null || gotAmount.compareTo(expectedAmount) >= 0) {
       debugF(
           "Incoming payment for SEP-{} transaction. sepTxn.id={}, ledgerTxn.id={}",
           sepTransaction.getProtocol(),

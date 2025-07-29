@@ -1,18 +1,21 @@
 package org.stellar.anchor.ledger;
 
-import static java.lang.Thread.sleep;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.sdk.xdr.HostFunctionType.HOST_FUNCTION_TYPE_INVOKE_CONTRACT;
 import static org.stellar.sdk.xdr.OperationType.*;
 
+import java.io.IOException;
 import java.math.BigInteger;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.TOID;
+import org.stellar.sdk.exception.BadRequestException;
 import org.stellar.sdk.scval.Scv;
 import org.stellar.sdk.xdr.*;
 
@@ -93,7 +96,7 @@ public class LedgerClientHelper {
             .type(
                 switch (op.getBody().getDiscriminant()) {
                   case PATH_PAYMENT_STRICT_RECEIVE -> PATH_PAYMENT_STRICT_RECEIVE;
-                  case PATH_PAYMENT_STRICT_SEND -> OperationType.PATH_PAYMENT_STRICT_SEND;
+                  case PATH_PAYMENT_STRICT_SEND -> PATH_PAYMENT_STRICT_SEND;
                   default -> null;
                 })
             .pathPaymentOperation(
@@ -118,10 +121,21 @@ public class LedgerClientHelper {
             .toString()
             .equals("transfer")) yield null;
         SCAddress contractAddress = hostFunction.getInvokeContract().getContractAddress();
-        String contractId = StrKey.encodeContract(contractAddress.getContractId().getHash());
         SCVal from = hostFunction.getInvokeContract().getArgs()[0];
         SCVal to = hostFunction.getInvokeContract().getArgs()[1];
         SCVal amount = hostFunction.getInvokeContract().getArgs()[2];
+
+        String contractId;
+        String fromAddr;
+        String toAddr;
+
+        try {
+          contractId = StrKey.encodeContract(contractAddress.getContractId().toXdrByteArray());
+          fromAddr = getAddressOrContractId(from.getAddress());
+          toAddr = getAddressOrContractId(to.getAddress());
+        } catch (IOException ioex) {
+          throw new LedgerException("Failed to encode contract address: " + contractAddress, ioex);
+        }
 
         yield LedgerOperation.builder()
             .type(INVOKE_HOST_FUNCTION)
@@ -131,8 +145,8 @@ public class LedgerClientHelper {
                     .hostFunction("transfer")
                     .id(operationId)
                     .amount(Scv.fromInt128(amount))
-                    .from(getAddressOrContractId(from.getAddress()))
-                    .to(getAddressOrContractId(to.getAddress()))
+                    .from(fromAddr)
+                    .to(toAddr)
                     .sourceAccount(sourceAccount)
                     .build())
             .build();
@@ -141,10 +155,20 @@ public class LedgerClientHelper {
     };
   }
 
-  static String getAddressOrContractId(SCAddress address) {
+  static String getAddressOrContractId(SCAddress address) throws IOException {
     return switch (address.getDiscriminant()) {
-      case SC_ADDRESS_TYPE_ACCOUNT -> StrKey.encodeEd25519PublicKey(address.getAccountId());
-      case SC_ADDRESS_TYPE_CONTRACT -> StrKey.encodeContract(address.getContractId().getHash());
+      case SC_ADDRESS_TYPE_ACCOUNT ->
+          StrKey.encodeEd25519PublicKey(
+              address.getAccountId().getAccountID().getEd25519().getUint256());
+      case SC_ADDRESS_TYPE_CONTRACT ->
+          StrKey.encodeContract(address.getContractId().toXdrByteArray());
+      case SC_ADDRESS_TYPE_MUXED_ACCOUNT -> {
+        MuxedEd25519Account ma = address.getMuxedAccount();
+        String accountId = StrKey.encodeEd25519PublicKey(ma.getEd25519().getUint256());
+        BigInteger muxedId = ma.getId().getUint64().getNumber();
+        yield new org.stellar.sdk.MuxedAccount(accountId, muxedId).getAddress();
+      }
+      case SC_ADDRESS_TYPE_CLAIMABLE_BALANCE, SC_ADDRESS_TYPE_LIQUIDITY_POOL -> null;
     };
   }
 
@@ -207,8 +231,7 @@ public class LedgerClientHelper {
   public static List<LedgerOperation> getLedgerOperations(
       Integer applicationOrder, Long sequenceNumber, ParseResult parseResult)
       throws LedgerException {
-    List<LedgerTransaction.LedgerOperation> operations =
-        new ArrayList<>(parseResult.operations().length);
+    List<LedgerOperation> operations = new ArrayList<>(parseResult.operations().length);
     for (int opIndex = 0; opIndex < parseResult.operations().length; opIndex++) {
       LedgerOperation ledgerOp =
           LedgerClientHelper.convert(
@@ -236,17 +259,17 @@ public class LedgerClientHelper {
     int pollCount = 0;
     try {
       do {
-        if (java.time.Duration.between(startTime, Instant.now()).getSeconds() > maxTimeout
+        if (Duration.between(startTime, Instant.now()).getSeconds() > maxTimeout
             || pollCount >= maxPollCount)
           throw new InterruptedException("Transaction took too long to complete");
         try {
           LedgerTransaction txn = ledgerClient.getTransaction(txhHash);
           if (txn != null) return txn;
           pollCount++;
-        } catch (org.stellar.sdk.exception.BadRequestException e) {
+        } catch (BadRequestException e) {
           debug("Transaction not yet available: " + e.getMessage());
         }
-        sleep(1000);
+        SECONDS.sleep(1);
       } while (true);
     } catch (InterruptedException e) {
       info("Interrupted while waiting for transaction to complete");

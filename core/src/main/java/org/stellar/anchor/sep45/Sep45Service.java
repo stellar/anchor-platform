@@ -347,10 +347,11 @@ public class Sep45Service {
     if (sep45Config.getHomeDomains().stream()
         .noneMatch(
             homeDomain -> {
-              URI expected = URI.create("https://" + homeDomain);
-              URI given = URI.create(argsMap.get(KEY_HOME_DOMAIN));
-
-              return expected.getAuthority().equals(given.getAuthority());
+              URI expected = URI.create("http://" + homeDomain.replaceFirst("^https?://", ""));
+              URI given =
+                  URI.create(
+                      "http://" + argsMap.get(KEY_HOME_DOMAIN).replaceFirst("^https?://", ""));
+              return expected.getAuthority().equalsIgnoreCase(given.getAuthority());
             })) {
       throw new BadRequestException("Invalid home domain");
     }

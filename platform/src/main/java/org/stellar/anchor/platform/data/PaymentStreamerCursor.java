@@ -15,5 +15,6 @@ public class PaymentStreamerCursor {
   @SerializedName("id")
   String id = SINGLETON_ID;
 
-  String cursor;
+  String horizonCursor;
+  String stellarRpcCursor;
 }
