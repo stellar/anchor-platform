@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
@@ -51,6 +52,7 @@ class PaymentObserverTests {
     private lateinit var stellarRpcPaymentObserver: StellarRpcPaymentObserver
     private val stellarRpc = SorobanServer("https://soroban-testnet.stellar.org")
     private val sacToAssetMapper = SacToAssetMapper(stellarRpc)
+    private val assetService = mockk<AssetService>(relaxed = true)
 
     @JvmStatic
     @BeforeAll
@@ -98,6 +100,7 @@ class PaymentObserverTests {
           paymentObservingAccountManager,
           TestCursorStore(),
           sacToAssetMapper,
+          assetService
         )
       stellarRpcPaymentObserver.start()
     }

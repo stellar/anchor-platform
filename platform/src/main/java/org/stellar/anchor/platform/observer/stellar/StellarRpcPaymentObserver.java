@@ -14,11 +14,14 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.stream.Stream;
 import lombok.Builder;
 import lombok.Getter;
+import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
+import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation;
@@ -29,6 +32,7 @@ import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentOb
 import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.GsonUtils;
+import org.stellar.anchor.util.Log;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.SorobanServer;
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType;
@@ -44,6 +48,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Getter final StellarRpc stellarRpc;
   @Getter final SorobanServer sorobanServer;
   final SacToAssetMapper sacToAssetMapper;
+  final AssetService assetService;
   ObserverStatus status = ObserverStatus.STARTING;
 
   public StellarRpcPaymentObserver(
@@ -52,9 +57,11 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       List<PaymentListener> paymentListeners,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
       StellarPaymentStreamerCursorStore paymentStreamerCursorStore,
-      SacToAssetMapper sacToAssetMapper) {
+      SacToAssetMapper sacToAssetMapper,
+      AssetService assetService) {
     super(config, paymentListeners, paymentObservingAccountsManager, paymentStreamerCursorStore);
     this.stellarRpc = new StellarRpc(rpcUrl);
+    this.assetService = assetService;
     this.sorobanServer = stellarRpc.getSorobanServer();
     this.sacToAssetMapper = sacToAssetMapper;
   }
@@ -236,21 +243,38 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   private GetEventsRequest buildEventRequest(String cursor) throws IOException {
-    GetEventsRequest.EventFilter filter =
-        GetEventsRequest.EventFilter.builder()
-            .type(EventFilterType.CONTRACT)
-            .topic(List.of(Scv.toSymbol("transfer").toXdrBase64(), "**"))
-            .build();
+    List<GetEventsRequest.EventFilter> filters =
+        assetService.getStellarAssets().stream()
+            .filter(asset -> asset.getSchema() == AssetInfo.Schema.STELLAR)
+            .flatMap(
+                asset -> {
+                  try {
+                    return Stream.of(
+                        GetEventsRequest.EventFilter.builder()
+                            .type(EventFilterType.CONTRACT)
+                            .topic(
+                                List.of(
+                                    Scv.toSymbol("transfer").toXdrBase64(),
+                                    "*",
+                                    Scv.toAddress(asset.getDistributionAccount()).toXdrBase64(),
+                                    "*"))
+                            .build());
+                  } catch (IOException e) {
+                    Log.errorF(
+                        "Skipping asset due to invalid distribution account: {}. Error: {}",
+                        asset.getDistributionAccount(),
+                        e.getMessage());
+                    return Stream.empty();
+                  }
+                })
+            .toList();
 
     if (isEmpty(cursor)) {
       long latestLedger = getLatestLedger();
-      return GetEventsRequest.builder()
-          .filters(List.of(filter))
-          .startLedger(latestLedger - 1)
-          .build();
+      return GetEventsRequest.builder().filters(filters).startLedger(latestLedger - 1).build();
     } else {
       return GetEventsRequest.builder()
-          .filters(List.of(filter))
+          .filters(filters)
           .pagination(
               GetEventsRequest.PaginationOptions.builder().limit(100L).cursor(cursor).build())
           .build();

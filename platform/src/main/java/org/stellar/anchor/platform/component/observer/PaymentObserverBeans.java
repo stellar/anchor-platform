@@ -79,7 +79,8 @@ public class PaymentObserverBeans {
               paymentListeners,
               paymentObservingAccountsManager,
               stellarPaymentStreamerCursorStore,
-              sacToAssetMapper);
+              sacToAssetMapper,
+              assetService);
     } else if (isNotEmpty(appConfig.getHorizonUrl())) {
       paymentObserver =
           new HorizonPaymentObserver(
