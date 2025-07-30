@@ -37,6 +37,7 @@ import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.SorobanServer;
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType;
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest;
+import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest.EventFilter;
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse.EventInfo;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
@@ -243,14 +244,25 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   private GetEventsRequest buildEventRequest(String cursor) throws IOException {
-    List<GetEventsRequest.EventFilter> filters =
+    List<EventFilter> filters =
         assetService.getStellarAssets().stream()
             .filter(asset -> asset.getSchema() == AssetInfo.Schema.STELLAR)
             .flatMap(
                 asset -> {
                   try {
                     return Stream.of(
-                        GetEventsRequest.EventFilter.builder()
+                        // Filter for transfers from the distribution account
+                        EventFilter.builder()
+                            .type(EventFilterType.CONTRACT)
+                            .topic(
+                                List.of(
+                                    Scv.toSymbol("transfer").toXdrBase64(),
+                                    Scv.toAddress(asset.getDistributionAccount()).toXdrBase64(),
+                                    "*",
+                                    "*"))
+                            .build(),
+                        // Filter for transfers to the distribution account
+                        EventFilter.builder()
                             .type(EventFilterType.CONTRACT)
                             .topic(
                                 List.of(
