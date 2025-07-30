@@ -18,6 +18,7 @@ import java.util.stream.Stream;
 import lombok.Builder;
 import lombok.Getter;
 import org.stellar.anchor.api.asset.AssetInfo;
+import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
@@ -244,11 +245,17 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   private GetEventsRequest buildEventRequest(String cursor) throws IOException {
-    List<EventFilter> filters =
+    List<String> uniqueDistributionAccounts =
         assetService.getStellarAssets().stream()
             .filter(asset -> asset.getSchema() == AssetInfo.Schema.STELLAR)
+            .map(StellarAssetInfo::getDistributionAccount)
+            .distinct()
+            .toList();
+
+    List<EventFilter> filters =
+        uniqueDistributionAccounts.stream()
             .flatMap(
-                asset -> {
+                distributionAccount -> {
                   try {
                     return Stream.of(
                         // Filter for transfers from the distribution account
@@ -257,7 +264,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                             .topic(
                                 List.of(
                                     Scv.toSymbol("transfer").toXdrBase64(),
-                                    Scv.toAddress(asset.getDistributionAccount()).toXdrBase64(),
+                                    Scv.toAddress(distributionAccount).toXdrBase64(),
                                     "*",
                                     "*"))
                             .build(),
@@ -268,13 +275,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                                 List.of(
                                     Scv.toSymbol("transfer").toXdrBase64(),
                                     "*",
-                                    Scv.toAddress(asset.getDistributionAccount()).toXdrBase64(),
+                                    Scv.toAddress(distributionAccount).toXdrBase64(),
                                     "*"))
                             .build());
                   } catch (IOException e) {
                     Log.errorF(
                         "Skipping asset due to invalid distribution account: {}. Error: {}",
-                        asset.getDistributionAccount(),
+                        distributionAccount,
                         e.getMessage());
                     return Stream.empty();
                   }

@@ -8,6 +8,7 @@ import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation
@@ -25,6 +26,7 @@ class StellarRpcPaymentObserverTest {
   private lateinit var paymentStreamerCursorStore: StellarPaymentStreamerCursorStore
   private lateinit var sacToAssetMapper: MockSacToAssetMapper
   private lateinit var observer: StellarRpcPaymentObserver
+  private lateinit var assetService: AssetService
 
   @BeforeEach
   fun setUp() {
@@ -42,6 +44,7 @@ class StellarRpcPaymentObserverTest {
     paymentObservingAccountsManager = mockk(relaxed = true)
     paymentStreamerCursorStore = mockk(relaxed = true)
     sacToAssetMapper = MockSacToAssetMapper()
+    assetService = mockk(relaxed = true)
     observer =
       spyk(
         StellarRpcPaymentObserver(
@@ -51,6 +54,7 @@ class StellarRpcPaymentObserverTest {
           paymentObservingAccountsManager,
           paymentStreamerCursorStore,
           sacToAssetMapper,
+          assetService,
         ),
         recordPrivateCalls = true,
       )
