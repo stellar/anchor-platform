@@ -244,7 +244,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  private GetEventsRequest buildEventRequest(String cursor) throws IOException {
+  GetEventsRequest buildEventRequest(String cursor) throws IOException {
     List<String> uniqueDistributionAccounts =
         assetService.getStellarAssets().stream()
             .filter(asset -> asset.getSchema() == AssetInfo.Schema.STELLAR)
