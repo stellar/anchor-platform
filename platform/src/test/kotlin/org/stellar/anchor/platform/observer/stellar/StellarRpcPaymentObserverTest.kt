@@ -8,6 +8,8 @@ import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.api.asset.StellarAssetInfo
+import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation
@@ -16,6 +18,8 @@ import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentOb
 import org.stellar.anchor.platform.observer.PaymentListener
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.requests.sorobanrpc.EventFilterType
+import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.OperationType
 
 class StellarRpcPaymentObserverTest {
@@ -25,6 +29,7 @@ class StellarRpcPaymentObserverTest {
   private lateinit var paymentStreamerCursorStore: StellarPaymentStreamerCursorStore
   private lateinit var sacToAssetMapper: MockSacToAssetMapper
   private lateinit var observer: StellarRpcPaymentObserver
+  private lateinit var assetService: AssetService
 
   @BeforeEach
   fun setUp() {
@@ -42,6 +47,7 @@ class StellarRpcPaymentObserverTest {
     paymentObservingAccountsManager = mockk(relaxed = true)
     paymentStreamerCursorStore = mockk(relaxed = true)
     sacToAssetMapper = MockSacToAssetMapper()
+    assetService = mockk(relaxed = true)
     observer =
       spyk(
         StellarRpcPaymentObserver(
@@ -51,6 +57,7 @@ class StellarRpcPaymentObserverTest {
           paymentObservingAccountsManager,
           paymentStreamerCursorStore,
           sacToAssetMapper,
+          assetService,
         ),
         recordPrivateCalls = true,
       )
@@ -215,6 +222,45 @@ class StellarRpcPaymentObserverTest {
     assertEquals("txHashInvoke", event.txHash)
     assertEquals(opId, event.operationId)
     assertEquals(ledgerTxn, event.ledgerTransaction)
+  }
+
+  @Test
+  fun `test buildEventRequest`() {
+    val account1 = KeyPair.random().accountId
+    val account2 = KeyPair.random().accountId
+    // Mock the behavior of getStellarAssets()
+    every { assetService.stellarAssets } returns
+      listOf(
+        StellarAssetInfo().apply { distributionAccount = account1 },
+        StellarAssetInfo().apply { distributionAccount = account2 },
+      )
+
+    // Call the method under test
+    val request = observer.buildEventRequest(null)
+
+    // Verify the result
+    assertEquals(4, request.filters.size)
+    val filterList = request.filters.stream().toList()
+    assertEquals(EventFilterType.CONTRACT, filterList[0].type)
+    assertEquals(EventFilterType.CONTRACT, filterList[1].type)
+    assertEquals(EventFilterType.CONTRACT, filterList[2].type)
+    assertEquals(EventFilterType.CONTRACT, filterList[3].type)
+    assertEquals(
+      Scv.toAddress(account1).toXdrBase64(),
+      filterList[0].topics.toList()[0].toList()[1]
+    )
+    assertEquals(
+      Scv.toAddress(account1).toXdrBase64(),
+      filterList[1].topics.toList()[0].toList()[2]
+    )
+    assertEquals(
+      Scv.toAddress(account2).toXdrBase64(),
+      filterList[2].topics.toList()[0].toList()[1]
+    )
+    assertEquals(
+      Scv.toAddress(account2).toXdrBase64(),
+      filterList[3].topics.toList()[0].toList()[2]
+    )
   }
 }
 
