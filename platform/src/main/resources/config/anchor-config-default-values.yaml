@@ -55,9 +55,9 @@ stellar_network:
     # If the type is `api_key` or `url_path`, the secret must be set by the environment variable `secret.stellar_network.rpc.auth.secret`.
     type: none
     # If the type is `api_key`, the following configuration can be set to configure how the API key is added to the HTTP request header.
-    x_api_key:
+    api_key:
       # The HTTP header name of the API key
-      http_header: Aurhorization
+      http_header: X-Api-Key
     # If the type is `url`, the following configuration can be set to configure how the API key is added to the URL.
     url:
       # The `type` can be one of the following:
@@ -67,7 +67,6 @@ stellar_network:
       type: path_append
       # If the type is `query_param`, the `query parameter name` must be set.
       query_param_name: api_key
-
 
   # The horizon server endpoint.
   # If the rpcURL is set, the horizonURL is not used other than the observer.
