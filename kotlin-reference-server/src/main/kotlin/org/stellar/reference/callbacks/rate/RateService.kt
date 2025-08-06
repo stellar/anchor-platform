@@ -196,7 +196,7 @@ class RateService(private val quoteRepository: QuoteRepository) {
         Pair(fiatCAD, stellarUSDCprod) to "0.74",
         Pair(fiatCAD, stellarSRT) to "0.406",
         Pair(stellarNative, fiatUSD) to "0.39",
-        Pair(stellarNative, fiatUSD) to "0.54",
+        Pair(stellarNative, fiatCAD) to "0.54",
         Pair(stellarUSDCtest, fiatUSD) to "1.05",
         Pair(stellarUSDCtest, stellarJPYC) to "0.0084",
         Pair(stellarUSDCtest, fiatCAD) to "1.37",
