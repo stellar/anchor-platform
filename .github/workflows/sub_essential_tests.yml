@@ -101,7 +101,7 @@ jobs:
 
       - name: Run Stellar validation tool
         run: |
-          docker run --network host -v /home/runner/anchor-platform/platform/src/test/resources://config stellar/anchor-tests:v0.6.20 --home-domain http://host.docker.internal:8080 --seps 1 6 10 12 24 31 38 --sep-config //config/stellar-anchor-tests-sep-config.json --verbose
+          docker run --network host -v /home/runner/anchor-platform/platform/src/test/resources://config stellar/anchor-tests:latest --home-domain http://host.docker.internal:8080 --seps 1 6 10 12 24 31 38 --sep-config //config/stellar-anchor-tests-sep-config.json --asset-code USDC --verbose
 
       - name: Upload Essential Tests report
         if: always()
