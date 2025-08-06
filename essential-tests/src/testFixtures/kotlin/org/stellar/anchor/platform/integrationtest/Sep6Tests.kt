@@ -22,7 +22,6 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test Sep6 info endpoint`() {
     val info = sep6Client.getInfo()
-    print(gson.toJson(info))
     JSONAssert.assertEquals(expectedSep6Info, gson.toJson(info), JSONCompareMode.STRICT)
   }
 
