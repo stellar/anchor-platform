@@ -42,7 +42,7 @@ public class UtilityBeans {
   }
 
   @Bean
-  @ConfigurationProperties(prefix = "app")
+  @ConfigurationProperties(prefix = "stellar-network")
   AppConfig appConfig() {
     return new PropertyAppConfig();
   }

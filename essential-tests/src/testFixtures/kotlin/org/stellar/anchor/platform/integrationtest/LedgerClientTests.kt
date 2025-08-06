@@ -39,7 +39,7 @@ class LedgerClientTests {
   fun setup() {
     every { appConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
     every { appConfig.horizonUrl } returns "https://horizon-testnet.stellar.org"
-    every { appConfig.stellarNetwork } returns "TESTNET"
+    every { appConfig.network } returns "TESTNET"
     every { appConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
 
     sourceKeypair = KeyPair.random()

@@ -13,21 +13,20 @@ import org.springframework.validation.Errors;
 import org.springframework.validation.ValidationUtils;
 import org.springframework.validation.Validator;
 import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.RpcAuthConfig;
 import org.stellar.anchor.util.NetUtil;
 
 @Data
 public class PropertyAppConfig implements AppConfig, Validator {
-  @Value("${stellar_network.network}")
-  private String stellarNetwork;
-
-  @Value("${stellar_network.horizon_url}")
+  private String network;
   private String horizonUrl;
-
-  @Value("${stellar_network.rpc_url}")
   private String rpcUrl;
+  private RpcAuthConfig rpcAuth;
 
   @Value("${languages}")
   private List<String> languages;
+
+  //  private RpcAuthConfig rpcAuthConfig;
 
   @Override
   public boolean supports(@NotNull Class<?> clazz) {
@@ -44,10 +43,7 @@ public class PropertyAppConfig implements AppConfig, Validator {
 
   void validateConfig(AppConfig config, Errors errors) {
     ValidationUtils.rejectIfEmpty(
-        errors,
-        "stellarNetwork",
-        "stellar-network-empty",
-        "stellar_network.network is not defined.");
+        errors, "network", "stellar-network-empty", "stellar_network.network is not defined.");
 
     try {
       config.getStellarNetworkPassphrase();
@@ -57,7 +53,7 @@ public class PropertyAppConfig implements AppConfig, Validator {
           "stellar-network-invalid",
           String.format(
               "The stellar_network.network:%s is not valid. Please check the configuration.",
-              config.getStellarNetwork()));
+              config.getNetwork()));
     }
 
     if (isEmpty(config.getHorizonUrl())) {
@@ -102,7 +98,7 @@ public class PropertyAppConfig implements AppConfig, Validator {
 
   @Override
   public String getStellarNetworkPassphrase() {
-    switch (stellarNetwork.toUpperCase()) {
+    switch (network.toUpperCase()) {
       case "TESTNET":
         return TESTNET.getNetworkPassphrase();
       case "PUBLIC":
@@ -111,7 +107,7 @@ public class PropertyAppConfig implements AppConfig, Validator {
         return FUTURENET.getNetworkPassphrase();
       default:
         throw new RuntimeException(
-            "Invalid stellar network " + stellarNetwork + ". Please check the configuration.");
+            "Invalid stellar network " + network + ". Please check the configuration.");
     }
   }
 }
