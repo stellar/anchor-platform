@@ -35,7 +35,8 @@ public class SepLanguageHelper {
     alternativeLangs = null;
   }
 
-  static Map<String, Rfc4646Language> prepareAlternativeLangs(StellarNetworkConfig stellarNetworkConfig) {
+  static Map<String, Rfc4646Language> prepareAlternativeLangs(
+      StellarNetworkConfig stellarNetworkConfig) {
     Map<String, Rfc4646Language> alternatives = new HashMap<>();
     stellarNetworkConfig
         .getLanguages()

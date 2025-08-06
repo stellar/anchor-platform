@@ -18,9 +18,9 @@ import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Nonce;
 import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep45Jwt;
-import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.util.ClientDomainHelper;
 import org.stellar.anchor.xdr.SorobanAuthorizationEntryList;
@@ -268,7 +268,8 @@ public class Sep45Service {
                 HashIDPreimage.HashIDPreimageSorobanAuthorization.builder()
                     .networkID(
                         new Hash(
-                            new Network(stellarNetworkConfig.getStellarNetworkPassphrase()).getNetworkId()))
+                            new Network(stellarNetworkConfig.getStellarNetworkPassphrase())
+                                .getNetworkId()))
                     .nonce(entry.getCredentials().getAddress().getNonce())
                     .invocation(entry.getRootInvocation())
                     .signatureExpirationLedger(

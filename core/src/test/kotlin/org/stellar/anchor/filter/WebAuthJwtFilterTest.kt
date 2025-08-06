@@ -19,9 +19,9 @@ import org.stellar.anchor.TestHelper.Companion.createWebAuthJwt
 import org.stellar.anchor.auth.AbstractJwt
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.WebAuthJwt
-import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.filter.WebAuthJwtFilter.APPLICATION_JSON_VALUE
 import org.stellar.anchor.filter.WebAuthJwtFilter.JWT_TOKEN
 import org.stellar.anchor.setupMock

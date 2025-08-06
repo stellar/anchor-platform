@@ -33,8 +33,8 @@ import org.stellar.anchor.api.shared.Refunds
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.client.ClientFinder
-import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.config.Sep6Config
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.util.ExchangeAmountsCalculator
 import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts

@@ -29,9 +29,9 @@ import org.stellar.anchor.api.sep.sep10.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.client.ClientFinder;
-import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep10Config;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.util.ClientDomainHelper;
 import org.stellar.anchor.util.Log;
@@ -169,7 +169,8 @@ public class Sep10Service implements ISep10Service {
       // Convert the challenge to response
       trace("SEP-10 challenge txn:", txn);
       ChallengeResponse challengeResponse =
-          ChallengeResponse.of(txn.toEnvelopeXdrBase64(), stellarNetworkConfig.getStellarNetworkPassphrase());
+          ChallengeResponse.of(
+              txn.toEnvelopeXdrBase64(), stellarNetworkConfig.getStellarNetworkPassphrase());
       trace("challengeResponse:", challengeResponse);
       return challengeResponse;
     } catch (InvalidSep10ChallengeException ex) {
@@ -330,7 +331,9 @@ public class Sep10Service implements ISep10Service {
     }
 
     if (claimNotEqual(payload.get("web_auth_endpoint"), authUrl())) {
-      if (stellarNetworkConfig.getStellarNetworkPassphrase().equals(TESTNET.getNetworkPassphrase())) {
+      if (stellarNetworkConfig
+          .getStellarNetworkPassphrase()
+          .equals(TESTNET.getNetworkPassphrase())) {
         // Allow http for testnet
         if (claimNotEqual(payload.get("web_auth_endpoint"), authUrl().replace("https", "http"))) {
           throw new SepValidationException("Invalid web_auth_endpoint in the signed header");

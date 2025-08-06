@@ -18,7 +18,7 @@ class StellarNetworkConfigTest {
   @BeforeEach
   fun setUp() {
     config = PropertyStellarNetworkConfig()
-    config.stellarNetwork = "TESTNET"
+    config.network = "TESTNET"
     config.horizonUrl = "https://horizon-testnet.stellar.org"
     errors = BindException(config, "config")
   }
@@ -90,7 +90,7 @@ class StellarNetworkConfigTest {
   @ParameterizedTest
   @ValueSource(strings = ["TESTNET", "testnet", "testNET", "PUBLIC", "public", "PUBlic"])
   fun `test valid stellar network configurations`(network: String) {
-    config.stellarNetwork = network
+    config.network = network
     config.validateConfig(config, errors)
     assertFalse(errors.hasErrors())
   }
@@ -98,7 +98,7 @@ class StellarNetworkConfigTest {
   @ParameterizedTest
   @ValueSource(strings = ["TESTNET1", "mainnet", ""])
   fun `test invalid stellar network configurations`(network: String) {
-    config.stellarNetwork = network
+    config.network = network
     config.validateConfig(config, errors)
     assertTrue(errors.hasErrors())
   }

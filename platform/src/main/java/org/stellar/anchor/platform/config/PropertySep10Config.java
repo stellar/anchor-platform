@@ -15,9 +15,9 @@ import org.springframework.validation.Validator;
 import org.stellar.anchor.client.ClientConfig;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.client.NonCustodialClient;
-import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep10Config;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.util.KeyUtil;
 import org.stellar.anchor.util.NetUtil;
 import org.stellar.sdk.*;
@@ -40,7 +40,9 @@ public class PropertySep10Config implements Sep10Config, Validator {
   private boolean requireAuthHeader = false;
 
   public PropertySep10Config(
-          StellarNetworkConfig stellarNetworkConfig, ClientService clientService, SecretConfig secretConfig) {
+      StellarNetworkConfig stellarNetworkConfig,
+      ClientService clientService,
+      SecretConfig secretConfig) {
     this.stellarNetworkConfig = stellarNetworkConfig;
     this.clientService = clientService;
     this.secretConfig = secretConfig;

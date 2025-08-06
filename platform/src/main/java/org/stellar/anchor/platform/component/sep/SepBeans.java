@@ -58,7 +58,9 @@ public class SepBeans {
   @Bean
   @ConfigurationProperties(prefix = "sep10")
   Sep10Config sep10Config(
-          StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig, ClientService clientService) {
+      StellarNetworkConfig stellarNetworkConfig,
+      SecretConfig secretConfig,
+      ClientService clientService) {
     return new PropertySep10Config(stellarNetworkConfig, clientService, secretConfig);
   }
 
@@ -151,7 +153,7 @@ public class SepBeans {
     ExchangeAmountsCalculator exchangeAmountsCalculator =
         new ExchangeAmountsCalculator(sep38QuoteStore);
     return new Sep6Service(
-            stellarNetworkConfig,
+        stellarNetworkConfig,
         sep6Config,
         assetService,
         requestValidator,
@@ -172,7 +174,7 @@ public class SepBeans {
       JwtService jwtService,
       ClientFinder clientFinder) {
     return new Sep10Service(
-            stellarNetworkConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder);
+        stellarNetworkConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder);
   }
 
   @Bean
@@ -203,7 +205,7 @@ public class SepBeans {
     ExchangeAmountsCalculator exchangeAmountsCalculator =
         new ExchangeAmountsCalculator(sep38QuoteStore);
     return new Sep24Service(
-            stellarNetworkConfig,
+        stellarNetworkConfig,
         sep24Config,
         clientService,
         assetService,
@@ -242,7 +244,7 @@ public class SepBeans {
       RateIntegration rateIntegration,
       EventService eventService) {
     return new Sep31Service(
-            stellarNetworkConfig,
+        stellarNetworkConfig,
         sep10Config,
         sep31Config,
         sep31TransactionStore,
@@ -276,6 +278,11 @@ public class SepBeans {
       JwtService jwtService) {
     assert (ledgerClient instanceof StellarRpc);
     return new Sep45Service(
-            stellarNetworkConfig, secretConfig, sep45Config, (StellarRpc) ledgerClient, nonceManager, jwtService);
+        stellarNetworkConfig,
+        secretConfig,
+        sep45Config,
+        (StellarRpc) ledgerClient,
+        nonceManager,
+        jwtService);
   }
 }

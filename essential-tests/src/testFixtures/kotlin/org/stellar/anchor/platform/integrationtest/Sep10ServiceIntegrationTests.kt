@@ -21,10 +21,10 @@ import org.junit.jupiter.params.provider.MethodSource
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.client.ClientFinder
-import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerClientHelper
@@ -92,7 +92,14 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
     secretConfig.setupMock()
     this.jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
     this.sep10Service =
-      Sep10Service(stellarNetworkConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder)
+      Sep10Service(
+        stellarNetworkConfig,
+        secretConfig,
+        sep10Config,
+        ledgerClient,
+        jwtService,
+        clientFinder
+      )
     this.httpClient = `create httpClient`()
   }
 
@@ -178,7 +185,14 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
     // 2 ------ Create Services
     every { secretConfig.sep10SigningSeed } returns String(serverKP.secretSeed)
     this.sep10Service =
-      Sep10Service(stellarNetworkConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder)
+      Sep10Service(
+        stellarNetworkConfig,
+        secretConfig,
+        sep10Config,
+        ledgerClient,
+        jwtService,
+        clientFinder
+      )
 
     // 3 ------ Run tests
     val validationRequest = ValidationRequest.of(transaction.toEnvelopeXdrBase64())
@@ -260,7 +274,14 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
     every { stellarNetworkConfig.horizonUrl } returns mockHorizonUrl
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
     this.sep10Service =
-      Sep10Service(stellarNetworkConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder)
+      Sep10Service(
+        stellarNetworkConfig,
+        secretConfig,
+        sep10Config,
+        ledgerClient,
+        jwtService,
+        clientFinder
+      )
 
     // 3 ------ Run tests
     val validationRequest = ValidationRequest.of(transaction.toEnvelopeXdrBase64())
@@ -338,7 +359,14 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns network.networkPassphrase
 
     this.sep10Service =
-      Sep10Service(stellarNetworkConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder)
+      Sep10Service(
+        stellarNetworkConfig,
+        secretConfig,
+        sep10Config,
+        ledgerClient,
+        jwtService,
+        clientFinder
+      )
 
     // 3 ------ Setup multisig
     val httpRequest =

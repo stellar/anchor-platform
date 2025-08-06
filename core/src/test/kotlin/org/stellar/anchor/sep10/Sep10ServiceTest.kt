@@ -41,10 +41,10 @@ import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.client.ClientFinder
-import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.ClientDomainHelper
@@ -117,7 +117,14 @@ internal class Sep10ServiceTest {
 
     this.jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
     this.sep10Service =
-      Sep10Service(stellarNetworkConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder)
+      Sep10Service(
+        stellarNetworkConfig,
+        secretConfig,
+        sep10Config,
+        ledgerClient,
+        jwtService,
+        clientFinder
+      )
   }
 
   @Synchronized

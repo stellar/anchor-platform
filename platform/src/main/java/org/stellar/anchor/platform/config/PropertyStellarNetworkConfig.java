@@ -12,8 +12,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ValidationUtils;
 import org.springframework.validation.Validator;
-import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.config.RpcAuthConfig;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.util.NetUtil;
 
 @Data
@@ -49,7 +49,7 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
       config.getStellarNetworkPassphrase();
     } catch (Exception ex) {
       errors.rejectValue(
-          "stellarNetwork",
+          "network",
           "stellar-network-invalid",
           String.format(
               "The stellar_network.network:%s is not valid. Please check the configuration.",
