@@ -68,6 +68,7 @@ stellar_network:
       # If the type is `query_param`, the `query parameter name` must be set.
       query_param_name: api_key
 
+
   # The horizon server endpoint.
   # If the rpcURL is set, the horizonURL is not used other than the observer.
   horizon_url: https://horizon-testnet.stellar.org

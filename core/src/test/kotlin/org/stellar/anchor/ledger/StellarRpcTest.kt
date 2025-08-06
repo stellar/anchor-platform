@@ -32,7 +32,7 @@ class StellarRpcTest {
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
 
     sorobanServer = mockk<SorobanServer>()
-    stellarRpc = StellarRpc(stellarNetworkConfig)
+    stellarRpc = StellarRpc(stellarNetworkConfig.rpcUrl)
     stellarRpc.sorobanServer = sorobanServer
   }
 
@@ -45,7 +45,7 @@ class StellarRpcTest {
     val result =
       stellarRpc.hasTrustline(
         "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
-        "USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+        "USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       )
 
     assertTrue(result)
@@ -57,7 +57,7 @@ class StellarRpcTest {
     assertNotNull(key.trustLine)
     assertEquals(
       "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
-      StrKey.encodeEd25519PublicKey(key.trustLine?.accountID?.accountID?.ed25519?.uint256)
+      StrKey.encodeEd25519PublicKey(key.trustLine?.accountID?.accountID?.ed25519?.uint256),
     )
   }
 
@@ -70,7 +70,7 @@ class StellarRpcTest {
     val result =
       stellarRpc.hasTrustline(
         "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
-        "USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+        "USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       )
 
     assertFalse(result)
@@ -101,7 +101,7 @@ class StellarRpcTest {
     assertNotNull(key.account)
     assertEquals(
       "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
-      StrKey.encodeEd25519PublicKey(key.account?.accountID?.accountID?.ed25519?.uint256)
+      StrKey.encodeEd25519PublicKey(key.account?.accountID?.accountID?.ed25519?.uint256),
     )
   }
 

@@ -123,7 +123,7 @@ class LedgerClientTests {
   }
 
   private fun getLedgerClient(): List<Array<Any>> {
-    val stellarRpc = StellarRpc(stellarNetworkConfig)
+    val stellarRpc = StellarRpc(stellarNetworkConfig.rpcUrl)
     val horizon = Horizon(stellarNetworkConfig)
 
     return listOf(arrayOf(stellarRpc), arrayOf(horizon))

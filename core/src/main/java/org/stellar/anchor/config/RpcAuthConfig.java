@@ -1,29 +1,35 @@
 package org.stellar.anchor.config;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
+@Getter
+@Setter
 public class RpcAuthConfig {
   RpcAuthType type;
   XApiKeyConfig xApiKey;
   UrlConfig url;
 
-  enum RpcAuthType {
+  public enum RpcAuthType {
     NONE,
     X_API_KEY,
     URL,
   }
 
-  @Data
-  static class XApiKeyConfig {
+  @Getter
+  @Setter
+  public static class XApiKeyConfig {
     String httpHeader;
   }
 
-  @Data
-  static class UrlConfig {
+  @Getter
+  @Setter
+  public static class UrlConfig {
     UrlType type;
     String queryParamName;
+    String value;
 
-    enum UrlType {
+    public enum UrlType {
       PATH_APPEND,
       QUERY_PARAM
     }

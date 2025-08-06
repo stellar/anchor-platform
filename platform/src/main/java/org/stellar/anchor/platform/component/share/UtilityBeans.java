@@ -111,8 +111,10 @@ public class UtilityBeans {
 
   @Bean
   @SneakyThrows
-  public LedgerClient ledgerClient(StellarNetworkConfig stellarNetworkConfig) {
-    if (isNotEmpty(stellarNetworkConfig.getRpcUrl())) return new StellarRpc(stellarNetworkConfig);
+  public LedgerClient ledgerClient(
+      StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
+    if (isNotEmpty(stellarNetworkConfig.getRpcUrl()))
+      return new StellarRpc(stellarNetworkConfig, secretConfig);
     else if (isNotEmpty(stellarNetworkConfig.getHorizonUrl()))
       return new Horizon(stellarNetworkConfig);
     throw new NotSupportedException("No horizon_url or rpc_url is defined.");

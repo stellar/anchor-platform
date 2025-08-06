@@ -7,11 +7,14 @@ import lombok.SneakyThrows;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
+import org.stellar.anchor.api.exception.NotSupportedException;
 import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
+import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.platform.config.PaymentObserverConfig;
 import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.JdbcSep24TransactionStore;
@@ -25,6 +28,7 @@ public class PaymentObserverBeans {
   @Bean
   @SneakyThrows
   public AbstractPaymentObserver stellarPaymentObserver(
+      LedgerClient ledgerClient,
       AssetService assetService,
       List<PaymentListener> paymentListeners,
       StellarPaymentStreamerCursorStore stellarPaymentStreamerCursorStore,
@@ -32,6 +36,12 @@ public class PaymentObserverBeans {
       StellarNetworkConfig stellarNetworkConfig,
       PaymentObserverConfig paymentObserverConfig,
       SacToAssetMapper sacToAssetMapper) {
+
+    // validate ledgerClient
+    if (!(ledgerClient instanceof StellarRpc stellarRpc)) {
+      throw new NotSupportedException(
+          "The ledger client must be an instance of StellarRpc for the Stellar payment observer. Please check the `stellar_network.type` is set to `rpc`.");
+    }
     // validate assetService
     if (assetService == null || assetService.getAssets() == null) {
       throw new ServerErrorException("Asset service cannot be empty.");
@@ -74,7 +84,7 @@ public class PaymentObserverBeans {
     if (isNotEmpty(stellarNetworkConfig.getRpcUrl())) {
       paymentObserver =
           new StellarRpcPaymentObserver(
-              stellarNetworkConfig.getRpcUrl(),
+              stellarRpc,
               paymentObserverConfig.getStellar(),
               paymentListeners,
               paymentObservingAccountsManager,
