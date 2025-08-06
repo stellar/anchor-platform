@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.MethodSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.config.StellarNetworkConfig
+import org.stellar.anchor.config.StellarNetworkConfig.ProviderType.HORIZON
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerClientHelper
@@ -37,6 +38,7 @@ class LedgerClientTests {
 
   @BeforeAll
   fun setup() {
+    every { stellarNetworkConfig.type } returns HORIZON
     every { stellarNetworkConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
     every { stellarNetworkConfig.horizonUrl } returns "https://horizon-testnet.stellar.org"
     every { stellarNetworkConfig.network } returns "TESTNET"
@@ -122,6 +124,9 @@ class LedgerClientTests {
     return Triple(sourceKeypair, destKeyPair, transaction)
   }
 
+  // The warning is suppressed because this method is used to provide the LedgerClient instances for
+  // the parameterized tests.
+  @SuppressWarnings("unused")
   private fun getLedgerClient(): List<Array<Any>> {
     val stellarRpc = StellarRpc(stellarNetworkConfig.rpcUrl)
     val horizon = Horizon(stellarNetworkConfig)

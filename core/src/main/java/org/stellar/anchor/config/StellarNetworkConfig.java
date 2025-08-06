@@ -2,6 +2,8 @@ package org.stellar.anchor.config;
 
 @SuppressWarnings("SameReturnValue")
 public interface StellarNetworkConfig {
+  ProviderType getType();
+
   String getNetwork();
 
   String getStellarNetworkPassphrase();
@@ -12,5 +14,8 @@ public interface StellarNetworkConfig {
 
   RpcAuthConfig getRpcAuth();
 
-  //  List<String> getLanguages();
+  enum ProviderType {
+    HORIZON,
+    RPC,
+  }
 }

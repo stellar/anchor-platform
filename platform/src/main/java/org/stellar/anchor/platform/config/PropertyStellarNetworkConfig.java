@@ -14,6 +14,7 @@ import org.stellar.anchor.util.NetUtil;
 
 @Data
 public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Validator {
+  private ProviderType type;
   private String network;
   private String horizonUrl;
   private String rpcUrl;

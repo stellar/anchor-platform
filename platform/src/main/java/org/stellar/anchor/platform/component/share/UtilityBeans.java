@@ -1,7 +1,5 @@
 package org.stellar.anchor.platform.component.share;
 
-import static org.stellar.anchor.util.StringHelper.isNotEmpty;
-
 import com.google.gson.Gson;
 import jakarta.validation.Validator;
 import java.util.List;
@@ -113,11 +111,10 @@ public class UtilityBeans {
   @SneakyThrows
   public LedgerClient ledgerClient(
       StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
-    if (isNotEmpty(stellarNetworkConfig.getRpcUrl()))
-      return new StellarRpc(stellarNetworkConfig, secretConfig);
-    else if (isNotEmpty(stellarNetworkConfig.getHorizonUrl()))
-      return new Horizon(stellarNetworkConfig);
-    throw new NotSupportedException("No horizon_url or rpc_url is defined.");
+    return switch (stellarNetworkConfig.getType()) {
+      case RPC -> new StellarRpc(stellarNetworkConfig, secretConfig);
+      case HORIZON -> new Horizon(stellarNetworkConfig);
+    };
   }
 
   @Bean
