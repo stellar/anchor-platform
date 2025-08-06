@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.asset.DefaultAssetService;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.config.AssetsConfig;
 import org.stellar.anchor.platform.config.PropertyAssetsConfig;
 import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
@@ -26,7 +26,7 @@ public class AssetBeans {
   }
 
   @Bean
-  SacToAssetMapper sacToAssetMapper(AppConfig appConfig) {
-    return new SacToAssetMapper(new SorobanServer(appConfig.getRpcUrl()));
+  SacToAssetMapper sacToAssetMapper(StellarNetworkConfig stellarNetworkConfig) {
+    return new SacToAssetMapper(new SorobanServer(stellarNetworkConfig.getRpcUrl()));
   }
 }

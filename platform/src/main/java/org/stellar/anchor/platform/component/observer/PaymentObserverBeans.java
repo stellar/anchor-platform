@@ -10,7 +10,7 @@ import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.platform.config.PaymentObserverConfig;
 import org.stellar.anchor.platform.config.RpcConfig;
@@ -29,7 +29,7 @@ public class PaymentObserverBeans {
       List<PaymentListener> paymentListeners,
       StellarPaymentStreamerCursorStore stellarPaymentStreamerCursorStore,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
-      AppConfig appConfig,
+      StellarNetworkConfig stellarNetworkConfig,
       PaymentObserverConfig paymentObserverConfig,
       SacToAssetMapper sacToAssetMapper) {
     // validate assetService
@@ -53,7 +53,7 @@ public class PaymentObserverBeans {
     }
 
     // validate appConfig
-    if (appConfig == null) {
+    if (stellarNetworkConfig == null) {
       throw new ServerErrorException("AppConfig cannot be empty.");
     }
 
@@ -71,20 +71,20 @@ public class PaymentObserverBeans {
     }
 
     AbstractPaymentObserver paymentObserver;
-    if (isNotEmpty(appConfig.getRpcUrl())) {
+    if (isNotEmpty(stellarNetworkConfig.getRpcUrl())) {
       paymentObserver =
           new StellarRpcPaymentObserver(
-              appConfig.getRpcUrl(),
+              stellarNetworkConfig.getRpcUrl(),
               paymentObserverConfig.getStellar(),
               paymentListeners,
               paymentObservingAccountsManager,
               stellarPaymentStreamerCursorStore,
               sacToAssetMapper,
               assetService);
-    } else if (isNotEmpty(appConfig.getHorizonUrl())) {
+    } else if (isNotEmpty(stellarNetworkConfig.getHorizonUrl())) {
       paymentObserver =
           new HorizonPaymentObserver(
-              new Horizon(appConfig.getHorizonUrl()),
+              new Horizon(stellarNetworkConfig.getHorizonUrl()),
               paymentObserverConfig.getStellar(),
               paymentListeners,
               paymentObservingAccountsManager,

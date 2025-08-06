@@ -11,13 +11,13 @@ import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.validation.BindException
 import org.springframework.validation.Errors
 
-class AppConfigTest {
-  private lateinit var config: PropertyAppConfig
+class StellarNetworkConfigTest {
+  private lateinit var config: PropertyStellarNetworkConfig
   private lateinit var errors: Errors
 
   @BeforeEach
   fun setUp() {
-    config = PropertyAppConfig()
+    config = PropertyStellarNetworkConfig()
     config.stellarNetwork = "TESTNET"
     config.horizonUrl = "https://horizon-testnet.stellar.org"
     errors = BindException(config, "config")

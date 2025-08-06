@@ -12,7 +12,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
-import org.stellar.anchor.config.AppConfig
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerClientHelper
@@ -29,7 +29,7 @@ import org.stellar.sdk.xdr.TransactionEnvelope
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Execution(ExecutionMode.SAME_THREAD)
 class LedgerClientTests {
-  private val appConfig = mockk<AppConfig>()
+  private val stellarNetworkConfig = mockk<StellarNetworkConfig>()
   private val trustlineTestAccount = "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
   val gson = GsonUtils.getInstance()!!
   private lateinit var sourceKeypair: KeyPair
@@ -37,14 +37,14 @@ class LedgerClientTests {
 
   @BeforeAll
   fun setup() {
-    every { appConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
-    every { appConfig.horizonUrl } returns "https://horizon-testnet.stellar.org"
-    every { appConfig.network } returns "TESTNET"
-    every { appConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
+    every { stellarNetworkConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
+    every { stellarNetworkConfig.horizonUrl } returns "https://horizon-testnet.stellar.org"
+    every { stellarNetworkConfig.network } returns "TESTNET"
+    every { stellarNetworkConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
 
     sourceKeypair = KeyPair.random()
     destKeyPair = KeyPair.fromAccountId("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG")
-    prepareAccount(Server(appConfig.horizonUrl), sourceKeypair)
+    prepareAccount(Server(stellarNetworkConfig.horizonUrl), sourceKeypair)
   }
 
   @ParameterizedTest
@@ -123,8 +123,8 @@ class LedgerClientTests {
   }
 
   private fun getLedgerClient(): List<Array<Any>> {
-    val stellarRpc = StellarRpc(appConfig)
-    val horizon = Horizon(appConfig)
+    val stellarRpc = StellarRpc(stellarNetworkConfig)
+    val horizon = Horizon(stellarNetworkConfig)
 
     return listOf(arrayOf(stellarRpc), arrayOf(horizon))
   }

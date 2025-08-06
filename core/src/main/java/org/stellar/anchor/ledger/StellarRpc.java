@@ -9,7 +9,7 @@ import java.util.*;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.exception.LedgerException;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Asset;
@@ -30,8 +30,8 @@ public class StellarRpc implements LedgerClient {
     sorobanServer = new SorobanServer(rpcServerUrl);
   }
 
-  public StellarRpc(AppConfig appConfig) {
-    this(appConfig.getRpcUrl());
+  public StellarRpc(StellarNetworkConfig stellarNetworkConfig) {
+    this(stellarNetworkConfig.getRpcUrl());
   }
 
   @Override

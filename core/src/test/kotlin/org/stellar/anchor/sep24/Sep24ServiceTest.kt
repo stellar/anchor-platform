@@ -99,7 +99,7 @@ internal class Sep24ServiceTest {
         .trimIndent()
   }
 
-  @MockK(relaxed = true) lateinit var appConfig: AppConfig
+  @MockK(relaxed = true) lateinit var stellarNetworkConfig: StellarNetworkConfig
 
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
   @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
@@ -169,7 +169,7 @@ internal class Sep24ServiceTest {
 
     sep24Service =
       Sep24Service(
-        appConfig,
+        stellarNetworkConfig,
         sep24Config,
         clientService,
         assetService,

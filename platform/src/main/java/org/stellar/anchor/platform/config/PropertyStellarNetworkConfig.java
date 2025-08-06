@@ -12,12 +12,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ValidationUtils;
 import org.springframework.validation.Validator;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.config.RpcAuthConfig;
 import org.stellar.anchor.util.NetUtil;
 
 @Data
-public class PropertyAppConfig implements AppConfig, Validator {
+public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Validator {
   private String network;
   private String horizonUrl;
   private String rpcUrl;
@@ -30,18 +30,18 @@ public class PropertyAppConfig implements AppConfig, Validator {
 
   @Override
   public boolean supports(@NotNull Class<?> clazz) {
-    return AppConfig.class.isAssignableFrom(clazz);
+    return StellarNetworkConfig.class.isAssignableFrom(clazz);
   }
 
   @Override
   public void validate(@NotNull Object target, @NotNull Errors errors) {
-    AppConfig config = (AppConfig) target;
+    StellarNetworkConfig config = (StellarNetworkConfig) target;
 
     validateConfig(config, errors);
     validateLanguage(config, errors);
   }
 
-  void validateConfig(AppConfig config, Errors errors) {
+  void validateConfig(StellarNetworkConfig config, Errors errors) {
     ValidationUtils.rejectIfEmpty(
         errors, "network", "stellar-network-empty", "stellar_network.network is not defined.");
 
@@ -81,7 +81,7 @@ public class PropertyAppConfig implements AppConfig, Validator {
     }
   }
 
-  void validateLanguage(AppConfig config, Errors errors) {
+  void validateLanguage(StellarNetworkConfig config, Errors errors) {
     if (config.getLanguages() != null) {
       for (String lang : config.getLanguages()) {
         try {

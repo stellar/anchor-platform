@@ -18,7 +18,7 @@ import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Nonce;
 import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep45Jwt;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
 import org.stellar.anchor.ledger.StellarRpc;
@@ -41,7 +41,7 @@ public class Sep45Service {
   private static final String KEY_WEB_AUTH_DOMAIN = "web_auth_domain";
   private static final String KEY_WEB_AUTH_DOMAIN_ACCOUNT = "web_auth_domain_account";
   private static final String KEY_NONCE = "nonce";
-  private final AppConfig appConfig;
+  private final StellarNetworkConfig stellarNetworkConfig;
   private final SecretConfig secretConfig;
   private final Sep45Config sep45Config;
   private final StellarRpc stellarRpc;
@@ -53,7 +53,7 @@ public class Sep45Service {
     // Transaction simulation does not require a real account, but it does need to be different from
     // the SEP-10 account to generate the correct auth entries
     KeyPair simulatingKeypair = KeyPair.random();
-    Network network = new Network(appConfig.getStellarNetworkPassphrase());
+    Network network = new Network(stellarNetworkConfig.getStellarNetworkPassphrase());
 
     SCVal[] args = createArgsFromRequest(request);
 
@@ -160,7 +160,7 @@ public class Sep45Service {
   public ValidationResponse validate(ValidationRequest request) throws AnchorException {
     KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
     KeyPair simulatingKeypair = KeyPair.random();
-    Network network = new Network(appConfig.getStellarNetworkPassphrase());
+    Network network = new Network(stellarNetworkConfig.getStellarNetworkPassphrase());
 
     SorobanAuthorizationEntryList authEntries;
     try {
@@ -268,7 +268,7 @@ public class Sep45Service {
                 HashIDPreimage.HashIDPreimageSorobanAuthorization.builder()
                     .networkID(
                         new Hash(
-                            new Network(appConfig.getStellarNetworkPassphrase()).getNetworkId()))
+                            new Network(stellarNetworkConfig.getStellarNetworkPassphrase()).getNetworkId()))
                     .nonce(entry.getCredentials().getAddress().getNonce())
                     .invocation(entry.getRootInvocation())
                     .signatureExpirationLedger(

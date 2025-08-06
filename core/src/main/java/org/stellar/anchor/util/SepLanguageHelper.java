@@ -8,18 +8,18 @@ import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.stellar.anchor.api.exception.SepValidationException;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.StellarNetworkConfig;
 
 public class SepLanguageHelper {
   static Map<String, Rfc4646Language> alternativeLangs = null;
 
-  public static String validateLanguage(AppConfig appConfig, String lang) {
+  public static String validateLanguage(StellarNetworkConfig stellarNetworkConfig, String lang) {
     if (alternativeLangs == null) {
-      alternativeLangs = prepareAlternativeLangs(appConfig);
+      alternativeLangs = prepareAlternativeLangs(stellarNetworkConfig);
     }
 
     if (lang != null) {
-      List<String> languages = appConfig.getLanguages();
+      List<String> languages = stellarNetworkConfig.getLanguages();
       if (languages != null && languages.size() > 0) {
         if (languages.stream().noneMatch(l -> l.equalsIgnoreCase(lang))) {
           return getAlternative(lang);
@@ -35,9 +35,9 @@ public class SepLanguageHelper {
     alternativeLangs = null;
   }
 
-  static Map<String, Rfc4646Language> prepareAlternativeLangs(AppConfig appConfig) {
+  static Map<String, Rfc4646Language> prepareAlternativeLangs(StellarNetworkConfig stellarNetworkConfig) {
     Map<String, Rfc4646Language> alternatives = new HashMap<>();
-    appConfig
+    stellarNetworkConfig
         .getLanguages()
         .forEach(
             lang -> {

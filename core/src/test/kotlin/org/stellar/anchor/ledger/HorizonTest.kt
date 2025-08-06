@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import org.stellar.anchor.config.AppConfig
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.sdk.Asset
 import org.stellar.sdk.AssetTypeCreditAlphaNum
 import org.stellar.sdk.Server
@@ -25,26 +25,26 @@ internal class HorizonTest {
   companion object {
     private const val TEST_HORIZON_URI = "https://horizon-testnet.stellar.org/"
     private const val TEST_HORIZON_PASSPHRASE = "Test SDF Network ; September 2015"
-    val appConfig = mockk<AppConfig>()
+    val stellarNetworkConfig = mockk<StellarNetworkConfig>()
 
     @JvmStatic
     @BeforeAll
     fun setup() {
-      every { appConfig.horizonUrl } returns TEST_HORIZON_URI
-      every { appConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
+      every { stellarNetworkConfig.horizonUrl } returns TEST_HORIZON_URI
+      every { stellarNetworkConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
     }
   }
 
   @Test
   fun `test the correctness of Horizon creation`() {
-    val horizon = Horizon(appConfig)
+    val horizon = Horizon(stellarNetworkConfig)
 
     assertNotNull(horizon.server)
   }
 
   @Test
   fun test_hasTrustline_native() {
-    val horizon = Horizon(appConfig)
+    val horizon = Horizon(stellarNetworkConfig)
 
     val account = "testAccount"
     val asset = "native"

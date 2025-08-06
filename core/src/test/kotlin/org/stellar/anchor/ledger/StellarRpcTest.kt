@@ -7,7 +7,7 @@ import io.mockk.verify
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.stellar.anchor.config.AppConfig
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.StrKey
@@ -24,15 +24,15 @@ class StellarRpcTest {
   private val gson = GsonUtils.getInstance()
   private lateinit var stellarRpc: StellarRpc
   private lateinit var sorobanServer: SorobanServer
-  val appConfig = mockk<AppConfig>()
+  val stellarNetworkConfig = mockk<StellarNetworkConfig>()
 
   @BeforeEach
   fun setUp() {
-    every { appConfig.rpcUrl } returns TEST_STELLAR_RPC_URI
-    every { appConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
+    every { stellarNetworkConfig.rpcUrl } returns TEST_STELLAR_RPC_URI
+    every { stellarNetworkConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
 
     sorobanServer = mockk<SorobanServer>()
-    stellarRpc = StellarRpc(appConfig)
+    stellarRpc = StellarRpc(stellarNetworkConfig)
     stellarRpc.sorobanServer = sorobanServer
   }
 

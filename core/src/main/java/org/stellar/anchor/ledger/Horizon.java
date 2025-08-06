@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.stellar.anchor.api.exception.LedgerException;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.LedgerClientHelper.ParseResult;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
@@ -35,8 +35,8 @@ public class Horizon implements LedgerClient {
     this.horizonServer = new Server(horizonUrl);
   }
 
-  public Horizon(AppConfig appConfig) {
-    this(appConfig.getHorizonUrl());
+  public Horizon(StellarNetworkConfig stellarNetworkConfig) {
+    this(stellarNetworkConfig.getHorizonUrl());
   }
 
   public Server getServer() {

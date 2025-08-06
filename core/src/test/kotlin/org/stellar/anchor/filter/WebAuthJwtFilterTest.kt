@@ -19,7 +19,7 @@ import org.stellar.anchor.TestHelper.Companion.createWebAuthJwt
 import org.stellar.anchor.auth.AbstractJwt
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.WebAuthJwt
-import org.stellar.anchor.config.AppConfig
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.filter.WebAuthJwtFilter.APPLICATION_JSON_VALUE
@@ -32,7 +32,7 @@ internal class WebAuthJwtFilterTest {
     private const val PUBLIC_KEY = "GBJDSMTMG4YBP27ZILV665XBISBBNRP62YB7WZA2IQX2HIPK7ABLF4C2"
   }
 
-  private lateinit var appConfig: AppConfig
+  private lateinit var stellarNetworkConfig: StellarNetworkConfig
   private lateinit var secretConfig: SecretConfig
   private lateinit var custodySecretConfig: CustodySecretConfig
   private lateinit var jwtService: JwtService
@@ -43,7 +43,7 @@ internal class WebAuthJwtFilterTest {
 
   @BeforeEach
   fun setup() {
-    this.appConfig = mockk(relaxed = true)
+    this.stellarNetworkConfig = mockk(relaxed = true)
     this.secretConfig = mockk(relaxed = true)
     this.custodySecretConfig = mockk(relaxed = true)
     secretConfig.setupMock()

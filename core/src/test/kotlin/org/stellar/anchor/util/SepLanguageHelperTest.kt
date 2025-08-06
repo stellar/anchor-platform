@@ -8,11 +8,11 @@ import io.mockk.impl.annotations.MockK
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.stellar.anchor.config.AppConfig
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.util.SepLanguageHelper.validateLanguage
 
 class SepLanguageHelperTest {
-  @MockK(relaxed = true) lateinit var appConfig: AppConfig
+  @MockK(relaxed = true) lateinit var stellarNetworkConfig: StellarNetworkConfig
 
   @BeforeEach
   fun setUp() {
@@ -22,7 +22,7 @@ class SepLanguageHelperTest {
 
   @Test
   fun `test validateLanguage()`() {
-    every { appConfig.languages } returns
+    every { stellarNetworkConfig.languages } returns
       listOf(
         "en",
         "es",
@@ -37,27 +37,27 @@ class SepLanguageHelperTest {
         "uk-UA"
       )
 
-    Assertions.assertEquals("en", validateLanguage(appConfig, "pt"))
-    Assertions.assertEquals("en", validateLanguage(appConfig, "uk"))
-    Assertions.assertEquals("en", validateLanguage(appConfig, "zh"))
-    Assertions.assertEquals("en", validateLanguage(appConfig, "en"))
-    Assertions.assertEquals("es", validateLanguage(appConfig, "es"))
-    Assertions.assertEquals("fr", validateLanguage(appConfig, "fr"))
+    Assertions.assertEquals("en", validateLanguage(stellarNetworkConfig, "pt"))
+    Assertions.assertEquals("en", validateLanguage(stellarNetworkConfig, "uk"))
+    Assertions.assertEquals("en", validateLanguage(stellarNetworkConfig, "zh"))
+    Assertions.assertEquals("en", validateLanguage(stellarNetworkConfig, "en"))
+    Assertions.assertEquals("es", validateLanguage(stellarNetworkConfig, "es"))
+    Assertions.assertEquals("fr", validateLanguage(stellarNetworkConfig, "fr"))
 
-    Assertions.assertEquals("fr-FR", validateLanguage(appConfig, "fr-BE"))
-    Assertions.assertEquals("fr-FR", validateLanguage(appConfig, "fr-FR"))
-    Assertions.assertEquals("fr-CA", validateLanguage(appConfig, "fr-CA"))
-    Assertions.assertEquals("zh-TW", validateLanguage(appConfig, "zh-HK"))
-    Assertions.assertEquals("es-ES", validateLanguage(appConfig, "es-AR"))
-    Assertions.assertEquals("es-ES", validateLanguage(appConfig, "es-BR"))
-    Assertions.assertEquals("uk-UA", validateLanguage(appConfig, "uk-RU"))
-    Assertions.assertEquals("en-US", validateLanguage(appConfig, "pt-BR"))
-    Assertions.assertEquals("en-US", validateLanguage(appConfig, "en-UK"))
-    Assertions.assertEquals("en-CA", validateLanguage(appConfig, "en-CA"))
-    Assertions.assertEquals("en-US", validateLanguage(appConfig, "en-US"))
+    Assertions.assertEquals("fr-FR", validateLanguage(stellarNetworkConfig, "fr-BE"))
+    Assertions.assertEquals("fr-FR", validateLanguage(stellarNetworkConfig, "fr-FR"))
+    Assertions.assertEquals("fr-CA", validateLanguage(stellarNetworkConfig, "fr-CA"))
+    Assertions.assertEquals("zh-TW", validateLanguage(stellarNetworkConfig, "zh-HK"))
+    Assertions.assertEquals("es-ES", validateLanguage(stellarNetworkConfig, "es-AR"))
+    Assertions.assertEquals("es-ES", validateLanguage(stellarNetworkConfig, "es-BR"))
+    Assertions.assertEquals("uk-UA", validateLanguage(stellarNetworkConfig, "uk-RU"))
+    Assertions.assertEquals("en-US", validateLanguage(stellarNetworkConfig, "pt-BR"))
+    Assertions.assertEquals("en-US", validateLanguage(stellarNetworkConfig, "en-UK"))
+    Assertions.assertEquals("en-CA", validateLanguage(stellarNetworkConfig, "en-CA"))
+    Assertions.assertEquals("en-US", validateLanguage(stellarNetworkConfig, "en-US"))
 
-    Assertions.assertEquals("en-US", validateLanguage(appConfig, null))
-    Assertions.assertEquals("en-US", validateLanguage(appConfig, "good-language"))
-    Assertions.assertEquals("en", validateLanguage(appConfig, "bad language"))
+    Assertions.assertEquals("en-US", validateLanguage(stellarNetworkConfig, null))
+    Assertions.assertEquals("en-US", validateLanguage(stellarNetworkConfig, "good-language"))
+    Assertions.assertEquals("en", validateLanguage(stellarNetworkConfig, "bad language"))
   }
 }

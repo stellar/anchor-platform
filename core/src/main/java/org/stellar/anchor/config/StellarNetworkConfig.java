@@ -3,7 +3,7 @@ package org.stellar.anchor.config;
 import java.util.List;
 
 @SuppressWarnings("SameReturnValue")
-public interface AppConfig {
+public interface StellarNetworkConfig {
   String getNetwork();
 
   String getStellarNetworkPassphrase();
