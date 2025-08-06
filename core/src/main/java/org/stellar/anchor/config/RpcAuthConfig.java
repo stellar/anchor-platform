@@ -1,4 +1,3 @@
 package org.stellar.anchor.config;
 
-public class RpcAuthConfig {
-}
+public class RpcAuthConfig {}
