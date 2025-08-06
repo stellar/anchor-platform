@@ -175,6 +175,7 @@ class RateService(private val quoteRepository: QuoteRepository) {
   }
 
   companion object {
+    val stellarNative = "stellar:native"
     val fiatUSD = "iso4217:USD"
     val fiatCAD = "iso4217:CAD"
     val stellarCircleUSDCtest =
@@ -185,13 +186,17 @@ class RateService(private val quoteRepository: QuoteRepository) {
     val stellarSRT = "stellar:SRT:GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B"
     val prices =
       mapOf(
+        Pair(fiatUSD, stellarNative) to "2.56",
         Pair(fiatUSD, stellarCircleUSDCtest) to "1.02",
         Pair(fiatUSD, stellarUSDCtest) to "1.02",
         Pair(fiatUSD, stellarJPYC) to "0.0083333",
         Pair(fiatUSD, stellarSRT) to "0.145",
+        Pair(fiatCAD, stellarNative) to "1.87",
         Pair(fiatCAD, stellarUSDCtest) to "0.74",
         Pair(fiatCAD, stellarUSDCprod) to "0.74",
         Pair(fiatCAD, stellarSRT) to "0.406",
+        Pair(stellarNative, fiatUSD) to "0.39",
+        Pair(stellarNative, fiatUSD) to "0.54",
         Pair(stellarUSDCtest, fiatUSD) to "1.05",
         Pair(stellarUSDCtest, stellarJPYC) to "0.0084",
         Pair(stellarUSDCtest, fiatCAD) to "1.37",
