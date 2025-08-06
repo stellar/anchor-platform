@@ -25,7 +25,10 @@ import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.asset.AssetInfo.Field
 import org.stellar.anchor.api.asset.Sep31Info
 import org.stellar.anchor.api.asset.StellarAssetInfo
-import org.stellar.anchor.api.callback.*
+import org.stellar.anchor.api.callback.CustomerIntegration
+import org.stellar.anchor.api.callback.GetCustomerResponse
+import org.stellar.anchor.api.callback.GetRateResponse
+import org.stellar.anchor.api.callback.RateIntegration
 import org.stellar.anchor.api.exception.*
 import org.stellar.anchor.api.sep.sep12.Sep12Status
 import org.stellar.anchor.api.sep.sep31.*
@@ -242,7 +245,7 @@ class Sep31ServiceTest {
 
   @MockK(relaxed = true) private lateinit var txnStore: Sep31TransactionStore
 
-  @MockK(relaxed = true) lateinit var stellarNetworkConfig: StellarNetworkConfig
+  @MockK(relaxed = true) lateinit var languageConfig: LanguageConfig
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
   @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) lateinit var clientService: ClientService
@@ -270,7 +273,7 @@ class Sep31ServiceTest {
   fun setUp() {
     MockKAnnotations.init(this, relaxUnitFun = true)
     secretConfig.setupMock()
-    every { stellarNetworkConfig.languages } returns listOf("en")
+    every { languageConfig.languages } returns listOf("en")
     every { sep31Config.paymentType } returns STRICT_SEND
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
     every { custodyConfig.type } returns NONE
@@ -280,7 +283,7 @@ class Sep31ServiceTest {
 
     sep31Service =
       Sep31Service(
-        stellarNetworkConfig,
+        languageConfig,
         sep10Config,
         sep31Config,
         txnStore,
@@ -748,7 +751,7 @@ class Sep31ServiceTest {
       DefaultAssetService.fromJsonResource("test_assets.json.quotes_not_supported")
     sep31Service =
       Sep31Service(
-        stellarNetworkConfig,
+        languageConfig,
         sep10Config,
         sep31Config,
         txnStore,

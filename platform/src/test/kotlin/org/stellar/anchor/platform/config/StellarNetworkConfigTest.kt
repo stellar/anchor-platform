@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.params.provider.NullSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.validation.BindException
@@ -58,22 +57,22 @@ class StellarNetworkConfigTest {
     assertErrorCode(errors, "rpc-url-invalid")
   }
 
-  @ParameterizedTest
-  @NullSource
-  @MethodSource("validLanguages")
-  fun `test valid languages`(langs: List<String>?) {
-    config.languages = langs
-    config.validateLanguage(config, errors)
-    assertFalse(errors.hasErrors())
-  }
-
-  @ParameterizedTest
-  @MethodSource("invalidLanguages")
-  fun `test invalid languages`(langs: List<String>) {
-    config.languages = langs
-    config.validateLanguage(config, errors)
-    assertErrorCode(errors, "languages-invalid")
-  }
+  //  @ParameterizedTest
+  //  @NullSource
+  //  @MethodSource("validLanguages")
+  //  fun `test valid languages`(langs: List<String>?) {
+  //    config.languages = langs
+  //    config.validateLanguage(config, errors)
+  //    assertFalse(errors.hasErrors())
+  //  }
+  //
+  //  @ParameterizedTest
+  //  @MethodSource("invalidLanguages")
+  //  fun `test invalid languages`(langs: List<String>) {
+  //    config.languages = langs
+  //    config.validateLanguage(config, errors)
+  //    assertErrorCode(errors, "languages-invalid")
+  //  }
 
   companion object {
     @JvmStatic

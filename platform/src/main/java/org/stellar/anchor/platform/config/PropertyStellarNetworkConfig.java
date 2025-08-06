@@ -3,12 +3,8 @@ package org.stellar.anchor.platform.config;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.Network.*;
 
-import java.util.IllformedLocaleException;
-import java.util.List;
-import java.util.Locale;
 import lombok.Data;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ValidationUtils;
 import org.springframework.validation.Validator;
@@ -23,11 +19,6 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
   private String rpcUrl;
   private RpcAuthConfig rpcAuth;
 
-  @Value("${languages}")
-  private List<String> languages;
-
-  //  private RpcAuthConfig rpcAuthConfig;
-
   @Override
   public boolean supports(@NotNull Class<?> clazz) {
     return StellarNetworkConfig.class.isAssignableFrom(clazz);
@@ -38,7 +29,6 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
     StellarNetworkConfig config = (StellarNetworkConfig) target;
 
     validateConfig(config, errors);
-    validateLanguage(config, errors);
   }
 
   void validateConfig(StellarNetworkConfig config, Errors errors) {
@@ -81,33 +71,15 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
     }
   }
 
-  void validateLanguage(StellarNetworkConfig config, Errors errors) {
-    if (config.getLanguages() != null) {
-      for (String lang : config.getLanguages()) {
-        try {
-          new Locale.Builder().setLanguageTag(lang);
-        } catch (IllformedLocaleException ex) {
-          errors.rejectValue(
-              "languages",
-              "languages-invalid",
-              String.format("%s defined in languages is not valid", lang));
-        }
-      }
-    }
-  }
-
   @Override
   public String getStellarNetworkPassphrase() {
-    switch (network.toUpperCase()) {
-      case "TESTNET":
-        return TESTNET.getNetworkPassphrase();
-      case "PUBLIC":
-        return PUBLIC.getNetworkPassphrase();
-      case "FUTURENET":
-        return FUTURENET.getNetworkPassphrase();
-      default:
-        throw new RuntimeException(
-            "Invalid stellar network " + network + ". Please check the configuration.");
-    }
+    return switch (network.toUpperCase()) {
+      case "TESTNET" -> TESTNET.getNetworkPassphrase();
+      case "PUBLIC" -> PUBLIC.getNetworkPassphrase();
+      case "FUTURENET" -> FUTURENET.getNetworkPassphrase();
+      default ->
+          throw new RuntimeException(
+              "Invalid stellar network " + network + ". Please check the configuration.");
+    };
   }
 }

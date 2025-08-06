@@ -141,6 +141,7 @@ public class SepBeans {
   @Bean
   @OnAllSepsEnabled(seps = {"sep6"})
   Sep6Service sep6Service(
+      LanguageConfig languageConfig,
       StellarNetworkConfig stellarNetworkConfig,
       Sep6Config sep6Config,
       AssetService assetService,
@@ -153,6 +154,7 @@ public class SepBeans {
     ExchangeAmountsCalculator exchangeAmountsCalculator =
         new ExchangeAmountsCalculator(sep38QuoteStore);
     return new Sep6Service(
+        languageConfig,
         stellarNetworkConfig,
         sep6Config,
         assetService,
@@ -189,6 +191,7 @@ public class SepBeans {
   @Bean
   @OnAllSepsEnabled(seps = {"sep24"})
   Sep24Service sep24Service(
+      LanguageConfig languageConfig,
       StellarNetworkConfig stellarNetworkConfig,
       Sep24Config sep24Config,
       ClientService clientService,
@@ -205,6 +208,7 @@ public class SepBeans {
     ExchangeAmountsCalculator exchangeAmountsCalculator =
         new ExchangeAmountsCalculator(sep38QuoteStore);
     return new Sep24Service(
+        languageConfig,
         stellarNetworkConfig,
         sep24Config,
         clientService,
@@ -234,7 +238,7 @@ public class SepBeans {
   @Bean
   @OnAllSepsEnabled(seps = {"sep31"})
   Sep31Service sep31Service(
-      StellarNetworkConfig stellarNetworkConfig,
+      LanguageConfig languageConfig,
       Sep10Config sep10Config,
       Sep31Config sep31Config,
       Sep31TransactionStore sep31TransactionStore,
@@ -244,7 +248,7 @@ public class SepBeans {
       RateIntegration rateIntegration,
       EventService eventService) {
     return new Sep31Service(
-        stellarNetworkConfig,
+        languageConfig,
         sep10Config,
         sep31Config,
         sep31TransactionStore,

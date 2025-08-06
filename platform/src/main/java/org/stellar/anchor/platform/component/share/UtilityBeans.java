@@ -48,6 +48,12 @@ public class UtilityBeans {
   }
 
   @Bean
+  @ConfigurationProperties(prefix = "app")
+  LanguageConfig appLanguageConfig() {
+    return new PropertyLanguageConfig();
+  }
+
+  @Bean
   @Qualifier("sep6MoreInfoUrlConstructor")
   MoreInfoUrlConstructor sep6MoreInfoUrlConstructor(
       AssetService assetService,

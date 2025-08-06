@@ -1,7 +1,5 @@
 package org.stellar.anchor.config;
 
-import java.util.List;
-
 @SuppressWarnings("SameReturnValue")
 public interface StellarNetworkConfig {
   String getNetwork();
@@ -14,5 +12,5 @@ public interface StellarNetworkConfig {
 
   RpcAuthConfig getRpcAuth();
 
-  List<String> getLanguages();
+  //  List<String> getLanguages();
 }
