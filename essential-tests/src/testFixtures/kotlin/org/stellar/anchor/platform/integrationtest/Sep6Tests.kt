@@ -22,6 +22,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test Sep6 info endpoint`() {
     val info = sep6Client.getInfo()
+    print(gson.toJson(info))
     JSONAssert.assertEquals(expectedSep6Info, gson.toJson(info), JSONCompareMode.STRICT)
   }
 
@@ -179,6 +180,20 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       """
       {
         "deposit": {
+          "native": {
+            "enabled": true,
+            "authentication_required": true,
+            "min_amount": 0,
+            "max_amount": 10,
+            "funding_methods": ["SEPA", "SWIFT"],
+            "fields": {
+              "type": {
+                "description": "type of deposit to make",
+                "choices": ["SEPA", "SWIFT"],
+                "optional": true
+              }
+            }
+          },
           "USDC": {
             "enabled": true,
             "authentication_required": true,
@@ -195,6 +210,20 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
           }
         },
         "deposit-exchange": {
+          "native": {
+            "enabled": true,
+            "authentication_required": true,
+            "min_amount": 0,
+            "max_amount": 10,
+            "funding_methods": ["SEPA", "SWIFT"],
+            "fields": {
+              "type": {
+                "description": "type of deposit to make",
+                "choices": ["SEPA", "SWIFT"],
+                "optional": true
+              }
+            }
+          },
           "USDC": {
             "enabled": true,
             "authentication_required": true,
@@ -211,6 +240,14 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
           }
         },
         "withdraw": {
+          "native": {
+            "enabled": true,
+            "authentication_required": true,
+            "min_amount": 0,
+            "max_amount": 10,
+            "funding_methods": ["bank_account", "cash"],
+            "types": { "cash": { "fields": {} }, "bank_account": { "fields": {} } }
+          },
           "USDC": {
             "enabled": true,
             "authentication_required": true,
@@ -221,6 +258,14 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
           }
         },
         "withdraw-exchange": {
+          "native": {
+            "enabled": true,
+            "authentication_required": true,
+            "min_amount": 0,
+            "max_amount": 10,
+            "funding_methods": ["bank_account", "cash"],
+            "types": { "cash": { "fields": {} }, "bank_account": { "fields": {} } }
+          },
           "USDC": {
             "enabled": true,
             "authentication_required": true,
