@@ -153,7 +153,6 @@ sep_server.management_server_port:
 sep_server.port:
 stellar_network.horizon_url:
 stellar_network.network:
-stellar_network.rpc_auth.api_key.http_header:
 stellar_network.rpc_auth.type:
 stellar_network.rpc_auth.url.query_param_name:
 stellar_network.rpc_auth.url.type:

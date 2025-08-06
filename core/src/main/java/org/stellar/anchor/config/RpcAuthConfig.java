@@ -7,19 +7,12 @@ import lombok.Setter;
 @Setter
 public class RpcAuthConfig {
   RpcAuthType type;
-  XApiKeyConfig xApiKey;
   UrlConfig url;
 
   public enum RpcAuthType {
     NONE,
-    X_API_KEY,
     URL,
-  }
-
-  @Getter
-  @Setter
-  public static class XApiKeyConfig {
-    String httpHeader;
+    BEARER_TOKEN
   }
 
   @Getter

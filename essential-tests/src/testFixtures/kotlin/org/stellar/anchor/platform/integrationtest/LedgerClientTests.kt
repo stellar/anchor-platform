@@ -12,12 +12,18 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
+import org.stellar.anchor.config.RpcAuthConfig
+import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.config.StellarNetworkConfig.ProviderType.HORIZON
+import org.stellar.anchor.config.StellarNetworkConfig.ProviderType.RPC
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.StellarRpc
+import org.stellar.anchor.platform.IntegrationTestBase
+import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.config.PropertyStellarNetworkConfig
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.*
 import org.stellar.sdk.Network.TESTNET
@@ -29,7 +35,7 @@ import org.stellar.sdk.xdr.TransactionEnvelope
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Execution(ExecutionMode.SAME_THREAD)
-class LedgerClientTests {
+class LedgerClientTests : IntegrationTestBase(TestConfig()) {
   private val stellarNetworkConfig = mockk<StellarNetworkConfig>()
   private val trustlineTestAccount = "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
   val gson = GsonUtils.getInstance()!!
@@ -130,19 +136,53 @@ class LedgerClientTests {
   private fun getLedgerClient(): List<Array<Any>> {
     val stellarRpc = StellarRpc(stellarNetworkConfig.rpcUrl)
     val horizon = Horizon(stellarNetworkConfig)
+    val quickNodeRpc = createQuickNodeRpc()
+    val gatewayRpc = createGatewayRpc()
 
-    return listOf(arrayOf(stellarRpc), arrayOf(horizon))
+    return listOf(arrayOf(stellarRpc), arrayOf(horizon), arrayOf(quickNodeRpc), arrayOf(gatewayRpc))
   }
-}
 
-fun prepareAccount(horizonServer: Server, kp: KeyPair): AccountResponse? {
-  val friendBotUrl = "https://friendbot.stellar.org/?addr=${kp.accountId}"
-  try {
-    java.net.URL(friendBotUrl).openStream()
-    val account = horizonServer.accounts().account(kp.accountId)
-    return account
-  } catch (e: java.io.IOException) {
-    throw e
+  private fun createGatewayRpc(): StellarRpc {
+    val secretConfig = mockk<SecretConfig>()
+    every { secretConfig.rpcAuthSecret } returns this.config.env["quicknode.api.key"]
+    val config =
+      PropertyStellarNetworkConfig().apply {
+        network = "TESTNET"
+        type = RPC
+        rpcUrl = "https://rpc.eu-central-8.gateway.fm/v4/soroban/non-archival/testnet"
+        rpcAuth = RpcAuthConfig().apply { type = RpcAuthConfig.RpcAuthType.BEARER_TOKEN }
+      }
+
+    return StellarRpc(config, secretConfig)
+  }
+
+  private fun createQuickNodeRpc(): StellarRpc {
+    val secretConfig = mockk<SecretConfig>()
+    every { secretConfig.rpcAuthSecret } returns this.config.env["quicknode.api.key"]
+    val config =
+      PropertyStellarNetworkConfig().apply {
+        network = "TESTNET"
+        type = RPC
+        rpcUrl = "https://bitter-few-friday.stellar-testnet.quiknode.pro"
+        rpcAuth =
+          RpcAuthConfig().apply {
+            type = RpcAuthConfig.RpcAuthType.URL
+            url =
+              RpcAuthConfig.UrlConfig().apply { type = RpcAuthConfig.UrlConfig.UrlType.PATH_APPEND }
+          }
+      }
+    return StellarRpc(config, secretConfig)
+  }
+
+  fun prepareAccount(horizonServer: Server, kp: KeyPair): AccountResponse? {
+    val friendBotUrl = "https://friendbot.stellar.org/?addr=${kp.accountId}"
+    try {
+      java.net.URL(friendBotUrl).openStream()
+      val account = horizonServer.accounts().account(kp.accountId)
+      return account
+    } catch (e: java.io.IOException) {
+      throw e
+    }
   }
 }
 

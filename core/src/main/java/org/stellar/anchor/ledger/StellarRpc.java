@@ -45,19 +45,17 @@ public class StellarRpc implements LedgerClient {
       case URL:
         sorobanServer = createUrlAuthRpcServer(stellarNetworkConfig, secretConfig);
         break;
-      case X_API_KEY:
-        sorobanServer = createXApiKeyRpcServer(stellarNetworkConfig, secretConfig);
+      case BEARER_TOKEN:
+        sorobanServer = createBearerTokenRpcServer(stellarNetworkConfig, secretConfig);
         break;
       default:
         throw new IllegalStateException("Unexpected value: " + rpcAuth.getType());
     }
   }
 
-  private SorobanServer createXApiKeyRpcServer(
+  private SorobanServer createBearerTokenRpcServer(
       StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
-    RpcAuthConfig rpcAuth = stellarNetworkConfig.getRpcAuth();
-    String httpHeader = rpcAuth.getXApiKey().getHttpHeader();
-    String value = String.format("Bearer%s", secretConfig.getRpcAuthSecret());
+    String value = String.format("Bearer %s", secretConfig.getRpcAuthSecret());
     // Create a SorobanServer with http header
     return new SorobanServer(
         stellarNetworkConfig.getRpcUrl(),
@@ -65,8 +63,8 @@ public class StellarRpc implements LedgerClient {
             .addInterceptor(new ClientIdentificationInterceptor())
             .addInterceptor(
                 chain -> {
-                  okhttp3.Request request =
-                      chain.request().newBuilder().addHeader(httpHeader, value).build();
+                  okhttp3.Request request = chain.request();
+                  chain.request().newBuilder().addHeader("Authorization", value).build();
                   return chain.proceed(request);
                 })
             .connectTimeout(10, TimeUnit.SECONDS)

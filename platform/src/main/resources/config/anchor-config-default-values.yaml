@@ -50,14 +50,12 @@ stellar_network:
     # The rpc_auth is used to authenticate with the Soroban RPC server.
     # The `type` can be one of the following:
     #   `none`: No authentication is used.
-    #   `api_key`: The authentication is done using an API key added to the HTTP request header.
+    #   `bearer_token`: The authentication is done using a Bearer token added to the HTTP request header.
+    #                   The RFC 6750 defines the Bearer token authentication scheme.
     #   `url`: The authentication is done using an API key added to the URL path.
     # If the type is `api_key` or `url_path`, the secret must be set by the environment variable `secret.stellar_network.rpc.auth.secret`.
     type: none
     # If the type is `api_key`, the following configuration can be set to configure how the API key is added to the HTTP request header.
-    api_key:
-      # The HTTP header name of the API key
-      http_header: X-Api-Key
     # If the type is `url`, the following configuration can be set to configure how the API key is added to the URL.
     url:
       # The `type` can be one of the following:
