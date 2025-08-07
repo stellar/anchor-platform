@@ -153,7 +153,12 @@ class LedgerClientTests : IntegrationTestBase(TestConfig()) {
         rpcAuth =
           RpcAuthConfig().apply {
             type = RpcAuthConfig.RpcAuthType.BEARER_TOKEN
-            bearerToken = RpcAuthConfig.BearerTokenConfig().apply { prefix = "Bearer" }
+
+            bearerToken =
+              RpcAuthConfig.BearerTokenConfig().apply {
+                header = "Authorization"
+                prefix = "Bearer"
+              }
           }
       }
 

@@ -19,6 +19,7 @@ public class RpcAuthConfig {
   @Getter
   @Setter
   public static class BearerTokenConfig {
+    String header;
     String prefix;
   }
 
