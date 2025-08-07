@@ -16,7 +16,7 @@ import org.stellar.anchor.config.LanguageConfig;
 public class PropertyLanguageConfig implements LanguageConfig, Validator {
 
   @Value("${languages}")
-  private List<String> languages;
+  List<String> languages;
 
   @Override
   public boolean supports(@NotNull Class<?> clazz) {

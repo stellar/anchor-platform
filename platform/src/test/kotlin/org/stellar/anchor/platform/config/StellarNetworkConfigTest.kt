@@ -9,6 +9,8 @@ import org.junit.jupiter.params.provider.NullSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.validation.BindException
 import org.springframework.validation.Errors
+import org.stellar.anchor.config.StellarNetworkConfig.ProviderType.HORIZON
+import org.stellar.anchor.config.StellarNetworkConfig.ProviderType.RPC
 
 class StellarNetworkConfigTest {
   private lateinit var config: PropertyStellarNetworkConfig
@@ -17,6 +19,7 @@ class StellarNetworkConfigTest {
   @BeforeEach
   fun setUp() {
     config = PropertyStellarNetworkConfig()
+    config.type = HORIZON
     config.network = "TESTNET"
     config.horizonUrl = "https://horizon-testnet.stellar.org"
     errors = BindException(config, "config")
@@ -52,27 +55,11 @@ class StellarNetworkConfigTest {
   @ParameterizedTest
   @ValueSource(strings = ["https ://soroban-testnet.stellar.org", "stellar.org", "abc"])
   fun `test invalid rpc_url`(url: String) {
+    config.type = RPC
     config.rpcUrl = url
     config.validateConfig(config, errors)
     assertErrorCode(errors, "rpc-url-invalid")
   }
-
-  //  @ParameterizedTest
-  //  @NullSource
-  //  @MethodSource("validLanguages")
-  //  fun `test valid languages`(langs: List<String>?) {
-  //    config.languages = langs
-  //    config.validateLanguage(config, errors)
-  //    assertFalse(errors.hasErrors())
-  //  }
-  //
-  //  @ParameterizedTest
-  //  @MethodSource("invalidLanguages")
-  //  fun `test invalid languages`(langs: List<String>) {
-  //    config.languages = langs
-  //    config.validateLanguage(config, errors)
-  //    assertErrorCode(errors, "languages-invalid")
-  //  }
 
   companion object {
     @JvmStatic
