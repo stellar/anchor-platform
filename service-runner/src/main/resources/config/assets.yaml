@@ -142,7 +142,21 @@ items:
     distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
     significant_decimals: 7
     sep6:
-      enabled: false
+      enabled: true
+      deposit:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - SEPA
+          - SWIFT
+      withdraw:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - bank_account
+          - cash
     sep24:
       enabled: true
       deposit:
@@ -162,7 +176,10 @@ items:
     sep31:
       enabled: false
     sep38:
-      enabled: false
+      enabled: true
+      exchangeable_assets:
+        - iso4217:USD
+        - iso4217:CAD
 
   # Fiat
   - id: iso4217:USD
@@ -180,6 +197,7 @@ items:
       exchangeable_assets:
         - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
         - stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+        - stellar:native
       country_codes:
         - US
       sell_delivery_methods:
@@ -203,6 +221,7 @@ items:
       exchangeable_assets:
         - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
         - stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+        - stellar:native
       country_codes:
         - CA
       sell_delivery_methods:
