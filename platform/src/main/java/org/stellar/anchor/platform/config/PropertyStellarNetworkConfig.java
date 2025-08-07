@@ -47,28 +47,43 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
               config.getNetwork()));
     }
 
-    if (isEmpty(config.getHorizonUrl())) {
-      errors.rejectValue(
-          "horizonUrl", "horizon-url-empty", "The stellar_network.horizon_url is not defined.");
-    } else {
-      if (!NetUtil.isUrlValid(config.getHorizonUrl())) {
+    switch (config.getType()) {
+      case HORIZON:
+        if (isEmpty(config.getHorizonUrl())) {
+          errors.rejectValue(
+              "horizonUrl",
+              "horizon-url-empty",
+              "The stellar_network.horizon_url is not defined.");
+        } else {
+          if (!NetUtil.isUrlValid(config.getHorizonUrl())) {
+            errors.rejectValue(
+                    "horizonUrl",
+                    "horizon-url-invalid",
+                    String.format(
+                            "The stellar_network.horizon_url:%s is not in valid format.",
+                            config.getHorizonUrl()));
+          }
+        }
+        break;
+      case RPC:
+        if (isEmpty(config.getRpcUrl())) {
+          errors.rejectValue(
+              "rpcUrl", "rpc-url-empty", "The stellar_network.rpc_url is not defined.");
+        } else {
+          if (!NetUtil.isUrlValid(config.getRpcUrl())) {
+            errors.rejectValue(
+                    "rpcUrl",
+                    "rpc-url-invalid",
+                    String.format(
+                            "The stellar_network.rpc_url:%s is not in valid format.", config.getRpcUrl()));
+          }
+        }
+        break;
+      default:
         errors.rejectValue(
-            "horizonUrl",
-            "horizon-url-invalid",
-            String.format(
-                "The stellar_network.horizon_url:%s is not in valid format.",
-                config.getHorizonUrl()));
-      }
-    }
-
-    if (!isEmpty(config.getRpcUrl())) {
-      if (!NetUtil.isUrlValid(config.getRpcUrl())) {
-        errors.rejectValue(
-            "rpcUrl",
-            "rpc-url-invalid",
-            String.format(
-                "The stellar_network.rpc_url:%s is not in valid format.", config.getRpcUrl()));
-      }
+            "type",
+            "stellar-network-type-invalid",
+            String.format("The stellar_network.type:%s is not valid.", config.getType()));
     }
   }
 
