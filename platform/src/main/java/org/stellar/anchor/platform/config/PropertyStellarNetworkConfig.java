@@ -51,17 +51,15 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
       case HORIZON:
         if (isEmpty(config.getHorizonUrl())) {
           errors.rejectValue(
-              "horizonUrl",
-              "horizon-url-empty",
-              "The stellar_network.horizon_url is not defined.");
+              "horizonUrl", "horizon-url-empty", "The stellar_network.horizon_url is not defined.");
         } else {
           if (!NetUtil.isUrlValid(config.getHorizonUrl())) {
             errors.rejectValue(
-                    "horizonUrl",
-                    "horizon-url-invalid",
-                    String.format(
-                            "The stellar_network.horizon_url:%s is not in valid format.",
-                            config.getHorizonUrl()));
+                "horizonUrl",
+                "horizon-url-invalid",
+                String.format(
+                    "The stellar_network.horizon_url:%s is not in valid format.",
+                    config.getHorizonUrl()));
           }
         }
         break;
@@ -72,10 +70,10 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
         } else {
           if (!NetUtil.isUrlValid(config.getRpcUrl())) {
             errors.rejectValue(
-                    "rpcUrl",
-                    "rpc-url-invalid",
-                    String.format(
-                            "The stellar_network.rpc_url:%s is not in valid format.", config.getRpcUrl()));
+                "rpcUrl",
+                "rpc-url-invalid",
+                String.format(
+                    "The stellar_network.rpc_url:%s is not in valid format.", config.getRpcUrl()));
           }
         }
         break;
