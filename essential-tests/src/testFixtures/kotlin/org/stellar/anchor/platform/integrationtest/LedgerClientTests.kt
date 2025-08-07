@@ -144,7 +144,7 @@ class LedgerClientTests : IntegrationTestBase(TestConfig()) {
 
   private fun createGatewayRpc(): StellarRpc {
     val secretConfig = mockk<SecretConfig>()
-    every { secretConfig.rpcAuthSecret } returns this.config.env["quicknode.api.key"]
+    every { secretConfig.rpcAuthSecret } returns this.config.env["gateway.api.key"]
     val config =
       PropertyStellarNetworkConfig().apply {
         network = "TESTNET"
