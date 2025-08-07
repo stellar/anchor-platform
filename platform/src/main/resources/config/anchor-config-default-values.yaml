@@ -55,8 +55,13 @@ stellar_network:
     #   `url`: The authentication is done using an API key added to the URL path.
     # If the type is `api_key` or `url_path`, the secret must be set by the environment variable `secret.stellar_network.rpc.auth.secret`.
     type: none
-    # If the type is `api_key`, the following configuration can be set to configure how the API key is added to the HTTP request header.
+    bearer_token:
+      # The prefix of the Bearer token.
+      # The Authorization header will be set to `{prefix} {token}`.
+      # Supported providers: Gateway, Obsrvr (with Api-Key prefix).
+      prefix: Bearer
     # If the type is `url`, the following configuration can be set to configure how the API key is added to the URL.
+    # Supported providers: Blockdaemon, QuickNode, Gateway, Infstones, GetBlock, and others.
     url:
       # The `type` can be one of the following:
       #   `path_append`: The API key is appended to the URL path.

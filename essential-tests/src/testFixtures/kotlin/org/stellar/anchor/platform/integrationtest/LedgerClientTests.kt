@@ -150,7 +150,11 @@ class LedgerClientTests : IntegrationTestBase(TestConfig()) {
         network = "TESTNET"
         type = RPC
         rpcUrl = "https://rpc.eu-central-8.gateway.fm/v4/soroban/non-archival/testnet"
-        rpcAuth = RpcAuthConfig().apply { type = RpcAuthConfig.RpcAuthType.BEARER_TOKEN }
+        rpcAuth =
+          RpcAuthConfig().apply {
+            type = RpcAuthConfig.RpcAuthType.BEARER_TOKEN
+            bearerToken = RpcAuthConfig.BearerTokenConfig().apply { prefix = "Bearer" }
+          }
       }
 
     return StellarRpc(config, secretConfig)

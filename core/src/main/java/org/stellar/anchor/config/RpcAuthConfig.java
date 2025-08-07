@@ -7,12 +7,19 @@ import lombok.Setter;
 @Setter
 public class RpcAuthConfig {
   RpcAuthType type;
+  BearerTokenConfig bearerToken;
   UrlConfig url;
 
   public enum RpcAuthType {
     NONE,
     URL,
     BEARER_TOKEN
+  }
+
+  @Getter
+  @Setter
+  public static class BearerTokenConfig {
+    String prefix;
   }
 
   @Getter

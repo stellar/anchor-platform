@@ -55,7 +55,11 @@ public class StellarRpc implements LedgerClient {
 
   private SorobanServer createBearerTokenRpcServer(
       StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
-    String value = String.format("Bearer %s", secretConfig.getRpcAuthSecret());
+    RpcAuthConfig rpcAuth = stellarNetworkConfig.getRpcAuth();
+
+    String value =
+        String.format(
+            "%s %s", rpcAuth.getBearerToken().getPrefix(), secretConfig.getRpcAuthSecret());
     // Create a SorobanServer with http header
     return new SorobanServer(
         stellarNetworkConfig.getRpcUrl(),
