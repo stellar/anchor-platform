@@ -81,7 +81,7 @@ jobs:
         with:
           url: "http://localhost:8080/.well-known/stellar.toml"
           interval: "1"
-          timeout: "180"
+          timeout: "600"
 
       - name: Run `custody` configuration tests
         env:
@@ -106,7 +106,7 @@ jobs:
         with:
           url: "http://localhost:8080/.well-known/stellar.toml"
           interval: "1"
-          timeout: "180"
+          timeout: "600"
 
       - name: Run `rpc` configuration tests
         env:
@@ -131,7 +131,7 @@ jobs:
         with:
           url: "http://localhost:8086/health"
           interval: "1"
-          timeout: "180"
+          timeout: "600"
 
       - name: Run `auth-apikey-custody` configuration tests
         env:
@@ -156,7 +156,7 @@ jobs:
         with:
           url: "http://localhost:8086/health"
           interval: "1"
-          timeout: "180"
+          timeout: "600"
 
       - name: Run `auth-jwt-custody` configuration tests
         env:
@@ -182,7 +182,7 @@ jobs:
           url: "http://localhost:8085/health"
           expected-status: "403"
           interval: "1"
-          timeout: "180"
+          timeout: "600"
 
       - name: Run `auth-apikey-platform` configuration tests
         env:
@@ -208,7 +208,7 @@ jobs:
           url: "http://localhost:8085/health"
           expected-status: "403"
           interval: "1"
-          timeout: "180"
+          timeout: "600"
 
       - name: Run `auth-jwt-platform` configuration tests
         env:
@@ -233,7 +233,7 @@ jobs:
         with:
           url: "http://localhost:8080/.well-known/stellar.toml"
           interval: "1"
-          timeout: "180"
+          timeout: "600"
 
       - name: Run limited `end-2-end` tests
         env:
