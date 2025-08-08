@@ -1,13 +1,10 @@
 package org.stellar.anchor.platform.component.observer;
 
-import static org.stellar.anchor.util.StringHelper.isNotEmpty;
-
 import java.util.List;
 import lombok.SneakyThrows;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
-import org.stellar.anchor.api.exception.NotSupportedException;
 import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
@@ -36,12 +33,6 @@ public class PaymentObserverBeans {
       StellarNetworkConfig stellarNetworkConfig,
       PaymentObserverConfig paymentObserverConfig,
       SacToAssetMapper sacToAssetMapper) {
-
-    // validate ledgerClient
-    if (!(ledgerClient instanceof StellarRpc stellarRpc)) {
-      throw new NotSupportedException(
-          "The ledger client must be an instance of StellarRpc for the Stellar payment observer. Please check the `stellar_network.type` is set to `rpc`.");
-    }
     // validate assetService
     if (assetService == null || assetService.getAssets() == null) {
       throw new ServerErrorException("Asset service cannot be empty.");
@@ -50,18 +41,15 @@ public class PaymentObserverBeans {
     if (stellarAssets.isEmpty()) {
       throw new ServerErrorException("Asset service should contain at least one Stellar asset.");
     }
-
     // validate paymentListeners
     if (paymentListeners == null || paymentListeners.isEmpty()) {
       throw new ServerErrorException(
           "The stellar payment observer service needs at least one listener.");
     }
-
     // validate paymentStreamerCursorStore
     if (stellarPaymentStreamerCursorStore == null) {
       throw new ServerErrorException("Payment streamer cursor store cannot be empty.");
     }
-
     // validate appConfig
     if (stellarNetworkConfig == null) {
       throw new ServerErrorException("AppConfig cannot be empty.");
@@ -70,7 +58,6 @@ public class PaymentObserverBeans {
     if (paymentObserverConfig == null) {
       throw new ServerErrorException("PaymentObserverConfig cannot be empty.");
     }
-
     // Add distribution wallet to the observing list as type RESIDENTIAL
     for (StellarAssetInfo asset : stellarAssets) {
       if (!paymentObservingAccountsManager.lookupAndUpdate(asset.getDistributionAccount())) {
@@ -79,9 +66,8 @@ public class PaymentObserverBeans {
             PaymentObservingAccountsManager.AccountType.RESIDENTIAL);
       }
     }
-
     AbstractPaymentObserver paymentObserver;
-    if (isNotEmpty(stellarNetworkConfig.getRpcUrl())) {
+    if (ledgerClient instanceof StellarRpc stellarRpc) {
       paymentObserver =
           new StellarRpcPaymentObserver(
               stellarRpc,
@@ -91,16 +77,17 @@ public class PaymentObserverBeans {
               stellarPaymentStreamerCursorStore,
               sacToAssetMapper,
               assetService);
-    } else if (isNotEmpty(stellarNetworkConfig.getHorizonUrl())) {
+    } else if (ledgerClient instanceof Horizon horizon) {
       paymentObserver =
           new HorizonPaymentObserver(
-              new Horizon(stellarNetworkConfig.getHorizonUrl()),
+              horizon,
               paymentObserverConfig.getStellar(),
               paymentListeners,
               paymentObservingAccountsManager,
               stellarPaymentStreamerCursorStore);
     } else {
-      throw new IllegalArgumentException("Either RPC or Horizon URL must be provided.");
+      throw new IllegalArgumentException(
+          "The ledger client type is not supported: " + ledgerClient.getClass().getName());
     }
 
     paymentObserver.start();
