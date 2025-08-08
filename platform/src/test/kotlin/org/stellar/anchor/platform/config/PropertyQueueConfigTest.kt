@@ -44,8 +44,7 @@ class PropertyQueueConfigTest {
 
   @ParameterizedTest
   @ValueSource(strings = [""])
-  @NullSource
-  fun `test empty bootstrap servers`(bootstrapServer: String?) {
+  fun `test empty bootstrap servers`() {
     configs.kafka.bootstrapServer = null
     configs.validate(configs, errors)
 

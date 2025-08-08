@@ -16,7 +16,6 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.client.DefaultClientService
-import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.platform.config.MoreInfoUrlConfig
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
@@ -32,7 +31,6 @@ class Sep24MoreInfoUrlConstructorTest {
 
   @MockK(relaxed = true) private lateinit var assetService: AssetService
   @MockK(relaxed = true) private lateinit var secretConfig: SecretConfig
-  @MockK(relaxed = true) private lateinit var custodySecretConfig: CustodySecretConfig
 
   private lateinit var jwtService: JwtService
   private lateinit var clientService: DefaultClientService
@@ -42,7 +40,7 @@ class Sep24MoreInfoUrlConstructorTest {
     MockKAnnotations.init(this, relaxUnitFun = true)
     secretConfig.setupMock()
     clientService = DefaultClientService.fromYamlResourceFile("test_clients.yaml")
-    jwtService = JwtService(secretConfig, custodySecretConfig)
+    jwtService = JwtService(secretConfig)
   }
 
   @Test
@@ -110,7 +108,7 @@ class Sep24MoreInfoUrlConstructorTest {
     assertEquals("txn_123", jwt.jti as String)
     Assertions.assertTrue(Instant.ofEpochSecond(jwt.exp).isAfter(Instant.now()))
 
-    val data = jwt.claims["data"] as Map<String, String>
+    val data = jwt.claims["data"] as Map<*, *>
     assertEquals(LANG, data["lang"] as String)
   }
 }

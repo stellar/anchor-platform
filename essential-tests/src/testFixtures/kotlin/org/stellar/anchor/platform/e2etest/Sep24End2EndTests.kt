@@ -77,8 +77,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       config.env["secret.sep24.interactive_url.jwt_secret"]!!,
       config.env["secret.sep24.more_info_url.jwt_secret"]!!,
       config.env["secret.callback_api.auth_secret"]!!,
-      config.env["secret.platform_api.auth_secret"]!!,
-      config.env["secret.custody_server.auth_secret"]!!,
+      config.env["secret.platform_api.auth_secret"]!!
     )
 
   @ParameterizedTest

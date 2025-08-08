@@ -2,11 +2,8 @@ package org.stellar.anchor.util;
 
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*;
 
-import com.google.common.collect.ImmutableSet;
 import jakarta.annotation.Nullable;
-import java.util.Optional;
 import org.stellar.anchor.api.asset.AssetInfo;
-import org.stellar.anchor.api.custody.CreateCustodyTransactionRequest;
 import org.stellar.anchor.api.platform.GetTransactionResponse;
 import org.stellar.anchor.api.platform.PlatformTransactionData;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
@@ -20,70 +17,6 @@ import org.stellar.anchor.sep31.Sep31Transaction;
 import org.stellar.anchor.sep6.Sep6Transaction;
 
 public class TransactionMapper {
-
-  public static CreateCustodyTransactionRequest toCustodyTransaction(Sep6Transaction txn) {
-    PlatformTransactionData.Kind kind = PlatformTransactionData.Kind.from(txn.getKind());
-    return CreateCustodyTransactionRequest.builder()
-        .id(txn.getId())
-        .memo(txn.getMemo())
-        .memoType(txn.getMemoType())
-        .protocol("6")
-        .fromAccount(
-            ImmutableSet.of(WITHDRAWAL, WITHDRAWAL_EXCHANGE).contains(kind)
-                ? txn.getFromAccount()
-                : null)
-        .toAccount(
-            ImmutableSet.of(DEPOSIT, DEPOSIT_EXCHANGE).contains(kind)
-                ? txn.getToAccount()
-                : txn.getWithdrawAnchorAccount())
-        .amount(
-            ImmutableSet.of(DEPOSIT, DEPOSIT_EXCHANGE).contains(kind)
-                ? txn.getAmountOut()
-                : Optional.ofNullable(txn.getAmountExpected()).orElse(txn.getAmountIn()))
-        .asset(
-            ImmutableSet.of(DEPOSIT, DEPOSIT_EXCHANGE).contains(kind)
-                ? txn.getAmountOutAsset()
-                : txn.getAmountInAsset())
-        .kind(txn.getKind())
-        .build();
-  }
-
-  public static CreateCustodyTransactionRequest toCustodyTransaction(Sep24Transaction txn) {
-    return CreateCustodyTransactionRequest.builder()
-        .id(txn.getId())
-        .memo(txn.getMemo())
-        .memoType(txn.getMemoType())
-        .protocol("24")
-        .fromAccount(WITHDRAWAL.getKind().equals(txn.getKind()) ? txn.getFromAccount() : null)
-        .toAccount(
-            DEPOSIT.getKind().equals(txn.getKind())
-                ? txn.getToAccount()
-                : txn.getWithdrawAnchorAccount())
-        .amount(
-            DEPOSIT.getKind().equals(txn.getKind())
-                ? txn.getAmountOut()
-                : Optional.ofNullable(txn.getAmountExpected()).orElse(txn.getAmountIn()))
-        .asset(
-            DEPOSIT.getKind().equals(txn.getKind())
-                ? txn.getAmountOutAsset()
-                : txn.getAmountInAsset())
-        .kind(txn.getKind())
-        .build();
-  }
-
-  public static CreateCustodyTransactionRequest toCustodyTransaction(Sep31Transaction txn) {
-    return CreateCustodyTransactionRequest.builder()
-        .id(txn.getId())
-        .memo(txn.getStellarMemo())
-        .memoType(txn.getStellarMemoType())
-        .protocol("31")
-        .toAccount(txn.getToAccount())
-        .amount(txn.getAmountIn())
-        .asset(txn.getAmountInAsset())
-        .kind(RECEIVE.getKind())
-        .build();
-  }
-
   public static GetTransactionResponse toGetTransactionResponse(Sep31Transaction txn) {
     Refunds refunds = null;
     if (txn.getRefunds() != null) {

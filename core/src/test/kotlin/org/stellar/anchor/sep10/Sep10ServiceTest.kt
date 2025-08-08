@@ -42,7 +42,6 @@ import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.config.AppConfig
-import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
 import org.stellar.anchor.ledger.LedgerClient
@@ -92,7 +91,6 @@ internal class Sep10ServiceTest {
 
   @MockK(relaxed = true) lateinit var appConfig: AppConfig
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
-  @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) lateinit var sep10Config: Sep10Config
   @MockK(relaxed = true) lateinit var ledgerClient: LedgerClient
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
@@ -115,7 +113,7 @@ internal class Sep10ServiceTest {
 
     secretConfig.setupMock()
 
-    this.jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
+    this.jwtService = spyk(JwtService(secretConfig))
     this.sep10Service =
       Sep10Service(appConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder)
   }

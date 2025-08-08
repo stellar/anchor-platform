@@ -26,7 +26,6 @@ import org.stellar.anchor.auth.ApiAuthJwt.CustodyAuthJwt;
 import org.stellar.anchor.auth.ApiAuthJwt.PlatformAuthJwt;
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt;
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep6MoreInfoUrlJwt;
-import org.stellar.anchor.config.CustodySecretConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.util.KeyUtil;
 import org.stellar.anchor.util.Log;
@@ -47,10 +46,8 @@ public class JwtService {
   String sep24MoreInfoUrlJwtSecret;
   String callbackAuthSecret;
   String platformAuthSecret;
-  String custodyAuthSecret;
 
-  public JwtService(SecretConfig secretConfig, CustodySecretConfig custodySecretConfig)
-      throws NotSupportedException {
+  public JwtService(SecretConfig secretConfig) throws NotSupportedException {
     this(
         secretConfig.getSep6MoreInfoUrlJwtSecret(),
         secretConfig.getSep10JwtSecretKey(),
@@ -58,8 +55,7 @@ public class JwtService {
         secretConfig.getSep24InteractiveUrlJwtSecret(),
         secretConfig.getSep24MoreInfoUrlJwtSecret(),
         secretConfig.getCallbackAuthSecret(),
-        secretConfig.getPlatformAuthSecret(),
-        custodySecretConfig.getCustodyAuthSecret());
+        secretConfig.getPlatformAuthSecret());
   }
 
   public JwtService(
@@ -69,8 +65,7 @@ public class JwtService {
       String sep24InteractiveUrlJwtSecret,
       String sep24MoreInfoUrlJwtSecret,
       String callbackAuthSecret,
-      String platformAuthSecret,
-      String custodyAuthSecret) {
+      String platformAuthSecret) {
     this.sep6MoreInfoUrlJwtSecret = sep6MoreInfoUrlJwtSecret;
     this.sep10JwtSecret = sep10JwtSecret;
     this.sep45JwtSecret = sep45JwtSecret;
@@ -78,7 +73,6 @@ public class JwtService {
     this.sep24MoreInfoUrlJwtSecret = sep24MoreInfoUrlJwtSecret;
     this.callbackAuthSecret = callbackAuthSecret;
     this.platformAuthSecret = platformAuthSecret;
-    this.custodyAuthSecret = custodyAuthSecret;
 
     // Required for Ed25519 keys
     Security.addProvider(new BouncyCastleProvider());
@@ -163,10 +157,6 @@ public class JwtService {
     return encode(token, platformAuthSecret);
   }
 
-  public String encode(CustodyAuthJwt token) throws InvalidConfigException {
-    return encode(token, custodyAuthSecret);
-  }
-
   private String encode(ApiAuthJwt token, String secret) throws InvalidConfigException {
     if (secret == null) {
       throw new InvalidConfigException(
@@ -202,8 +192,6 @@ public class JwtService {
       secret = callbackAuthSecret;
     } else if (cls.equals(PlatformAuthJwt.class)) {
       secret = platformAuthSecret;
-    } else if (cls.equals(CustodyAuthJwt.class)) {
-      secret = custodyAuthSecret;
     } else {
       throw new NotSupportedException(
           String.format("The Jwt class:[%s] is not supported", cls.getName()));

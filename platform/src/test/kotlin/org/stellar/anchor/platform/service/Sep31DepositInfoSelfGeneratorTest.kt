@@ -22,16 +22,16 @@ class Sep31DepositInfoSelfGeneratorTest {
         Arguments.of(
           "testId1",
           "GBJDTHT4562X2H37JMOE6IUTZZSDU6RYGYUNFYCHVFG3J4MYJIMU33HK",
-          "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMHRlc3RJZDE="
+          "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMHRlc3RJZDE=",
         ),
-        Arguments.of("testId2", null, "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMHRlc3RJZDI=")
+        Arguments.of("testId2", null, "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMHRlc3RJZDI="),
       )
     }
   }
 
   @ParameterizedTest
   @MethodSource("assets")
-  fun test_sep31_selfGenerator_success(txnId: String, address: String?, memo: String) {
+  fun test_sep31_selfGenerator_success(txnId: String, address: String?) {
     val txn = JdbcSep31Transaction()
     txn.id = txnId
     txn.toAccount = address

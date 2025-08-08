@@ -12,12 +12,11 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.validation.BindException
 import org.springframework.validation.Errors
+import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
-import org.stellar.anchor.config.CustodyConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep24Config.DepositInfoGeneratorType
-import org.stellar.anchor.config.Sep24Config.Features
 import org.stellar.anchor.platform.config.PropertySep24Config.InteractiveUrlConfig
 import org.stellar.anchor.platform.utils.setupMock
 
@@ -25,18 +24,15 @@ class Sep24ConfigTest {
   lateinit var config: PropertySep24Config
   lateinit var errors: Errors
   lateinit var secretConfig: SecretConfig
-  lateinit var custodyConfig: CustodyConfig
   lateinit var assetService: AssetService
 
   @BeforeEach
   fun setUp() {
     secretConfig = mockk()
-    custodyConfig = mockk()
     assetService = DefaultAssetService.fromJsonResource("test_assets.json")
     secretConfig.setupMock()
-    every { custodyConfig.isCustodyIntegrationEnabled } returns false
 
-    config = PropertySep24Config(secretConfig, custodyConfig, assetService)
+    config = PropertySep24Config(secretConfig, assetService)
     config.enabled = true
     errors = BindException(config, "config")
     config.interactiveUrl = InteractiveUrlConfig("https://www.stellar.org", 600, listOf(""))
@@ -52,28 +48,8 @@ class Sep24ConfigTest {
 
   @Test
   fun `test invalid deposit info generator type`() {
-    config.depositInfoGeneratorType = DepositInfoGeneratorType.CUSTODY
-    config.validate(config, errors)
-    assertEquals("sep24-deposit-info-generator-type", errors.allErrors[0].code)
-  }
-
-  @Test
-  fun `test valid sep24 configuration with custody integration`() {
-    every { custodyConfig.isCustodyIntegrationEnabled } returns true
-    config.features = Features()
-    config.features.accountCreation = false
-    config.features.claimableBalances = false
-    config.depositInfoGeneratorType = DepositInfoGeneratorType.CUSTODY
-    config.validate(config, errors)
-    assertFalse(errors.hasErrors())
-  }
-
-  @Test
-  fun `test invalid deposit info generator type with custody integration`() {
-    every { custodyConfig.isCustodyIntegrationEnabled } returns true
-    config.features = Features()
-    config.features.accountCreation = false
-    config.features.claimableBalances = false
+    config.depositInfoGeneratorType = DepositInfoGeneratorType.SELF
+    (assetService.assets[0] as StellarAssetInfo).distributionAccount = null
     config.validate(config, errors)
     assertEquals("sep24-deposit-info-generator-type", errors.allErrors[0].code)
   }
@@ -142,37 +118,5 @@ class Sep24ConfigTest {
 
     config.validate(config, errors)
     assertEquals("sep24-more-info-url-jwt-expiration-not-valid", errors.allErrors[0].code)
-  }
-
-  @Test
-  fun `test validate accountCreation = true and claimableBalances = true with custody integration`() {
-    config.features = Features()
-    config.features.accountCreation = true
-    config.features.claimableBalances = true
-    config.depositInfoGeneratorType = DepositInfoGeneratorType.CUSTODY
-    every { custodyConfig.isCustodyIntegrationEnabled } returns true
-    config.validate(config, errors)
-    assertEquals("sep24-features-account_creation-not-supported", errors.allErrors[0].code)
-    assertEquals("sep24-features-claimable_balances-not-supported", errors.allErrors[1].code)
-  }
-
-  @Test
-  fun `test validate accountCreation = false and claimableBalances = false with custody integration`() {
-    config.features = Features()
-    config.features.accountCreation = false
-    config.features.claimableBalances = false
-    config.depositInfoGeneratorType = DepositInfoGeneratorType.CUSTODY
-    every { custodyConfig.isCustodyIntegrationEnabled } returns true
-    config.validate(config, errors)
-    assertFalse(errors.hasErrors())
-  }
-
-  @Test
-  fun `test validate accountCreation = true and claimableBalances = true with disabled custody integration`() {
-    config.features = Features()
-    config.features.accountCreation = true
-    config.features.claimableBalances = true
-    config.validate(config, errors)
-    assertFalse(errors.hasErrors())
   }
 }

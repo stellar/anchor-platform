@@ -20,8 +20,6 @@ import org.stellar.anchor.api.shared.Amount
 import org.stellar.anchor.api.shared.Customers
 import org.stellar.anchor.api.shared.StellarId
 import org.stellar.anchor.asset.AssetService
-import org.stellar.anchor.config.CustodyConfig
-import org.stellar.anchor.custody.CustodyService
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.platform.data.JdbcSep31Transaction
 import org.stellar.anchor.platform.service.TransactionService
@@ -51,8 +49,6 @@ class GetTransactionHandlerTest {
   @MockK(relaxed = true) private lateinit var eventSession: EventService.Session
   @MockK(relaxed = true) private lateinit var sep6DepositInfoGenerator: Sep6DepositInfoGenerator
   @MockK(relaxed = true) private lateinit var sep24DepositInfoGenerator: Sep24DepositInfoGenerator
-  @MockK(relaxed = true) private lateinit var custodyService: CustodyService
-  @MockK(relaxed = true) private lateinit var custodyConfig: CustodyConfig
   private lateinit var transactionService: TransactionService
   private lateinit var handler: GetTransactionHandler
 
@@ -70,9 +66,7 @@ class GetTransactionHandlerTest {
         assetService,
         eventService,
         sep6DepositInfoGenerator,
-        sep24DepositInfoGenerator,
-        custodyService,
-        custodyConfig
+        sep24DepositInfoGenerator
       )
     handler = GetTransactionHandler(transactionService)
   }

@@ -6,19 +6,15 @@ import io.mockk.impl.annotations.MockK
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.CsvSource
 import org.springframework.validation.BindException
 import org.springframework.validation.Errors
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
-import org.stellar.anchor.config.CustodyConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep6Config
 import org.stellar.anchor.platform.utils.setupMock
 
 class Sep6ConfigTest {
-  @MockK(relaxed = true) lateinit var custodyConfig: CustodyConfig
   @MockK(relaxed = true) lateinit var assetService: AssetService
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
   lateinit var config: PropertySep6Config
@@ -28,13 +24,11 @@ class Sep6ConfigTest {
   fun setUp() {
     MockKAnnotations.init(this, relaxUnitFun = true)
     assetService = DefaultAssetService.fromJsonResource("test_assets.json")
-    every { custodyConfig.isCustodyIntegrationEnabled } returns true
     secretConfig.setupMock {}
     config =
-      PropertySep6Config(custodyConfig, assetService, secretConfig).apply {
+      PropertySep6Config(assetService, secretConfig).apply {
         enabled = true
         features = Sep6Config.Features(false, false)
-        depositInfoGeneratorType = Sep6Config.DepositInfoGeneratorType.CUSTODY
       }
     config.moreInfoUrl = MoreInfoUrlConfig("https://www.stellar.org", 600, listOf(""))
     errors = BindException(config, "config")
@@ -107,23 +101,5 @@ class Sep6ConfigTest {
     config.validate(config, errors)
     Assertions.assertTrue(errors.hasErrors())
     assertErrorCode(errors, "hmac-weak-secret")
-  }
-
-  @CsvSource(value = ["NONE", "SELF"])
-  @ParameterizedTest
-  fun `test validation rejecting custody enabled and non-custodial deposit info generator`(
-    type: String
-  ) {
-    config.depositInfoGeneratorType = Sep6Config.DepositInfoGeneratorType.valueOf(type)
-    config.validate(config, errors)
-    Assertions.assertEquals("sep6-deposit-info-generator-type", errors.allErrors[0].code)
-  }
-
-  @Test
-  fun `test validation rejecting custody disabled and custodial deposit generator`() {
-    every { custodyConfig.isCustodyIntegrationEnabled } returns false
-    config.depositInfoGeneratorType = Sep6Config.DepositInfoGeneratorType.CUSTODY
-    config.validate(config, errors)
-    Assertions.assertEquals("sep6-deposit-info-generator-type", errors.allErrors[0].code)
   }
 }

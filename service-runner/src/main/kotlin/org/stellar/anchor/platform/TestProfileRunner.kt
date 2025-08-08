@@ -117,9 +117,6 @@ class TestProfileExecutor(val config: TestConfig) {
       if ((shouldStartAllServers || shouldStartObserver) && !custodyEnabled) {
         jobs += scope.launch { runningServers.add(ServiceRunner.startStellarObserver(envMap)) }
       }
-      if ((shouldStartAllServers || shouldStartCustodyServer) && custodyEnabled) {
-        jobs += scope.launch { runningServers.add(ServiceRunner.startCustodyServer(envMap)) }
-      }
       if (shouldStartAllServers || shouldStartEventProcessingServer) {
         jobs +=
           scope.launch { runningServers.add(ServiceRunner.startEventProcessingServer(envMap)) }

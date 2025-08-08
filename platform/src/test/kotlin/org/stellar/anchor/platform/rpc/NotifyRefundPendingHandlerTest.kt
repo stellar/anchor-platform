@@ -1009,7 +1009,7 @@ class NotifyRefundPendingHandlerTest {
 
   @CsvSource(value = ["deposit", "deposit-exchange"])
   @ParameterizedTest
-  fun test_handle_sep6_more_then_amount_in(kind: String) {
+  fun test_handle_sep6_more_then_amount_in() {
     val transferReceivedAt = Instant.now()
     val request =
       NotifyRefundPendingRequest.builder()

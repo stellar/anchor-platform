@@ -13,8 +13,6 @@ import org.stellar.anchor.api.platform.TransactionsSeps
 import org.stellar.anchor.api.rpc.method.GetTransactionsRpcRequest
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.asset.AssetService
-import org.stellar.anchor.config.CustodyConfig
-import org.stellar.anchor.custody.CustodyService
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.platform.data.JdbcSep31Transaction
 import org.stellar.anchor.platform.service.TransactionService
@@ -41,8 +39,6 @@ class GetTransactionsHandlerTest {
   @MockK(relaxed = true) private lateinit var eventSession: EventService.Session
   @MockK(relaxed = true) private lateinit var sep6DepositInfoGenerator: Sep6DepositInfoGenerator
   @MockK(relaxed = true) private lateinit var sep24DepositInfoGenerator: Sep24DepositInfoGenerator
-  @MockK(relaxed = true) private lateinit var custodyService: CustodyService
-  @MockK(relaxed = true) private lateinit var custodyConfig: CustodyConfig
   private lateinit var transactionService: TransactionService
 
   private lateinit var handler: GetTransactionsHandler
@@ -61,9 +57,7 @@ class GetTransactionsHandlerTest {
         assetService,
         eventService,
         sep6DepositInfoGenerator,
-        sep24DepositInfoGenerator,
-        custodyService,
-        custodyConfig
+        sep24DepositInfoGenerator
       )
     this.handler = GetTransactionsHandler(transactionService)
   }

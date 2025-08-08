@@ -25,7 +25,6 @@ import org.stellar.anchor.platform.config.PropertySecretConfig.SECRET_EVENTS_QUE
 import org.stellar.anchor.platform.config.PropertySecretConfig.SECRET_EVENTS_QUEUE_KAFKA_USERNAME
 import org.stellar.anchor.platform.configurator.SecretManager
 import org.stellar.anchor.platform.utils.ResourceHelper
-import org.stellar.anchor.platform.utils.TrustAllSslEngineFactory
 
 @ExtendWith(LockAndMockTest::class)
 class KafkaSessionTest {
@@ -102,7 +101,7 @@ class KafkaSessionTest {
       assertEquals("truststore.jks", properties.getProperty(SSL_TRUSTSTORE_LOCATION_CONFIG))
     } else {
       assertEquals("", properties.getProperty(SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG))
-      val cls = properties.get(SSL_ENGINE_FACTORY_CLASS_CONFIG) as Class<TrustAllSslEngineFactory>
+      val cls = properties[SSL_ENGINE_FACTORY_CLASS_CONFIG] as Class<*>
       assertEquals("org.stellar.anchor.platform.utils.TrustAllSslEngineFactory", cls.name)
 
       // make sure we don't look for keystore and truststore
