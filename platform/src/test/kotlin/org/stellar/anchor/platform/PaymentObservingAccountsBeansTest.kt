@@ -14,6 +14,7 @@ import org.stellar.anchor.api.exception.ServerErrorException
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.config.StellarNetworkConfig
+import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.component.observer.PaymentObserverBeans
 import org.stellar.anchor.platform.config.PaymentObserverConfig
@@ -26,6 +27,7 @@ class PaymentObservingAccountsBeansTest {
   @MockK private lateinit var paymentObservingAccountStore: PaymentObservingAccountStore
 
   val stellarRpc = StellarRpc("https://soroban-testnet.stellar.org")
+  val horizon = Horizon("https://horizon-testnet.stellar.org")
 
   @BeforeEach
   fun setUp() {
@@ -80,7 +82,7 @@ class PaymentObservingAccountsBeansTest {
     every { mockStellarLessAssetService.getStellarAssets() } returns listOf()
     ex = assertThrows {
       paymentObserverBeans.stellarPaymentObserver(
-        stellarRpc,
+        horizon,
         mockStellarLessAssetService,
         null,
         null,
@@ -181,7 +183,7 @@ class PaymentObservingAccountsBeansTest {
     assertDoesNotThrow {
       val paymentObserver =
         paymentObserverBeans.stellarPaymentObserver(
-          stellarRpc,
+          horizon,
           assetService,
           mockPaymentListeners,
           paymentStreamerCursorStore,
@@ -210,22 +212,6 @@ class PaymentObservingAccountsBeansTest {
         )
       assertNotNull(paymentObserver)
       assertTrue(paymentObserver is StellarRpcPaymentObserver)
-    }
-
-    every { mockStellarNetworkConfig.horizonUrl } returns null
-    every { mockStellarNetworkConfig.rpcUrl } returns null
-
-    assertThrows<IllegalArgumentException> {
-      paymentObserverBeans.stellarPaymentObserver(
-        stellarRpc,
-        assetService,
-        mockPaymentListeners,
-        paymentStreamerCursorStore,
-        paymentObservingAccountsManager,
-        mockStellarNetworkConfig,
-        mockPaymentObserverConfig,
-        mockk(),
-      )
     }
   }
 }
