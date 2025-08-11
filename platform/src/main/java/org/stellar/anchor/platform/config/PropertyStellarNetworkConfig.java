@@ -3,6 +3,7 @@ package org.stellar.anchor.platform.config;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.Network.*;
 
+import java.util.Objects;
 import lombok.Data;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.validation.Errors;
@@ -28,8 +29,18 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
   @Override
   public void validate(@NotNull Object target, @NotNull Errors errors) {
     StellarNetworkConfig config = (StellarNetworkConfig) target;
-
     validateConfig(config, errors);
+    validateRpcAuth(config.getRpcAuth(), errors);
+  }
+
+  void validateRpcAuth(RpcAuthConfig rpcAuth, Errors errors) {
+    if (Objects.requireNonNull(rpcAuth.getType()) == RpcAuthConfig.RpcAuthType.HEADER) {
+      if (isEmpty(rpcAuth.getHeaderConfig().getName())) {
+        errors.reject(
+            "rpc-auth-header-name-empty",
+            "The stellar_network.rpc_auth.header_config.header is not defined.");
+      }
+    }
   }
 
   void validateConfig(StellarNetworkConfig config, Errors errors) {

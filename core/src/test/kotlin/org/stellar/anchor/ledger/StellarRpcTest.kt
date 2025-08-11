@@ -22,8 +22,8 @@ import org.stellar.sdk.xdr.OperationType
 
 class StellarRpcTest {
 
-  private val TEST_STELLAR_RPC_URI = "https://horizon-testnet.stellar.org"
-  private val TEST_HORIZON_PASSPHRASE = "Test SDF Network ; September 2015"
+  private val testStellarRpcUrl = "https://horizon-testnet.stellar.org"
+  private val testNetworkPassphrase = "Test SDF Network ; September 2015"
 
   private val gson = GsonUtils.getInstance()
   private lateinit var stellarRpc: StellarRpc
@@ -32,8 +32,8 @@ class StellarRpcTest {
 
   @BeforeEach
   fun setUp() {
-    every { stellarNetworkConfig.rpcUrl } returns TEST_STELLAR_RPC_URI
-    every { stellarNetworkConfig.stellarNetworkPassphrase } returns TEST_HORIZON_PASSPHRASE
+    every { stellarNetworkConfig.rpcUrl } returns testStellarRpcUrl
+    every { stellarNetworkConfig.stellarNetworkPassphrase } returns testNetworkPassphrase
 
     sorobanServer = mockk<SorobanServer>()
     stellarRpc = StellarRpc(stellarNetworkConfig.rpcUrl)
@@ -201,7 +201,7 @@ class StellarRpcTest {
     val config = mockk<StellarNetworkConfig>()
     val secret = mockk<SecretConfig>()
     val rpcAuth = mockk<RpcAuthConfig>()
-    val headerConfig = RpcAuthConfig.HeaderConfig("Authorization", "test-token")
+    val headerConfig = RpcAuthConfig.HeaderConfig("Authorization")
     val chain = mockk<Interceptor.Chain>()
     val request = mockk<Request>()
 

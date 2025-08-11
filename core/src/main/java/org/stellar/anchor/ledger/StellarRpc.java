@@ -54,7 +54,6 @@ public class StellarRpc implements LedgerClient {
       StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
     RpcAuthConfig rpcAuth = stellarNetworkConfig.getRpcAuth();
 
-    String value = secretConfig.getRpcAuthSecret();
     // Create a SorobanServer with http header
     return createSorobanServerWithHttpClient(
         stellarNetworkConfig.getRpcUrl(),
@@ -66,7 +65,8 @@ public class StellarRpc implements LedgerClient {
                   chain
                       .request()
                       .newBuilder()
-                      .addHeader(rpcAuth.getHeaderConfig().getHeader(), value)
+                      .addHeader(
+                          rpcAuth.getHeaderConfig().getName(), secretConfig.getRpcAuthSecret())
                       .build();
                   return chain.proceed(request);
                 })

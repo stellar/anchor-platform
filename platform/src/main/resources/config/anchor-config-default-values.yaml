@@ -50,28 +50,14 @@ stellar_network:
     # The rpc_auth is used to authenticate with the Soroban RPC server.
     # The `type` can be one of the following:
     #   `none`: No authentication is used.
-    #   `bearer_token`: The authentication is done using a Bearer token added to the HTTP request header.
+    #   `header`: The authentication is done using a Bearer token added to the HTTP request header.
     #                   The RFC 6750 defines the Bearer token authentication scheme.
     #   `url`: The authentication is done using an API key added to the URL path.
     # If the type is `api_key` or `url_path`, the secret must be set by the environment variable `secret.stellar_network.rpc.auth.secret`.
     type: none
-    bearer_token:
+    header:
       # The HTTP header name of the Bearer token.
-      header: Authorization
-      # The prefix of the Bearer token.
-      # The Authorization header will be set to `{prefix} {token}`.
-      # Supported providers: Gateway, Obsrvr (with Api-Key prefix), NowNodes (with api-key header).
-      prefix: Bearer
-    # If the type is `url`, the following configuration can be set to configure how the API key is added to the URL.
-    # Supported providers: Blockdaemon, Validation Cloud, QuickNode, Gateway, Ankr, Infstones, GetBlock, and others.
-    url:
-      # The `type` can be one of the following:
-      #   `path_append`: The API key is appended to the URL path.
-      #       For example, QuickNode appends the API key to the URL path like this: `https://bitter-few-friday.stellar-testnet.quiknode.pro/{YOUR_API_KEY}/`.
-      #   `query_param`: The API key is added as a query parameter to the URL.
-      type: path_append
-      # If the type is `query_param`, the `query parameter name` must be set.
-      query_param_name: api_key
+      name: Authorization
 
   # The horizon server endpoint.
   horizon_url: https://horizon-testnet.stellar.org

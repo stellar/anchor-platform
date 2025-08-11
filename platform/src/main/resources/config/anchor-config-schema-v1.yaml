@@ -154,9 +154,7 @@ sep_server.port:
 stellar_network.horizon_url:
 stellar_network.network:
 stellar_network.rpc_auth.type:
-stellar_network.rpc_auth.bearer_token.header:
-stellar_network.rpc_auth.bearer_token.prefix:
-stellar_network.rpc_auth.url.query_param_name:
+stellar_network.rpc_auth.header.name:
 stellar_network.rpc_auth.url.type:
 stellar_network.rpc_url:
 stellar_network.type:

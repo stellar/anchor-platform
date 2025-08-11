@@ -19,7 +19,6 @@ public class RpcAuthConfig {
   @Setter
   @AllArgsConstructor
   public static class HeaderConfig {
-    String header;
-    String value;
+    String name;
   }
 }

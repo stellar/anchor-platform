@@ -1,14 +1,15 @@
 package org.stellar.anchor.platform.config
 
-import java.util.stream.Stream
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.NullSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.validation.BindException
 import org.springframework.validation.Errors
+import org.stellar.anchor.config.RpcAuthConfig
 import org.stellar.anchor.config.StellarNetworkConfig.ProviderType.HORIZON
 import org.stellar.anchor.config.StellarNetworkConfig.ProviderType.RPC
 
@@ -32,6 +33,20 @@ class StellarNetworkConfigTest {
     config.horizonUrl = url
     config.validateConfig(config, errors)
     assertErrorCode(errors, "horizon-url-empty")
+  }
+
+  @Test
+  fun `test empty header auth type`() {
+    config.type = RPC
+    config.rpcUrl = "https://soroban-testnet.stellar.org"
+    config.rpcAuth =
+      RpcAuthConfig().apply {
+        type = RpcAuthConfig.RpcAuthType.HEADER
+        headerConfig = RpcAuthConfig.HeaderConfig("")
+      }
+
+    config.validate(config, errors)
+    assertErrorCode(errors, "rpc-auth-header-name-empty")
   }
 
   @ParameterizedTest
@@ -59,18 +74,6 @@ class StellarNetworkConfigTest {
     config.rpcUrl = url
     config.validateConfig(config, errors)
     assertErrorCode(errors, "rpc-url-invalid")
-  }
-
-  companion object {
-    @JvmStatic
-    fun validLanguages(): Stream<List<String>> {
-      return Stream.of(listOf(), listOf("en", "en-us", "EN", "EN-US"), listOf("zh-tw", "zh"))
-    }
-
-    @JvmStatic
-    fun invalidLanguages(): Stream<List<String>> {
-      return Stream.of(listOf("1234", "EN", "EN-US"))
-    }
   }
 
   @ParameterizedTest
