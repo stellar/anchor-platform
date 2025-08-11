@@ -36,16 +36,7 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
     ValidationUtils.rejectIfEmpty(
         errors, "network", "stellar-network-empty", "stellar_network.network is not defined.");
 
-    try {
-      config.getStellarNetworkPassphrase();
-    } catch (Exception ex) {
-      errors.rejectValue(
-          "network",
-          "stellar-network-invalid",
-          String.format(
-              "The stellar_network.network:%s is not valid. Please check the configuration.",
-              config.getNetwork()));
-    }
+    config.getStellarNetworkPassphrase();
 
     switch (config.getType()) {
       case HORIZON:

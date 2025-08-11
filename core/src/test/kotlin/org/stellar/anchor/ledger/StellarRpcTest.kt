@@ -1,12 +1,16 @@
 package org.stellar.anchor.ledger
 
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.slot
-import io.mockk.verify
+import io.mockk.*
+import okhttp3.Interceptor
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
+import org.stellar.anchor.config.RpcAuthConfig
+import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.SorobanServer
@@ -143,6 +147,88 @@ class StellarRpcTest {
       stellarRpc.getTransaction("4f7bd0fd0ec58b4d4ec31b4e37d21d4de4cbc2bd548d95d27fece550e98754c5")
 
     assertNull(result)
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "https://rpc-url",
+        "https://soroban-testnet.stellar.org",
+        "https://soroban-mainnet.stellar.org/1234567/"
+      ]
+  )
+  fun `When auth is NONE, SorobanServer is created with the correct URL`(testUrl: String) {
+    val config = mockk<StellarNetworkConfig>()
+    val secret = mockk<SecretConfig>()
+    val rpcAuth = mockk<RpcAuthConfig>()
+    every { config.rpcAuth } returns rpcAuth
+    every { rpcAuth.type } returns RpcAuthConfig.RpcAuthType.NONE
+    every { config.rpcUrl } returns testUrl
+
+    val slot = slot<OkHttpClient>()
+    val rpc = spyk(StellarRpc(config, secret))
+    every { rpc.createSorobanServerWithHttpClient(testUrl, capture(slot)) } returns sorobanServer
+
+    val capturedKeys = slot<Collection<LedgerKey>>()
+    every { sorobanServer.getLedgerEntries(capture(capturedKeys)) } returns
+      gson.fromJson(trustlineTestResponse, GetLedgerEntriesResponse::class.java)
+
+    rpc.createSimpleRpcServer(config)
+    // run code that constructs SorobanServer("https://rpc-url")
+    verify { rpc.createSorobanServer(testUrl) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "https://rpc-url",
+        "https://soroban-testnet.stellar.org",
+        "https://soroban-mainnet.stellar.org/1234567/"
+      ]
+  )
+  fun `When auth is HEADER, SorobanServer is created with the correct URL and HEADER`(
+    testUrl: String
+  ) {
+    // slots
+    val slotUrl = slot<String>()
+    val slotHeaderValue = slot<String>()
+    val slotHeaderName = slot<String>()
+    val slotOkHttpClient = slot<OkHttpClient>()
+
+    // inputs
+    val config = mockk<StellarNetworkConfig>()
+    val secret = mockk<SecretConfig>()
+    val rpcAuth = mockk<RpcAuthConfig>()
+    val headerConfig = RpcAuthConfig.HeaderConfig("Authorization", "test-token")
+    val chain = mockk<Interceptor.Chain>()
+    val request = mockk<Request>()
+
+    every { config.rpcAuth } returns rpcAuth
+    every { rpcAuth.type } returns RpcAuthConfig.RpcAuthType.HEADER
+    every { rpcAuth.headerConfig } returns headerConfig
+    every { secret.rpcAuthSecret } returns "test-token"
+    every { config.rpcUrl } returns testUrl
+    every { chain.request() } returns request
+    every { request.newBuilder() } returns
+      mockk<Request.Builder> {
+        every { addHeader(capture(slotHeaderName), capture(slotHeaderValue)) } returns this
+        every { build() } returns request
+      }
+    every { chain.proceed(any()) } returns mockk()
+
+    // action
+    val rpc = spyk(StellarRpc(config, secret))
+    every {
+      rpc.createSorobanServerWithHttpClient(capture(slotUrl), capture(slotOkHttpClient))
+    } returns sorobanServer
+    rpc.createHeaderAuthServer(config, secret)
+    slotOkHttpClient.captured.interceptors[1].intercept(chain)
+
+    // assertions
+    verify { rpc.createSorobanServerWithHttpClient(testUrl, any()) }
+    assertEquals("test-token", slotHeaderValue.captured)
   }
 }
 

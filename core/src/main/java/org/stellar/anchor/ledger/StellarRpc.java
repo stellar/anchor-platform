@@ -42,26 +42,21 @@ public class StellarRpc implements LedgerClient {
       case NONE:
         sorobanServer = createSimpleRpcServer(stellarNetworkConfig);
         break;
-      case URL:
-        sorobanServer = createUrlAuthRpcServer(stellarNetworkConfig, secretConfig);
-        break;
-      case BEARER_TOKEN:
-        sorobanServer = createBearerTokenRpcServer(stellarNetworkConfig, secretConfig);
+      case HEADER:
+        sorobanServer = createHeaderAuthServer(stellarNetworkConfig, secretConfig);
         break;
       default:
         throw new IllegalStateException("Unexpected value: " + rpcAuth.getType());
     }
   }
 
-  private SorobanServer createBearerTokenRpcServer(
+  SorobanServer createHeaderAuthServer(
       StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
     RpcAuthConfig rpcAuth = stellarNetworkConfig.getRpcAuth();
 
-    String value =
-        String.format(
-            "%s %s", rpcAuth.getBearerToken().getPrefix(), secretConfig.getRpcAuthSecret());
+    String value = secretConfig.getRpcAuthSecret();
     // Create a SorobanServer with http header
-    return new SorobanServer(
+    return createSorobanServerWithHttpClient(
         stellarNetworkConfig.getRpcUrl(),
         new OkHttpClient.Builder()
             .addInterceptor(new ClientIdentificationInterceptor())
@@ -71,7 +66,7 @@ public class StellarRpc implements LedgerClient {
                   chain
                       .request()
                       .newBuilder()
-                      .addHeader(rpcAuth.getBearerToken().getHeader(), value)
+                      .addHeader(rpcAuth.getHeaderConfig().getHeader(), value)
                       .build();
                   return chain.proceed(request);
                 })
@@ -81,29 +76,16 @@ public class StellarRpc implements LedgerClient {
             .build());
   }
 
-  private SorobanServer createUrlAuthRpcServer(
-      StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
-    RpcAuthConfig rpcAuth = stellarNetworkConfig.getRpcAuth();
-    return switch (rpcAuth.getUrl().getType()) {
-      case PATH_APPEND ->
-          new SorobanServer(
-              String.format(
-                  "%s/%s",
-                  stellarNetworkConfig.getRpcUrl().replaceAll("/+$", ""),
-                  secretConfig.getRpcAuthSecret().replaceAll("^/+", "")));
-      case QUERY_PARAM ->
-          // Append the query parameter to the base URL
-          new SorobanServer(
-              String.format(
-                  "%s?%s=%s",
-                  stellarNetworkConfig.getRpcUrl(),
-                  rpcAuth.getUrl().getQueryParamName(),
-                  secretConfig.getRpcAuthSecret()));
-    };
+  SorobanServer createSimpleRpcServer(StellarNetworkConfig stellarNetworkConfig) {
+    return createSorobanServer(stellarNetworkConfig.getRpcUrl());
   }
 
-  private SorobanServer createSimpleRpcServer(StellarNetworkConfig stellarNetworkConfig) {
-    return new SorobanServer(stellarNetworkConfig.getRpcUrl());
+  SorobanServer createSorobanServer(String rpcServerUrl) {
+    return new SorobanServer(rpcServerUrl);
+  }
+
+  SorobanServer createSorobanServerWithHttpClient(String rpcServerUrl, OkHttpClient okHttpClient) {
+    return new SorobanServer(rpcServerUrl, okHttpClient);
   }
 
   @Override

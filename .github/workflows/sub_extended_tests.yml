@@ -23,8 +23,6 @@ jobs:
       TEST_WITHDRAW_FUND_CLIENT_SECRET_2: ${{ vars.TEST_WITHDRAW_FUND_CLIENT_SECRET_2 }}
       TEST_DEPOSIT_FUND_CLIENT_SECRET_1: ${{ vars.TEST_DEPOSIT_FUND_CLIENT_SECRET_1 }}
       TEST_DEPOSIT_FUND_CLIENT_SECRET_2: ${{ vars.TEST_DEPOSIT_FUND_CLIENT_SECRET_2 }}
-      GATEWAY_API_KEY: ${{ vars.GATEWAY_API_KEY }}
-      QUICKNODE_API_KEY: ${{ vars.QUICKNODE_API_KEY }}
     steps:
       #############################################
       # Setup JDK 17

@@ -1,5 +1,6 @@
 package org.stellar.anchor.config;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -7,32 +8,18 @@ import lombok.Setter;
 @Setter
 public class RpcAuthConfig {
   RpcAuthType type;
-  BearerTokenConfig bearerToken;
-  UrlConfig url;
+  HeaderConfig headerConfig;
 
   public enum RpcAuthType {
     NONE,
-    URL,
-    BEARER_TOKEN
+    HEADER
   }
 
   @Getter
   @Setter
-  public static class BearerTokenConfig {
+  @AllArgsConstructor
+  public static class HeaderConfig {
     String header;
-    String prefix;
-  }
-
-  @Getter
-  @Setter
-  public static class UrlConfig {
-    UrlType type;
-    String queryParamName;
     String value;
-
-    public enum UrlType {
-      PATH_APPEND,
-      QUERY_PARAM
-    }
   }
 }

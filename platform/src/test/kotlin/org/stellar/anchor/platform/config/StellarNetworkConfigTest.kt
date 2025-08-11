@@ -2,8 +2,8 @@ package org.stellar.anchor.platform.config
 
 import java.util.stream.Stream
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.NullSource
 import org.junit.jupiter.params.provider.ValueSource
@@ -85,7 +85,6 @@ class StellarNetworkConfigTest {
   @ValueSource(strings = ["TESTNET1", "mainnet", ""])
   fun `test invalid stellar network configurations`(network: String) {
     config.network = network
-    config.validateConfig(config, errors)
-    assertTrue(errors.hasErrors())
+    assertThrows<RuntimeException> { config.validateConfig(config, errors) }
   }
 }
