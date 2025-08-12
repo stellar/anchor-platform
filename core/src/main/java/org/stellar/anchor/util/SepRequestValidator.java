@@ -227,24 +227,26 @@ public class SepRequestValidator {
    * @throws SepValidationException if the account is invalid
    */
   public void validateAccount(String account) throws AnchorException {
-    switch (account.charAt(0)) {
-      case 'G':
-      case 'C':
-        try {
-          Address.fromSCAddress(Scv.fromAddress(Scv.toAddress(account)).toSCAddress());
-        } catch (RuntimeException ex) {
-          throw new SepValidationException(String.format("invalid account %s", account));
-        }
-        break;
-      case 'M':
-        try {
-          new MuxedAccount(account);
-        } catch (RuntimeException ex) {
-          throw new SepValidationException(String.format("invalid account %s", account));
-        }
-        break;
-      default:
-        throw new SepValidationException(String.format("invalid account %s", account));
+    try {
+      switch (SepHelper.accountType(account)) {
+        case G:
+        case C:
+          try {
+            Address.fromSCAddress(Scv.fromAddress(Scv.toAddress(account)).toSCAddress());
+          } catch (RuntimeException ex) {
+            throw new SepValidationException(String.format("invalid account %s", account));
+          }
+          break;
+        case M:
+          try {
+            new MuxedAccount(account);
+          } catch (RuntimeException ex) {
+            throw new SepValidationException(String.format("invalid account %s", account));
+          }
+          break;
+      }
+    } catch (IllegalArgumentException ex) {
+      throw new SepValidationException(String.format("invalid account %s", account), ex);
     }
   }
 }

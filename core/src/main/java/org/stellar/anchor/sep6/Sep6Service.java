@@ -3,7 +3,11 @@ package org.stellar.anchor.sep6;
 import static io.micrometer.core.instrument.Metrics.counter;
 import static org.stellar.anchor.util.AssetHelper.isDepositEnabled;
 import static org.stellar.anchor.util.AssetHelper.isWithdrawEnabled;
+import static org.stellar.anchor.util.Log.infoF;
 import static org.stellar.anchor.util.MemoHelper.*;
+import static org.stellar.anchor.util.SepHelper.*;
+import static org.stellar.anchor.util.SepHelper.AccountType.C;
+import static org.stellar.anchor.util.SepHelper.accountType;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 
 import com.google.common.collect.ImmutableMap;
@@ -120,9 +124,7 @@ public class Sep6Service {
     }
     requestValidator.validateAccount(request.getAccount());
 
-    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-    String id = SepHelper.generateSepTransactionId();
-
+    String id = generateSepTransactionId();
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
             .id(id)
@@ -144,9 +146,21 @@ public class Sep6Service {
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token));
 
+    if (accountType(token.getAccount()) == C) {
+      if (request.getMemoType() == null || !request.getMemoType().equalsIgnoreCase("id")) {
+        infoF(
+            "If the request account:{} is a C-account, the memo_type must be set to 'id'",
+            token.getAccount());
+        throw new SepValidationException(
+            "C-account requires 'memo_type' to be set to 'id' in the request");
+      }
+    }
+
+    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
+
     if (memo != null) {
       builder.memo(memo.toString());
-      builder.memoType(SepHelper.memoTypeString(memoType(memo)));
+      builder.memoType(memoTypeString(memoType(memo)));
     }
 
     Sep6Transaction txn = builder.build();
@@ -217,7 +231,7 @@ public class Sep6Service {
     }
 
     Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
@@ -248,7 +262,7 @@ public class Sep6Service {
 
     if (memo != null) {
       builder.memo(memo.toString());
-      builder.memoType(SepHelper.memoTypeString(memoType(memo)));
+      builder.memoType(memoTypeString(memoType(memo)));
     }
 
     Sep6Transaction txn = builder.build();
@@ -298,7 +312,7 @@ public class Sep6Service {
     String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
     requestValidator.validateAccount(sourceAccount);
 
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
@@ -372,7 +386,7 @@ public class Sep6Service {
     String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
     requestValidator.validateAccount(sourceAccount);
 
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Amounts amounts;
     if (request.getQuoteId() != null) {

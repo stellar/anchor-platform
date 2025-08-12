@@ -17,6 +17,8 @@ import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MemoHelper.makeMemo;
 import static org.stellar.anchor.util.MemoHelper.memoType;
 import static org.stellar.anchor.util.MetricConstants.*;
+import static org.stellar.anchor.util.SepHelper.*;
+import static org.stellar.anchor.util.SepHelper.AccountType.*;
 import static org.stellar.anchor.util.SepHelper.generateSepTransactionId;
 import static org.stellar.anchor.util.SepHelper.memoTypeString;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
@@ -247,8 +249,7 @@ public class Sep24Service {
     String quoteId = withdrawRequest.get("quote_id");
     AssetInfo buyAsset = assetService.getAssetById(withdrawRequest.get("destination_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(
-          quoteId, asset, buyAsset, strAmount, builder, WITHDRAWAL.toString(), txnId);
+      validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
     } else {
       builder.amountExpected(strAmount);
       if (buyAsset != null) {
@@ -381,7 +382,6 @@ public class Sep24Service {
     if (token.getClientDomain() != null)
       depositRequest.put("client_domain", token.getClientDomain());
 
-    Memo memo = makeMemo(depositRequest.get("memo"), depositRequest.get("memo_type"));
     String txnId = generateSepTransactionId();
     Sep24TransactionBuilder builder =
         new Sep24TransactionBuilder(txnStore)
@@ -402,9 +402,19 @@ public class Sep24Service {
             .clientName(clientFinder.getClientName(token))
             .claimableBalanceSupported(claimableSupported);
 
-    if (memo != null) {
-      debug("transaction memo detected.", memo);
+    if (accountType(token.getAccount()) == C) {
+      if (depositRequest.get("memo_type") == null
+          || !depositRequest.get("memo_type").equalsIgnoreCase("id")) {
+        infoF(
+            "If the request account:{} is a C-account, the memo_type must be set to 'id'",
+            token.getAccount());
+        throw new SepValidationException(
+            "C-account requires 'memo_type' to be set to 'id' in the request");
+      }
+    }
 
+    Memo memo = makeMemo(depositRequest.get("memo"), depositRequest.get("memo_type"));
+    if (memo != null) {
       if (!CustodyUtils.isMemoTypeSupported(
           custodyConfig.getType(), memoTypeString(memoType(memo)))) {
         throw new SepValidationException(
@@ -413,6 +423,7 @@ public class Sep24Service {
                 memoTypeString(memoType(memo)), custodyConfig.getType()));
       }
 
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
     }
@@ -420,8 +431,7 @@ public class Sep24Service {
     String quoteId = depositRequest.get("quote_id");
     AssetInfo sellAsset = assetService.getAssetById(depositRequest.get("source_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(
-          quoteId, sellAsset, asset, strAmount, builder, DEPOSIT.toString(), txnId);
+      validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
     } else {
       builder.amountExpected(strAmount);
       if (sellAsset != null) {
@@ -589,7 +599,6 @@ public class Sep24Service {
       AssetInfo buyAsset,
       String strAmount,
       Sep24TransactionBuilder builder,
-      String kind,
       String txnId)
       throws AnchorException {
     Sep38Quote quote =

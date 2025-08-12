@@ -284,7 +284,7 @@ public class TransactionService {
           SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(sep6Transaction);
           sep6Transaction.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
           sep6Transaction.setMemo(sep6DepositInfo.getMemo());
-          sep6Transaction.setMemoType(sep6DepositInfo.getMemoType());
+          sep6Transaction.setMemoType("id");
         }
 
         if (custodyConfig.isCustodyIntegrationEnabled()
@@ -419,7 +419,7 @@ public class TransactionService {
           SepDepositInfo sep24DepositInfo = sep24DepositInfoGenerator.generate(sep24Txn);
           sep24Txn.setWithdrawAnchorAccount(sep24DepositInfo.getStellarAddress());
           sep24Txn.setMemo(sep24DepositInfo.getMemo());
-          sep24Txn.setMemoType(sep24DepositInfo.getMemoType());
+          sep24Txn.setMemoType("id");
         }
 
         txnUpdated = updateField(patch, sep24Txn, "message", txnUpdated);

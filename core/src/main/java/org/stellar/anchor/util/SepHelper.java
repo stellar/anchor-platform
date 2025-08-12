@@ -12,6 +12,23 @@ import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.xdr.MemoType;
 
 public class SepHelper {
+  public enum AccountType {
+    G,
+    M,
+    C,
+  }
+
+  public static AccountType accountType(String account) {
+    return switch (account.charAt(0)) {
+      case 'G' -> AccountType.G;
+      case 'M' -> AccountType.M;
+      case 'C' -> AccountType.C;
+      default ->
+          throw new IllegalArgumentException(
+              String.format("Invalid account type for account: %s", account));
+    };
+  }
+
   /**
    * Generates an Id for SEP transactions.
    *

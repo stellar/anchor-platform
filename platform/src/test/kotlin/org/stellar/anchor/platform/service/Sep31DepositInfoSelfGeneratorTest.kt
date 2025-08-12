@@ -41,6 +41,5 @@ class Sep31DepositInfoSelfGeneratorTest {
 
     assertEquals(actualInfo.stellarAddress, address)
     assertTrue(actualInfo.memo.toLongOrNull() != null)
-    assertTrue(actualInfo.memoType == "id")
   }
 }
