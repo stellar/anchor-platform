@@ -41,7 +41,6 @@ import org.stellar.anchor.platform.WalletClient
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.Log.info
-import org.stellar.anchor.util.StringHelper.isNotEmpty
 import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
@@ -124,8 +123,8 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   @Order(11)
   fun `test contract account deposit`() = runBlocking {
     assumeTrue(
-      isNotEmpty(config.get("stellar_network.rpc_url")),
-      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
     )
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
@@ -300,8 +299,8 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   @Order(21)
   fun `test contract account withdraw`() = runBlocking {
     assumeTrue(
-      isNotEmpty(config.get("stellar_network.rpc_url")),
-      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
     )
 
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
@@ -382,8 +381,8 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   ) {
     var status: TransactionStatus? = null
 
-    for (i in 0..maxTries) {
-      // Get transaction info
+    var tries = 0
+    while (tries <= maxTries) {
       val transaction = anchor.interactive().getTransaction(id, token)
       if (status != transaction.status) {
         status = transaction.status
@@ -391,12 +390,11 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
           "Transaction(id=${transaction.id}) status changed to $status. Message: ${transaction.message}"
         )
       }
-
       if (transaction.status == expectedStatus) return
-
       if (transaction.status == exitStatus) break
 
       delay(1.seconds)
+      tries++
     }
 
     fail("Transaction wasn't $expectedStatus in $maxTries tries, last status: $status")
@@ -409,17 +407,16 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
     sep24Client: Sep24Client,
   ) {
     var status: String? = null
-    for (i in 0..maxTries) {
-      val transaction = sep24Client.getTransaction(id, assetCode)
-      if (!status.equals(transaction.transaction.status)) {
-        status = transaction.transaction.status
-        info(
-          "Transaction(${transaction.transaction.id}) status changed to ${status}. Message: ${transaction.transaction.message}"
-        )
+    repeat(maxTries + 1) {
+      val tx = sep24Client.getTransaction(id, assetCode).transaction
+
+      if (status != tx.status) {
+        status = tx.status
+        info("Transaction(${tx.id}) status changed to $status. Message: ${tx.message}")
       }
-      if (transaction.transaction.status == expectedStatus.status) {
-        return
-      }
+
+      if (tx.status == expectedStatus.status) return
+
       delay(1.seconds)
     }
     DefaultAsserter.fail("Transaction status $status did not match expected status $expectedStatus")

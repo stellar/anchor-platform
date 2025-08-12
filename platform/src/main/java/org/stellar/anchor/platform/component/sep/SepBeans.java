@@ -58,8 +58,10 @@ public class SepBeans {
   @Bean
   @ConfigurationProperties(prefix = "sep10")
   Sep10Config sep10Config(
-      AppConfig appConfig, SecretConfig secretConfig, ClientService clientService) {
-    return new PropertySep10Config(appConfig, clientService, secretConfig);
+      StellarNetworkConfig stellarNetworkConfig,
+      SecretConfig secretConfig,
+      ClientService clientService) {
+    return new PropertySep10Config(stellarNetworkConfig, clientService, secretConfig);
   }
 
   @Bean
@@ -76,8 +78,8 @@ public class SepBeans {
 
   @Bean
   @ConfigurationProperties(prefix = "sep45")
-  Sep45Config sep45Config(AppConfig appConfig, SecretConfig secretConfig) {
-    return new PropertySep45Config(appConfig, secretConfig);
+  Sep45Config sep45Config(StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
+    return new PropertySep45Config(stellarNetworkConfig, secretConfig);
   }
 
   /**
@@ -139,7 +141,8 @@ public class SepBeans {
   @Bean
   @OnAllSepsEnabled(seps = {"sep6"})
   Sep6Service sep6Service(
-      AppConfig appConfig,
+      LanguageConfig languageConfig,
+      StellarNetworkConfig stellarNetworkConfig,
       Sep6Config sep6Config,
       AssetService assetService,
       SepRequestValidator requestValidator,
@@ -151,7 +154,8 @@ public class SepBeans {
     ExchangeAmountsCalculator exchangeAmountsCalculator =
         new ExchangeAmountsCalculator(sep38QuoteStore);
     return new Sep6Service(
-        appConfig,
+        languageConfig,
+        stellarNetworkConfig,
         sep6Config,
         assetService,
         requestValidator,
@@ -165,14 +169,14 @@ public class SepBeans {
   @Bean
   @OnAllSepsEnabled(seps = {"sep10"})
   Sep10Service sep10Service(
-      AppConfig appConfig,
+      StellarNetworkConfig stellarNetworkConfig,
       SecretConfig secretConfig,
       Sep10Config sep10Config,
       LedgerClient ledgerClient,
       JwtService jwtService,
       ClientFinder clientFinder) {
     return new Sep10Service(
-        appConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder);
+        stellarNetworkConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder);
   }
 
   @Bean
@@ -187,7 +191,8 @@ public class SepBeans {
   @Bean
   @OnAllSepsEnabled(seps = {"sep24"})
   Sep24Service sep24Service(
-      AppConfig appConfig,
+      LanguageConfig languageConfig,
+      StellarNetworkConfig stellarNetworkConfig,
       Sep24Config sep24Config,
       ClientService clientService,
       AssetService assetService,
@@ -203,7 +208,8 @@ public class SepBeans {
     ExchangeAmountsCalculator exchangeAmountsCalculator =
         new ExchangeAmountsCalculator(sep38QuoteStore);
     return new Sep24Service(
-        appConfig,
+        languageConfig,
+        stellarNetworkConfig,
         sep24Config,
         clientService,
         assetService,
@@ -232,7 +238,7 @@ public class SepBeans {
   @Bean
   @OnAllSepsEnabled(seps = {"sep31"})
   Sep31Service sep31Service(
-      AppConfig appConfig,
+      LanguageConfig languageConfig,
       Sep10Config sep10Config,
       Sep31Config sep31Config,
       Sep31TransactionStore sep31TransactionStore,
@@ -242,7 +248,7 @@ public class SepBeans {
       RateIntegration rateIntegration,
       EventService eventService) {
     return new Sep31Service(
-        appConfig,
+        languageConfig,
         sep10Config,
         sep31Config,
         sep31TransactionStore,
@@ -268,7 +274,7 @@ public class SepBeans {
   @Bean
   @OnAnySepsEnabled(seps = {"sep45"})
   Sep45Service sep45Service(
-      AppConfig appConfig,
+      StellarNetworkConfig stellarNetworkConfig,
       SecretConfig secretConfig,
       Sep45Config sep45Config,
       LedgerClient ledgerClient,
@@ -276,6 +282,11 @@ public class SepBeans {
       JwtService jwtService) {
     assert (ledgerClient instanceof StellarRpc);
     return new Sep45Service(
-        appConfig, secretConfig, sep45Config, (StellarRpc) ledgerClient, nonceManager, jwtService);
+        stellarNetworkConfig,
+        secretConfig,
+        sep45Config,
+        (StellarRpc) ledgerClient,
+        nonceManager,
+        jwtService);
   }
 }

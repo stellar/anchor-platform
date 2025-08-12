@@ -12,23 +12,23 @@ import org.springframework.validation.BindException
 import org.springframework.validation.Errors
 import org.stellar.anchor.client.ClientService
 import org.stellar.anchor.client.DefaultClientService
-import org.stellar.anchor.config.AppConfig
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.platform.utils.setupMock
 
 class Sep10ConfigTest {
   lateinit var config: PropertySep10Config
   lateinit var errors: Errors
   private lateinit var secretConfig: PropertySecretConfig
-  private lateinit var appConfig: AppConfig
+  private lateinit var stellarNetworkConfig: StellarNetworkConfig
   private lateinit var clientService: ClientService
 
   @BeforeEach
   fun setUp() {
     secretConfig = mockk()
-    appConfig = mockk()
+    stellarNetworkConfig = mockk()
     clientService = DefaultClientService.fromYamlResourceFile("test_clients.yaml")
 
-    config = PropertySep10Config(appConfig, clientService, secretConfig)
+    config = PropertySep10Config(stellarNetworkConfig, clientService, secretConfig)
     config.enabled = true
     config.homeDomains = listOf("stellar.org")
     errors = BindException(config, "config")
@@ -50,7 +50,7 @@ class Sep10ConfigTest {
 
   @Test
   fun `test validation of empty client allow list when client attribution is required`() {
-    val config = PropertySep10Config(appConfig, DefaultClientService(), secretConfig)
+    val config = PropertySep10Config(stellarNetworkConfig, DefaultClientService(), secretConfig)
     config.isClientAttributionRequired = true
     config.validateClientAttribution(errors)
     assertErrorCode(errors, "sep10-client-attribution-lists-empty")
@@ -101,13 +101,13 @@ class Sep10ConfigTest {
 
   @Test
   fun `test when clientAllowList is not defined, clientAttributionAllowList equals to the list of all clients`() {
-    val config = PropertySep10Config(appConfig, clientService, secretConfig)
+    val config = PropertySep10Config(stellarNetworkConfig, clientService, secretConfig)
     assertEquals(config.allowedClientDomains, listOf("lobstr.co", "circle.com"))
   }
 
   @Test
   fun `test when clientAllowList is defined, clientAttributionAllowList returns correct values`() {
-    val config = PropertySep10Config(appConfig, clientService, secretConfig)
+    val config = PropertySep10Config(stellarNetworkConfig, clientService, secretConfig)
     config.clientAllowList = listOf("lobstr")
     assertEquals(config.allowedClientDomains, listOf("lobstr.co"))
 

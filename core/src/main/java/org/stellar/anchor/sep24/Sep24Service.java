@@ -49,9 +49,10 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.client.CustodialClient;
-import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.CustodyConfig;
+import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep24Config;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
 import org.stellar.anchor.util.*;
@@ -64,7 +65,8 @@ public class Sep24Service {
   public static final List<String> INTERACTIVE_URL_JWT_REQUIRED_FIELDS_FROM_REQUEST =
       List.of("amount", "client_domain", "lang", "customer_id");
   public static String ERR_TOKEN_ACCOUNT_MISMATCH = "'account' does not match the one in the token";
-  final AppConfig appConfig;
+  final LanguageConfig languageConfig;
+  final StellarNetworkConfig stellarNetworkConfig;
   final Sep24Config sep24Config;
   final ClientService clientService;
   final AssetService assetService;
@@ -92,7 +94,8 @@ public class Sep24Service {
           MetricConstants.TV_SEP24_DEPOSIT);
 
   public Sep24Service(
-      AppConfig appConfig,
+      LanguageConfig languageConfig,
+      StellarNetworkConfig stellarNetworkConfig,
       Sep24Config sep24Config,
       ClientService clientsService,
       AssetService assetService,
@@ -105,9 +108,10 @@ public class Sep24Service {
       MoreInfoUrlConstructor moreInfoUrlConstructor,
       CustodyConfig custodyConfig,
       ExchangeAmountsCalculator exchangeAmountsCalculator) {
-    debug("appConfig:", appConfig);
+    debug("appConfig:", stellarNetworkConfig);
     debug("sep24Config:", sep24Config);
-    this.appConfig = appConfig;
+    this.languageConfig = languageConfig;
+    this.stellarNetworkConfig = stellarNetworkConfig;
     this.sep24Config = sep24Config;
     this.clientService = clientsService;
     this.assetService = assetService;
@@ -146,7 +150,7 @@ public class Sep24Service {
     String sourceAccount = withdrawRequest.get("account");
     String strAmount = withdrawRequest.get("amount");
 
-    String lang = validateLanguage(appConfig, withdrawRequest.get("lang"));
+    String lang = validateLanguage(languageConfig, withdrawRequest.get("lang"));
     debugF("language: {}", lang);
 
     if (assetCode == null) {
@@ -315,7 +319,7 @@ public class Sep24Service {
       debugF("claimable balance supported: {}", claimableSupported);
     }
 
-    String lang = validateLanguage(appConfig, depositRequest.get("lang"));
+    String lang = validateLanguage(languageConfig, depositRequest.get("lang"));
     debugF("language: {}", lang);
 
     if (assetCode == null) {
@@ -501,7 +505,7 @@ public class Sep24Service {
     List<TransactionResponse> list = new ArrayList<>();
     debugF("found {} transactions", txns.size());
     for (Sep24Transaction txn : txns) {
-      String lang = validateLanguage(appConfig, txReq.getLang());
+      String lang = validateLanguage(languageConfig, txReq.getLang());
       TransactionResponse transactionResponse =
           fromTxn(assetService, moreInfoUrlConstructor, txn, lang);
       list.add(transactionResponse);
@@ -559,7 +563,7 @@ public class Sep24Service {
     }
     // increment counter
     sep24TransactionQueriedCounter.increment();
-    String lang = validateLanguage(appConfig, txReq.getLang());
+    String lang = validateLanguage(languageConfig, txReq.getLang());
     return Sep24GetTransactionResponse.of(fromTxn(assetService, moreInfoUrlConstructor, txn, lang));
   }
 

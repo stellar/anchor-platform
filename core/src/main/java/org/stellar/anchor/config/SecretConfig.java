@@ -24,4 +24,6 @@ public interface SecretConfig {
   String getEventsQueueKafkaUsername();
 
   String getEventsQueueKafkaPassword();
+
+  String getRpcAuthSecret();
 }

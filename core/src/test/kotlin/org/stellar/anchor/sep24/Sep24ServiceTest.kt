@@ -8,7 +8,6 @@ import java.net.URI
 import java.nio.charset.Charset
 import java.time.Instant
 import org.apache.hc.core5.net.URLEncodedUtils
-import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -99,27 +98,18 @@ internal class Sep24ServiceTest {
         .trimIndent()
   }
 
-  @MockK(relaxed = true) lateinit var appConfig: AppConfig
-
+  @MockK(relaxed = true) lateinit var languageConfig: LanguageConfig
+  @MockK(relaxed = true) lateinit var stellarNetworkConfig: StellarNetworkConfig
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
   @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
-
   @MockK(relaxed = true) lateinit var sep24Config: Sep24Config
-
   @MockK(relaxed = true) lateinit var eventService: EventService
-
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
-
   @MockK(relaxed = true) lateinit var txnStore: Sep24TransactionStore
-
   @MockK(relaxed = true) lateinit var interactiveUrlConstructor: InteractiveUrlConstructor
-
   @MockK(relaxed = true) lateinit var moreInfoUrlConstructor: MoreInfoUrlConstructor
-
   @MockK(relaxed = true) lateinit var custodyConfig: CustodyConfig
-
   @MockK(relaxed = true) lateinit var sep38QuoteStore: Sep38QuoteStore
-
   @MockK(relaxed = true) lateinit var clientService: ClientService
 
   private val assetService: AssetService = DefaultAssetService.fromJsonResource("test_assets.json")
@@ -169,7 +159,8 @@ internal class Sep24ServiceTest {
 
     sep24Service =
       Sep24Service(
-        appConfig,
+        languageConfig,
+        stellarNetworkConfig,
         sep24Config,
         clientService,
         assetService,
@@ -291,14 +282,8 @@ internal class Sep24ServiceTest {
     sep24Service.withdraw(createTestWebAuthJwtWithMemo(), createTestTransactionRequest())
     val dbDeadline = slotTxn.captured.userActionRequiredBy.epochSecond
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
-    Assertions.assertTrue(
-      dbDeadline >= expectedDeadline - 2,
-      "Expected $expectedDeadline got $dbDeadline}",
-    )
-    Assertions.assertTrue(
-      dbDeadline <= expectedDeadline,
-      "Expected $expectedDeadline got $dbDeadline}",
-    )
+    assertTrue(dbDeadline >= expectedDeadline - 2, "Expected $expectedDeadline got $dbDeadline}")
+    assertTrue(dbDeadline <= expectedDeadline, "Expected $expectedDeadline got $dbDeadline}")
   }
 
   @Test
@@ -445,14 +430,8 @@ internal class Sep24ServiceTest {
     sep24Service.deposit(createTestWebAuthJwtWithMemo(), createTestTransactionRequest())
     val dbDeadline = slotTxn.captured.userActionRequiredBy.epochSecond
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
-    Assertions.assertTrue(
-      dbDeadline >= expectedDeadline - 2,
-      "Expected $expectedDeadline got $dbDeadline}",
-    )
-    Assertions.assertTrue(
-      dbDeadline <= expectedDeadline,
-      "Expected $expectedDeadline got $dbDeadline}",
-    )
+    assertTrue(dbDeadline >= expectedDeadline - 2, "Expected $expectedDeadline got $dbDeadline}")
+    assertTrue(dbDeadline <= expectedDeadline, "Expected $expectedDeadline got $dbDeadline}")
   }
 
   @Test

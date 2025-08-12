@@ -33,8 +33,9 @@ import org.stellar.anchor.api.shared.Refunds
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.client.ClientFinder
-import org.stellar.anchor.config.AppConfig
+import org.stellar.anchor.config.LanguageConfig
 import org.stellar.anchor.config.Sep6Config
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.util.ExchangeAmountsCalculator
 import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts
@@ -49,7 +50,8 @@ class Sep6ServiceTest {
 
   private val assetService: AssetService = DefaultAssetService.fromJsonResource("test_assets.json")
 
-  @MockK(relaxed = true) lateinit var appConfig: AppConfig
+  @MockK(relaxed = true) lateinit var languageConfig: LanguageConfig
+  @MockK(relaxed = true) lateinit var stellarNetworkConfig: StellarNetworkConfig
   @MockK(relaxed = true) lateinit var sep6Config: Sep6Config
   @MockK(relaxed = true) lateinit var requestValidator: SepRequestValidator
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
@@ -75,7 +77,8 @@ class Sep6ServiceTest {
       "https://example.com/more_info"
     sep6Service =
       Sep6Service(
-        appConfig,
+        languageConfig,
+        stellarNetworkConfig,
         sep6Config,
         assetService,
         requestValidator,

@@ -12,11 +12,14 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
-import org.stellar.anchor.config.AppConfig
+import org.stellar.anchor.config.StellarNetworkConfig
+import org.stellar.anchor.config.StellarNetworkConfig.ProviderType.HORIZON
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.StellarRpc
+import org.stellar.anchor.platform.IntegrationTestBase
+import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.*
 import org.stellar.sdk.Network.TESTNET
@@ -28,8 +31,8 @@ import org.stellar.sdk.xdr.TransactionEnvelope
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Execution(ExecutionMode.SAME_THREAD)
-class LedgerClientTests {
-  private val appConfig = mockk<AppConfig>()
+class LedgerClientTests : IntegrationTestBase(TestConfig()) {
+  private val stellarNetworkConfig = mockk<StellarNetworkConfig>()
   private val trustlineTestAccount = "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
   val gson = GsonUtils.getInstance()!!
   private lateinit var sourceKeypair: KeyPair
@@ -37,14 +40,15 @@ class LedgerClientTests {
 
   @BeforeAll
   fun setup() {
-    every { appConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
-    every { appConfig.horizonUrl } returns "https://horizon-testnet.stellar.org"
-    every { appConfig.stellarNetwork } returns "TESTNET"
-    every { appConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
+    every { stellarNetworkConfig.type } returns HORIZON
+    every { stellarNetworkConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
+    every { stellarNetworkConfig.horizonUrl } returns "https://horizon-testnet.stellar.org"
+    every { stellarNetworkConfig.network } returns "TESTNET"
+    every { stellarNetworkConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
 
     sourceKeypair = KeyPair.random()
     destKeyPair = KeyPair.fromAccountId("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG")
-    prepareAccount(Server(appConfig.horizonUrl), sourceKeypair)
+    prepareAccount(Server(stellarNetworkConfig.horizonUrl), sourceKeypair)
   }
 
   @ParameterizedTest
@@ -122,22 +126,25 @@ class LedgerClientTests {
     return Triple(sourceKeypair, destKeyPair, transaction)
   }
 
+  // The warning is suppressed because this method is used to provide the LedgerClient instances for
+  // the parameterized tests.
+  @SuppressWarnings("unused")
   private fun getLedgerClient(): List<Array<Any>> {
-    val stellarRpc = StellarRpc(appConfig)
-    val horizon = Horizon(appConfig)
+    val stellarRpc = StellarRpc(stellarNetworkConfig.rpcUrl)
+    val horizon = Horizon(stellarNetworkConfig)
 
     return listOf(arrayOf(stellarRpc), arrayOf(horizon))
   }
-}
 
-fun prepareAccount(horizonServer: Server, kp: KeyPair): AccountResponse? {
-  val friendBotUrl = "https://friendbot.stellar.org/?addr=${kp.accountId}"
-  try {
-    java.net.URL(friendBotUrl).openStream()
-    val account = horizonServer.accounts().account(kp.accountId)
-    return account
-  } catch (e: java.io.IOException) {
-    throw e
+  fun prepareAccount(horizonServer: Server, kp: KeyPair): AccountResponse? {
+    val friendBotUrl = "https://friendbot.stellar.org/?addr=${kp.accountId}"
+    try {
+      java.net.URL(friendBotUrl).openStream()
+      val account = horizonServer.accounts().account(kp.accountId)
+      return account
+    } catch (e: java.io.IOException) {
+      throw e
+    }
   }
 }
 

@@ -9,9 +9,9 @@ import lombok.Data;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
-import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.util.NetUtil;
 import org.stellar.sdk.Address;
 import org.stellar.sdk.scval.Scv;
@@ -24,11 +24,11 @@ public class PropertySep45Config implements Sep45Config, Validator {
   private List<String> homeDomains;
   private Integer jwtTimeout;
   private Integer authTimeout;
-  private AppConfig appConfig;
+  private StellarNetworkConfig stellarNetworkConfig;
   private SecretConfig secretConfig;
 
-  public PropertySep45Config(AppConfig appConfig, SecretConfig secretConfig) {
-    this.appConfig = appConfig;
+  public PropertySep45Config(StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
+    this.stellarNetworkConfig = stellarNetworkConfig;
     this.secretConfig = secretConfig;
   }
 
@@ -53,7 +53,7 @@ public class PropertySep45Config implements Sep45Config, Validator {
       return;
     }
 
-    if (isEmpty(appConfig.getRpcUrl())) {
+    if (isEmpty(stellarNetworkConfig.getRpcUrl())) {
       errors.reject(
           "stellar-network-rpc-url-empty",
           "The stellar_network.rpc_url is not defined. It is required for SEP-45.");

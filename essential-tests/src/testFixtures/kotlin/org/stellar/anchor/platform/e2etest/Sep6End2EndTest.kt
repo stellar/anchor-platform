@@ -22,7 +22,6 @@ import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.WalletClient
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
-import org.stellar.anchor.util.StringHelper.isNotEmpty
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
@@ -160,8 +159,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Order(11)
   fun `test contract account deposit`() = runBlocking {
     assumeTrue(
-      isNotEmpty(config.get("stellar_network.rpc_url")),
-      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
     )
 
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
@@ -320,8 +319,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Order(13)
   fun `test contract account deposit-exchange`() = runBlocking {
     assumeTrue(
-      isNotEmpty(config.get("stellar_network.rpc_url")),
-      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
     )
 
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
@@ -466,8 +465,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Order(21)
   fun `test contract account withdraw`() = runBlocking {
     assumeTrue(
-      isNotEmpty(config.get("stellar_network.rpc_url")),
-      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
     )
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
@@ -626,8 +625,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @Order(23)
   fun `test contract account withdraw-exchange`() = runBlocking {
     assumeTrue(
-      isNotEmpty(config.get("stellar_network.rpc_url")),
-      "stellar_network.rpc_url must be set for this test for SEP-45 authentication",
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
     )
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 

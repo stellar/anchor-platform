@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.PaymentTransferEvent
+import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
 import org.stellar.anchor.platform.observer.stellar.*
@@ -94,7 +95,7 @@ class PaymentObserverTests {
 
       stellarRpcPaymentObserver =
         StellarRpcPaymentObserver(
-          "https://soroban-testnet.stellar.org",
+          StellarRpc("https://soroban-testnet.stellar.org"),
           StellarPaymentObserverConfig(5, 90, 5, 5, 300, 5, 300),
           listOf(eventCaptureListenerStellarRpc),
           paymentObservingAccountManager,

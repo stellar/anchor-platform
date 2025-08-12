@@ -243,7 +243,7 @@ class Sep31ServiceTest {
 
   @MockK(relaxed = true) private lateinit var txnStore: Sep31TransactionStore
 
-  @MockK(relaxed = true) lateinit var appConfig: AppConfig
+  @MockK(relaxed = true) lateinit var languageConfig: LanguageConfig
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
   @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) lateinit var clientService: ClientService
@@ -271,7 +271,7 @@ class Sep31ServiceTest {
   fun setUp() {
     MockKAnnotations.init(this, relaxUnitFun = true)
     secretConfig.setupMock()
-    every { appConfig.languages } returns listOf("en")
+    every { languageConfig.languages } returns listOf("en")
     every { sep31Config.paymentType } returns STRICT_SEND
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
     every { custodyConfig.type } returns NONE
@@ -281,7 +281,7 @@ class Sep31ServiceTest {
 
     sep31Service =
       Sep31Service(
-        appConfig,
+        languageConfig,
         sep10Config,
         sep31Config,
         txnStore,
@@ -750,7 +750,7 @@ class Sep31ServiceTest {
       DefaultAssetService.fromJsonResource("test_assets.json.quotes_not_supported")
     sep31Service =
       Sep31Service(
-        appConfig,
+        languageConfig,
         sep10Config,
         sep31Config,
         txnStore,

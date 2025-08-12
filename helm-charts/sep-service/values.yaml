@@ -75,8 +75,10 @@ config:
 
   stellar_network:
     network: TESTNET
-    network_passphrase: "Test SDF Network ; September 2015"
-    horizon_url: "https://horizon-testnet.stellar.org"
+    type: rpc
+    rpc_url: https://soroban-testnet.stellar.org
+    rpc_auth:
+      type: none
 
   data:
     type: postgres
