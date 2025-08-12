@@ -11,24 +11,24 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.validation.BindException
 import org.springframework.validation.Errors
-import org.stellar.anchor.config.AppConfig
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.platform.utils.setupMock
 
 class Sep45ConfigTest {
   lateinit var config: PropertySep45Config
   lateinit var errors: Errors
   private lateinit var secretConfig: PropertySecretConfig
-  private lateinit var appConfig: AppConfig
+  private lateinit var stellarNetworkConfig: StellarNetworkConfig
 
   @BeforeEach
   fun setup() {
     secretConfig = mockk()
-    appConfig = mockk()
+    stellarNetworkConfig = mockk()
 
-    every { appConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
+    every { stellarNetworkConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
     every { secretConfig.sep45JwtSecretKey } returns "some_jwt_secret"
 
-    config = PropertySep45Config(appConfig, secretConfig)
+    config = PropertySep45Config(stellarNetworkConfig, secretConfig)
     config.enabled = true
     config.webAuthDomain = "stellar.org"
     config.webAuthContractId = "CAASCQKVVBSLREPEUGPOTQZ4BC2NDBY2MW7B2LGIGFUPIY4Z3XUZRVTX"
@@ -56,7 +56,7 @@ class Sep45ConfigTest {
 
   @Test
   fun `test missing rpc url`() {
-    every { appConfig.rpcUrl } returns null
+    every { stellarNetworkConfig.rpcUrl } returns null
     config.validate(config, errors)
     assertEquals("stellar-network-rpc-url-empty", errors.allErrors[0].code)
   }

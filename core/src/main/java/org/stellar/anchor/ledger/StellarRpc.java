@@ -6,15 +6,20 @@ import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import lombok.Getter;
 import lombok.SneakyThrows;
+import okhttp3.OkHttpClient;
 import org.stellar.anchor.api.exception.LedgerException;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.RpcAuthConfig;
+import org.stellar.anchor.config.SecretConfig;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerTransactionResponse;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Asset;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.TrustLineAsset;
+import org.stellar.sdk.requests.ClientIdentificationInterceptor;
 import org.stellar.sdk.responses.sorobanrpc.*;
 import org.stellar.sdk.xdr.*;
 import org.stellar.sdk.xdr.LedgerKey.LedgerKeyAccount;
@@ -30,8 +35,57 @@ public class StellarRpc implements LedgerClient {
     sorobanServer = new SorobanServer(rpcServerUrl);
   }
 
-  public StellarRpc(AppConfig appConfig) {
-    this(appConfig.getRpcUrl());
+  public StellarRpc(StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
+    RpcAuthConfig rpcAuth = stellarNetworkConfig.getRpcAuth();
+
+    switch (rpcAuth.getType()) {
+      case NONE:
+        sorobanServer = createSimpleRpcServer(stellarNetworkConfig);
+        break;
+      case HEADER:
+        sorobanServer = createHeaderAuthServer(stellarNetworkConfig, secretConfig);
+        break;
+      default:
+        throw new IllegalStateException("Unexpected value: " + rpcAuth.getType());
+    }
+  }
+
+  SorobanServer createHeaderAuthServer(
+      StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
+    RpcAuthConfig rpcAuth = stellarNetworkConfig.getRpcAuth();
+
+    // Create a SorobanServer with http header
+    return createSorobanServerWithHttpClient(
+        stellarNetworkConfig.getRpcUrl(),
+        new OkHttpClient.Builder()
+            .addInterceptor(new ClientIdentificationInterceptor())
+            .addInterceptor(
+                chain -> {
+                  okhttp3.Request request = chain.request();
+                  chain
+                      .request()
+                      .newBuilder()
+                      .addHeader(
+                          rpcAuth.getHeaderConfig().getName(), secretConfig.getRpcAuthSecret())
+                      .build();
+                  return chain.proceed(request);
+                })
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(40, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build());
+  }
+
+  SorobanServer createSimpleRpcServer(StellarNetworkConfig stellarNetworkConfig) {
+    return createSorobanServer(stellarNetworkConfig.getRpcUrl());
+  }
+
+  SorobanServer createSorobanServer(String rpcServerUrl) {
+    return new SorobanServer(rpcServerUrl);
+  }
+
+  SorobanServer createSorobanServerWithHttpClient(String rpcServerUrl, OkHttpClient okHttpClient) {
+    return new SorobanServer(rpcServerUrl, okHttpClient);
   }
 
   @Override

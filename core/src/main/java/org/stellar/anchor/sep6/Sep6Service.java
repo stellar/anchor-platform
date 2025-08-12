@@ -22,15 +22,17 @@ import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep6Config;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.*;
 import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts;
 import org.stellar.sdk.Memo;
 
 public class Sep6Service {
-  private final AppConfig appConfig;
+  private final LanguageConfig languageConfig;
+  private final StellarNetworkConfig stellarNetworkConfig;
   private final Sep6Config sep6Config;
   private final AssetService assetService;
   private final SepRequestValidator requestValidator;
@@ -66,7 +68,8 @@ public class Sep6Service {
           MetricConstants.TV_SEP6_DEPOSIT_EXCHANGE);
 
   public Sep6Service(
-      AppConfig appConfig,
+      LanguageConfig languageConfig,
+      StellarNetworkConfig stellarNetworkConfig,
       Sep6Config sep6Config,
       AssetService assetService,
       SepRequestValidator requestValidator,
@@ -75,7 +78,8 @@ public class Sep6Service {
       ExchangeAmountsCalculator exchangeAmountsCalculator,
       EventService eventService,
       MoreInfoUrlConstructor moreInfoUrlConstructor) {
-    this.appConfig = appConfig;
+    this.languageConfig = languageConfig;
+    this.stellarNetworkConfig = stellarNetworkConfig;
     this.sep6Config = sep6Config;
     this.assetService = assetService;
     this.requestValidator = requestValidator;
@@ -459,7 +463,7 @@ public class Sep6Service {
         txnStore.findTransactions(token.getAccount(), token.getAccountMemo(), request);
     List<Sep6TransactionResponse> responses = new ArrayList<>();
     for (Sep6Transaction txn : transactions) {
-      String lang = validateLanguage(appConfig, request.getLang());
+      String lang = validateLanguage(languageConfig, request.getLang());
       Sep6TransactionResponse tr = Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang);
       responses.add(tr);
     }
@@ -503,7 +507,7 @@ public class Sep6Service {
     }
 
     sep6TransactionQueriedCounter.increment();
-    String lang = validateLanguage(appConfig, request.getLang());
+    String lang = validateLanguage(languageConfig, request.getLang());
     return new GetTransactionResponse(
         Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang));
   }

@@ -14,6 +14,7 @@ import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation
 import org.stellar.anchor.ledger.PaymentTransferEvent
+import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
 import org.stellar.sdk.Asset
@@ -30,6 +31,7 @@ class StellarRpcPaymentObserverTest {
   private lateinit var sacToAssetMapper: MockSacToAssetMapper
   private lateinit var observer: StellarRpcPaymentObserver
   private lateinit var assetService: AssetService
+  private val stellarRpc = StellarRpc("https://soroban-testnet.stellar.org")
 
   @BeforeEach
   fun setUp() {
@@ -51,7 +53,7 @@ class StellarRpcPaymentObserverTest {
     observer =
       spyk(
         StellarRpcPaymentObserver(
-          "https://soroban-testnet.stellar.org",
+          stellarRpc,
           config,
           paymentListeners,
           paymentObservingAccountsManager,
@@ -247,19 +249,19 @@ class StellarRpcPaymentObserverTest {
     assertEquals(EventFilterType.CONTRACT, filterList[3].type)
     assertEquals(
       Scv.toAddress(account1).toXdrBase64(),
-      filterList[0].topics.toList()[0].toList()[1]
+      filterList[0].topics.toList()[0].toList()[1],
     )
     assertEquals(
       Scv.toAddress(account1).toXdrBase64(),
-      filterList[1].topics.toList()[0].toList()[2]
+      filterList[1].topics.toList()[0].toList()[2],
     )
     assertEquals(
       Scv.toAddress(account2).toXdrBase64(),
-      filterList[2].topics.toList()[0].toList()[1]
+      filterList[2].topics.toList()[0].toList()[1],
     )
     assertEquals(
       Scv.toAddress(account2).toXdrBase64(),
-      filterList[3].topics.toList()[0].toList()[2]
+      filterList[3].topics.toList()[0].toList()[2],
     )
   }
 }

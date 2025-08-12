@@ -54,7 +54,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   ObserverStatus status = ObserverStatus.STARTING;
 
   public StellarRpcPaymentObserver(
-      String rpcUrl,
+      StellarRpc stellarRpc,
       StellarPaymentObserverConfig config,
       List<PaymentListener> paymentListeners,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
@@ -62,7 +62,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       SacToAssetMapper sacToAssetMapper,
       AssetService assetService) {
     super(config, paymentListeners, paymentObservingAccountsManager, paymentStreamerCursorStore);
-    this.stellarRpc = new StellarRpc(rpcUrl);
+    this.stellarRpc = stellarRpc;
     this.assetService = assetService;
     this.sorobanServer = stellarRpc.getSorobanServer();
     this.sacToAssetMapper = sacToAssetMapper;

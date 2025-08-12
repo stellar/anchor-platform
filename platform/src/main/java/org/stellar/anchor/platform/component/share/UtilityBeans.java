@@ -1,7 +1,5 @@
 package org.stellar.anchor.platform.component.share;
 
-import static org.stellar.anchor.util.StringHelper.isNotEmpty;
-
 import com.google.gson.Gson;
 import jakarta.validation.Validator;
 import java.util.List;
@@ -42,9 +40,15 @@ public class UtilityBeans {
   }
 
   @Bean
+  @ConfigurationProperties(prefix = "stellar-network")
+  StellarNetworkConfig appConfig() {
+    return new PropertyStellarNetworkConfig();
+  }
+
+  @Bean
   @ConfigurationProperties(prefix = "app")
-  AppConfig appConfig() {
-    return new PropertyAppConfig();
+  LanguageConfig appLanguageConfig() {
+    return new PropertyLanguageConfig();
   }
 
   @Bean
@@ -105,10 +109,12 @@ public class UtilityBeans {
 
   @Bean
   @SneakyThrows
-  public LedgerClient ledgerClient(AppConfig appConfig) {
-    if (isNotEmpty(appConfig.getRpcUrl())) return new StellarRpc(appConfig);
-    else if (isNotEmpty(appConfig.getHorizonUrl())) return new Horizon(appConfig);
-    throw new NotSupportedException("No horizon_url or rpc_url is defined.");
+  public LedgerClient ledgerClient(
+      StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
+    return switch (stellarNetworkConfig.getType()) {
+      case RPC -> new StellarRpc(stellarNetworkConfig, secretConfig);
+      case HORIZON -> new Horizon(stellarNetworkConfig);
+    };
   }
 
   @Bean
