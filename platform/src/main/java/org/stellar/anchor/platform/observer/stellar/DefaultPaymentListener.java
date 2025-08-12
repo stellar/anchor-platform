@@ -6,6 +6,7 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MathHelper.formatAmount;
+import static org.stellar.anchor.util.MemoHelper.*;
 
 import io.micrometer.core.instrument.Metrics;
 import java.io.IOException;
@@ -23,7 +24,7 @@ import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.service.AnchorMetrics;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.GsonUtils;
-import org.stellar.anchor.util.MemoHelper;
+import org.stellar.sdk.Memo;
 import org.stellar.sdk.xdr.AssetType;
 
 public class DefaultPaymentListener implements PaymentListener {
@@ -98,7 +99,7 @@ public class DefaultPaymentListener implements PaymentListener {
       return;
     }
 
-    String memo = MemoHelper.xdrMemoToString(ledgerTransaction.getMemo());
+    String memo = xdrMemoToString(ledgerTransaction.getMemo());
 
     // Find a transaction matching the memo, assumes transactions are unique to account+memo
     try {
@@ -148,18 +149,11 @@ public class DefaultPaymentListener implements PaymentListener {
     // Find a transaction matching the memo, assumes transactions are unique to account+memo
 
     try {
-      // TODO: replace the query with this when SAC memo is supported.
-      //      JdbcSep6Transaction sep6Txn =
-      //          sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
-      //              ledgerPayment.getTo(),
-      //              memo,
-      //              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       JdbcSep6Transaction sep6Txn =
-          sep6TransactionStore
-              .findFirstByWithdrawAnchorAccountAndFromAccountAndStatusOrderByStartedAtDesc(
-                  ledgerPayment.getTo(),
-                  ledgerPayment.getFrom(),
-                  SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+          sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+              ledgerPayment.getTo(),
+              memoAsString(Memo.fromXdr(ledgerTransaction.getMemo())),
+              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
 
       if (sep6Txn != null) {
         try {
