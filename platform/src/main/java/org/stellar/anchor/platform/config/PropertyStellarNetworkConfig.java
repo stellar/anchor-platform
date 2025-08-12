@@ -38,7 +38,7 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
       if (isEmpty(rpcAuth.getHeaderConfig().getName())) {
         errors.reject(
             "rpc-auth-header-name-empty",
-            "The stellar_network.rpc_auth.header_config.header is not defined.");
+            "The stellar_network.rpc_auth.header.header is not defined.");
       }
     }
   }
