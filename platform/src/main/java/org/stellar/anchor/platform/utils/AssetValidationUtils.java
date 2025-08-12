@@ -16,7 +16,7 @@ import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
 import org.stellar.anchor.util.MathHelper;
-import org.stellar.anchor.util.SepHelper;
+import org.stellar.anchor.util.SepRequestValidator;
 import org.stellar.anchor.util.StringHelper;
 
 public class AssetValidationUtils {
@@ -88,7 +88,7 @@ public class AssetValidationUtils {
     }
 
     // asset amount needs to be non-empty and valid
-    SepHelper.validateAmount(fieldName + ".", amount.getAmount(), allowZero);
+    SepRequestValidator.validateAmount(fieldName + ".", amount.getAmount(), allowZero);
 
     // asset name cannot be empty
     if (StringHelper.isEmpty(amount.getAsset())) {

@@ -53,6 +53,7 @@ import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.util.Log;
+import org.stellar.anchor.util.SepRequestValidator;
 import org.stellar.anchor.util.TransactionMapper;
 
 public class Sep31Service {
@@ -117,13 +118,13 @@ public class Sep31Service {
     Context.get().setAsset(assetInfo);
 
     // Pre-validation
-    validateAmount(request.getAmount());
-    validateAmountLimit(
+    SepRequestValidator.validateAmount(request.getAmount());
+    SepRequestValidator.validateAmountLimit(
         "sell_",
         request.getAmount(),
         assetInfo.getSep31().getReceive().getMinAmount(),
         assetInfo.getSep31().getReceive().getMaxAmount());
-    validateFundingMethod(
+    SepRequestValidator.validateFundingMethod(
         assetInfo.getId(),
         request.getFundingMethod(),
         assetInfo.getSep31().getReceive().getMethods());

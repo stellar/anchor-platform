@@ -66,7 +66,6 @@ import org.stellar.anchor.sep6.Sep6Transaction;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
 import org.stellar.anchor.util.*;
 import org.stellar.anchor.util.Log;
-import org.stellar.anchor.util.SepHelper;
 import org.stellar.anchor.util.StringHelper;
 import org.stellar.anchor.util.TransactionsParams;
 import org.stellar.sdk.Memo;
@@ -506,7 +505,7 @@ public class TransactionService {
     }
 
     // asset amount needs to be non-empty and valid
-    SepHelper.validateAmount(fieldName + ".", amount.getAmount(), allowZero);
+    SepRequestValidator.validateAmount(fieldName + ".", amount.getAmount(), allowZero);
 
     // asset name cannot be empty
     if (StringHelper.isEmpty(amount.getAsset())) {
