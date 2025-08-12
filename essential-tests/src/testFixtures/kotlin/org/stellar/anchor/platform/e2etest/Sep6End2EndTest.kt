@@ -22,7 +22,6 @@ import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.WalletClient
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
-import org.stellar.anchor.util.StringHelper.isNotEmpty
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
