@@ -5,7 +5,6 @@ import static org.stellar.anchor.util.MathHelper.decimal;
 
 import java.util.Set;
 import java.util.UUID;
-
 import org.stellar.anchor.api.exception.InvalidStellarAccountException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.sdk.KeyPair;
