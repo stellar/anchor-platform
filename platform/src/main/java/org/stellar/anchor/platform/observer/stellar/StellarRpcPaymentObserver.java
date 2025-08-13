@@ -17,6 +17,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.stream.Stream;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.val;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
@@ -135,12 +136,20 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   private void processEvents(List<EventInfo> events) {
     if (events == null || events.isEmpty()) return;
     debugF("Processing {} 'transfer' events", events.size());
+    val lastEvent = events.get(events.size() - 1);
+    if (lastEvent != null)
+      metricLatestBlockRead.set(lastEvent.getLedger());
+
     for (EventInfo event : events) {
       ShouldProcessResult result = shouldProcess(event);
       if (result.shouldProcess) {
         processTransferEvent(result);
       }
     }
+
+    if (lastEvent != null)
+      metricLatestBlockProcessed.set(lastEvent.getLedger());
+
   }
 
   private void processTransferEvent(ShouldProcessResult result) {

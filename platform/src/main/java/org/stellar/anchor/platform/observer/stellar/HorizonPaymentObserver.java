@@ -85,6 +85,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
         horizon
             .getServer()
             .payments()
+            .includeTransactions(true)
             .cursor(latestCursor)
             .order(RequestBuilder.Order.ASC)
             .limit(MAX_RESULTS);
@@ -99,7 +100,9 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
               silenceTimeoutCount = 0;
               streamBackoffTimer.reset();
               try {
+                metricLatestBlockRead.set(operationResponse.getTransaction().getLedger());;
                 processOperation(operationResponse);
+                metricLatestBlockProcessed.set(operationResponse.getTransaction().getLedger());;
               } catch (TransactionException ex) {
                 errorEx("Error handling events", ex);
                 setStatus(DATABASE_ERROR);
