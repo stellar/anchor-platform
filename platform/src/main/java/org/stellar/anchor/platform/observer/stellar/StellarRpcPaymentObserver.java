@@ -137,8 +137,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     if (events == null || events.isEmpty()) return;
     debugF("Processing {} 'transfer' events", events.size());
     val lastEvent = events.get(events.size() - 1);
-    if (lastEvent != null)
-      metricLatestBlockRead.set(lastEvent.getLedger());
+    if (lastEvent != null) metricLatestBlockRead.set(lastEvent.getLedger());
 
     for (EventInfo event : events) {
       ShouldProcessResult result = shouldProcess(event);
@@ -147,9 +146,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       }
     }
 
-    if (lastEvent != null)
-      metricLatestBlockProcessed.set(lastEvent.getLedger());
-
+    if (lastEvent != null) metricLatestBlockProcessed.set(lastEvent.getLedger());
   }
 
   private void processTransferEvent(ShouldProcessResult result) {
