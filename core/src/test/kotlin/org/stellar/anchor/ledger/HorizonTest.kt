@@ -12,6 +12,7 @@ import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.sdk.Asset
 import org.stellar.sdk.AssetTypeCreditAlphaNum
+import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Server
 import org.stellar.sdk.TrustLineAsset
 import org.stellar.sdk.requests.AccountsRequestBuilder
@@ -69,9 +70,10 @@ internal class HorizonTest {
 
   @Test
   fun test_hasTrustline_present() {
+    val kp = KeyPair.random()
     val server = mockk<Server>()
-    val account = "testAccount"
-    val asset = "stellar:USDC:issuerAccount1"
+    val account = kp.accountId
+    val asset = "stellar:USDC:${kp.accountId}"
     val accountsRequestBuilder: AccountsRequestBuilder = mockk()
     val accountResponse: AccountResponse = mockk()
     val balance1: Balance = mockk()
@@ -83,9 +85,9 @@ internal class HorizonTest {
     every { accountsRequestBuilder.account(account) } returns accountResponse
 
     every { asset1.code } returns "USDC"
-    every { asset1.issuer } returns "issuerAccount1"
+    every { asset1.issuer } returns kp.accountId
     every { asset2.code } returns "USDC"
-    every { asset2.issuer } returns "issuerAccount2"
+    every { asset2.issuer } returns kp.accountId
 
     every { balance1.trustLineAsset } returns
       TrustLineAsset(Asset.createNonNativeAsset(asset1.code, asset1.issuer))
@@ -101,8 +103,9 @@ internal class HorizonTest {
 
   @Test
   fun test_hasTrustline_absent() {
+    val kp = KeyPair.random()
     val server = mockk<Server>()
-    val account = "testAccount"
+    val account = kp.accountId
     val asset = "stellar:USDC:issuerAccount1"
     val accountsRequestBuilder: AccountsRequestBuilder = mockk()
     val accountResponse: AccountResponse = mockk()
@@ -117,9 +120,9 @@ internal class HorizonTest {
 
     // asset 1 is native asset
     every { asset2.code } returns "SRT"
-    every { asset2.issuer } returns "issuerAccount1"
+    every { asset2.issuer } returns kp.accountId
     every { asset3.code } returns "USDC"
-    every { asset3.issuer } returns "issuerAccount2"
+    every { asset3.issuer } returns kp.accountId
 
     every { balance1.trustLineAsset } returns TrustLineAsset(Asset.createNativeAsset())
     every { balance2.trustLineAsset } returns
