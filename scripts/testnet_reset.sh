@@ -18,16 +18,32 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 check_prerequisites() {
   log_info "Checking prerequisites..."
-  command -v stellar &>/dev/null || {
+
+  # Check Stellar CLI installation
+  if ! command -v stellar &>/dev/null; then
     log_error "Stellar CLI not installed"
     exit 1
-  }
-  command -v rustc &>/dev/null || {
+  fi
+
+  # Check Stellar CLI version
+  local required_version="23.0.0"
+  local installed_version
+  installed_version=$(stellar --version | awk '{print $2}')  # assumes output like: stellar 23.0.2
+
+  if [[ "$(printf '%s\n%s' "$required_version" "$installed_version" | sort -V | head -n1)" != "$required_version" ]]; then
+    log_error "Stellar CLI version $installed_version is less than required $required_version"
+    exit 1
+  fi
+
+  # Check Rust installation
+  if ! command -v rustc &>/dev/null; then
     log_error "Rust not installed"
     exit 1
-  }
+  fi
+
   log_success "Prerequisites check passed"
 }
+
 
 load_env() {
   log_info "Loading environment..."
