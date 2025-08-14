@@ -244,7 +244,7 @@ deploy_contracts() {
 
   log_info "Deploying account contract..."
   local account_contract_result=$(stellar contract deploy \
-    --wasm target/wasm32-unknown-unknown/release/account.wasm \
+    --wasm target/wasm32v1-none/release/account.wasm \
     --source-account "$deployer_secret" \
     --network testnet \
     --salt 616e63686f722d706c6174666f726d \
@@ -264,7 +264,7 @@ deploy_contracts() {
   local webauth_deployer_public="GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
 
   local webauth_contract_result=$(stellar contract deploy \
-    --wasm target/wasm32-unknown-unknown/release/web_auth.wasm \
+    --wasm target/wasm32v1-none/release/web_auth.wasm \
     --source-account "$webauth_deployer_secret" \
     --network testnet \
     --salt 616e63686f722d706c6174666f726d \
@@ -293,14 +293,14 @@ deploy_contracts() {
 }
 
 main() {
-  log_info "Starting testnet reset..."
-  check_prerequisites
-  load_env
-  fund_test_accounts
-  reset_multisig
-  setup_trustlines
-  issue_and_fund_usdc
-  issue_and_fund_srt
+#  log_info "Starting testnet reset..."
+#  check_prerequisites
+#  load_env
+#  fund_test_accounts
+#  reset_multisig
+#  setup_trustlines
+#  issue_and_fund_usdc
+#  issue_and_fund_srt
   deploy_contracts
   log_success "✨ Testnet setup completed!"
 }
