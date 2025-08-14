@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   workflow_call:
 
+concurrency:
+  group: ap-test-job
+  cancel-in-progress: false
+
 jobs:
   extended_tests:
     name: Run Extended Tests
