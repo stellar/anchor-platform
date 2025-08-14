@@ -293,14 +293,14 @@ deploy_contracts() {
 }
 
 main() {
-#  log_info "Starting testnet reset..."
-#  check_prerequisites
-#  load_env
-#  fund_test_accounts
-#  reset_multisig
-#  setup_trustlines
-#  issue_and_fund_usdc
-#  issue_and_fund_srt
+  log_info "Starting testnet reset..."
+  check_prerequisites
+  load_env
+  fund_test_accounts
+  reset_multisig
+  setup_trustlines
+  issue_and_fund_usdc
+  issue_and_fund_srt
   deploy_contracts
   log_success "✨ Testnet setup completed!"
 }
