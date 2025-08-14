@@ -23,7 +23,6 @@ import org.stellar.anchor.config.Sep45Config;
 import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.util.ClientDomainHelper;
-import org.stellar.anchor.xdr.SorobanAuthorizationEntryList;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.operations.InvokeHostFunctionOperation;
@@ -96,7 +95,7 @@ public class Sep45Service {
 
     try {
       String authEntriesXdr =
-          new SorobanAuthorizationEntryList(authEntries.toArray(SorobanAuthorizationEntry[]::new))
+          new SorobanAuthorizationEntries(authEntries.toArray(SorobanAuthorizationEntry[]::new))
               .toXdrBase64();
 
       return ChallengeResponse.builder()
@@ -162,16 +161,16 @@ public class Sep45Service {
     KeyPair simulatingKeypair = KeyPair.random();
     Network network = new Network(stellarNetworkConfig.getStellarNetworkPassphrase());
 
-    SorobanAuthorizationEntryList authEntries;
+    SorobanAuthorizationEntries authEntries;
     try {
-      authEntries = SorobanAuthorizationEntryList.fromXdrBase64(request.getAuthorizationEntries());
+      authEntries = SorobanAuthorizationEntries.fromXdrBase64(request.getAuthorizationEntries());
     } catch (IOException e) {
       throw new BadRequestException("Failed to decode auth entries");
     }
 
     // Verify that all entries have the same arguments and that the arguments are valid
     SCVal[] firstEntryArgs = {};
-    for (SorobanAuthorizationEntry entry : authEntries.getAuthorizationEntryList()) {
+    for (SorobanAuthorizationEntry entry : authEntries.getSorobanAuthorizationEntries()) {
       if (firstEntryArgs.length == 0) {
         firstEntryArgs = entry.getRootInvocation().getFunction().getContractFn().getArgs();
         verifyArguments(firstEntryArgs[0].getMap().getSCMap());
@@ -202,7 +201,7 @@ public class Sep45Service {
                 WEB_AUTH_VERIFY_FN,
                 Arrays.asList(firstEntryArgs))
             .sourceAccount(simulatingKeypair.getAccountId())
-            .auth(Arrays.asList(authEntries.getAuthorizationEntryList()))
+            .auth(Arrays.asList(authEntries.getSorobanAuthorizationEntries()))
             .build();
 
     Transaction transaction =
@@ -229,7 +228,10 @@ public class Sep45Service {
       hashHex =
           Util.bytesToHex(
               Util.hash(
-                  authEntries.getAuthorizationEntryList()[0].getRootInvocation().toXdrByteArray()));
+                  authEntries
+                      .getSorobanAuthorizationEntries()[0]
+                      .getRootInvocation()
+                      .toXdrByteArray()));
     } catch (IOException e) {
       throw new InternalServerErrorException("Unable to decode invocation");
     }

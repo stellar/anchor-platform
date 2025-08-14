@@ -6,12 +6,12 @@ import org.stellar.anchor.api.sep.sep45.ValidationRequest
 import org.stellar.anchor.api.sep.sep45.ValidationResponse
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.OkHttpUtil
-import org.stellar.anchor.xdr.SorobanAuthorizationEntryList
 import org.stellar.sdk.Auth
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Network
 import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.xdr.SCAddressType
+import org.stellar.sdk.xdr.SorobanAuthorizationEntries
 
 class Sep45Client(
   private val endpoint: String,
@@ -44,8 +44,9 @@ class Sep45Client(
     }
 
     val authEntries =
-      SorobanAuthorizationEntryList.fromXdrBase64(challengeResponse.authorizationEntries)
-        .authorizationEntryList
+      SorobanAuthorizationEntries.fromXdrBase64(challengeResponse.authorizationEntries)
+        .sorobanAuthorizationEntries
+
     val walletAuthEntry =
       authEntries.find {
         it.credentials.address.address.discriminant.equals(SCAddressType.SC_ADDRESS_TYPE_CONTRACT)
@@ -93,7 +94,7 @@ class Sep45Client(
 
     return ValidationRequest.builder()
       .authorizationEntries(
-        SorobanAuthorizationEntryList(signedAuthEntries.toTypedArray()).toXdrBase64()
+        SorobanAuthorizationEntries(signedAuthEntries.toTypedArray()).toXdrBase64()
       )
       .build()
   }
