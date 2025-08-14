@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   workflow_call:
 
+concurrency:
+  group: ap-test-job
+  cancel-in-progress: false
+
 jobs:
   essential_tests:
     name: Run Essential Tests (Integration Tests, Faster End-2-End Tests, Unit Tests, and Stellar Validation Tools)
