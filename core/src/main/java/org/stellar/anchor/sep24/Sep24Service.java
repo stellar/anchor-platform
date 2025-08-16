@@ -407,7 +407,7 @@ public class Sep24Service {
             .claimableBalanceSupported(claimableSupported);
 
     if (accountType(token.getAccount()) == C) {
-      if (depositRequest.get("memo_type") == null
+      if (depositRequest.get("memo_type") != null
           || !depositRequest.get("memo_type").equalsIgnoreCase("id")) {
         infoF(
             "If the request account:{} is a C-account, the memo_type must be set to 'id'",

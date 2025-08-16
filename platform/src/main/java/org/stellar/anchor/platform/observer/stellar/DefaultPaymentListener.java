@@ -7,11 +7,15 @@ import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MathHelper.formatAmount;
 import static org.stellar.anchor.util.MemoHelper.*;
+import static org.stellar.anchor.util.SepHelper.AccountType.*;
+import static org.stellar.anchor.util.SepHelper.accountType;
+import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.micrometer.core.instrument.Metrics;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.apiclient.PlatformApiClient;
@@ -25,6 +29,7 @@ import org.stellar.anchor.platform.service.AnchorMetrics;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.GsonUtils;
 import org.stellar.sdk.Memo;
+import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.xdr.AssetType;
 
 public class DefaultPaymentListener implements PaymentListener {
@@ -99,10 +104,8 @@ public class DefaultPaymentListener implements PaymentListener {
       return;
     }
 
-    String memo = xdrMemoToString(ledgerTransaction.getMemo());
-
-    // Find a transaction matching the memo, assumes transactions are unique to account+memo
     try {
+      String memo = xdrMemoToString(ledgerTransaction.getMemo());
       JdbcSep31Transaction sep31Txn =
           sep31TransactionStore.findByToAccountAndMemoAndStatus(
               ledgerPayment.getTo(), memo, SepTransactionStatus.PENDING_SENDER.toString());
@@ -120,18 +123,11 @@ public class DefaultPaymentListener implements PaymentListener {
       errorEx(ex);
     }
 
-    // Find a transaction matching the memo, assumes transactions are unique to account+memo
     try {
-      // TODO: replace the query with this when SAC memo is supported.
-      //      JdbcSep24Transaction sep24Txn =
-      //          sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
-      //              ledgerPayment.getTo(),
-      //              memo,
-      //              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       JdbcSep24Transaction sep24Txn =
-          sep24TransactionStore.findFirstByToAccountAndFromAccountAndStatusOrderByStartedAtDesc(
+          sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
               ledgerPayment.getTo(),
-              ledgerPayment.getFrom(),
+              memoAsString(Memo.fromXdr(ledgerTransaction.getMemo())),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       if (sep24Txn != null) {
         try {
@@ -146,13 +142,23 @@ public class DefaultPaymentListener implements PaymentListener {
       errorEx(ex);
     }
 
-    // Find a transaction matching the memo, assumes transactions are unique to account+memo
-
     try {
+      Memo memo;
+      String toAccount;
+      if (accountType(ledgerPayment.getFrom()) == C && accountType(ledgerPayment.getTo()) == M) {
+        // Sending payment from C-account to G-account with a memo, which is the muxed-id of the mux
+        // account
+        MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
+        toAccount = muxedAccount.getAccountId();
+        memo = Memo.id(Objects.requireNonNull(muxedAccount.getMuxedId()).longValue());
+      } else {
+        toAccount = ledgerPayment.getTo();
+        memo = Memo.fromXdr(ledgerTransaction.getMemo());
+      }
       JdbcSep6Transaction sep6Txn =
           sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
-              ledgerPayment.getTo(),
-              memoAsString(Memo.fromXdr(ledgerTransaction.getMemo())),
+              toAccount,
+              memoAsString(memo),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
 
       if (sep6Txn != null) {
@@ -272,18 +278,19 @@ public class DefaultPaymentListener implements PaymentListener {
   }
 
   boolean validate(LedgerTransaction ledgerTransaction, LedgerPayment ledgerPayment) {
-    // TODO: Enable this validation when SAC memo is supported.
-    //    if (isEmpty(ledgerTransaction.getHash())
-    //        || ledgerTransaction.getMemo() == null
-    //        || isEmpty(MemoHelper.xdrMemoToString(ledgerTransaction.getMemo()))) {
-    //      // The transaction do not have a hash or memo.
-    //      // We do not process it.
-    //      debugF(
-    //          "Transaction {} does not have a hash or memo. This indicates a potential bug from
-    // stellar network events.",
-    //          ledgerTransaction.getHash());
-    //      return false;
-    //    }
+    if (isEmpty(ledgerTransaction.getHash())) {
+      debugF(
+          "Transaction {} does not have a hash. This indicates a potential bug from stellar network events.",
+          ledgerTransaction.getHash());
+      return false;
+    }
+
+    if (ledgerTransaction.getMemo() == null) {
+      debugF(
+          "Transaction {} with a null memo. This indicates a potential bug from stellar network events.",
+          ledgerTransaction.getHash());
+      return false;
+    }
 
     if (!List.of(
             AssetType.ASSET_TYPE_NATIVE,

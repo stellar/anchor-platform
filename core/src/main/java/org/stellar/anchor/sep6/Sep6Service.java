@@ -151,7 +151,7 @@ public class Sep6Service {
             .clientName(clientFinder.getClientName(token));
 
     if (accountType(token.getAccount()) == C) {
-      if (request.getMemoType() == null || !request.getMemoType().equalsIgnoreCase("id")) {
+      if (request.getMemoType() != null && !request.getMemoType().equalsIgnoreCase("id")) {
         infoF(
             "If the request account:{} is a C-account, the memo_type must be set to 'id'",
             token.getAccount());
