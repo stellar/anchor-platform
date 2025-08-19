@@ -161,7 +161,7 @@ class DefaultPaymentListenerTest {
       null
 
     every {
-      sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         capture(slotAccount),
         capture(slotMemo),
         capture(slotStatus),
@@ -173,7 +173,7 @@ class DefaultPaymentListenerTest {
     paymentListener.onReceived(event)
 
     verify(exactly = 1) {
-      sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_1",
         "pending_user_transfer_start",
@@ -202,8 +202,9 @@ class DefaultPaymentListenerTest {
 
     every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
       null
-    every { sep24TransactionStore.findOneByToAccountAndMemoAndStatus(any(), any(), any()) } returns
-      null
+    every {
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns null
     every {
       sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         capture(slotAccount),
@@ -324,7 +325,7 @@ class DefaultPaymentListenerTest {
     every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
       null
     every {
-      sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_3",
         "pending_user_transfer_start",
@@ -334,7 +335,7 @@ class DefaultPaymentListenerTest {
     paymentListener.onReceived(event)
 
     verify(exactly = 1) {
-      sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_3",
         "pending_user_transfer_start",
@@ -362,8 +363,9 @@ class DefaultPaymentListenerTest {
 
     every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
       null
-    every { sep24TransactionStore.findOneByToAccountAndMemoAndStatus(any(), any(), any()) } returns
-      null
+    every {
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns null
     every {
       sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",

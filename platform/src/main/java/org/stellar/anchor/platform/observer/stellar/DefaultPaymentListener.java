@@ -123,11 +123,26 @@ public class DefaultPaymentListener implements PaymentListener {
       errorEx(ex);
     }
 
+    // For SEP-24 and SEP-6, we need to check the memo and the destination account.
+    // We need to handle the case where a C-account sends a payment to a G-account with a memo.
+    // In this case, the memo is the muxed-id of the muxed account.
+    Memo memo;
+    String toAccount;
+    if (accountType(ledgerPayment.getFrom()) == C && accountType(ledgerPayment.getTo()) == M) {
+
+      MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
+      toAccount = muxedAccount.getAccountId();
+      memo = Memo.id(Objects.requireNonNull(muxedAccount.getMuxedId()).longValue());
+    } else {
+      toAccount = ledgerPayment.getTo();
+      memo = Memo.fromXdr(ledgerTransaction.getMemo());
+    }
+
     try {
       JdbcSep24Transaction sep24Txn =
-          sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
-              ledgerPayment.getTo(),
-              memoAsString(Memo.fromXdr(ledgerTransaction.getMemo())),
+          sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+              toAccount,
+              memoAsString(memo),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       if (sep24Txn != null) {
         try {
@@ -143,18 +158,6 @@ public class DefaultPaymentListener implements PaymentListener {
     }
 
     try {
-      Memo memo;
-      String toAccount;
-      if (accountType(ledgerPayment.getFrom()) == C && accountType(ledgerPayment.getTo()) == M) {
-        // Sending payment from C-account to G-account with a memo, which is the muxed-id of the mux
-        // account
-        MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
-        toAccount = muxedAccount.getAccountId();
-        memo = Memo.id(Objects.requireNonNull(muxedAccount.getMuxedId()).longValue());
-      } else {
-        toAccount = ledgerPayment.getTo();
-        memo = Memo.fromXdr(ledgerTransaction.getMemo());
-      }
       JdbcSep6Transaction sep6Txn =
           sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
               toAccount,

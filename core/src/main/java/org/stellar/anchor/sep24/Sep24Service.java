@@ -408,7 +408,7 @@ public class Sep24Service {
 
     if (accountType(token.getAccount()) == C) {
       if (depositRequest.get("memo_type") != null
-          || !depositRequest.get("memo_type").equalsIgnoreCase("id")) {
+          && !depositRequest.get("memo_type").equalsIgnoreCase("id")) {
         infoF(
             "If the request account:{} is a C-account, the memo_type must be set to 'id'",
             token.getAccount());

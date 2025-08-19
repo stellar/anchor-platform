@@ -28,7 +28,6 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep6Config;
-import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.*;
 import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts;
@@ -36,7 +35,6 @@ import org.stellar.sdk.Memo;
 
 public class Sep6Service {
   private final LanguageConfig languageConfig;
-  private final StellarNetworkConfig stellarNetworkConfig;
   private final Sep6Config sep6Config;
   private final AssetService assetService;
   private final SepRequestValidator requestValidator;
@@ -73,7 +71,6 @@ public class Sep6Service {
 
   public Sep6Service(
       LanguageConfig languageConfig,
-      StellarNetworkConfig stellarNetworkConfig,
       Sep6Config sep6Config,
       AssetService assetService,
       SepRequestValidator requestValidator,
@@ -83,7 +80,6 @@ public class Sep6Service {
       EventService eventService,
       MoreInfoUrlConstructor moreInfoUrlConstructor) {
     this.languageConfig = languageConfig;
-    this.stellarNetworkConfig = stellarNetworkConfig;
     this.sep6Config = sep6Config;
     this.assetService = assetService;
     this.requestValidator = requestValidator;
