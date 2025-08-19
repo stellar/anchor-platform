@@ -33,9 +33,7 @@ class Sep31EventProcessor(
         config.appSettings.distributionWalletMemo.isBlank() ||
           config.appSettings.distributionWalletMemoType.isBlank()
       ) {
-        val paddedMemo = event.payload.transaction!!.id.take(32).padStart(32, '0')
-        val encodedMemo = Base64.getEncoder().encodeToString(paddedMemo.toByteArray())
-        Pair(encodedMemo, "hash")
+        Pair((10000..20000).random().toString(), "id")
       } else {
         Pair(
           config.appSettings.distributionWalletMemo,

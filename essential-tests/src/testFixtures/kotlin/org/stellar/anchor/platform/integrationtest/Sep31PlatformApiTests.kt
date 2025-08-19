@@ -158,8 +158,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_RESPONSES =
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
-                  "memo": "ZWQ0NmIwMzAtM2E5NC00M2RkLThkMWYtYWUwMjNhMGI=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -234,8 +233,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_RESPONSES =
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
-                  "memo": "ZWQ0NmIwMzAtM2E5NC00M2RkLThkMWYtYWUwMjNhMGI=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -357,8 +355,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
-                  "memo": "ZDA1NjVlYWYtNjVmNy00ZGIzLWJmZWMtZjNiM2EzMDg=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -411,8 +408,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
-                  "memo": "ZDA1NjVlYWYtNjVmNy00ZGIzLWJmZWMtZjNiM2EzMDg=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -465,8 +461,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
-                  "memo": "ZDA1NjVlYWYtNjVmNy00ZGIzLWJmZWMtZjNiM2EzMDg=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -519,8 +514,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
-                  "memo": "ZDA1NjVlYWYtNjVmNy00ZGIzLWJmZWMtZjNiM2EzMDg=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -573,8 +567,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
-                  "memo": "ZDA1NjVlYWYtNjVmNy00ZGIzLWJmZWMtZjNiM2EzMDg=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
@@ -629,8 +622,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
-                  "memo": "ZDA1NjVlYWYtNjVmNy00ZGIzLWJmZWMtZjNiM2EzMDg=",
-                  "memo_type": "hash",
+                  "memo_type": "id",
                   "payments": [
                     {
                       "id": "%TESTPAYMENT_ID%",
