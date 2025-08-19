@@ -142,12 +142,10 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
    * @throws IOException if there is an error processing the event
    */
   void handleEvent(PaymentTransferEvent transferEvent) throws AnchorException, IOException {
-    metricLatestBlockRead.set(transferEvent.getLedgerTransaction().getLedger());
     // process the payment
     for (PaymentListener listener : paymentListeners) {
       listener.onReceived(transferEvent);
     }
-    metricLatestBlockProcessed.set(transferEvent.getLedgerTransaction().getLedger());
     publishingBackoffTimer.reset();
   }
 
