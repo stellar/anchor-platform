@@ -31,6 +31,7 @@ import org.stellar.anchor.util.GsonUtils;
 import org.stellar.sdk.Memo;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.xdr.AssetType;
+import org.stellar.sdk.xdr.MemoType;
 
 public class DefaultPaymentListener implements PaymentListener {
   final PaymentObservingAccountsManager paymentObservingAccountsManager;
@@ -129,7 +130,6 @@ public class DefaultPaymentListener implements PaymentListener {
     Memo memo;
     String toAccount;
     if (accountType(ledgerPayment.getFrom()) == C && accountType(ledgerPayment.getTo()) == M) {
-
       MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
       toAccount = muxedAccount.getAccountId();
       memo = Memo.id(Objects.requireNonNull(muxedAccount.getMuxedId()).longValue());
@@ -293,6 +293,15 @@ public class DefaultPaymentListener implements PaymentListener {
           "Transaction {} with a null memo. This indicates a potential bug from stellar network events.",
           ledgerTransaction.getHash());
       return false;
+    }
+
+    if (ledgerTransaction.getMemo().getDiscriminant() == MemoType.MEMO_TEXT) {
+      if (ledgerTransaction.getMemo().getText().getBytes().length == 0) {
+        debugF(
+            "Transaction {} with an empty text memo. This indicates a potential bug from stellar network events.",
+            ledgerTransaction.getHash());
+        return false;
+      }
     }
 
     if (!List.of(
