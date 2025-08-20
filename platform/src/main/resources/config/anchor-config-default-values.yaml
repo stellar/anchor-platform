@@ -52,8 +52,7 @@ stellar_network:
     #   `none`: No authentication is used.
     #   `header`: The authentication is done using a Bearer token added to the HTTP request header.
     #                   The RFC 6750 defines the Bearer token authentication scheme.
-    #   `url`: The authentication is done using an API key added to the URL path.
-    # If the type is `api_key` or `url_path`, the secret must be set by the environment variable `secret.stellar_network.rpc.auth.secret`.
+    # If the type is `header`, the secret `secret.stellar_network.rpc.auth.secret` must be set.
     type: none
     header:
       # The HTTP header name of the Bearer token.

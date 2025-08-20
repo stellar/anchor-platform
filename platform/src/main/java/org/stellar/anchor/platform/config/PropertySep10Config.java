@@ -81,7 +81,8 @@ public class PropertySep10Config implements Sep10Config, Validator {
   void validateConfig(Errors errors) {
     if (isEmpty(secretConfig.getSep10SigningSeed())) {
       errors.reject(
-          "sep10-signing-seed-empty", "Please set environment variable SECRET_SEP10_SIGNING_SEED");
+          "sep10-signing-seed-empty",
+          "Please set the secret secret.sep10.signing_seed or the SECRET_SEP10_SIGNING_SEED environment variable");
     }
 
     if (isNotEmpty(secretConfig.getSep10SigningSeed())) {

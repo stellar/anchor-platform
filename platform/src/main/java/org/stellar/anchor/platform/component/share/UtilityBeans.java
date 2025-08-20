@@ -41,8 +41,8 @@ public class UtilityBeans {
 
   @Bean
   @ConfigurationProperties(prefix = "stellar-network")
-  StellarNetworkConfig appConfig() {
-    return new PropertyStellarNetworkConfig();
+  StellarNetworkConfig stellarNetworkConfig(SecretConfig secretConfig) {
+    return new PropertyStellarNetworkConfig(secretConfig);
   }
 
   @Bean
