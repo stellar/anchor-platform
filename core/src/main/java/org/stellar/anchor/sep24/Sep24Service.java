@@ -251,8 +251,7 @@ public class Sep24Service {
     String quoteId = withdrawRequest.get("quote_id");
     AssetInfo buyAsset = assetService.getAssetById(withdrawRequest.get("destination_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(
-          quoteId, asset, buyAsset, strAmount, builder, WITHDRAWAL.toString(), txnId);
+      validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
     } else {
       builder.amountExpected(strAmount);
       if (buyAsset != null) {
@@ -351,9 +350,15 @@ public class Sep24Service {
       }
     }
 
+    if (!(assetService.getAsset(assetCode, assetIssuer) instanceof StellarAssetInfo asset)) {
+      infoF("The asset_code ({}) of the deposit request must be a stellar asset.", assetCode);
+      throw new SepValidationException(
+          String.format(
+              "The asset_code (%s) of the deposit request must be a stellar asset.", assetCode));
+    }
+
     // Verify that the asset code exists in our database, with deposit enabled.
-    StellarAssetInfo asset = (StellarAssetInfo) assetService.getAsset(assetCode, assetIssuer);
-    if (asset == null || !AssetHelper.isDepositEnabled(asset.getSep24())) {
+    if (!AssetHelper.isDepositEnabled(asset.getSep24())) {
       infoF("invalid operation for asset {}", assetCode);
       throw new SepValidationException(String.format("invalid operation for asset %s", assetCode));
     }
@@ -424,8 +429,7 @@ public class Sep24Service {
     String quoteId = depositRequest.get("quote_id");
     AssetInfo sellAsset = assetService.getAssetById(depositRequest.get("source_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(
-          quoteId, sellAsset, asset, strAmount, builder, DEPOSIT.toString(), txnId);
+      validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
     } else {
       builder.amountExpected(strAmount);
       if (sellAsset != null) {
@@ -593,7 +597,6 @@ public class Sep24Service {
       AssetInfo buyAsset,
       String strAmount,
       Sep24TransactionBuilder builder,
-      String kind,
       String txnId)
       throws AnchorException {
     Sep38Quote quote =
