@@ -350,6 +350,11 @@ public class Sep24Service {
       }
     }
 
+    if (assetService.getAsset(assetCode, assetIssuer) == null) {
+      infoF("The asset_code of the deposit request must be set.");
+      throw new SepValidationException("The asset_code of the deposit request must be set");
+    }
+
     if (!(assetService.getAsset(assetCode, assetIssuer) instanceof StellarAssetInfo asset)) {
       infoF("The asset_code ({}) of the deposit request must be a stellar asset.", assetCode);
       throw new SepValidationException(
