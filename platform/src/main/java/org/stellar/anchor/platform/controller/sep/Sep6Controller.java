@@ -225,7 +225,7 @@ public class Sep6Controller {
       value = "/transaction",
       produces = {MediaType.APPLICATION_JSON_VALUE},
       method = {RequestMethod.GET})
-  public GetTransactionResponse getTransaction(
+  public Sep6GetTransactionResponse getTransaction(
       HttpServletRequest request,
       @RequestParam(required = false, value = "id") String id,
       @RequestParam(required = false, value = "stellar_transaction_id") String stellarTransactionId,

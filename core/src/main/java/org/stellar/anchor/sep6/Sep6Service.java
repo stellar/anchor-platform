@@ -472,7 +472,7 @@ public class Sep6Service {
     return new GetTransactionsResponse(responses);
   }
 
-  public GetTransactionResponse findTransaction(WebAuthJwt token, GetTransactionRequest request)
+  public Sep6GetTransactionResponse findTransaction(WebAuthJwt token, GetTransactionRequest request)
       throws AnchorException {
     // Pre-validation
     if (token == null) {
@@ -508,7 +508,7 @@ public class Sep6Service {
 
     sep6TransactionQueriedCounter.increment();
     String lang = validateLanguage(languageConfig, request.getLang());
-    return new GetTransactionResponse(
+    return new Sep6GetTransactionResponse(
         Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang));
   }
 

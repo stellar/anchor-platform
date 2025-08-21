@@ -28,6 +28,7 @@ import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.platform.GetTransactionResponse;
 import org.stellar.anchor.api.sep.sep24.Sep24GetTransactionResponse;
+import org.stellar.anchor.api.sep.sep6.Sep6GetTransactionResponse;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.client.ClientConfig;
 import org.stellar.anchor.config.SecretConfig;
@@ -175,11 +176,9 @@ public class ClientStatusCallbackHandler extends EventHandler {
     if (event.getTransaction() != null) {
       switch (event.getTransaction().getSep()) {
         case SEP_6:
-          // TODO: remove dependence on the transaction store
-          Sep6Transaction sep6Txn =
-              sep6TransactionStore.findByTransactionId(event.getTransaction().getId());
-          org.stellar.anchor.api.sep.sep6.GetTransactionResponse sep6TxnRes =
-              new org.stellar.anchor.api.sep.sep6.GetTransactionResponse(
+          Sep6Transaction sep6Txn = fromSep6Txn(event.getTransaction());
+          Sep6GetTransactionResponse sep6TxnRes =
+              new Sep6GetTransactionResponse(
                   Sep6TransactionUtils.fromTxn(sep6Txn, sep6MoreInfoUrlConstructor, null));
           return json(sep6TxnRes);
         case SEP_24:
@@ -200,6 +199,50 @@ public class ClientStatusCallbackHandler extends EventHandler {
     } else {
       throw new InternalServerErrorException("Event must have either a transaction or a customer");
     }
+  }
+
+  private Sep6Transaction fromSep6Txn(GetTransactionResponse txn) {
+    JdbcSep6Transaction sep6Txn = new JdbcSep6Transaction();
+    sep6Txn.setTransactionId(txn.getId());
+    if (txn.getStellarTransactions() != null && !txn.getStellarTransactions().isEmpty()) {
+      sep6Txn.setStellarTransactionId(txn.getStellarTransactions().get(0).getId());
+    }
+    sep6Txn.setExternalTransactionId(txn.getExternalTransactionId());
+    sep6Txn.setStatus(txn.getStatus().getStatus());
+    sep6Txn.setKind(txn.getKind().kind);
+    sep6Txn.setStartedAt(txn.getStartedAt());
+    sep6Txn.setCompletedAt(txn.getCompletedAt());
+    sep6Txn.setTransferReceivedAt(txn.getTransferReceivedAt());
+    sep6Txn.setType(txn.getType());
+    if (txn.getAmountIn() != null) {
+      sep6Txn.setAmountIn(txn.getAmountIn().getAmount());
+      sep6Txn.setAmountInAsset(txn.getAmountIn().getAsset());
+    }
+    if (txn.getAmountOut() != null) {
+      sep6Txn.setAmountOut(txn.getAmountOut().getAmount());
+      sep6Txn.setAmountOutAsset(txn.getAmountOut().getAsset());
+    }
+    if (txn.getFeeDetails() != null) {
+      sep6Txn.setFeeDetails(txn.getFeeDetails());
+    }
+    if (txn.getAmountExpected() != null) {
+      sep6Txn.setAmountExpected(txn.getAmountExpected().getAmount());
+    }
+    sep6Txn.setFromAccount(txn.getSourceAccount());
+    sep6Txn.setToAccount(txn.getDestinationAccount());
+    sep6Txn.setMemo(txn.getMemo());
+    sep6Txn.setMemoType(txn.getMemoType());
+    sep6Txn.setClientDomain(txn.getClientDomain());
+    sep6Txn.setQuoteId(txn.getQuoteId());
+    sep6Txn.setMessage(txn.getMessage());
+    sep6Txn.setRefunds(txn.getRefunds());
+    sep6Txn.setRefundMemo(txn.getRefundMemo());
+    sep6Txn.setRefundMemoType(txn.getRefundMemoType());
+    sep6Txn.setRequiredInfoMessage(txn.getRequiredInfoMessage());
+    sep6Txn.setRequiredInfoUpdates(txn.getRequiredInfoUpdates());
+    sep6Txn.setInstructions(txn.getInstructions());
+
+    return sep6Txn;
   }
 
   private Sep24Transaction fromSep24Txn(GetTransactionResponse txn) {
