@@ -231,6 +231,7 @@ public class Sep24Service {
                 memoTypeString(memoType(memo)), custodyConfig.getType()));
       }
 
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
     }
@@ -406,14 +407,14 @@ public class Sep24Service {
             .clientName(clientFinder.getClientName(token))
             .claimableBalanceSupported(claimableSupported);
 
-    if (accountType(token.getAccount()) == C) {
+    if (accountType(token.getAccount()) == Contract) {
       if (depositRequest.get("memo_type") != null
           && !depositRequest.get("memo_type").equalsIgnoreCase("id")) {
         infoF(
             "If the request account:{} is a C-account, the memo_type must be set to 'id'",
             token.getAccount());
         throw new SepValidationException(
-            "C-account requires 'memo_type' to be set to 'id' in the request");
+            "Contract account requires 'memo_type' to be set to 'id' in the request");
       }
     }
 

@@ -13,16 +13,16 @@ import org.stellar.sdk.xdr.MemoType;
 
 public class SepHelper {
   public enum AccountType {
-    G,
-    M,
-    C,
+    Classic,
+    Muxed,
+    Contract,
   }
 
   public static AccountType accountType(String account) {
     return switch (account.charAt(0)) {
-      case 'G' -> AccountType.G;
-      case 'M' -> AccountType.M;
-      case 'C' -> AccountType.C;
+      case 'G' -> AccountType.Classic;
+      case 'M' -> AccountType.Muxed;
+      case 'C' -> AccountType.Contract;
       default ->
           throw new IllegalArgumentException(
               String.format("Invalid account type for account: %s", account));

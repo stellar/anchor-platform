@@ -129,7 +129,8 @@ public class DefaultPaymentListener implements PaymentListener {
     // In this case, the memo is the muxed-id of the muxed account.
     Memo memo;
     String toAccount;
-    if (accountType(ledgerPayment.getFrom()) == C && accountType(ledgerPayment.getTo()) == M) {
+    if (accountType(ledgerPayment.getFrom()) == Contract
+        && accountType(ledgerPayment.getTo()) == Muxed) {
       MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
       toAccount = muxedAccount.getAccountId();
       memo = Memo.id(Objects.requireNonNull(muxedAccount.getMuxedId()).longValue());

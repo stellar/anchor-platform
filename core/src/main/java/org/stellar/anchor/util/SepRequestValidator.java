@@ -229,15 +229,15 @@ public class SepRequestValidator {
   public void validateAccount(String account) throws AnchorException {
     try {
       switch (SepHelper.accountType(account)) {
-        case G:
-        case C:
+        case Classic:
+        case Contract:
           try {
             Address.fromSCAddress(Scv.fromAddress(Scv.toAddress(account)).toSCAddress());
           } catch (RuntimeException ex) {
             throw new SepValidationException(String.format("invalid account %s", account));
           }
           break;
-        case M:
+        case Muxed:
           try {
             new MuxedAccount(account);
           } catch (RuntimeException ex) {

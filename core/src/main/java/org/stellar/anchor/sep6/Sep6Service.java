@@ -3,10 +3,11 @@ package org.stellar.anchor.sep6;
 import static io.micrometer.core.instrument.Metrics.counter;
 import static org.stellar.anchor.util.AssetHelper.isDepositEnabled;
 import static org.stellar.anchor.util.AssetHelper.isWithdrawEnabled;
+import static org.stellar.anchor.util.Log.debug;
 import static org.stellar.anchor.util.Log.infoF;
 import static org.stellar.anchor.util.MemoHelper.*;
 import static org.stellar.anchor.util.SepHelper.*;
-import static org.stellar.anchor.util.SepHelper.AccountType.C;
+import static org.stellar.anchor.util.SepHelper.AccountType.Contract;
 import static org.stellar.anchor.util.SepHelper.accountType;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 
@@ -146,7 +147,7 @@ public class Sep6Service {
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token));
 
-    if (accountType(token.getAccount()) == C) {
+    if (accountType(token.getAccount()) == Contract) {
       if (request.getMemoType() != null && !request.getMemoType().equalsIgnoreCase("id")) {
         infoF(
             "If the request account:{} is a C-account, the memo_type must be set to 'id'",
@@ -159,6 +160,7 @@ public class Sep6Service {
     Memo memo = makeMemo(request.getMemo(), request.getMemoType());
 
     if (memo != null) {
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
     }
@@ -261,6 +263,7 @@ public class Sep6Service {
             .quoteId(request.getQuoteId());
 
     if (memo != null) {
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
     }
