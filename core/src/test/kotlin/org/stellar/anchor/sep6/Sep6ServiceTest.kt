@@ -78,7 +78,6 @@ class Sep6ServiceTest {
     sep6Service =
       Sep6Service(
         languageConfig,
-        stellarNetworkConfig,
         sep6Config,
         assetService,
         requestValidator,

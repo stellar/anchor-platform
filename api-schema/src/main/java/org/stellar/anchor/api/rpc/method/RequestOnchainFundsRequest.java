@@ -31,9 +31,7 @@ public class RequestOnchainFundsRequest extends RpcMethodParamsRequest
   @SerializedName("destination_account")
   private String destinationAccount;
 
-  @SerializedName("memo_type")
-  private String memoType;
-
+  // The memo must be a MEMO_ID type.
   private String memo;
 
   @SerializedName("user_action_required_by")

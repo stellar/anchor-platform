@@ -8,5 +8,4 @@ import lombok.Data;
 public class SepDepositInfo {
   private final String stellarAddress;
   private final String memo;
-  private final String memoType;
 }

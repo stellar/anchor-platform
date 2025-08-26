@@ -2,6 +2,7 @@ package org.stellar.anchor.util;
 
 import static org.stellar.anchor.util.AssetHelper.isDepositEnabled;
 import static org.stellar.anchor.util.AssetHelper.isWithdrawEnabled;
+import static org.stellar.anchor.util.MathHelper.decimal;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -9,6 +10,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.*;
+import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.sdk.Address;
 import org.stellar.sdk.MuxedAccount;
@@ -18,6 +20,117 @@ import org.stellar.sdk.scval.Scv;
 @RequiredArgsConstructor
 public class SepRequestValidator {
   @NonNull private final AssetService assetService;
+
+  public static void validateAmount(String amount) throws AnchorException {
+    validateAmount("", amount);
+  }
+
+  public static BigDecimal validateAmount(String messagePrefix, String amount)
+      throws AnchorException {
+    return validateAmount(messagePrefix, amount, false);
+  }
+
+  public static BigDecimal validateAmount(String messagePrefix, String amount, boolean allowZero)
+      throws BadRequestException {
+    // assetName
+    if (StringHelper.isEmpty(amount)) {
+      throw new BadRequestException(messagePrefix + "amount cannot be empty");
+    }
+
+    BigDecimal sAmount;
+    try {
+      sAmount = decimal(amount);
+    } catch (NumberFormatException e) {
+      throw new BadRequestException(messagePrefix + "amount is invalid", e);
+    }
+
+    if (allowZero) {
+      if (sAmount.signum() < 0) {
+        throw new BadRequestException(messagePrefix + "amount should be non-negative");
+      }
+    } else {
+      if (sAmount.signum() < 1) {
+        throw new BadRequestException(messagePrefix + "amount should be positive");
+      }
+    }
+    return sAmount;
+  }
+
+  public static void validateAmountLimit(String messagePrefix, String amount, Long min, Long max)
+      throws AnchorException {
+    BigDecimal sAmount = validateAmount("", amount);
+
+    // Validate min amount
+    if (min != null) {
+      BigDecimal bdMin = new BigDecimal(min);
+      if (sAmount.compareTo(bdMin) < 0) {
+        throw new BadRequestException(String.format("%samount less than min limit", messagePrefix));
+      }
+    }
+
+    // Validate max amount
+    if (max != null) {
+      BigDecimal bdMax = new BigDecimal(max);
+      if (sAmount.compareTo(bdMax) > 0) {
+        throw new BadRequestException(String.format("%samount exceeds max limit", messagePrefix));
+      }
+    }
+  }
+
+  /**
+   * Validates whether a specified funding method is supported for a given asset.
+   *
+   * @param assetID the unique id of the asset being validated.
+   * @param method the funding method to validate.
+   * @param supportedMethods a list of funding methods supported for the asset.
+   * @throws BadRequestException if the provided funding method is not in the list of supported
+   *     methods.
+   */
+  public static void validateFundingMethod(
+      String assetID, String method, List<String> supportedMethods) throws BadRequestException {
+    if (StringHelper.isEmpty(method)) {
+      throw new BadRequestException("funding_method cannot be empty");
+    }
+    if (!supportedMethods.contains(method)) {
+      throw new BadRequestException(
+          String.format(
+              "invalid funding method %s for asset %s, supported types are %s",
+              method, assetID, supportedMethods));
+    }
+  }
+
+  /**
+   * Checks if the status is valid in a SEP.
+   *
+   * @param sep The sep number.
+   * @param status The name (String) of the status to be checked.
+   * @return true, if valid. Otherwise false
+   */
+  public static boolean validateTransactionStatus(String status, int sep) {
+    for (SepTransactionStatus transactionStatus : SepTransactionStatus.values()) {
+      if (transactionStatus.getStatus().equals(status)) {
+        return validateTransactionStatus(transactionStatus, sep);
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Checks if the status is valid in a SEP.
+   *
+   * @param sep The sep number.
+   * @param status The status to be checked.
+   * @return true, if valid. Otherwise false
+   */
+  public static boolean validateTransactionStatus(SepTransactionStatus status, int sep) {
+    return switch (sep) {
+      case 6 -> (SepHelper.sep6Statuses.contains(status));
+      case 24 -> (SepHelper.sep24Statuses.contains(status));
+      case 31 -> (SepHelper.sep31Statuses.contains(status));
+      default -> false;
+    };
+  }
 
   /**
    * Validates that the requested asset is valid and enabled for deposit.
@@ -114,24 +227,26 @@ public class SepRequestValidator {
    * @throws SepValidationException if the account is invalid
    */
   public void validateAccount(String account) throws AnchorException {
-    switch (account.charAt(0)) {
-      case 'G':
-      case 'C':
-        try {
-          Address.fromSCAddress(Scv.fromAddress(Scv.toAddress(account)).toSCAddress());
-        } catch (RuntimeException ex) {
-          throw new SepValidationException(String.format("invalid account %s", account));
-        }
-        break;
-      case 'M':
-        try {
-          new MuxedAccount(account);
-        } catch (RuntimeException ex) {
-          throw new SepValidationException(String.format("invalid account %s", account));
-        }
-        break;
-      default:
-        throw new SepValidationException(String.format("invalid account %s", account));
+    try {
+      switch (SepHelper.accountType(account)) {
+        case Classic:
+        case Contract:
+          try {
+            Address.fromSCAddress(Scv.fromAddress(Scv.toAddress(account)).toSCAddress());
+          } catch (RuntimeException ex) {
+            throw new SepValidationException(String.format("invalid account %s", account));
+          }
+          break;
+        case Muxed:
+          try {
+            new MuxedAccount(account);
+          } catch (RuntimeException ex) {
+            throw new SepValidationException(String.format("invalid account %s", account));
+          }
+          break;
+      }
+    } catch (IllegalArgumentException ex) {
+      throw new SepValidationException(String.format("invalid account %s", account), ex);
     }
   }
 }

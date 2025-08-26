@@ -46,8 +46,7 @@ class Sep6DepositInfoSelfGeneratorTest {
     txnId: String,
     assetCode: String,
     assetIssuer: String?,
-    distributionAccount: String?,
-    memo: String
+    distributionAccount: String?
   ) {
     val txn = JdbcSep6Transaction()
     txn.id = txnId
@@ -58,6 +57,5 @@ class Sep6DepositInfoSelfGeneratorTest {
 
     assertEquals(result.stellarAddress, distributionAccount)
     assertTrue(result.memo.toLongOrNull() != null)
-    assertTrue(result.memoType == "id")
   }
 }
