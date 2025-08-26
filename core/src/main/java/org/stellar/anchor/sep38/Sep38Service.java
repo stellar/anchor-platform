@@ -11,7 +11,7 @@ import static org.stellar.anchor.util.MathHelper.formatAmount;
 import static org.stellar.anchor.util.MetricConstants.SEP38_PRICE_QUERIED;
 import static org.stellar.anchor.util.MetricConstants.SEP38_QUOTE_CREATED;
 import static org.stellar.anchor.util.NumberHelper.DEFAULT_ROUNDING_MODE;
-import static org.stellar.anchor.util.SepHelper.validateAmount;
+import static org.stellar.anchor.util.SepRequestValidator.validateAmount;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;

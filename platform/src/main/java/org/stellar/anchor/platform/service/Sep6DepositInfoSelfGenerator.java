@@ -1,8 +1,5 @@
 package org.stellar.anchor.platform.service;
 
-import static org.stellar.anchor.util.MemoHelper.memoTypeAsString;
-import static org.stellar.sdk.xdr.MemoType.MEMO_ID;
-
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.stellar.anchor.api.asset.AssetInfo;
@@ -26,7 +23,6 @@ public class Sep6DepositInfoSelfGenerator extends DepositInfoSelfGeneratorBase
         assetInfo instanceof StellarAssetInfo
             ? ((StellarAssetInfo) assetInfo).getDistributionAccount()
             : null,
-        generateMemoId(),
-        memoTypeAsString(MEMO_ID));
+        generateMemoId());
   }
 }

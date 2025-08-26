@@ -156,7 +156,6 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       TRANSACTION_CREATED to SepTransactionStatus.INCOMPLETE,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_USR_TRANSFER_START,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_ANCHOR,
-      TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_STELLAR,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.COMPLETED,
     )
   }
@@ -166,7 +165,6 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       TRANSACTION_CREATED to SepTransactionStatus.INCOMPLETE,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_USR_TRANSFER_START,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_ANCHOR,
-      TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_EXTERNAL,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.COMPLETED,
     )
   }
@@ -305,12 +303,15 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
+    val memo = (100000..200000).random().toString()
     val request =
       mapOf(
         "asset_code" to "USDC",
         "asset_issuer" to "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
         "account" to CLIENT_SMART_WALLET_ACCOUNT,
         "amount" to "1",
+        "memo" to memo,
+        "memo_type" to "id",
       )
     val response = wallet.sep24.withdraw(request)
 
@@ -328,7 +329,9 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
     // Submit transfer transaction
     val withdrawTxn = wallet.sep24.getTransaction(response.id, "USDC")
-    transactionWithRetry { wallet.send(withdrawTxn.transaction.to, Asset.create(USDC.id), "1") }
+    transactionWithRetry {
+      wallet.send(withdrawTxn.transaction.to, Asset.create(USDC.id), "1", memo)
+    }
 
     // Wait for the status to change to COMPLETED
     waitForTxnStatusWithoutSDK(response.id, "USDC", SepTransactionStatus.COMPLETED, wallet.sep24)

@@ -35,7 +35,6 @@ class DepositInfoGeneratorTest {
 
     assertEquals(actualInfo.stellarAddress, ADDRESS)
     assertTrue(actualInfo.memo.toLongOrNull() != null)
-    assertTrue(actualInfo.memoType == "id")
   }
 
   @Test
@@ -51,7 +50,7 @@ class DepositInfoGeneratorTest {
 
     val actualInfo = generator.generate(txn)
 
-    val expectedInfo = SepDepositInfo(ADDRESS, MEMO, MEMO_TYPE)
+    val expectedInfo = SepDepositInfo(ADDRESS, MEMO)
 
     assertEquals(expectedInfo, actualInfo)
   }
@@ -82,7 +81,6 @@ class DepositInfoGeneratorTest {
 
     assertEquals(actualInfo.stellarAddress, ADDRESS)
     assertTrue(actualInfo.memo.toLongOrNull() != null)
-    assertTrue(actualInfo.memoType == "id")
   }
 
   @Test
@@ -97,7 +95,7 @@ class DepositInfoGeneratorTest {
 
     val actualInfo = generator.generate(txn)
 
-    val expectedInfo = SepDepositInfo(ADDRESS, MEMO, MEMO_TYPE)
+    val expectedInfo = SepDepositInfo(ADDRESS, MEMO)
 
     assertEquals(expectedInfo, actualInfo)
   }

@@ -160,7 +160,7 @@ public class MemoHelper {
     return switch (memoXdr.getDiscriminant()) {
       case MEMO_NONE -> null; // No memo
       case MEMO_TEXT -> new String(memoXdr.getText().getBytes(), StandardCharsets.UTF_8);
-      case MEMO_ID -> String.valueOf(memoXdr.getId().getUint64());
+      case MEMO_ID -> String.valueOf(memoXdr.getId().getUint64().getNumber().longValue());
       case MEMO_HASH, MEMO_RETURN ->
           Base64.getEncoder().encodeToString(memoXdr.getHash().getHash());
     };

@@ -19,7 +19,7 @@ app:
   # Indicates, that custody integration is enabled
   custodyEnabled: false
   # Indicates, that RPC requests should be used instead of PATCH /transactions endpoint
-  rpcEnabled: false
+  rpcEnabled: true
 
 # These are secrets shared between Anchor and Platform that are used to safely communicate from `Platform->Anchor`
 # and `Anchor->Platform`, especially when they are in different clusters.

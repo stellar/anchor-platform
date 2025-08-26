@@ -8,9 +8,7 @@ import io.mockk.impl.annotations.MockK
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import java.util.*
 import java.util.stream.Stream
-import org.apache.commons.lang3.StringUtils
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Order
@@ -634,10 +632,8 @@ class Sep31ServiceTest {
     every { sep31DepositInfoGenerator.generate(capture(txForDepositInfoGenerator)) } answers
       {
         val tx: Sep31Transaction = txForDepositInfoGenerator.captured
-        var memo = StringUtils.truncate(tx.id, 32)
-        memo = StringUtils.leftPad(memo, 32, '0')
-        memo = String(Base64.getEncoder().encode(memo.toByteArray()))
-        SepDepositInfo(tx.toAccount, memo, "hash")
+        val memo = (10000..20000).random().toString()
+        SepDepositInfo(tx.toAccount, memo)
       }
 
     // mock client config
@@ -739,7 +735,10 @@ class Sep31ServiceTest {
   @Test
   fun `test post transaction when quote is not supported`() {
     every { sep31DepositInfoGenerator.generate(any()) } returns
-      SepDepositInfo("GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I", "123456", "id")
+      SepDepositInfo(
+        "GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I",
+        "123456",
+      )
 
     every { txnStore.save(any()) } answers
       {
