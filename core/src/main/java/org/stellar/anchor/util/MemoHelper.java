@@ -95,7 +95,7 @@ public class MemoHelper {
       }
     } catch (NumberFormatException nfex) {
       throw new SepValidationException(
-          String.format("Invalid memo %s of type:%s", memo, memoType), nfex);
+          String.format("Invalid memo %s of type: %s", memo, memoType), nfex);
     }
   }
 
