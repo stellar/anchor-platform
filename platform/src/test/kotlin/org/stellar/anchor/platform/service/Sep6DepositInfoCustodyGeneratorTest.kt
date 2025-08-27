@@ -38,7 +38,7 @@ class Sep6DepositInfoCustodyGeneratorTest {
       GenerateDepositAddressResponse(ADDRESS, MEMO, MEMO_TYPE)
 
     val result = generator.generate(txn)
-    val expected = SepDepositInfo(ADDRESS, MEMO, MEMO_TYPE)
+    val expected = SepDepositInfo(ADDRESS, MEMO)
     assertEquals(expected, result)
   }
 }

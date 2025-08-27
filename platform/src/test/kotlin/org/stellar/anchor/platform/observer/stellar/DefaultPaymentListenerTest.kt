@@ -6,7 +6,6 @@ import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.platform.PlatformTransactionData
 import org.stellar.anchor.apiclient.PlatformApiClient
@@ -61,8 +60,6 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  // TODO: enable this test when the SAC memo is implemented
-  @Disabled
   fun `test validate()`() {
     var ledgerTransaction = createTestTransferEvent().ledgerTransaction
     // empty hash
@@ -145,8 +142,6 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  // TODO: enable this test when the SAC memo is implemented
-  @Disabled
   fun `test handleSep24Transaction are called properly`() {
     val event = createTestTransferEvent()
     val ledgerTransaction = event.ledgerTransaction
@@ -161,7 +156,7 @@ class DefaultPaymentListenerTest {
       null
 
     every {
-      sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         capture(slotAccount),
         capture(slotMemo),
         capture(slotStatus),
@@ -173,7 +168,7 @@ class DefaultPaymentListenerTest {
     paymentListener.onReceived(event)
 
     verify(exactly = 1) {
-      sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_1",
         "pending_user_transfer_start",
@@ -188,8 +183,6 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  // TODO: enable this test when the SAC memo is implemented
-  @Disabled
   fun `test handleSep6Transaction are called properly`() {
     val event = createTestTransferEvent()
     val ledgerTransaction = event.ledgerTransaction
@@ -202,8 +195,9 @@ class DefaultPaymentListenerTest {
 
     every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
       null
-    every { sep24TransactionStore.findOneByToAccountAndMemoAndStatus(any(), any(), any()) } returns
-      null
+    every {
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns null
     every {
       sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         capture(slotAccount),
@@ -258,6 +252,7 @@ class DefaultPaymentListenerTest {
                   .asset(testAssetFoo.toXdr())
                   .amount(BigInteger.valueOf(1))
                   .sourceAccount("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
+                  .from("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
                   .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
                   .build()
               )
@@ -277,7 +272,7 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  fun `test if Sep31 findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
+  fun `test if Sep31 findByToAccountAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
     val event = createTestTransferEvent()
     val ledgerTransaction = event.ledgerTransaction
 
@@ -312,8 +307,6 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  // TODO: enable this test when the SAC memo is implemented
-  @Disabled
   fun `test if Sep24 findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
     val event = createTestTransferEvent()
     val ledgerTransaction = event.ledgerTransaction
@@ -324,7 +317,7 @@ class DefaultPaymentListenerTest {
     every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
       null
     every {
-      sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_3",
         "pending_user_transfer_start",
@@ -334,7 +327,7 @@ class DefaultPaymentListenerTest {
     paymentListener.onReceived(event)
 
     verify(exactly = 1) {
-      sep24TransactionStore.findOneByToAccountAndMemoAndStatus(
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_3",
         "pending_user_transfer_start",
@@ -351,9 +344,7 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  // TODO: enable this test when the SAC memo is implemented
-  @Disabled
-  fun `test if Sep6 findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
+  fun `test if Sep6 findOneByWithdrawAnchorAccountAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
     val event = createTestTransferEvent()
     val ledgerTransaction = event.ledgerTransaction
 
@@ -362,8 +353,9 @@ class DefaultPaymentListenerTest {
 
     every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
       null
-    every { sep24TransactionStore.findOneByToAccountAndMemoAndStatus(any(), any(), any()) } returns
-      null
+    every {
+      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns null
     every {
       sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",

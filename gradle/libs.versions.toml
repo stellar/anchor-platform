@@ -28,14 +28,11 @@ jackson-dataformat-yaml = "2.17.2"
 jakarta-annotation-api = "3.0.0"
 jakarta-transaction-api = "2.0.1"
 jakarta-validation-api = "3.1.0"
-jakarta-xml-bind-api = "4.0.2"
 java-stellar-sdk = "2.0.0"
 jjwt = "0.12.5"
 jsonassert = "1.5.0"
 junit = "5.10.3"
 junit-suite-engine = "1.8.2"
-kafka = "3.7.1"
-kafka-json-schema = "7.6.1"
 kotlin = "1.9.23"
 kotlin-logging = "7.0.0"
 kotlinx-json = "1.7.1"
@@ -93,7 +90,6 @@ jackson-dataformat-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-d
 jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api", version.ref = "jakarta-annotation-api" }
 jakarta-transaction-api = { module = "jakarta.transaction:jakarta.transaction-api", version.ref = "jakarta-transaction-api" }
 jakarta-validation-api = { module = "jakarta.validation:jakarta.validation-api", version.ref = "jakarta-validation-api" }
-jakarta-xml-bind-api = { module = "jakarta.xml.bind:jakarta.xml.bind-api", version.ref = "jakarta-xml-bind-api" }
 java-stellar-sdk = { module = "network.lightsail:stellar-sdk", version.ref = "java-stellar-sdk" }
 jjwt = { module = "io.jsonwebtoken:jjwt", version.ref = "jjwt" }
 jsonassert = { module = "org.skyscreamer:jsonassert", version.ref = "jsonassert" }
@@ -101,8 +97,6 @@ junit-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "jun
 junit-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }
 junit-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit" }
 junit-suite-engine = { module = "org.junit.platform:junit-platform-suite-engine", version.ref = "junit-suite-engine" }
-kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafka" }
-kafka-json-schema = { module = "io.confluent:kafka-json-schema-serializer", version.ref = "kafka-json-schema" }
 kotlin-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
 kotlin-logging = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-logging" }
 kotlin-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-json" }
@@ -117,7 +111,6 @@ ktor-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 ktor-netty = { module = "io.ktor:ktor-server-netty-jvm", version.ref = "ktor" }
 ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
 ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
-ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", version.ref = "ktor" }
 ktor-yaml = { module = "io.ktor:ktor-server-config-yaml", version.ref = "ktor" }
 log4j-template-json = { module = "org.apache.logging.log4j:log4j-layout-template-json", version.ref = "log4j-template-json" }
 log4j2-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j" }
@@ -133,8 +126,6 @@ postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" 
 sentry-agent = { module = "io.sentry:sentry-opentelemetry-agent", version.ref = "sentry" }
 servlet-api = { module = "jakarta.servlet:jakarta.servlet-api", version.ref = "servlet-api" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j2" }
-slf4j-jul-bridge = { module = "org.slf4j:jul-to-slf4j", version.ref = "slf4j2" }
-slf4j-log4j12 = { module = "org.slf4j:slf4j-log4j12", version.ref = "slf4j2" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j2" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 spotbugs-annotations = { module = "com.github.spotbugs:spotbugs-annotations", version.ref = "spotbugs-annotations" }
@@ -145,9 +136,7 @@ spring-retry = { module = "org.springframework.retry:spring-retry", version.ref 
 stellar-wallet-sdk = { module = "org.stellar:wallet-sdk", version.ref = "stellar-wallet-sdk" }
 
 [bundles]
-slf4j = ["slf4j-api", "slf4j-log4j12", "slf4j-jul-bridge"]
 junit = ["junit-api", "junit-engine", "junit-params", "junit-suite-engine", "kotlin-stdlib", "kotlin-junit", "mockk"]
-kafka = ["kafka-clients", "kafka-json-schema"]
 ktor = ["ktor-core", "ktor-content-negotiation", "ktor-netty", "ktor-yaml", "ktor-cors", "ktor-server-auth", "ktor-server-auth-jwt"]
 ktor-client = ["ktor-client-core", "ktor-client-content-negotiation", "ktor-client-json", "ktor-client-okhttp"]
 exposed = ["exposed", "exposed-jdbc"]

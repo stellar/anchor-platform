@@ -17,7 +17,6 @@ public class Sep6DepositInfoCustodyGenerator implements Sep6DepositInfoGenerator
   public SepDepositInfo generate(Sep6Transaction txn) throws AnchorException {
     GenerateDepositAddressResponse depositAddress =
         custodyApiClient.generateDepositAddress(txn.getAmountInAsset());
-    return new SepDepositInfo(
-        depositAddress.getAddress(), depositAddress.getMemo(), depositAddress.getMemoType());
+    return new SepDepositInfo(depositAddress.getAddress(), depositAddress.getMemo());
   }
 }

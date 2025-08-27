@@ -30,7 +30,7 @@ class Sep31DepositInfoCustodyGeneratorTest {
 
     val actualInfo = generator.generate(txn)
 
-    val expectedInfo = SepDepositInfo(ADDRESS, MEMO, MEMO_TYPE)
+    val expectedInfo = SepDepositInfo(ADDRESS, MEMO)
 
     assertEquals(expectedInfo, actualInfo)
   }

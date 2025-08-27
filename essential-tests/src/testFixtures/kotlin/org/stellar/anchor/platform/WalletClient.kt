@@ -89,7 +89,7 @@ class WalletClient(
     }
 
     return when (account[0]) {
-      'C' -> sendFromContractAccount(destination, asset, amount, memo, memoType)
+      'C' -> sendFromContractAccount(destination, asset, amount, memo)
       'G',
       'M' -> sendFromClassicAccount(destination, asset, amount, memo, memoType)
       else -> throw Exception("Unsupported destination account type")
@@ -146,19 +146,13 @@ class WalletClient(
     destination: String,
     asset: Asset,
     amount: String,
-    memo: String?,
-    memoType: String?
+    memo: String? = null,
   ): String {
-    // TODO: Implement memo handling for contract accounts after SAC memo is supported in Soroban
-    //    var destAddress = destination
-    //    if (memo!= null && memoType != null) {
-    //      if ("id" == memoType) {
-    //        destAddress = MuxedAccount(destination, BigInteger(memo)).address
-    //      } else {
-    //        throw IllegalArgumentException("Illegal memoType: $memoType. When sending from a
-    // contract account, only memoType 'id' is supported.")
-    //      }
-    //    }
+    var destAddress = destination
+    if (memo != null) {
+      // memo must be a number for MuxedAccount
+      destAddress = MuxedAccount(destination, BigInteger.valueOf(memo.toLong())).address
+    }
 
     val keyPair = KeyPair.fromSecretSeed(signingKey)
     val parameters =
@@ -171,7 +165,7 @@ class WalletClient(
         // to=
         SCVal.builder()
           .discriminant(SCValType.SCV_ADDRESS)
-          .address(Scv.toAddress(destination).address)
+          .address(Scv.toAddress(destAddress).address)
           .build(),
         SCVal.builder()
           .discriminant(SCValType.SCV_I128)

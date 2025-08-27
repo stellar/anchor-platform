@@ -66,7 +66,6 @@ import org.stellar.anchor.sep6.Sep6Transaction;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
 import org.stellar.anchor.util.*;
 import org.stellar.anchor.util.Log;
-import org.stellar.anchor.util.SepHelper;
 import org.stellar.anchor.util.StringHelper;
 import org.stellar.anchor.util.TransactionsParams;
 import org.stellar.sdk.Memo;
@@ -285,7 +284,7 @@ public class TransactionService {
           SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(sep6Transaction);
           sep6Transaction.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
           sep6Transaction.setMemo(sep6DepositInfo.getMemo());
-          sep6Transaction.setMemoType(sep6DepositInfo.getMemoType());
+          sep6Transaction.setMemoType("id");
         }
 
         if (custodyConfig.isCustodyIntegrationEnabled()
@@ -420,7 +419,7 @@ public class TransactionService {
           SepDepositInfo sep24DepositInfo = sep24DepositInfoGenerator.generate(sep24Txn);
           sep24Txn.setWithdrawAnchorAccount(sep24DepositInfo.getStellarAddress());
           sep24Txn.setMemo(sep24DepositInfo.getMemo());
-          sep24Txn.setMemoType(sep24DepositInfo.getMemoType());
+          sep24Txn.setMemoType("id");
         }
 
         txnUpdated = updateField(patch, sep24Txn, "message", txnUpdated);
@@ -506,7 +505,7 @@ public class TransactionService {
     }
 
     // asset amount needs to be non-empty and valid
-    SepHelper.validateAmount(fieldName + ".", amount.getAmount(), allowZero);
+    SepRequestValidator.validateAmount(fieldName + ".", amount.getAmount(), allowZero);
 
     // asset name cannot be empty
     if (StringHelper.isEmpty(amount.getAsset())) {
