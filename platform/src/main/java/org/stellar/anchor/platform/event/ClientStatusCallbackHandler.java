@@ -203,6 +203,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
 
   private Sep6Transaction fromSep6Txn(GetTransactionResponse txn) {
     JdbcSep6Transaction sep6Txn = new JdbcSep6Transaction();
+    sep6Txn.setId(txn.getId());
     sep6Txn.setTransactionId(txn.getId());
     if (txn.getStellarTransactions() != null && !txn.getStellarTransactions().isEmpty()) {
       sep6Txn.setStellarTransactionId(txn.getStellarTransactions().get(0).getId());
