@@ -13,10 +13,16 @@ jobs:
   essential_tests:
     needs: [ gradle_build ]
     uses: ./.github/workflows/sub_essential_tests.yml
+    concurrency:
+      group: ap-test-job
+      cancel-in-progress: false
 
   extended_tests:
     needs: [ gradle_build, essential_tests ]
     uses: ./.github/workflows/sub_extended_tests.yml
+    concurrency:
+      group: ap-test-job
+      cancel-in-progress: false
 
   codeql_analysis:
     uses: ./.github/workflows/sub_codeql_analysis.yml
