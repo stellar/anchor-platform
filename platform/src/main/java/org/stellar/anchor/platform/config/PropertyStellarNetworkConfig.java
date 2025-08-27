@@ -10,6 +10,7 @@ import org.springframework.validation.Errors;
 import org.springframework.validation.ValidationUtils;
 import org.springframework.validation.Validator;
 import org.stellar.anchor.config.RpcAuthConfig;
+import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.util.NetUtil;
 
@@ -20,6 +21,11 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
   private String horizonUrl;
   private String rpcUrl;
   private RpcAuthConfig rpcAuth;
+  private SecretConfig secretConfig;
+
+  public PropertyStellarNetworkConfig(SecretConfig secretConfig) {
+    this.secretConfig = secretConfig;
+  }
 
   @Override
   public boolean supports(@NotNull Class<?> clazz) {
@@ -76,6 +82,14 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
                 "rpc-url-invalid",
                 String.format(
                     "The stellar_network.rpc_url:%s is not in valid format.", config.getRpcUrl()));
+          } else {
+            if (config.getRpcAuth().getType() != RpcAuthConfig.RpcAuthType.NONE) {
+              if (isEmpty(secretConfig.getRpcAuthSecret())) {
+                errors.reject(
+                    "rpc-auth-secret-empty",
+                    "Please set the secret.stellar_network.rpc.auth.secret or SECRET_STELLAR_NETWORK_RPC_AUTH_SECRET environment variable");
+              }
+            }
           }
         }
         break;

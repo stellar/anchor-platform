@@ -142,7 +142,6 @@ public class SepBeans {
   @OnAllSepsEnabled(seps = {"sep6"})
   Sep6Service sep6Service(
       LanguageConfig languageConfig,
-      StellarNetworkConfig stellarNetworkConfig,
       Sep6Config sep6Config,
       AssetService assetService,
       SepRequestValidator requestValidator,
@@ -155,7 +154,6 @@ public class SepBeans {
         new ExchangeAmountsCalculator(sep38QuoteStore);
     return new Sep6Service(
         languageConfig,
-        stellarNetworkConfig,
         sep6Config,
         assetService,
         requestValidator,

@@ -3,7 +3,12 @@ package org.stellar.anchor.sep6;
 import static io.micrometer.core.instrument.Metrics.counter;
 import static org.stellar.anchor.util.AssetHelper.isDepositEnabled;
 import static org.stellar.anchor.util.AssetHelper.isWithdrawEnabled;
+import static org.stellar.anchor.util.Log.debug;
+import static org.stellar.anchor.util.Log.infoF;
 import static org.stellar.anchor.util.MemoHelper.*;
+import static org.stellar.anchor.util.SepHelper.*;
+import static org.stellar.anchor.util.SepHelper.AccountType.Contract;
+import static org.stellar.anchor.util.SepHelper.accountType;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 
 import com.google.common.collect.ImmutableMap;
@@ -24,7 +29,6 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep6Config;
-import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.*;
 import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts;
@@ -32,7 +36,6 @@ import org.stellar.sdk.Memo;
 
 public class Sep6Service {
   private final LanguageConfig languageConfig;
-  private final StellarNetworkConfig stellarNetworkConfig;
   private final Sep6Config sep6Config;
   private final AssetService assetService;
   private final SepRequestValidator requestValidator;
@@ -69,7 +72,6 @@ public class Sep6Service {
 
   public Sep6Service(
       LanguageConfig languageConfig,
-      StellarNetworkConfig stellarNetworkConfig,
       Sep6Config sep6Config,
       AssetService assetService,
       SepRequestValidator requestValidator,
@@ -79,7 +81,6 @@ public class Sep6Service {
       EventService eventService,
       MoreInfoUrlConstructor moreInfoUrlConstructor) {
     this.languageConfig = languageConfig;
-    this.stellarNetworkConfig = stellarNetworkConfig;
     this.sep6Config = sep6Config;
     this.assetService = assetService;
     this.requestValidator = requestValidator;
@@ -124,9 +125,7 @@ public class Sep6Service {
     }
     requestValidator.validateAccount(request.getAccount());
 
-    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-    String id = SepHelper.generateSepTransactionId();
-
+    String id = generateSepTransactionId();
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
             .id(id)
@@ -148,9 +147,22 @@ public class Sep6Service {
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token));
 
+    if (accountType(token.getAccount()) == Contract) {
+      if (request.getMemoType() != null && !request.getMemoType().equalsIgnoreCase("id")) {
+        infoF(
+            "If the request account:{} is a C-account, the memo_type must be set to 'id'",
+            token.getAccount());
+        throw new SepValidationException(
+            "C-account requires 'memo_type' to be set to 'id' in the request");
+      }
+    }
+
+    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
+
     if (memo != null) {
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
-      builder.memoType(SepHelper.memoTypeString(memoType(memo)));
+      builder.memoType(memoTypeString(memoType(memo)));
     }
 
     Sep6Transaction txn = builder.build();
@@ -221,7 +233,7 @@ public class Sep6Service {
     }
 
     Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
@@ -251,8 +263,9 @@ public class Sep6Service {
             .quoteId(request.getQuoteId());
 
     if (memo != null) {
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
-      builder.memoType(SepHelper.memoTypeString(memoType(memo)));
+      builder.memoType(memoTypeString(memoType(memo)));
     }
 
     Sep6Transaction txn = builder.build();
@@ -302,7 +315,7 @@ public class Sep6Service {
     String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
     requestValidator.validateAccount(sourceAccount);
 
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
@@ -376,7 +389,7 @@ public class Sep6Service {
     String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
     requestValidator.validateAccount(sourceAccount);
 
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Amounts amounts;
     if (request.getQuoteId() != null) {
