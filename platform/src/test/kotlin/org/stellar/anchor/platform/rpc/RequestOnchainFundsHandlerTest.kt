@@ -304,7 +304,7 @@ class RequestOnchainFundsHandlerTest {
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
-    assertEquals("Invalid id memo : Invalid memo testMemo of type:MEMO_ID", ex.message)
+    assertEquals("Invalid id memo : Invalid memo testMemo of type: MEMO_ID", ex.message)
 
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
