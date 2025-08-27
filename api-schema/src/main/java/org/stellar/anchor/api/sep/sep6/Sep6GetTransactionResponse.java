@@ -12,6 +12,6 @@ import lombok.Data;
  */
 @Data
 @AllArgsConstructor
-public class GetTransactionResponse {
+public class Sep6GetTransactionResponse {
   Sep6TransactionResponse transaction;
 }

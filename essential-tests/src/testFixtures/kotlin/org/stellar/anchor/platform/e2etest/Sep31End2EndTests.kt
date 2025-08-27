@@ -283,12 +283,10 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
         status = transaction.status
         "Transaction(${transaction.id}) status changed to $current. Message: ${transaction.message}"
       }
-
-      delay(1.seconds)
-
       if (transaction.status in expectedStatuses) {
         return
       }
+      delay(1.seconds)
     }
 
     fail("Transaction wasn't $expectedStatuses in $maxTries tries, last status: $status")
