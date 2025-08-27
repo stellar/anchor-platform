@@ -3,12 +3,8 @@ package org.stellar.anchor.util;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.*;
 import static org.stellar.anchor.util.MathHelper.decimal;
 
-import java.math.BigDecimal;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import org.stellar.anchor.api.exception.AnchorException;
-import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.InvalidStellarAccountException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.sdk.KeyPair;
@@ -16,6 +12,23 @@ import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.xdr.MemoType;
 
 public class SepHelper {
+  public enum AccountType {
+    Classic,
+    Muxed,
+    Contract,
+  }
+
+  public static AccountType accountType(String account) {
+    return switch (account.charAt(0)) {
+      case 'G' -> AccountType.Classic;
+      case 'M' -> AccountType.Muxed;
+      case 'C' -> AccountType.Contract;
+      default ->
+          throw new IllegalArgumentException(
+              String.format("Invalid account type for account: %s", account));
+    };
+  }
+
   /**
    * Generates an Id for SEP transactions.
    *
@@ -66,117 +79,6 @@ public class SepHelper {
 
   public static boolean amountEquals(String amount1, String amount2) {
     return decimal(amount1).compareTo(decimal(amount2)) == 0;
-  }
-
-  public static void validateAmount(String amount) throws AnchorException {
-    validateAmount("", amount);
-  }
-
-  public static BigDecimal validateAmount(String messagePrefix, String amount)
-      throws AnchorException {
-    return validateAmount(messagePrefix, amount, false);
-  }
-
-  public static BigDecimal validateAmount(String messagePrefix, String amount, boolean allowZero)
-      throws BadRequestException {
-    // assetName
-    if (StringHelper.isEmpty(amount)) {
-      throw new BadRequestException(messagePrefix + "amount cannot be empty");
-    }
-
-    BigDecimal sAmount;
-    try {
-      sAmount = decimal(amount);
-    } catch (NumberFormatException e) {
-      throw new BadRequestException(messagePrefix + "amount is invalid", e);
-    }
-
-    if (allowZero) {
-      if (sAmount.signum() < 0) {
-        throw new BadRequestException(messagePrefix + "amount should be non-negative");
-      }
-    } else {
-      if (sAmount.signum() < 1) {
-        throw new BadRequestException(messagePrefix + "amount should be positive");
-      }
-    }
-    return sAmount;
-  }
-
-  public static void validateAmountLimit(String messagePrefix, String amount, Long min, Long max)
-      throws AnchorException {
-    BigDecimal sAmount = validateAmount("", amount);
-
-    // Validate min amount
-    if (min != null) {
-      BigDecimal bdMin = new BigDecimal(min);
-      if (sAmount.compareTo(bdMin) < 0) {
-        throw new BadRequestException(String.format("%samount less than min limit", messagePrefix));
-      }
-    }
-
-    // Validate max amount
-    if (max != null) {
-      BigDecimal bdMax = new BigDecimal(max);
-      if (sAmount.compareTo(bdMax) > 0) {
-        throw new BadRequestException(String.format("%samount exceeds max limit", messagePrefix));
-      }
-    }
-  }
-
-  /**
-   * Validates whether a specified funding method is supported for a given asset.
-   *
-   * @param assetID the unique id of the asset being validated.
-   * @param method the funding method to validate.
-   * @param supportedMethods a list of funding methods supported for the asset.
-   * @throws BadRequestException if the provided funding method is not in the list of supported
-   *     methods.
-   */
-  public static void validateFundingMethod(
-      String assetID, String method, List<String> supportedMethods) throws BadRequestException {
-    if (StringHelper.isEmpty(method)) {
-      throw new BadRequestException("funding_method cannot be empty");
-    }
-    if (!supportedMethods.contains(method)) {
-      throw new BadRequestException(
-          String.format(
-              "invalid funding method %s for asset %s, supported types are %s",
-              method, assetID, supportedMethods));
-    }
-  }
-
-  /**
-   * Checks if the status is valid in a SEP.
-   *
-   * @param sep The sep number.
-   * @param status The name (String) of the status to be checked.
-   * @return true, if valid. Otherwise false
-   */
-  public static boolean validateTransactionStatus(String status, int sep) {
-    for (SepTransactionStatus transactionStatus : SepTransactionStatus.values()) {
-      if (transactionStatus.getStatus().equals(status)) {
-        return validateTransactionStatus(transactionStatus, sep);
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Checks if the status is valid in a SEP.
-   *
-   * @param sep The sep number.
-   * @param status The status to be checked.
-   * @return true, if valid. Otherwise false
-   */
-  public static boolean validateTransactionStatus(SepTransactionStatus status, int sep) {
-    return switch (sep) {
-      case 6 -> (sep6Statuses.contains(status));
-      case 24 -> (sep24Statuses.contains(status));
-      case 31 -> (sep31Statuses.contains(status));
-      default -> false;
-    };
   }
 
   public static final Set<SepTransactionStatus> sep6Statuses =

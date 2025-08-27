@@ -8,6 +8,7 @@ import static org.stellar.anchor.api.sep.SepTransactionStatus.*;
 import static org.stellar.anchor.util.MemoHelper.makeMemo;
 import static org.stellar.anchor.util.MemoHelper.memoType;
 import static org.stellar.anchor.util.SepHelper.memoTypeString;
+import static org.stellar.sdk.xdr.MemoType.MEMO_ID;
 
 import com.google.common.collect.ImmutableSet;
 import java.util.Collections;
@@ -165,22 +166,21 @@ public class RequestOnchainFundsHandler
       throw new InvalidParamsException("fee_details or amount_fee is required");
     }
 
-    boolean canGenerateSep6DepositInfo =
+    boolean canAssignSep6DepositInfo =
         SEP_6 == Sep.from(txn.getProtocol())
             && sep6DepositInfoGenerator instanceof Sep6DepositInfoNoneGenerator;
-    boolean canGenerateSep24DepositInfo =
+    boolean canAssignSep24DepositInfo =
         SEP_24 == Sep.from(txn.getProtocol())
             && sep24DepositInfoGenerator instanceof Sep24DepositInfoNoneGenerator;
-    boolean canGenerateSep31DepositInfo =
+    boolean canAssignSep31DepositInfo =
         SEP_31 == Sep.from(txn.getProtocol())
             && sep31DepositInfoGenerator instanceof Sep31DepositInfoNoneGenerator;
-    if (canGenerateSep6DepositInfo || canGenerateSep24DepositInfo || canGenerateSep31DepositInfo) {
+    if (canAssignSep6DepositInfo || canAssignSep24DepositInfo || canAssignSep31DepositInfo) {
       Memo memo;
       try {
-        memo = makeMemo(request.getMemo(), request.getMemoType());
+        memo = makeMemo(request.getMemo(), "id");
       } catch (SepException e) {
-        throw new InvalidParamsException(
-            String.format("Invalid memo or memo_type: %s", e.getMessage()), e);
+        throw new InvalidParamsException(String.format("Invalid id memo : %s", e.getMessage()), e);
       }
 
       if (memo == null) {
@@ -189,9 +189,7 @@ public class RequestOnchainFundsHandler
       if (request.getDestinationAccount() == null) {
         throw new InvalidParamsException("destination_account is required");
       }
-    } else if (request.getMemo() != null
-        || request.getMemoType() != null
-        || request.getDestinationAccount() != null) {
+    } else if (request.getMemo() != null || request.getDestinationAccount() != null) {
       throw new InvalidParamsException(
           "Anchor is not configured to accept memo, memo_type and destination_account. "
               + "Please set configuration deposit_info_generator_type to 'none' "
@@ -281,17 +279,15 @@ public class RequestOnchainFundsHandler
         }
 
         if (sep6DepositInfoGenerator instanceof Sep6DepositInfoNoneGenerator) {
-          Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-          if (memo != null) {
-            txn6.setMemo(request.getMemo());
-            txn6.setMemoType(memoTypeString(memoType(memo)));
-          }
+          Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          txn6.setMemo(request.getMemo());
+          txn6.setMemoType(memoTypeString(memoType(memo)));
           txn6.setWithdrawAnchorAccount(request.getDestinationAccount());
         } else {
           SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(txn6);
           txn6.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
           txn6.setMemo(sep6DepositInfo.getMemo());
-          txn6.setMemoType(sep6DepositInfo.getMemoType());
+          txn6.setMemoType("id");
         }
 
         if (!CustodyUtils.isMemoTypeSupported(custodyConfig.getType(), txn6.getMemoType())) {
@@ -315,11 +311,9 @@ public class RequestOnchainFundsHandler
         }
 
         if (sep24DepositInfoGenerator instanceof Sep24DepositInfoNoneGenerator) {
-          Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-          if (memo != null) {
-            txn24.setMemo(request.getMemo());
-            txn24.setMemoType(memoTypeString(memoType(memo)));
-          }
+          Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          txn24.setMemo(request.getMemo());
+          txn24.setMemoType(memoTypeString(memoType(memo)));
           txn24.setWithdrawAnchorAccount(request.getDestinationAccount());
           txn24.setToAccount(request.getDestinationAccount());
         } else {
@@ -327,7 +321,7 @@ public class RequestOnchainFundsHandler
           txn24.setToAccount(sep24DepositInfo.getStellarAddress());
           txn24.setWithdrawAnchorAccount(sep24DepositInfo.getStellarAddress());
           txn24.setMemo(sep24DepositInfo.getMemo());
-          txn24.setMemoType(sep24DepositInfo.getMemoType());
+          txn24.setMemoType("id");
         }
 
         if (!CustodyUtils.isMemoTypeSupported(custodyConfig.getType(), txn24.getMemoType())) {
@@ -351,17 +345,15 @@ public class RequestOnchainFundsHandler
         }
 
         if (sep31DepositInfoGenerator instanceof Sep31DepositInfoNoneGenerator) {
-          Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-          if (memo != null) {
-            txn31.setStellarMemo(request.getMemo());
-            txn31.setStellarMemoType(memoTypeString(memoType(memo)));
-          }
+          Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          txn31.setStellarMemo(request.getMemo());
+          txn31.setStellarMemoType(memoTypeString(memoType(memo)));
           txn31.setToAccount(request.getDestinationAccount());
         } else {
           SepDepositInfo sep31DepositInfo = sep31DepositInfoGenerator.generate(txn31);
           txn31.setToAccount(sep31DepositInfo.getStellarAddress());
           txn31.setStellarMemo(sep31DepositInfo.getMemo());
-          txn31.setStellarMemoType(sep31DepositInfo.getMemoType());
+          txn31.setStellarMemoType("id");
         }
 
         Log.infoF("Memo set to {} {}", txn31.getStellarMemoType(), txn31.getStellarMemo());
