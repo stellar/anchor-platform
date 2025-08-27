@@ -351,9 +351,19 @@ public class Sep24Service {
       }
     }
 
-    // Verify that the asset code exists in our database, with deposit enabled.
-    StellarAssetInfo asset = (StellarAssetInfo) assetService.getAsset(assetCode, assetIssuer);
-    if (asset == null || !AssetHelper.isDepositEnabled(asset.getSep24())) {
+    if (assetService.getAsset(assetCode, assetIssuer) == null) {
+      infoF("The asset_code of the deposit request must be set.");
+      throw new SepValidationException("The asset_code of the deposit request must be set");
+    }
+
+    if (!(assetService.getAsset(assetCode, assetIssuer) instanceof StellarAssetInfo asset)) {
+      infoF("The asset_code ({}) of the deposit request must be a stellar asset.", assetCode);
+      throw new SepValidationException(
+          String.format(
+              "The asset_code (%s) of the deposit request must be a stellar asset.", assetCode));
+    }
+
+    if (!AssetHelper.isDepositEnabled(asset.getSep24())) {
       infoF("invalid operation for asset {}", assetCode);
       throw new SepValidationException(String.format("invalid operation for asset %s", assetCode));
     }

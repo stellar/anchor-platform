@@ -209,7 +209,7 @@ public class DefaultAssetService implements AssetService {
       }
     }
     for (AssetInfo asset : fiatAssets) {
-      if (asset.getCode().equals(code) && asset.getIssuer().equals(issuer)) {
+      if (asset.getCode().equals(code)) {
         return asset;
       }
     }
