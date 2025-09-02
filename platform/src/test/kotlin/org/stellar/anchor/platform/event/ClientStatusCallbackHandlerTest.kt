@@ -6,6 +6,7 @@ import io.mockk.mockk
 import java.util.*
 import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -13,11 +14,15 @@ import org.stellar.anchor.LockAndMockStatic
 import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.platform.GetTransactionResponse
-import org.stellar.anchor.api.platform.PlatformTransactionData
-import org.stellar.anchor.api.sep.SepTransactionStatus
+import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
+import org.stellar.anchor.api.platform.PlatformTransactionData.Sep.*
+import org.stellar.anchor.api.sep.SepTransactionStatus.COMPLETED
+import org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_USR_TRANSFER_START
 import org.stellar.anchor.api.sep.sep12.Sep12GetCustomerResponse
 import org.stellar.anchor.api.sep.sep24.TransactionResponse
 import org.stellar.anchor.api.sep.sep6.Sep6TransactionResponse
+import org.stellar.anchor.api.shared.Amount
+import org.stellar.anchor.api.shared.FeeDetails
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.client.ClientConfig.CallbackUrls
 import org.stellar.anchor.client.CustodialClient
@@ -29,6 +34,7 @@ import org.stellar.anchor.sep24.Sep24Helper
 import org.stellar.anchor.sep24.Sep24Helper.fromTxn
 import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31TransactionStore
+import org.stellar.anchor.sep6.Sep6Transaction
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.sep6.Sep6TransactionUtils
 import org.stellar.anchor.util.StringHelper.json
@@ -95,15 +101,14 @@ class ClientStatusCallbackHandlerTest {
     ts = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis()).toString()
     event = AnchorEvent()
     event.transaction = GetTransactionResponse()
-    event.transaction.sep = PlatformTransactionData.Sep.SEP_24
-    event.transaction.kind = PlatformTransactionData.Kind.DEPOSIT
-    event.transaction.status = SepTransactionStatus.COMPLETED
+    event.transaction.sep = SEP_24
+    event.transaction.kind = Kind.DEPOSIT
+    event.transaction.status = COMPLETED
 
     handler =
       ClientStatusCallbackHandler(
         secretConfig,
         clientConfig,
-        sep6TransactionStore,
         assetService,
         sep6MoreInfoUrlConstructor,
         sep24MoreInfoUrlConstructor
@@ -137,29 +142,29 @@ class ClientStatusCallbackHandlerTest {
 
   @Test
   fun `test getCallbackUrl with SEP-6 event`() {
-    event.transaction.sep = PlatformTransactionData.Sep.SEP_6
+    event.transaction.sep = SEP_6
     clientConfig.callbackUrls.sep6 = "https://callback.circle.com/api/v1/anchor/callback/sep6"
     val url = handler.getCallbackUrl(event)
 
-    Assertions.assertEquals(clientConfig.callbackUrls.sep6, url)
+    assertEquals(clientConfig.callbackUrls.sep6, url)
   }
 
   @Test
   fun `test getCallbackUrl with SEP-24 event`() {
-    event.transaction.sep = PlatformTransactionData.Sep.SEP_24
+    event.transaction.sep = SEP_24
     clientConfig.callbackUrls.sep24 = "https://callback.circle.com/api/v1/anchor/callback/sep24"
     val url = handler.getCallbackUrl(event)
 
-    Assertions.assertEquals(clientConfig.callbackUrls.sep24, url)
+    assertEquals(clientConfig.callbackUrls.sep24, url)
   }
 
   @Test
   fun `test getCallbackUrl with SEP-31 event`() {
-    event.transaction.sep = PlatformTransactionData.Sep.SEP_31
+    event.transaction.sep = SEP_31
     clientConfig.callbackUrls.sep31 = "https://callback.circle.com/api/v1/anchor/callback/sep31"
     val url = handler.getCallbackUrl(event)
 
-    Assertions.assertEquals(clientConfig.callbackUrls.sep31, url)
+    assertEquals(clientConfig.callbackUrls.sep31, url)
   }
 
   @Test
@@ -169,7 +174,7 @@ class ClientStatusCallbackHandlerTest {
     clientConfig.callbackUrls.sep12 = "https://callback.circle.com/api/v1/anchor/callback/sep12"
     val url = handler.getCallbackUrl(event)
 
-    Assertions.assertEquals(clientConfig.callbackUrls.sep12, url)
+    assertEquals(clientConfig.callbackUrls.sep12, url)
   }
 
   @Test
@@ -181,5 +186,160 @@ class ClientStatusCallbackHandlerTest {
 
     val request = handler.buildHttpRequest(signer, event)
     Assertions.assertNull(request)
+  }
+
+  @Test
+  fun `fromSep6Txn should map GetTransactionResponse to Sep6Transaction correctly`() {
+    // Arrange
+    val amountIn = Amount("100.0", "USD")
+    val amountOut = Amount("99.0", "USD")
+    val feeDetails = FeeDetails("1.0", "USD", emptyList())
+    val txnResponse =
+      GetTransactionResponse.builder()
+        .id("test-id")
+        .sep(SEP_6)
+        .kind(Kind.WITHDRAWAL)
+        .status(PENDING_USR_TRANSFER_START)
+        .startedAt(java.time.Instant.now())
+        .completedAt(java.time.Instant.now())
+        .transferReceivedAt(java.time.Instant.now())
+        .type("bank_account")
+        .amountIn(amountIn)
+        .amountOut(amountOut)
+        .feeDetails(feeDetails)
+        .amountExpected(amountIn)
+        .sourceAccount("source-account")
+        .destinationAccount("dest-account")
+        .externalTransactionId("ext-id")
+        .memo("memo")
+        .memoType("id")
+        .clientDomain("client.com")
+        .quoteId("quote-id")
+        .message("message")
+        .build()
+
+    // Act
+    val sep6Txn: Sep6Transaction = ClientStatusCallbackHandler.fromSep6Txn(txnResponse)
+
+    // Assert
+    assertEquals("test-id", sep6Txn.id)
+    assertEquals("test-id", sep6Txn.transactionId)
+    assertEquals("ext-id", sep6Txn.externalTransactionId)
+    assertEquals("pending_user_transfer_start", sep6Txn.status)
+    assertEquals("bank_account", sep6Txn.type)
+    assertEquals("100.0", sep6Txn.amountIn)
+    assertEquals("USD", sep6Txn.amountInAsset)
+    assertEquals("99.0", sep6Txn.amountOut)
+    assertEquals("USD", sep6Txn.amountOutAsset)
+    assertEquals(feeDetails, sep6Txn.feeDetails)
+    assertEquals("100.0", sep6Txn.amountExpected)
+    assertEquals("source-account", sep6Txn.fromAccount)
+    assertEquals("dest-account", sep6Txn.toAccount)
+    assertEquals("memo", sep6Txn.memo)
+    assertEquals("id", sep6Txn.memoType)
+    assertEquals("client.com", sep6Txn.clientDomain)
+    assertEquals("quote-id", sep6Txn.quoteId)
+    assertEquals("message", sep6Txn.message)
+  }
+
+  @Test
+  fun `fromSep24Txn should map GetTransactionResponse to Sep24Transaction correctly`() {
+    // Arrange
+    val amountIn = Amount("200.0", "USD")
+    val amountOut = Amount("198.0", "USD")
+    val feeDetails = FeeDetails("2.0", "USD", emptyList())
+    val txnResponse =
+      GetTransactionResponse.builder()
+        .id("sep24-id")
+        .sep(SEP_24)
+        .kind(Kind.DEPOSIT)
+        .status(PENDING_USR_TRANSFER_START)
+        .startedAt(java.time.Instant.now())
+        .completedAt(java.time.Instant.now())
+        .transferReceivedAt(java.time.Instant.now())
+        .amountIn(amountIn)
+        .amountOut(amountOut)
+        .feeDetails(feeDetails)
+        .amountExpected(amountIn)
+        .sourceAccount("source-account")
+        .destinationAccount("dest-account")
+        .externalTransactionId("ext-id")
+        .memo("memo")
+        .memoType("id")
+        .clientDomain("client.com")
+        .quoteId("quote-id")
+        .message("message")
+        .build()
+
+    // Act
+    val sep24Txn = ClientStatusCallbackHandler.fromSep24Txn(txnResponse)
+
+    // Assert
+    assertEquals("sep24-id", sep24Txn.id)
+    assertEquals("sep24-id", sep24Txn.transactionId)
+    assertEquals("ext-id", sep24Txn.externalTransactionId)
+    assertEquals("pending_user_transfer_start", sep24Txn.status)
+    assertEquals("200.0", sep24Txn.amountIn)
+    assertEquals("USD", sep24Txn.amountInAsset)
+    assertEquals("198.0", sep24Txn.amountOut)
+    assertEquals("USD", sep24Txn.amountOutAsset)
+    assertEquals(feeDetails, sep24Txn.feeDetails)
+    assertEquals("200.0", sep24Txn.amountExpected)
+    assertEquals("source-account", sep24Txn.fromAccount)
+    assertEquals("dest-account", sep24Txn.toAccount)
+    assertEquals("memo", sep24Txn.memo)
+    assertEquals("id", sep24Txn.memoType)
+    assertEquals("client.com", sep24Txn.clientDomain)
+    assertEquals("quote-id", sep24Txn.quoteId)
+    assertEquals("message", sep24Txn.message)
+  }
+
+  @Test
+  fun `fromSep31Txn should map GetTransactionResponse to Sep31Transaction correctly`() {
+    // Arrange
+    val amountIn = Amount("300.0", "USD")
+    val amountOut = Amount("295.0", "USD")
+    val feeDetails = FeeDetails("5.0", "USD", emptyList())
+    val txnResponse =
+      GetTransactionResponse.builder()
+        .id("sep31-id")
+        .sep(SEP_31)
+        .kind(Kind.RECEIVE)
+        .status(PENDING_USR_TRANSFER_START)
+        .startedAt(java.time.Instant.now())
+        .completedAt(java.time.Instant.now())
+        .transferReceivedAt(java.time.Instant.now())
+        .amountIn(amountIn)
+        .amountOut(amountOut)
+        .feeDetails(feeDetails)
+        .amountExpected(amountIn)
+        .sourceAccount("source-account")
+        .destinationAccount("dest-account")
+        .externalTransactionId("ext-id")
+        .memo("memo")
+        .memoType("id")
+        .clientDomain("client.com")
+        .quoteId("quote-id")
+        .message("message")
+        .build()
+
+    // Act
+    val sep31Txn = ClientStatusCallbackHandler.fromSep31Txn(txnResponse)
+
+    // Assert
+    assertEquals("sep31-id", sep31Txn.id)
+    assertEquals("ext-id", sep31Txn.externalTransactionId)
+    assertEquals("pending_user_transfer_start", sep31Txn.status)
+    assertEquals("300.0", sep31Txn.amountIn)
+    assertEquals("USD", sep31Txn.amountInAsset)
+    assertEquals("295.0", sep31Txn.amountOut)
+    assertEquals("USD", sep31Txn.amountOutAsset)
+    assertEquals(feeDetails, sep31Txn.feeDetails)
+    assertEquals("300.0", sep31Txn.amountExpected)
+    assertEquals("source-account", sep31Txn.fromAccount)
+    assertEquals("dest-account", sep31Txn.toAccount)
+    assertEquals("client.com", sep31Txn.clientDomain)
+    assertEquals("quote-id", sep31Txn.quoteId)
+    assertEquals("message", sep31Txn.requiredInfoMessage)
   }
 }
