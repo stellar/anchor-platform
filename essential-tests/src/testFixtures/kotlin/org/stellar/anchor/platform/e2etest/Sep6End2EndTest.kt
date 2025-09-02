@@ -12,7 +12,7 @@ import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep12.Sep12Status
-import org.stellar.anchor.api.sep.sep6.GetTransactionResponse
+import org.stellar.anchor.api.sep.sep6.Sep6GetTransactionResponse
 import org.stellar.anchor.api.shared.InstructionField
 import org.stellar.anchor.client.Sep6Client
 import org.stellar.anchor.platform.IntegrationTestBase
@@ -130,7 +130,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
       ),
       completedDepositTxn.transaction.instructions,
     )
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
       )
@@ -209,7 +209,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     waitStatus(deposit.id, COMPLETED, wallet.sep6)
 
     val completedDepositTxn = wallet.sep6.getTransaction(mapOf("id" to deposit.id))
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
       )
@@ -290,7 +290,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
       ),
       completedDepositTxn.transaction.instructions,
     )
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
       )
@@ -368,7 +368,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     waitStatus(deposit.id, COMPLETED, wallet.sep6)
 
     val completedDepositTxn = wallet.sep6.getTransaction(mapOf("id" to deposit.id))
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
       )
@@ -522,7 +522,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     waitStatus(withdraw.id, COMPLETED, wallet.sep6)
 
     val completedWithdrawTxn = wallet.sep6.getTransaction(mapOf("id" to withdraw.id))
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedWithdrawTxn.transaction.stellarTransactionId)
       )
@@ -687,7 +687,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     waitStatus(withdraw.id, COMPLETED, wallet.sep6)
 
     val completedWithdrawTxn = wallet.sep6.getTransaction(mapOf("id" to withdraw.id))
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedWithdrawTxn.transaction.stellarTransactionId)
       )
@@ -703,7 +703,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         "sep6",
         txnId,
         expected.size,
-        GetTransactionResponse::class.java,
+        Sep6GetTransactionResponse::class.java,
       )
     val statuses = callbacks.map { it.transaction.status }
     assertEquals(expected.map { it.status }, statuses)

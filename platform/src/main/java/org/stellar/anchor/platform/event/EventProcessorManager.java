@@ -112,7 +112,6 @@ public class EventProcessorManager {
                 new ClientStatusCallbackHandler(
                     secretConfig,
                     clientConfig,
-                    sep6TransactionStore,
                     assetService,
                     sep6MoreInfoUrlConstructor,
                     sep24MoreInfoUrlConstructor)));
