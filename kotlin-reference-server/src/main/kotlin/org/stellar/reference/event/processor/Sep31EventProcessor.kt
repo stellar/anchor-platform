@@ -56,6 +56,9 @@ class Sep31EventProcessor(
   override suspend fun onTransactionStatusChanged(event: SendEventRequest) {
     val transaction = event.payload.transaction!!
     when (val status = transaction.status) {
+      PENDING_SENDER -> {
+        log.info { "Transaction ${transaction.id} is in pending_sender status" }
+      }
       PENDING_RECEIVER -> {
         if (verifyKyc(transaction).isNotEmpty()) {
           requestKyc(event)

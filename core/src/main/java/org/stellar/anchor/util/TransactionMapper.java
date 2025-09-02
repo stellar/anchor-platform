@@ -266,6 +266,9 @@ public class TransactionMapper {
     }
 
     AssetInfo info = service.getAsset(txn.getRequestAssetCode(), txn.getRequestAssetIssuer());
+    if (info == null) {
+      return null;
+    }
 
     return info.getId();
   }
