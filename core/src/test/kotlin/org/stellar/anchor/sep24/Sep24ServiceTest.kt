@@ -521,7 +521,7 @@ internal class Sep24ServiceTest {
       val request = createTestTransactionRequest()
       request["asset_code"] = "USD"
       request["asset_issuer"] = ""
-      sep24Service.deposit(createTestSep10JwtToken(), request)
+      sep24Service.deposit(createTestWebAuthJwt(), request)
     }
 
     assertThrows<SepValidationException> {
