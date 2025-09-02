@@ -143,6 +143,7 @@ public class SepBeans {
   Sep6Service sep6Service(
       LanguageConfig languageConfig,
       Sep6Config sep6Config,
+      Sep38Config sep38Config,
       AssetService assetService,
       SepRequestValidator requestValidator,
       ClientFinder clientFinder,
@@ -155,6 +156,7 @@ public class SepBeans {
     return new Sep6Service(
         languageConfig,
         sep6Config,
+        sep38Config,
         assetService,
         requestValidator,
         clientFinder,
