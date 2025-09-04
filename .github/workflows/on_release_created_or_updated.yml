@@ -33,7 +33,7 @@ jobs:
           echo "EXPECTED_RELEASE_TAG=$v" | tee -a $GITHUB_ENV
 
       - name: Fail if the release version and the project version do not match
-        if: ${{ github.event.release.tag_name != env.EXPECTED_RELEASE_TAG }}
+        if: ${{ github.event_name == 'release' && github.event.release.tag_name != env.EXPECTED_RELEASE_TAG }}
         run: |
           echo "The release tag is invalid: [${{ github.event.release.tag_name }}]"
           echo "The expected release tag is: [${{ env.EXPECTED_RELEASE_TAG }}]"
