@@ -112,6 +112,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.fullName }}-secrets
                   key: SENTRY_AUTH_TOKEN
+            - name: SECRET_SEP45_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP45_JWT_SECRET
+                  optional: true
           resources:
             requests:
               memory: {{ .Values.services.platform.deployment.resources.requests.memory }}

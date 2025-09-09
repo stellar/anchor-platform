@@ -2,10 +2,10 @@ package org.stellar.anchor.platform.service
 
 import java.util.stream.Stream
 import kotlin.test.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
-import org.stellar.anchor.api.shared.SepDepositInfo
 import org.stellar.anchor.platform.data.JdbcSep31Transaction
 
 class Sep31DepositInfoSelfGeneratorTest {
@@ -39,8 +39,7 @@ class Sep31DepositInfoSelfGeneratorTest {
 
     val actualInfo = generator.generate(txn)
 
-    val expectedInfo = SepDepositInfo(address, memo, "hash")
-
-    assertEquals(expectedInfo, actualInfo)
+    assertEquals(actualInfo.stellarAddress, address)
+    assertTrue(actualInfo.memo.toLongOrNull() != null)
   }
 }

@@ -4,6 +4,7 @@ import com.google.gson.reflect.TypeToken
 import io.micrometer.core.instrument.Counter
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
+import java.math.BigInteger
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -16,6 +17,7 @@ import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED
+import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.api.exception.rpc.InternalErrorException
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException
@@ -34,27 +36,66 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
 import org.stellar.anchor.event.EventService.Session
-import org.stellar.anchor.horizon.Horizon
+import org.stellar.anchor.ledger.Horizon
+import org.stellar.anchor.ledger.LedgerTransaction
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation
 import org.stellar.anchor.metrics.MetricsService
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep6Transaction
+import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper
 import org.stellar.anchor.platform.service.AnchorMetrics.PLATFORM_RPC_TRANSACTION
 import org.stellar.anchor.platform.validator.RequestValidator
 import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31TransactionStore
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
-import org.stellar.sdk.exception.NetworkException
-import org.stellar.sdk.responses.operations.OperationResponse
-import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.anchor.util.MemoHelper
+import org.stellar.sdk.Memo
+import org.stellar.sdk.xdr.Asset
+import org.stellar.sdk.xdr.AssetType
+import org.stellar.sdk.xdr.OperationType
 
 class NotifyOnchainFundsSentHandlerTest {
 
   companion object {
-    private val gson = GsonUtils.getInstance()
     private const val TX_ID = "testId"
     private const val STELLAR_TX_ID = "stellarTxId"
     private const val VALIDATION_ERROR_MESSAGE = "Invalid request"
+
+    private val gson = GsonUtils.getInstance()
+    val stellarTransactions: List<StellarTransaction> =
+      gson.fromJson(
+        stellarTransactionRecord,
+        object : TypeToken<List<StellarTransaction>>() {}.type
+      )
+    private val testLedgerTxn =
+      LedgerTransaction.builder()
+        .hash("stellarTxId")
+        .ledger(1L)
+        .applicationOrder(1)
+        .memo(MemoHelper.toXdr(Memo.id(12345)))
+        .sourceAccount("testSourceAccount")
+        .createdAt(Instant.parse("2023-05-10T10:18:20Z"))
+        .fee(100)
+        .envelopeXdr("testEnvelopeXdr")
+        .operations(
+          listOf(
+            LedgerOperation.builder()
+              .type(OperationType.PAYMENT)
+              .paymentOperation(
+                LedgerPaymentOperation.builder()
+                  .id("12345")
+                  .amount(BigInteger.valueOf(150000000))
+                  .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
+                  .from("testFrom")
+                  .to("testTo")
+                  .build()
+              )
+              .build()
+          )
+        )
+        .build()
   }
 
   @MockK(relaxed = true) private lateinit var txn6Store: Sep6TransactionStore
@@ -92,7 +133,8 @@ class NotifyOnchainFundsSentHandlerTest {
         horizon,
         assetService,
         eventService,
-        metricsService
+        metricsService,
+        mockk<SacToAssetMapper>()
       )
   }
 
@@ -162,8 +204,7 @@ class NotifyOnchainFundsSentHandlerTest {
     every { txn24Store.findByTransactionId(TX_ID) } returns txn24
     every { txn31Store.findByTransactionId(any()) } returns null
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
-    every { horizon.getStellarTxnOperations(any()) } throws
-      NetworkException(400, "Invalid stellar transaction")
+    every { horizon.getTransaction(any()) } throws LedgerException("Invalid stellar transaction")
 
     val ex = assertThrows<InternalErrorException> { handler.handle(request) }
     assertEquals("Failed to retrieve Stellar transaction by ID[stellarTxId]", ex.message)
@@ -259,20 +300,11 @@ class NotifyOnchainFundsSentHandlerTest {
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
 
-    val operationRecordsTypeToken =
-      object : TypeToken<ArrayList<PaymentOperationResponse>>() {}.type
-    val operationRecords: ArrayList<OperationResponse> =
-      gson.fromJson(paymentOperationRecord, operationRecordsTypeToken)
-
-    val stellarTransactionsToken = object : TypeToken<List<StellarTransaction>>() {}.type
-    val stellarTransactions: List<StellarTransaction> =
-      gson.fromJson(stellarTransactions, stellarTransactionsToken)
-
     every { txn6Store.findByTransactionId(any()) } returns null
     every { txn24Store.findByTransactionId(TX_ID) } returns txn24
     every { txn31Store.findByTransactionId(any()) } returns null
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
-    every { horizon.getStellarTxnOperations(STELLAR_TX_ID) } returns operationRecords
+    every { horizon.getTransaction(STELLAR_TX_ID) } returns testLedgerTxn
     every { eventSession.publish(capture(anchorEventCapture)) } just Runs
     every { metricsService.counter(PLATFORM_RPC_TRANSACTION, "SEP", "sep24") } returns
       sepTransactionCounter
@@ -425,20 +457,11 @@ class NotifyOnchainFundsSentHandlerTest {
     val sep6TxnCapture = slot<JdbcSep6Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
 
-    val operationRecordsTypeToken =
-      object : TypeToken<ArrayList<PaymentOperationResponse>>() {}.type
-    val operationRecords: ArrayList<OperationResponse> =
-      gson.fromJson(paymentOperationRecord, operationRecordsTypeToken)
-
-    val stellarTransactionsToken = object : TypeToken<List<StellarTransaction>>() {}.type
-    val stellarTransactions: List<StellarTransaction> =
-      gson.fromJson(stellarTransactions, stellarTransactionsToken)
-
     every { txn6Store.findByTransactionId(TX_ID) } returns txn6
     every { txn24Store.findByTransactionId(any()) } returns null
     every { txn31Store.findByTransactionId(any()) } returns null
     every { txn6Store.save(capture(sep6TxnCapture)) } returns null
-    every { horizon.getStellarTxnOperations(STELLAR_TX_ID) } returns operationRecords
+    every { horizon.getTransaction(STELLAR_TX_ID) } returns testLedgerTxn
     every { eventSession.publish(capture(anchorEventCapture)) } just Runs
     every { metricsService.counter(PLATFORM_RPC_TRANSACTION, "SEP", "sep6") } returns
       sepTransactionCounter
@@ -503,115 +526,10 @@ class NotifyOnchainFundsSentHandlerTest {
     assertTrue(sep6TxnCapture.captured.completedAt >= startDate)
     assertTrue(sep6TxnCapture.captured.completedAt <= endDate)
   }
+}
 
-  private val paymentOperationRecord =
-    """
-[
-  {
-    "amount": "15.0000000",
-    "asset_type": "native",
-    "from": "testFrom",
-    "to": "testTo",
-    "id": 12345,
-    "source_account": "testSourceAccount",
-    "paging_token": "testPagingToken",
-    "created_at": "2023-05-10T10:18:20Z",
-    "transaction_hash": "testTxHash",
-    "transaction_successful": true,
-    "type": "payment",
-    "links": {
-      "effects": {
-        "href": "https://horizon-testnet.stellar.org/operations/12345/effects",
-        "templated": false
-      },
-      "precedes": {
-        "href": "https://horizon-testnet.stellar.org/effects?order\u003dasc\u0026cursor\u003d12345",
-        "templated": false
-      },
-      "self": {
-        "href": "https://horizon-testnet.stellar.org/operations/12345",
-        "templated": false
-      },
-      "succeeds": {
-        "href": "https://horizon-testnet.stellar.org/effects?order\u003ddesc\u0026cursor\u003d12345",
-        "templated": false
-      },
-      "transaction": {
-        "href": "https://horizon-testnet.stellar.org/transactions/testTxHash",
-        "templated": false
-      }
-    },
-    "transaction": {
-      "hash": "testTxHash",
-      "memo": "12345",
-      "memo_type": "id",
-      "ledger": 1234,
-      "created_at": "2023-05-10T10:18:20Z",
-      "source_account": "testSourceAccount",
-      "fee_account": "testFeeAccount",
-      "successful": true,
-      "paging_token": "1234",
-      "source_account_sequence": 12345,
-      "max_fee": 100,
-      "fee_charged": 100,
-      "operation_count": 1,
-      "envelope_xdr": "testEnvelopeXdr",
-      "result_xdr": "testResultXdr",
-      "result_meta_xdr": "resultMetaXdr",
-      "signatures": [
-        "testSignature1"
-      ],
-      "preconditions": {
-        "timeBounds": {
-          "minTime": 0,
-          "maxTime": 1683713997
-        },
-        "min_account_sequence_age": 0,
-        "min_account_sequence_ledger_gap": 0
-      },
-      "links": {
-        "account": {
-          "href": "https://horizon-testnet.stellar.org/accounts/testAccount",
-          "templated": false
-        },
-        "effects": {
-          "href": "https://horizon-testnet.stellar.org/transactions/testTxHash/effects{?cursor,limit,order}",
-          "templated": true
-        },
-        "ledger": {
-          "href": "https://horizon-testnet.stellar.org/ledgers/1234",
-          "templated": false
-        },
-        "operations": {
-          "href": "https://horizon-testnet.stellar.org/transactions/testTxHash/operations{?cursor,limit,order}",
-          "templated": true
-        },
-        "precedes": {
-          "href": "https://horizon-testnet.stellar.org/transactions?order\u003dasc\u0026cursor\u003d12345",
-          "templated": false
-        },
-        "self": {
-          "href": "https://horizon-testnet.stellar.org/transactions/testTxHash",
-          "templated": false
-        },
-        "succeeds": {
-          "href": "https://horizon-testnet.stellar.org/transactions?order\u003ddesc\u0026cursor\u003d12345",
-          "templated": false
-        }
-      },
-      "rate_limit_limit": 0,
-      "rate_limit_remaining": 0,
-      "rate_limit_reset": 0
-    },
-    "rate_limit_limit": 0,
-    "rate_limit_remaining": 0,
-    "rate_limit_reset": 0
-  }
-]  
-"""
-
-  private val stellarTransactions =
-    """
+private const val stellarTransactionRecord =
+  """
 [
   {
     "id": "stellarTxId",
@@ -619,12 +537,12 @@ class NotifyOnchainFundsSentHandlerTest {
     "envelope": "testEnvelopeXdr",
     "payments": [
       {
-        "asset_type": "native",
         "id": "12345",
         "amount": {
           "amount": "15.0000000",
           "asset": "native"
         },
+        "asset_type": "native",
         "payment_type": "payment",
         "source_account": "testFrom",
         "destination_account": "testTo"
@@ -633,4 +551,22 @@ class NotifyOnchainFundsSentHandlerTest {
   }
 ]  
 """
-}
+
+private const val paymentOperationRecord =
+  """
+[
+  {
+    "type": "PAYMENT",
+    "paymentOperation": {
+      "assetType": "native",
+      "sourceAccount": "testSourceAccount",
+      "from": "testFrom",
+      "to": "testTo",
+      "amount": "15.0000000",
+      "asset": {
+        "discriminant": "ASSET_TYPE_NATIVE"
+      }
+    }
+  }
+]  
+"""

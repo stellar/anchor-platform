@@ -9,13 +9,14 @@ import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.component.sep.ApiClientBeans;
 import org.stellar.anchor.platform.config.PropertyCustodyConfig;
 import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.JdbcTransactionPendingTrustRepo;
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager;
+import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
 import org.stellar.anchor.platform.rpc.*;
 import org.stellar.anchor.platform.service.RpcService;
 import org.stellar.anchor.platform.service.TransactionService;
@@ -44,7 +45,7 @@ public class RpcActionBeans {
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
       CustodyConfig custodyConfig,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       AssetService assetService,
       CustodyService custodyService,
       EventService eventService,
@@ -56,7 +57,7 @@ public class RpcActionBeans {
         txn31Store,
         requestValidator,
         custodyConfig,
-        horizon,
+        ledgerClient,
         assetService,
         custodyService,
         eventService,
@@ -226,19 +227,21 @@ public class RpcActionBeans {
       Sep24TransactionStore txn24Store,
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       AssetService assetService,
       EventService eventService,
-      MetricsService metricsService) {
+      MetricsService metricsService,
+      SacToAssetMapper sacToAssetMapper) {
     return new NotifyOnchainFundsReceivedHandler(
         txn6Store,
         txn24Store,
         txn31Store,
         requestValidator,
-        horizon,
+        ledgerClient,
         assetService,
         eventService,
-        metricsService);
+        metricsService,
+        sacToAssetMapper);
   }
 
   @Bean
@@ -247,19 +250,21 @@ public class RpcActionBeans {
       Sep24TransactionStore txn24Store,
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       AssetService assetService,
       EventService eventService,
-      MetricsService metricsService) {
+      MetricsService metricsService,
+      SacToAssetMapper sacToAssetMapper) {
     return new NotifyOnchainFundsSentHandler(
         txn6Store,
         txn24Store,
         txn31Store,
         requestValidator,
-        horizon,
+        ledgerClient,
         assetService,
         eventService,
-        metricsService);
+        metricsService,
+        sacToAssetMapper);
   }
 
   @Bean

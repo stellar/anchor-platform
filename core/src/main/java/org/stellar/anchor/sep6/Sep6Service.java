@@ -3,8 +3,12 @@ package org.stellar.anchor.sep6;
 import static io.micrometer.core.instrument.Metrics.counter;
 import static org.stellar.anchor.util.AssetHelper.isDepositEnabled;
 import static org.stellar.anchor.util.AssetHelper.isWithdrawEnabled;
-import static org.stellar.anchor.util.MemoHelper.makeMemo;
-import static org.stellar.anchor.util.MemoHelper.memoType;
+import static org.stellar.anchor.util.Log.debug;
+import static org.stellar.anchor.util.Log.infoF;
+import static org.stellar.anchor.util.MemoHelper.*;
+import static org.stellar.anchor.util.SepHelper.*;
+import static org.stellar.anchor.util.SepHelper.AccountType.Contract;
+import static org.stellar.anchor.util.SepHelper.accountType;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 
 import com.google.common.collect.ImmutableMap;
@@ -21,24 +25,20 @@ import org.stellar.anchor.api.sep.sep6.*;
 import org.stellar.anchor.api.sep.sep6.InfoResponse.*;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
-import org.stellar.anchor.config.AppConfig;
-import org.stellar.anchor.config.Sep38Config;
+import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep6Config;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator.Amounts;
-import org.stellar.anchor.util.MetricConstants;
-import org.stellar.anchor.util.SepHelper;
-import org.stellar.anchor.util.TransactionMapper;
+import org.stellar.anchor.util.*;
+import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts;
 import org.stellar.sdk.Memo;
 
 public class Sep6Service {
-  private final AppConfig appConfig;
+  private final LanguageConfig languageConfig;
   private final Sep6Config sep6Config;
-  private final Sep38Config sep38Config;
   private final AssetService assetService;
-  private final RequestValidator requestValidator;
+  private final SepRequestValidator requestValidator;
   private final ClientFinder clientFinder;
   private final Sep6TransactionStore txnStore;
   private final ExchangeAmountsCalculator exchangeAmountsCalculator;
@@ -71,19 +71,17 @@ public class Sep6Service {
           MetricConstants.TV_SEP6_DEPOSIT_EXCHANGE);
 
   public Sep6Service(
-      AppConfig appConfig,
+      LanguageConfig languageConfig,
       Sep6Config sep6Config,
-      Sep38Config sep38Config,
       AssetService assetService,
-      RequestValidator requestValidator,
+      SepRequestValidator requestValidator,
       ClientFinder clientFinder,
       Sep6TransactionStore txnStore,
       ExchangeAmountsCalculator exchangeAmountsCalculator,
       EventService eventService,
       MoreInfoUrlConstructor moreInfoUrlConstructor) {
-    this.appConfig = appConfig;
+    this.languageConfig = languageConfig;
     this.sep6Config = sep6Config;
-    this.sep38Config = sep38Config;
     this.assetService = assetService;
     this.requestValidator = requestValidator;
     this.clientFinder = clientFinder;
@@ -99,7 +97,7 @@ public class Sep6Service {
     return infoResponse;
   }
 
-  public StartDepositResponse deposit(Sep10Jwt token, StartDepositRequest request)
+  public StartDepositResponse deposit(WebAuthJwt token, StartDepositRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
@@ -127,9 +125,7 @@ public class Sep6Service {
     }
     requestValidator.validateAccount(request.getAccount());
 
-    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-    String id = SepHelper.generateSepTransactionId();
-
+    String id = generateSepTransactionId();
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
             .id(id)
@@ -145,15 +141,28 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token));
 
+    if (accountType(token.getAccount()) == Contract) {
+      if (request.getMemoType() != null && !request.getMemoType().equalsIgnoreCase("id")) {
+        infoF(
+            "If the request account:{} is a C-account, the memo_type must be set to 'id'",
+            token.getAccount());
+        throw new SepValidationException(
+            "C-account requires 'memo_type' to be set to 'id' in the request");
+      }
+    }
+
+    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
+
     if (memo != null) {
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
-      builder.memoType(SepHelper.memoTypeString(memoType(memo)));
+      builder.memoType(memoTypeString(memoType(memo)));
     }
 
     Sep6Transaction txn = builder.build();
@@ -174,7 +183,7 @@ public class Sep6Service {
         .build();
   }
 
-  public StartDepositResponse depositExchange(Sep10Jwt token, StartDepositExchangeRequest request)
+  public StartDepositResponse depositExchange(WebAuthJwt token, StartDepositExchangeRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
@@ -183,10 +192,6 @@ public class Sep6Service {
     }
     if (request == null) {
       throw new SepValidationException("missing request");
-    }
-    if (!sep38Config.isEnabled()) {
-      throw new SepNotImplementedException(
-          "The deposit-exchange is not supported because sep38.enabled is set to false.");
     }
 
     AssetInfo sellAsset = assetService.getAssetById(request.getSourceAsset());
@@ -228,7 +233,7 @@ public class Sep6Service {
     }
 
     Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
@@ -243,23 +248,24 @@ public class Sep6Service {
             .amountInAsset(amounts.getAmountInAsset())
             .amountOut(amounts.getAmountOut())
             .amountOutAsset(amounts.getAmountOutAsset())
-            .feeDetails(amounts.feeDetails)
+            .feeDetails(amounts.getFeeDetails())
             .amountExpected(request.getAmount())
             .startedAt(Instant.now())
             .userActionRequiredBy(
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
             .quoteId(request.getQuoteId());
 
     if (memo != null) {
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
-      builder.memoType(SepHelper.memoTypeString(memoType(memo)));
+      builder.memoType(memoTypeString(memoType(memo)));
     }
 
     Sep6Transaction txn = builder.build();
@@ -280,7 +286,7 @@ public class Sep6Service {
         .build();
   }
 
-  public StartWithdrawResponse withdraw(Sep10Jwt token, StartWithdrawRequest request)
+  public StartWithdrawResponse withdraw(WebAuthJwt token, StartWithdrawRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
@@ -309,7 +315,7 @@ public class Sep6Service {
     String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
     requestValidator.validateAccount(sourceAccount);
 
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
@@ -328,8 +334,8 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
@@ -352,7 +358,7 @@ public class Sep6Service {
   }
 
   public StartWithdrawResponse withdrawExchange(
-      Sep10Jwt token, StartWithdrawExchangeRequest request) throws AnchorException {
+      WebAuthJwt token, StartWithdrawExchangeRequest request) throws AnchorException {
     sep6TransactionRequestedCounter.increment();
 
     // Pre-validation
@@ -361,10 +367,6 @@ public class Sep6Service {
     }
     if (request == null) {
       throw new SepValidationException("missing request");
-    }
-    if (!sep38Config.isEnabled()) {
-      throw new SepNotImplementedException(
-          "The withdraw-exchange is not supported because sep38.enabled is set to false.");
     }
 
     AssetInfo buyAsset = assetService.getAssetById(request.getDestinationAsset());
@@ -387,7 +389,7 @@ public class Sep6Service {
     String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
     requestValidator.validateAccount(sourceAccount);
 
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Amounts amounts;
     if (request.getQuoteId() != null) {
@@ -428,8 +430,8 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
@@ -452,7 +454,7 @@ public class Sep6Service {
     return StartWithdrawResponse.builder().id(txn.getId()).build();
   }
 
-  public GetTransactionsResponse findTransactions(Sep10Jwt token, GetTransactionsRequest request)
+  public GetTransactionsResponse findTransactions(WebAuthJwt token, GetTransactionsRequest request)
       throws SepException {
     // Pre-validation
     if (token == null) {
@@ -474,7 +476,7 @@ public class Sep6Service {
         txnStore.findTransactions(token.getAccount(), token.getAccountMemo(), request);
     List<Sep6TransactionResponse> responses = new ArrayList<>();
     for (Sep6Transaction txn : transactions) {
-      String lang = validateLanguage(appConfig, request.getLang());
+      String lang = validateLanguage(languageConfig, request.getLang());
       Sep6TransactionResponse tr = Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang);
       responses.add(tr);
     }
@@ -483,7 +485,7 @@ public class Sep6Service {
     return new GetTransactionsResponse(responses);
   }
 
-  public GetTransactionResponse findTransaction(Sep10Jwt token, GetTransactionRequest request)
+  public Sep6GetTransactionResponse findTransaction(WebAuthJwt token, GetTransactionRequest request)
       throws AnchorException {
     // Pre-validation
     if (token == null) {
@@ -510,20 +512,20 @@ public class Sep6Service {
     if (txn == null) {
       throw new NotFoundException("transaction not found");
     }
-    if (!Objects.equals(txn.getSep10Account(), token.getAccount())) {
+    if (!Objects.equals(txn.getWebAuthAccount(), token.getAccount())) {
       throw new NotFoundException("account does not match token");
     }
-    if (!Objects.equals(txn.getSep10AccountMemo(), token.getAccountMemo())) {
+    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
       throw new NotFoundException("account memo does not match token");
     }
 
     sep6TransactionQueriedCounter.increment();
-    String lang = validateLanguage(appConfig, request.getLang());
-    return new GetTransactionResponse(
+    String lang = validateLanguage(languageConfig, request.getLang());
+    return new Sep6GetTransactionResponse(
         Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang));
   }
 
-  InfoResponse buildInfoResponse() {
+  private InfoResponse buildInfoResponse() {
     InfoResponse response =
         InfoResponse.builder()
             .deposit(new HashMap<>())
@@ -565,10 +567,9 @@ public class Sep6Service {
                 .fundingMethods(methods)
                 .fields(ImmutableMap.of("type", type))
                 .build();
+
         response.getDeposit().put(asset.getCode(), deposit);
-        if (sep38Config.isEnabled()) {
-          response.getDepositExchange().put(asset.getCode(), deposit);
-        }
+        response.getDepositExchange().put(asset.getCode(), deposit);
       }
 
       if (isWithdrawEnabled(asset.getSep6())) {
@@ -588,9 +589,7 @@ public class Sep6Service {
                 .build();
 
         response.getWithdraw().put(asset.getCode(), withdraw);
-        if (sep38Config.isEnabled()) {
-          response.getWithdrawExchange().put(asset.getCode(), withdraw);
-        }
+        response.getWithdrawExchange().put(asset.getCode(), withdraw);
       }
     }
     return response;

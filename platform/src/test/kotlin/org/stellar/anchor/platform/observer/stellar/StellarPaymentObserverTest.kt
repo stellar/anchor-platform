@@ -5,14 +5,16 @@ package org.stellar.anchor.platform.observer.stellar
 import com.google.gson.reflect.TypeToken
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
-import java.util.*
 import javax.net.ssl.SSLProtocolException
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.platform.HealthCheckStatus.RED
+import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
+import org.stellar.anchor.platform.observer.PaymentListener
+import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.ObserverStatus
 import org.stellar.sdk.Server
 import org.stellar.sdk.exception.NetworkException
 import org.stellar.sdk.requests.RequestBuilder
@@ -28,8 +30,9 @@ class StellarPaymentObserverTest {
 
   @MockK lateinit var paymentStreamerCursorStore: StellarPaymentStreamerCursorStore
   @MockK lateinit var paymentObservingAccountsManager: PaymentObservingAccountsManager
+  @MockK lateinit var paymentListener: PaymentListener
 
-  val stellarPaymentObserverConfig = StellarPaymentObserverConfig(1, 5, 1, 1, 2, 1, 2)
+  private val stellarPaymentObserverConfig = StellarPaymentObserverConfig(1, 5, 1, 1, 2, 1, 2)
 
   @BeforeEach
   fun setUp() {
@@ -39,34 +42,34 @@ class StellarPaymentObserverTest {
   @Test
   fun `test if StellarPaymentObserver will fetch the cursor from the DB, then fallback to the Network`() {
     // 1 - If there is a stored cursor, we'll use that.
-    every { paymentStreamerCursorStore.load() } returns "123"
+    every { paymentStreamerCursorStore.loadHorizonCursor() } returns "123"
     var stellarObserver =
       spyk(
-        StellarPaymentObserver(
-          TEST_HORIZON_URI,
+        HorizonPaymentObserver(
+          Horizon(TEST_HORIZON_URI),
           stellarPaymentObserverConfig,
           null,
           paymentObservingAccountsManager,
-          paymentStreamerCursorStore
+          paymentStreamerCursorStore,
         )
       )
 
-    every { stellarObserver.fetchLatestCursorFromNetwork() } returns "1000"
+    every { stellarObserver.fetchLatestCursorFromHorizon() } returns "1000"
     var gotCursor = stellarObserver.fetchStreamingCursor()
     assertEquals("800", gotCursor)
-    verify(exactly = 1) { paymentStreamerCursorStore.load() }
+    verify(exactly = 1) { paymentStreamerCursorStore.loadHorizonCursor() }
 
     // 2 - If there is no stored constructor, we will fall back to fetching a result from the
     // network.
-    every { paymentStreamerCursorStore.load() } returns null
+    every { paymentStreamerCursorStore.loadHorizonCursor() } returns null
     mockkConstructor(Server::class)
     stellarObserver =
-      StellarPaymentObserver(
-        TEST_HORIZON_URI,
+      HorizonPaymentObserver(
+        Horizon(TEST_HORIZON_URI),
         stellarPaymentObserverConfig,
         null,
         paymentObservingAccountsManager,
-        paymentStreamerCursorStore
+        paymentStreamerCursorStore,
       )
 
     // 2.1 If fetching from the network throws an error, we return `null`
@@ -79,7 +82,7 @@ class StellarPaymentObserverTest {
     } throws NetworkException(null, "Some IO Problem happened!")
 
     gotCursor = stellarObserver.fetchStreamingCursor()
-    verify(exactly = 2) { paymentStreamerCursorStore.load() }
+    verify(exactly = 2) { paymentStreamerCursorStore.loadHorizonCursor() }
     verify(exactly = 1) {
       constructedWith<Server>(EqMatcher(TEST_HORIZON_URI))
         .payments()
@@ -99,7 +102,7 @@ class StellarPaymentObserverTest {
     } returns null
 
     gotCursor = stellarObserver.fetchStreamingCursor()
-    verify(exactly = 3) { paymentStreamerCursorStore.load() }
+    verify(exactly = 3) { paymentStreamerCursorStore.loadHorizonCursor() }
     verify(exactly = 2) {
       constructedWith<Server>(EqMatcher(TEST_HORIZON_URI))
         .payments()
@@ -134,7 +137,7 @@ class StellarPaymentObserverTest {
     } returns operationPage
 
     gotCursor = stellarObserver.fetchStreamingCursor()
-    verify(exactly = 4) { paymentStreamerCursorStore.load() }
+    verify(exactly = 4) { paymentStreamerCursorStore.loadHorizonCursor() }
     verify(exactly = 3) {
       constructedWith<Server>(EqMatcher(TEST_HORIZON_URI))
         .payments()
@@ -150,17 +153,17 @@ class StellarPaymentObserverTest {
     val stream: SSEStream<OperationResponse> = mockk(relaxed = true)
     val observer =
       spyk(
-        StellarPaymentObserver(
-          TEST_HORIZON_URI,
+        HorizonPaymentObserver(
+          Horizon(TEST_HORIZON_URI),
           stellarPaymentObserverConfig,
           null,
           paymentObservingAccountsManager,
-          paymentStreamerCursorStore
+          paymentStreamerCursorStore,
         )
       )
     every { observer.startSSEStream() } returns stream
     observer.start()
-    observer.handleFailure(Optional.of(SSLProtocolException("")))
+    observer.handleFailure(SSLProtocolException(""))
     assertEquals(ObserverStatus.STREAM_ERROR, observer.status)
 
     val checkResult = observer.check()

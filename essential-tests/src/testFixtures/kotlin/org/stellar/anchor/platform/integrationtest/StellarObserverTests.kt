@@ -3,13 +3,15 @@ package org.stellar.anchor.platform.integrationtest
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.gson
+import org.stellar.anchor.util.Log.info
+import org.stellar.anchor.util.StringHelper.isNotEmpty
 
-class StellarObserverTests : AbstractIntegrationTests(TestConfig()) {
+class StellarObserverTests : IntegrationTestBase(TestConfig()) {
   companion object {
     const val OBSERVER_HEALTH_SERVER_PORT = 8083
   }
@@ -29,38 +31,47 @@ class StellarObserverTests : AbstractIntegrationTests(TestConfig()) {
         .header("Content-Type", "application/json")
         .get()
         .build()
-    val response = httpClient.newCall(httpRequest).execute()
-    Assertions.assertEquals(200, response.code)
 
-    val responseBody = gson.fromJson(response.body!!.string(), HashMap::class.java)
-    Assertions.assertEquals(5, responseBody.size)
-    Assertions.assertNotNull(responseBody["started_at"])
-    Assertions.assertNotNull(responseBody["elapsed_time_ms"])
-    Assertions.assertNotNull(responseBody["number_of_checks"])
-    Assertions.assertEquals(2L, responseBody["number_of_checks"])
-    Assertions.assertNotNull(responseBody["version"])
-    Assertions.assertNotNull(responseBody["checks"])
+    info("Sending request to Stellar Observer health endpoint: ${httpRequest.url}")
+
+    val response = httpClient.newCall(httpRequest).execute()
+    assertEquals(200, response.code)
+    val responseBodyStr = response.body!!.string()
+
+    info("Received response from Stellar Observer health endpoint: $responseBodyStr")
+
+    val responseBody = gson.fromJson(responseBodyStr, HashMap::class.java)
+    assertEquals(5, responseBody.size)
+    assertNotNull(responseBody["started_at"])
+    assertNotNull(responseBody["elapsed_time_ms"])
+    assertNotNull(responseBody["number_of_checks"])
+    assertEquals(2L, responseBody["number_of_checks"])
+    assertNotNull(responseBody["version"])
+    assertNotNull(responseBody["checks"])
 
     val checks = responseBody["checks"] as Map<*, *>
 
-    Assertions.assertEquals(2, checks.size)
-    Assertions.assertNotNull(checks["config"])
-    Assertions.assertNotNull(checks["stellar_payment_observer"])
+    assertEquals(2, checks.size)
+    assertNotNull(checks["config"])
 
-    val stellarPaymentObserverCheck = checks["stellar_payment_observer"] as Map<*, *>
-    Assertions.assertEquals(2, stellarPaymentObserverCheck.size)
-    Assertions.assertTrue(
-      (stellarPaymentObserverCheck["status"] as String) in setOf("GREEN", "YELLOW")
-    )
+    if (isNotEmpty(this.config.env["stellar_network.rpc_url"])) {
+      val stellarPaymentObserverCheck = checks["stellar_rpc_payment_observer"] as Map<*, *>
+      assertNotNull(stellarPaymentObserverCheck)
+      assertEquals(stellarPaymentObserverCheck["status"], "GREEN")
+      // TODO: Check the streams after unified event observer is implemented.
+    } else {
+      val stellarPaymentObserverCheck = checks["horizon_payment_observer"] as Map<*, *>
+      assertTrue((stellarPaymentObserverCheck["status"] as String) in setOf("GREEN", "YELLOW"))
 
-    val observerStreams = stellarPaymentObserverCheck["streams"] as List<*>
-    Assertions.assertEquals(1, observerStreams.size)
+      val observerStreams = stellarPaymentObserverCheck["streams"] as List<*>
+      assertEquals(1, observerStreams.size)
 
-    val stream1 = observerStreams[0] as Map<*, *>
-    Assertions.assertEquals(5, stream1.size)
-    Assertions.assertEquals(false, stream1["thread_shutdown"])
-    Assertions.assertEquals(false, stream1["thread_terminated"])
-    Assertions.assertEquals(false, stream1["stopped"])
-    Assertions.assertNotNull(stream1["last_event_id"])
+      val stream1 = observerStreams[0] as Map<*, *>
+      assertEquals(5, stream1.size)
+      assertEquals(false, stream1["thread_shutdown"])
+      assertEquals(false, stream1["thread_terminated"])
+      assertEquals(false, stream1["stopped"])
+      assertNotNull(stream1["last_event_id"])
+    }
   }
 }

@@ -5,13 +5,14 @@ import java.time.format.DateTimeFormatter
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.sep.sep38.Sep38Context.SEP31
+import org.stellar.anchor.api.sep.sep38.Sep38Context.SEP6
 import org.stellar.anchor.client.Sep38Client
-import org.stellar.anchor.platform.AbstractIntegrationTests
+import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.printRequest
 import org.stellar.anchor.platform.printResponse
 
-class Sep38Tests : AbstractIntegrationTests(TestConfig()) {
+class Sep38Tests : IntegrationTestBase(TestConfig()) {
   private val sep38Client: Sep38Client =
     Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
 
@@ -37,6 +38,17 @@ class Sep38Tests : AbstractIntegrationTests(TestConfig()) {
         SEP31,
       )
     assertEquals(price.sellAmount, "100")
+
+    // GET {SEP38}/price - native asset
+    printRequest("Calling GET /price for native asset")
+    val nativePrice =
+      sep38Client.getPrice(
+        "iso4217:USD",
+        "10",
+        "stellar:native",
+        SEP6,
+      )
+    assertEquals(nativePrice.sellAmount, "10")
 
     // POST {SEP38}/quote
     printRequest("Calling POST /quote")

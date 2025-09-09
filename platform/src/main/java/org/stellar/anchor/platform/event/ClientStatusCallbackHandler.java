@@ -28,6 +28,7 @@ import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.platform.GetTransactionResponse;
 import org.stellar.anchor.api.sep.sep24.Sep24GetTransactionResponse;
+import org.stellar.anchor.api.sep.sep6.Sep6GetTransactionResponse;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.client.ClientConfig;
 import org.stellar.anchor.config.SecretConfig;
@@ -38,7 +39,6 @@ import org.stellar.anchor.sep31.RefundPayment;
 import org.stellar.anchor.sep31.Sep31Refunds;
 import org.stellar.anchor.sep31.Sep31Transaction;
 import org.stellar.anchor.sep6.Sep6Transaction;
-import org.stellar.anchor.sep6.Sep6TransactionStore;
 import org.stellar.anchor.sep6.Sep6TransactionUtils;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.KeyPair;
@@ -53,7 +53,6 @@ public class ClientStatusCallbackHandler extends EventHandler {
           .build();
   private final SecretConfig secretConfig;
   private final ClientConfig clientConfig;
-  private final Sep6TransactionStore sep6TransactionStore;
   private final AssetService assetService;
   private final MoreInfoUrlConstructor sep6MoreInfoUrlConstructor;
   private final MoreInfoUrlConstructor sep24MoreInfoUrlConstructor;
@@ -61,7 +60,6 @@ public class ClientStatusCallbackHandler extends EventHandler {
   public ClientStatusCallbackHandler(
       SecretConfig secretConfig,
       ClientConfig clientConfig,
-      Sep6TransactionStore sep6TransactionStore,
       AssetService assetService,
       MoreInfoUrlConstructor sep6MoreInfoUrlConstructor,
       MoreInfoUrlConstructor sep24MoreInfoUrlConstructor) {
@@ -69,7 +67,6 @@ public class ClientStatusCallbackHandler extends EventHandler {
     this.secretConfig = secretConfig;
     this.clientConfig = clientConfig;
     this.assetService = assetService;
-    this.sep6TransactionStore = sep6TransactionStore;
     this.sep6MoreInfoUrlConstructor = sep6MoreInfoUrlConstructor;
     this.sep24MoreInfoUrlConstructor = sep24MoreInfoUrlConstructor;
   }
@@ -175,11 +172,9 @@ public class ClientStatusCallbackHandler extends EventHandler {
     if (event.getTransaction() != null) {
       switch (event.getTransaction().getSep()) {
         case SEP_6:
-          // TODO: remove dependence on the transaction store
-          Sep6Transaction sep6Txn =
-              sep6TransactionStore.findByTransactionId(event.getTransaction().getId());
-          org.stellar.anchor.api.sep.sep6.GetTransactionResponse sep6TxnRes =
-              new org.stellar.anchor.api.sep.sep6.GetTransactionResponse(
+          Sep6Transaction sep6Txn = fromSep6Txn(event.getTransaction());
+          Sep6GetTransactionResponse sep6TxnRes =
+              new Sep6GetTransactionResponse(
                   Sep6TransactionUtils.fromTxn(sep6Txn, sep6MoreInfoUrlConstructor, null));
           return json(sep6TxnRes);
         case SEP_24:
@@ -202,8 +197,54 @@ public class ClientStatusCallbackHandler extends EventHandler {
     }
   }
 
-  private Sep24Transaction fromSep24Txn(GetTransactionResponse txn) {
+  static Sep6Transaction fromSep6Txn(GetTransactionResponse txn) {
+    JdbcSep6Transaction sep6Txn = new JdbcSep6Transaction();
+    sep6Txn.setId(txn.getId());
+    sep6Txn.setTransactionId(txn.getId());
+    if (txn.getStellarTransactions() != null && !txn.getStellarTransactions().isEmpty()) {
+      sep6Txn.setStellarTransactionId(txn.getStellarTransactions().get(0).getId());
+    }
+    sep6Txn.setExternalTransactionId(txn.getExternalTransactionId());
+    sep6Txn.setStatus(txn.getStatus().getStatus());
+    sep6Txn.setKind(txn.getKind().kind);
+    sep6Txn.setStartedAt(txn.getStartedAt());
+    sep6Txn.setCompletedAt(txn.getCompletedAt());
+    sep6Txn.setTransferReceivedAt(txn.getTransferReceivedAt());
+    sep6Txn.setType(txn.getType());
+    if (txn.getAmountIn() != null) {
+      sep6Txn.setAmountIn(txn.getAmountIn().getAmount());
+      sep6Txn.setAmountInAsset(txn.getAmountIn().getAsset());
+    }
+    if (txn.getAmountOut() != null) {
+      sep6Txn.setAmountOut(txn.getAmountOut().getAmount());
+      sep6Txn.setAmountOutAsset(txn.getAmountOut().getAsset());
+    }
+    if (txn.getFeeDetails() != null) {
+      sep6Txn.setFeeDetails(txn.getFeeDetails());
+    }
+    if (txn.getAmountExpected() != null) {
+      sep6Txn.setAmountExpected(txn.getAmountExpected().getAmount());
+    }
+    sep6Txn.setFromAccount(txn.getSourceAccount());
+    sep6Txn.setToAccount(txn.getDestinationAccount());
+    sep6Txn.setMemo(txn.getMemo());
+    sep6Txn.setMemoType(txn.getMemoType());
+    sep6Txn.setClientDomain(txn.getClientDomain());
+    sep6Txn.setQuoteId(txn.getQuoteId());
+    sep6Txn.setMessage(txn.getMessage());
+    sep6Txn.setRefunds(txn.getRefunds());
+    sep6Txn.setRefundMemo(txn.getRefundMemo());
+    sep6Txn.setRefundMemoType(txn.getRefundMemoType());
+    sep6Txn.setRequiredInfoMessage(txn.getRequiredInfoMessage());
+    sep6Txn.setRequiredInfoUpdates(txn.getRequiredInfoUpdates());
+    sep6Txn.setInstructions(txn.getInstructions());
+
+    return sep6Txn;
+  }
+
+  static Sep24Transaction fromSep24Txn(GetTransactionResponse txn) {
     JdbcSep24Transaction sep24Txn = new JdbcSep24Transaction();
+    sep24Txn.setId(txn.getId());
     sep24Txn.setTransactionId(txn.getId());
     sep24Txn.setKind(txn.getKind().kind);
     sep24Txn.setStatus(txn.getStatus().getStatus());
@@ -214,6 +255,9 @@ public class ClientStatusCallbackHandler extends EventHandler {
     if (txn.getAmountOut() != null) {
       sep24Txn.setAmountOut(txn.getAmountOut().getAmount());
       sep24Txn.setAmountOutAsset(txn.getAmountOut().getAsset());
+    }
+    if (txn.getAmountExpected() != null) {
+      sep24Txn.setAmountExpected(txn.getAmountExpected().getAmount());
     }
     if (txn.getFeeDetails() != null) {
       sep24Txn.setFeeDetails(txn.getFeeDetails());
@@ -226,6 +270,8 @@ public class ClientStatusCallbackHandler extends EventHandler {
     sep24Txn.setToAccount(txn.getDestinationAccount());
     sep24Txn.setMemo(txn.getMemo());
     sep24Txn.setMemoType(txn.getMemoType());
+    sep24Txn.setClientDomain(txn.getClientDomain());
+    sep24Txn.setQuoteId(txn.getQuoteId());
 
     if (txn.getRefunds() != null) {
       List<Sep24RefundPayment> paymentList =
@@ -250,7 +296,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
     return sep24Txn;
   }
 
-  private Sep31Transaction fromSep31Txn(GetTransactionResponse txn) {
+  static Sep31Transaction fromSep31Txn(GetTransactionResponse txn) {
     JdbcSep31Transaction sep31Txn = new JdbcSep31Transaction();
     sep31Txn.setId(txn.getId());
     sep31Txn.setStatus(txn.getStatus().getStatus());
@@ -262,6 +308,9 @@ public class ClientStatusCallbackHandler extends EventHandler {
       sep31Txn.setAmountOut(txn.getAmountOut().getAmount());
       sep31Txn.setAmountOutAsset(txn.getAmountOut().getAsset());
     }
+    if (txn.getAmountExpected() != null) {
+      sep31Txn.setAmountExpected(txn.getAmountExpected().getAmount());
+    }
     if (txn.getFeeDetails() != null) {
       sep31Txn.setFeeDetails(txn.getFeeDetails());
     }
@@ -271,6 +320,10 @@ public class ClientStatusCallbackHandler extends EventHandler {
     sep31Txn.setRequiredInfoMessage(txn.getMessage());
     sep31Txn.setStellarMemo(txn.getMemo());
     sep31Txn.setStellarMemoType(txn.getMemoType());
+    sep31Txn.setFromAccount(txn.getSourceAccount());
+    sep31Txn.setToAccount(txn.getDestinationAccount());
+    sep31Txn.setClientDomain(txn.getClientDomain());
+    sep31Txn.setQuoteId(txn.getQuoteId());
 
     if (txn.getRefunds() != null) {
       List<RefundPayment> paymentList =

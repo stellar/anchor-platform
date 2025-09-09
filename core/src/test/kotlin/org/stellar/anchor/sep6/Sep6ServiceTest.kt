@@ -7,7 +7,7 @@ import java.time.Instant
 import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -24,7 +24,6 @@ import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.NotFoundException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
-import org.stellar.anchor.api.exception.SepNotImplementedException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.sep.sep6.*
 import org.stellar.anchor.api.shared.Amount
@@ -34,25 +33,27 @@ import org.stellar.anchor.api.shared.Refunds
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.client.ClientFinder
-import org.stellar.anchor.config.AppConfig
-import org.stellar.anchor.config.Sep38Config
+import org.stellar.anchor.config.LanguageConfig
 import org.stellar.anchor.config.Sep6Config
+import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.event.EventService
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator.Amounts
+import org.stellar.anchor.util.ExchangeAmountsCalculator
+import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.SepRequestValidator
 
 class Sep6ServiceTest {
   companion object {
     val gson: Gson = GsonUtils.getInstance()
-    val token = TestHelper.createSep10Jwt(TEST_ACCOUNT, TEST_MEMO)
+    val token = TestHelper.createWebAuthJwt(TEST_ACCOUNT, TEST_MEMO)
   }
 
   private val assetService: AssetService = DefaultAssetService.fromJsonResource("test_assets.json")
 
-  @MockK(relaxed = true) lateinit var appConfig: AppConfig
+  @MockK(relaxed = true) lateinit var languageConfig: LanguageConfig
+  @MockK(relaxed = true) lateinit var stellarNetworkConfig: StellarNetworkConfig
   @MockK(relaxed = true) lateinit var sep6Config: Sep6Config
-  @MockK(relaxed = true) lateinit var sep38Config: Sep38Config
-  @MockK(relaxed = true) lateinit var requestValidator: RequestValidator
+  @MockK(relaxed = true) lateinit var requestValidator: SepRequestValidator
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
   @MockK(relaxed = true) lateinit var txnStore: Sep6TransactionStore
   @MockK(relaxed = true) lateinit var exchangeAmountsCalculator: ExchangeAmountsCalculator
@@ -67,7 +68,6 @@ class Sep6ServiceTest {
     MockKAnnotations.init(this, relaxUnitFun = true)
     every { sep6Config.features.isAccountCreation } returns false
     every { sep6Config.features.isClaimableBalances } returns false
-    every { sep38Config.isEnabled } returns true
     every { clientFinder.getClientName(token) } returns "vibrant"
     every { txnStore.newInstance() } returns PojoSep6Transaction()
     every { eventService.createSession(any(), any()) } returns eventSession
@@ -77,9 +77,8 @@ class Sep6ServiceTest {
       "https://example.com/more_info"
     sep6Service =
       Sep6Service(
-        appConfig,
+        languageConfig,
         sep6Config,
-        sep38Config,
         assetService,
         requestValidator,
         clientFinder,
@@ -99,38 +98,6 @@ class Sep6ServiceTest {
       gson.fromJson(Sep6ServiceTestData.infoJson, InfoResponse::class.java),
       infoResponse,
     )
-  }
-
-  @Test
-  fun `test info response with sep38 disabled`() {
-    every { sep38Config.isEnabled } returns false
-
-    val infoResponse = sep6Service.buildInfoResponse()
-
-    assertTrue(infoResponse.withdrawExchange.isEmpty())
-    assertTrue(infoResponse.depositExchange.isEmpty())
-  }
-
-  @Test
-  fun `test withdrawExchange and depositExchange when sep38 is disabled`() {
-    every { sep38Config.isEnabled } returns false
-
-    sep6Service =
-      Sep6Service(
-        appConfig,
-        sep6Config,
-        sep38Config,
-        assetService,
-        requestValidator,
-        clientFinder,
-        txnStore,
-        exchangeAmountsCalculator,
-        eventService,
-        sep6MoreInfoUrlConstructor,
-      )
-
-    assertThrows<SepNotImplementedException> { sep6Service.depositExchange(mockk(), mockk()) }
-    assertThrows<SepNotImplementedException> { sep6Service.withdrawExchange(mockk(), mockk()) }
   }
 
   @Test
@@ -181,11 +148,11 @@ class Sep6ServiceTest {
     assertNotNull(slotTxn.captured.startedAt)
     val dbDeadline = slotTxn.captured.userActionRequiredBy.epochSecond
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
-    assertTrue(
+    Assertions.assertTrue(
       dbDeadline >= expectedDeadline - 2,
       "Expected $expectedDeadline got $dbDeadline}",
     )
-    assertTrue(
+    Assertions.assertTrue(
       dbDeadline <= expectedDeadline,
       "Expected $expectedDeadline got $dbDeadline}",
     )
@@ -441,11 +408,11 @@ class Sep6ServiceTest {
     assertNotNull(slotTxn.captured.startedAt)
     val dbDeadline = slotTxn.captured.userActionRequiredBy.epochSecond
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
-    assertTrue(
+    Assertions.assertTrue(
       dbDeadline >= expectedDeadline - 2,
       "Expected $expectedDeadline got $dbDeadline}",
     )
-    assertTrue(
+    Assertions.assertTrue(
       dbDeadline <= expectedDeadline,
       "Expected $expectedDeadline got $dbDeadline}",
     )
@@ -737,11 +704,11 @@ class Sep6ServiceTest {
     assertNotNull(slotTxn.captured.startedAt)
     val dbDeadline = slotTxn.captured.userActionRequiredBy.epochSecond
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
-    assertTrue(
+    Assertions.assertTrue(
       dbDeadline >= expectedDeadline - 2,
       "Expected $expectedDeadline got $dbDeadline}",
     )
-    assertTrue(
+    Assertions.assertTrue(
       dbDeadline <= expectedDeadline,
       "Expected $expectedDeadline got $dbDeadline}",
     )
@@ -1097,11 +1064,11 @@ class Sep6ServiceTest {
     assertNotNull(slotTxn.captured.startedAt)
     val dbDeadline = slotTxn.captured.userActionRequiredBy.epochSecond
     val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
-    assertTrue(
+    Assertions.assertTrue(
       dbDeadline >= expectedDeadline - 2,
       "Expected $expectedDeadline got $dbDeadline}",
     )
-    assertTrue(
+    Assertions.assertTrue(
       dbDeadline <= expectedDeadline,
       "Expected $expectedDeadline got $dbDeadline}",
     )
@@ -1309,7 +1276,7 @@ class Sep6ServiceTest {
     val request = GetTransactionRequest.builder().id(depositTxn.id).lang("en-US").build()
     every { txnStore.findByTransactionId(depositTxn.id) } returns depositTxn
 
-    sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+    sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
 
     verify { txnStore.findByTransactionId(depositTxn.id) }
   }
@@ -1325,7 +1292,7 @@ class Sep6ServiceTest {
     every { txnStore.findByStellarTransactionId(depositTxn.stellarTransactionId) } returns
       depositTxn
 
-    sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+    sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
 
     verify { txnStore.findByStellarTransactionId(depositTxn.stellarTransactionId) }
   }
@@ -1341,7 +1308,7 @@ class Sep6ServiceTest {
     every { txnStore.findByExternalTransactionId(depositTxn.externalTransactionId) } returns
       depositTxn
 
-    sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+    sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
 
     verify { txnStore.findByExternalTransactionId(depositTxn.externalTransactionId) }
   }
@@ -1351,7 +1318,7 @@ class Sep6ServiceTest {
     val request = GetTransactionRequest.builder().lang("en-US").build()
 
     assertThrows<SepValidationException> {
-      sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
     }
     verify { txnStore wasNot Called }
   }
@@ -1363,7 +1330,7 @@ class Sep6ServiceTest {
     every { txnStore.findByTransactionId(any()) } returns null
 
     assertThrows<NotFoundException> {
-      sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
     }
 
     verify { txnStore.findByTransactionId(any()) }
@@ -1376,7 +1343,7 @@ class Sep6ServiceTest {
     every { txnStore.findByTransactionId(depositTxn.id) } returns depositTxn
 
     assertThrows<NotFoundException> {
-      sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
     }
 
     verify { txnStore.findByTransactionId(depositTxn.id) }
@@ -1389,7 +1356,7 @@ class Sep6ServiceTest {
     every { txnStore.findByTransactionId(depositTxn.id) } returns depositTxn
 
     assertThrows<NotFoundException> {
-      sep6Service.findTransaction(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
     }
 
     verify { txnStore.findByTransactionId(depositTxn.id) }
@@ -1409,7 +1376,7 @@ class Sep6ServiceTest {
         .build()
 
     assertThrows<SepNotAuthorizedException> {
-      sep6Service.findTransactions(TestHelper.createSep10Jwt("other-account"), request)
+      sep6Service.findTransactions(TestHelper.createWebAuthJwt("other-account"), request)
     }
     verify { txnStore wasNot Called }
   }
@@ -1428,7 +1395,7 @@ class Sep6ServiceTest {
         .build()
 
     assertThrows<SepValidationException> {
-      sep6Service.findTransactions(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+      sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
     }
     verify { txnStore wasNot Called }
   }
@@ -1447,7 +1414,7 @@ class Sep6ServiceTest {
         .pagingId("1")
         .lang("en-US")
         .build()
-    val response = sep6Service.findTransactions(TestHelper.createSep10Jwt(TEST_ACCOUNT), request)
+    val response = sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
 
     verify(exactly = 1) { txnStore.findTransactions(TEST_ACCOUNT, null, request) }
 
@@ -1455,8 +1422,8 @@ class Sep6ServiceTest {
   }
 
   private fun createDepositTxn(
-    sep10Account: String,
-    sep10AccountMemo: String? = null,
+    webAuthAccount: String,
+    webAuthAccountMemo: String? = null,
   ): Sep6Transaction {
     val txn = PojoSep6Transaction()
 
@@ -1481,8 +1448,8 @@ class Sep6ServiceTest {
     txn.amountOutAsset = "USDC"
     txn.amountFee = "2"
     txn.amountOutAsset = "stellar:USDC:GABCD"
-    txn.sep10Account = sep10Account
-    txn.sep10AccountMemo = sep10AccountMemo
+    txn.webAuthAccount = webAuthAccount
+    txn.webAuthAccountMemo = webAuthAccountMemo
     txn.fromAccount = "GABCD"
     txn.toAccount = "GABCD"
     txn.memo = "some memo"

@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.sep.sep6.*;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.sep6.Sep6Service;
 
@@ -58,7 +58,7 @@ public class Sep6Controller {
           Boolean claimableBalancesSupported)
       throws AnchorException {
     debugF("GET /deposit");
-    Sep10Jwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     StartDepositRequest startDepositRequest =
         StartDepositRequest.builder()
             .assetCode(assetCode)
@@ -100,7 +100,7 @@ public class Sep6Controller {
           Boolean claimableBalancesSupported)
       throws AnchorException {
     debugF("GET /deposit-exchange");
-    Sep10Jwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     StartDepositExchangeRequest startDepositExchangeRequest =
         StartDepositExchangeRequest.builder()
             .destinationAsset(destinationAsset)
@@ -135,7 +135,7 @@ public class Sep6Controller {
       @RequestParam(value = "refundMemoType", required = false) String refundMemoType)
       throws AnchorException {
     debugF("GET /withdraw");
-    Sep10Jwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     StartWithdrawRequest startWithdrawRequest =
         StartWithdrawRequest.builder()
             .assetCode(assetCode)
@@ -167,7 +167,7 @@ public class Sep6Controller {
       @RequestParam(value = "refund_memo_type", required = false) String refundMemoType)
       throws AnchorException {
     debugF("GET /withdraw-exchange");
-    Sep10Jwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     StartWithdrawExchangeRequest startWithdrawExchangeRequest =
         StartWithdrawExchangeRequest.builder()
             .sourceAsset(sourceAsset)
@@ -206,7 +206,7 @@ public class Sep6Controller {
         pagingId,
         noOlderThan,
         lang);
-    Sep10Jwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     GetTransactionsRequest getTransactionsRequest =
         GetTransactionsRequest.builder()
             .assetCode(assetCode)
@@ -225,7 +225,7 @@ public class Sep6Controller {
       value = "/transaction",
       produces = {MediaType.APPLICATION_JSON_VALUE},
       method = {RequestMethod.GET})
-  public GetTransactionResponse getTransaction(
+  public Sep6GetTransactionResponse getTransaction(
       HttpServletRequest request,
       @RequestParam(required = false, value = "id") String id,
       @RequestParam(required = false, value = "stellar_transaction_id") String stellarTransactionId,
@@ -239,7 +239,7 @@ public class Sep6Controller {
         stellarTransactionId,
         externalTransactionId,
         lang);
-    Sep10Jwt token = Sep10Helper.getSep10Token(request);
+    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
     GetTransactionRequest getTransactionRequest =
         GetTransactionRequest.builder()
             .id(id)

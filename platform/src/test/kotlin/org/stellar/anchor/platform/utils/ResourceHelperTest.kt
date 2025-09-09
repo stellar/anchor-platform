@@ -12,6 +12,6 @@ class ResourceHelperTest {
   fun `test reading resource file`(resource: String) {
     val resource = ResourceHelper.resource(resource)
     assertTrue(resource.exists())
-    assertTrue(resource.isFile)
+    assertTrue(resource.isReadable)
   }
 }

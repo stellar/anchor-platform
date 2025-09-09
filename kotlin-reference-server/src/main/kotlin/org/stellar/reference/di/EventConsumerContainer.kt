@@ -11,16 +11,12 @@ object EventConsumerContainer {
   private val sep6EventProcessor =
     Sep6EventProcessor(
       config,
-      ServiceContainer.horizon,
       ServiceContainer.platform,
+      ServiceContainer.paymentClient,
       ServiceContainer.customerService,
       ServiceContainer.sepHelper,
     )
-  private val sep31EventProcessor =
-    Sep31EventProcessor(
-      config,
-      ServiceContainer.platform,
-    )
+  private val sep31EventProcessor = Sep31EventProcessor(config, ServiceContainer.platform)
   private val noOpEventProcessor = NoOpEventProcessor()
   private val processor =
     AnchorEventProcessor(sep6EventProcessor, sep31EventProcessor, noOpEventProcessor)

@@ -8,9 +8,7 @@ import io.mockk.impl.annotations.MockK
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import java.util.*
 import java.util.stream.Stream
-import org.apache.commons.lang3.StringUtils
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Order
@@ -25,7 +23,10 @@ import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.asset.AssetInfo.Field
 import org.stellar.anchor.api.asset.Sep31Info
 import org.stellar.anchor.api.asset.StellarAssetInfo
-import org.stellar.anchor.api.callback.*
+import org.stellar.anchor.api.callback.CustomerIntegration
+import org.stellar.anchor.api.callback.GetCustomerResponse
+import org.stellar.anchor.api.callback.GetRateResponse
+import org.stellar.anchor.api.callback.RateIntegration
 import org.stellar.anchor.api.exception.*
 import org.stellar.anchor.api.sep.sep12.Sep12Status
 import org.stellar.anchor.api.sep.sep31.*
@@ -242,7 +243,7 @@ class Sep31ServiceTest {
 
   @MockK(relaxed = true) private lateinit var txnStore: Sep31TransactionStore
 
-  @MockK(relaxed = true) lateinit var appConfig: AppConfig
+  @MockK(relaxed = true) lateinit var languageConfig: LanguageConfig
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
   @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) lateinit var clientService: ClientService
@@ -270,7 +271,7 @@ class Sep31ServiceTest {
   fun setUp() {
     MockKAnnotations.init(this, relaxUnitFun = true)
     secretConfig.setupMock()
-    every { appConfig.languages } returns listOf("en")
+    every { languageConfig.languages } returns listOf("en")
     every { sep31Config.paymentType } returns STRICT_SEND
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
     every { custodyConfig.type } returns NONE
@@ -280,7 +281,7 @@ class Sep31ServiceTest {
 
     sep31Service =
       Sep31Service(
-        appConfig,
+        languageConfig,
         sep10Config,
         sep31Config,
         txnStore,
@@ -324,9 +325,7 @@ class Sep31ServiceTest {
   @Test
   fun `test quotes supported and required validation`() {
     val ex: AnchorException = assertThrows {
-      DefaultAssetService.fromJsonResource(
-        "test_assets.json.quotes_required_but_not_supported",
-      )
+      DefaultAssetService.fromJsonResource("test_assets.json.quotes_required_but_not_supported")
     }
     assertInstanceOf(InvalidConfigException::class.java, ex)
     assertEquals(
@@ -478,7 +477,7 @@ class Sep31ServiceTest {
 
   @Test
   fun `test POST transaction failures`() {
-    val jwtToken = TestHelper.createSep10Jwt()
+    val jwtToken = TestHelper.createWebAuthJwt()
 
     // missing asset code
     val postTxRequest = Sep31PostTransactionRequest()
@@ -619,7 +618,7 @@ class Sep31ServiceTest {
           "receiver_account_number" to "1",
           "type" to "1",
           "receiver_routing_number" to "SWIFT",
-        ),
+        )
       )
 
     // Make sure we can get the sender and receiver customers
@@ -633,10 +632,8 @@ class Sep31ServiceTest {
     every { sep31DepositInfoGenerator.generate(capture(txForDepositInfoGenerator)) } answers
       {
         val tx: Sep31Transaction = txForDepositInfoGenerator.captured
-        var memo = StringUtils.truncate(tx.id, 32)
-        memo = StringUtils.leftPad(memo, 32, '0')
-        memo = String(Base64.getEncoder().encode(memo.toByteArray()))
-        SepDepositInfo(tx.toAccount, memo, "hash")
+        val memo = (10000..20000).random().toString()
+        SepDepositInfo(tx.toAccount, memo)
       }
 
     // mock client config
@@ -653,7 +650,7 @@ class Sep31ServiceTest {
       }
 
     // POST transaction
-    val jwtToken = TestHelper.createSep10Jwt(accountMemo = TestHelper.TEST_MEMO)
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
     var gotResponse: Sep31PostTransactionResponse? = null
     assertDoesNotThrow { gotResponse = sep31Service.postTransaction(jwtToken, postTxRequest) }
 
@@ -720,7 +717,7 @@ class Sep31ServiceTest {
           "receiver_account_number" to "1",
           "type" to "1",
           "receiver_routing_number" to "SWIFT",
-        ),
+        )
       )
 
     // Make sure we can get the sender and receiver customers
@@ -729,7 +726,7 @@ class Sep31ServiceTest {
     every { customerIntegration.getCustomer(any()) } returns mockCustomer
 
     // POST transaction
-    val jwtToken = TestHelper.createSep10Jwt()
+    val jwtToken = TestHelper.createWebAuthJwt()
     val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("quotes_required is set to true; quote id cannot be empty", ex.message)
@@ -738,7 +735,10 @@ class Sep31ServiceTest {
   @Test
   fun `test post transaction when quote is not supported`() {
     every { sep31DepositInfoGenerator.generate(any()) } returns
-      SepDepositInfo("GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I", "123456", "id")
+      SepDepositInfo(
+        "GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I",
+        "123456",
+      )
 
     every { txnStore.save(any()) } answers
       {
@@ -747,12 +747,10 @@ class Sep31ServiceTest {
       }
 
     val assetServiceQuotesNotSupported: AssetService =
-      DefaultAssetService.fromJsonResource(
-        "test_assets.json.quotes_not_supported",
-      )
+      DefaultAssetService.fromJsonResource("test_assets.json.quotes_not_supported")
     sep31Service =
       Sep31Service(
-        appConfig,
+        languageConfig,
         sep10Config,
         sep31Config,
         txnStore,
@@ -760,7 +758,7 @@ class Sep31ServiceTest {
         clientService,
         assetServiceQuotesNotSupported,
         rateIntegration,
-        eventService
+        eventService,
       )
 
     val senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"
@@ -778,7 +776,7 @@ class Sep31ServiceTest {
           "receiver_account_number" to "1",
           "type" to "1",
           "receiver_routing_number" to "SWIFT",
-        ),
+        )
       )
 
     // Provide fee response.
@@ -791,7 +789,7 @@ class Sep31ServiceTest {
     every { customerIntegration.getCustomer(any()) } returns mockCustomer
 
     // POST transaction
-    val jwtToken = TestHelper.createSep10Jwt()
+    val jwtToken = TestHelper.createWebAuthJwt()
     var gotResponse: Sep31PostTransactionResponse? = null
     assertDoesNotThrow { gotResponse = sep31Service.postTransaction(jwtToken, postTxRequest) }
 
@@ -844,9 +842,9 @@ class Sep31ServiceTest {
 
   @Test
   fun `Test update fee ok`() {
-    val jwtToken = TestHelper.createSep10Jwt()
+    val jwtToken = TestHelper.createWebAuthJwt()
     Context.get().request = request
-    Context.get().sep10Jwt = jwtToken
+    Context.get().webAuthJwt = jwtToken
 
     // With quote
     Context.get().quote = quote
@@ -863,7 +861,7 @@ class Sep31ServiceTest {
           .fee(
             FeeDetails(
               "10",
-              "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+              "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
             )
           )
           .build()
@@ -885,9 +883,9 @@ class Sep31ServiceTest {
 
   @Test
   fun `test update fee failure`() {
-    val jwtToken = TestHelper.createSep10Jwt()
+    val jwtToken = TestHelper.createWebAuthJwt()
     Context.get().request = request
-    Context.get().sep10Jwt = jwtToken
+    Context.get().webAuthJwt = jwtToken
 
     // With quote
     Context.get().quote = quote

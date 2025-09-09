@@ -25,6 +25,7 @@ minikube start
 
 ```bash
 helm repo add external-secrets https://charts.external-secrets.io
+helm repo update
 helm install external-secrets \
    external-secrets/external-secrets \
     -n external-secrets \
@@ -37,6 +38,7 @@ To install `postgresql` and `postgresql-ref`, run the following commands:
 
 ```bash
 helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
 helm install postgresql-ref bitnami/postgresql --version 15.1.2 --set global.postgresql.auth.postgresPassword=123456789
 helm install postgresql bitnami/postgresql --version 15.1.2 --set global.postgresql.auth.postgresPassword=123456789
 ```
@@ -58,7 +60,7 @@ This should only be run one time.
 
 ```bash
 source ../.env
-helm upgrade --install fake-secret-store ./secret-store/ --set sep10_signing_seed=$SECRET_SEP10_SIGNING_SEED --set sentry_auth_token=$SENTRY_AUTH_TOKEN --set payment_signing_seed=${APP__PAYMENT_SIGNING_SEED}
+helm upgrade --install fake-secret-store ./secret-store/ --set sep10_signing_seed=$SECRET_SEP10_SIGNING_SEED --set sentry_auth_token=$SENTRY_AUTH_TOKEN --set payment_signing_seed=$APP__PAYMENT_SIGNING_SEED
 ```
 
 To show if the secret store is running, run the following command:

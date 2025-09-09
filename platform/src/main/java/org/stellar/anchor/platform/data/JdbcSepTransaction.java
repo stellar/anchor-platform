@@ -31,6 +31,9 @@ public abstract class JdbcSepTransaction {
   @Column(name = "updated_at")
   Instant updatedAt;
 
+  @SerializedName("amount_expected")
+  String amountExpected;
+
   @SerializedName("amount_in")
   @Column(name = "amount_in")
   String amountIn;

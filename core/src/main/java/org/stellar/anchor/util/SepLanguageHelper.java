@@ -8,19 +8,19 @@ import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.stellar.anchor.api.exception.SepValidationException;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.LanguageConfig;
 
 public class SepLanguageHelper {
   static Map<String, Rfc4646Language> alternativeLangs = null;
 
-  public static String validateLanguage(AppConfig appConfig, String lang) {
+  public static String validateLanguage(LanguageConfig languageConfig, String lang) {
     if (alternativeLangs == null) {
-      alternativeLangs = prepareAlternativeLangs(appConfig);
+      alternativeLangs = prepareAlternativeLangs(languageConfig);
     }
 
     if (lang != null) {
-      List<String> languages = appConfig.getLanguages();
-      if (languages != null && languages.size() > 0) {
+      List<String> languages = languageConfig.getLanguages();
+      if (languages != null && !languages.isEmpty()) {
         if (languages.stream().noneMatch(l -> l.equalsIgnoreCase(lang))) {
           return getAlternative(lang);
         }
@@ -35,9 +35,9 @@ public class SepLanguageHelper {
     alternativeLangs = null;
   }
 
-  static Map<String, Rfc4646Language> prepareAlternativeLangs(AppConfig appConfig) {
+  static Map<String, Rfc4646Language> prepareAlternativeLangs(LanguageConfig stellarNetworkConfig) {
     Map<String, Rfc4646Language> alternatives = new HashMap<>();
-    appConfig
+    stellarNetworkConfig
         .getLanguages()
         .forEach(
             lang -> {
@@ -86,14 +86,12 @@ class Rfc4646Language {
       throw new SepValidationException("lang is null");
     }
     String[] tokens = lang.split("-");
-    switch (tokens.length) {
-      case 1:
-        return new Rfc4646Language(tokens[0], null);
-      case 2:
-        return new Rfc4646Language(tokens[0], tokens[1]);
-      default:
-        throw new SepValidationException(String.format("Invalid language format: %s", lang));
-    }
+    return switch (tokens.length) {
+      case 1 -> new Rfc4646Language(tokens[0], null);
+      case 2 -> new Rfc4646Language(tokens[0], tokens[1]);
+      default ->
+          throw new SepValidationException(String.format("Invalid language format: %s", lang));
+    };
   }
 
   public String getAltLangKey() {

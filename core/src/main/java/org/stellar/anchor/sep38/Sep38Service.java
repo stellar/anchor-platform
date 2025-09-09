@@ -11,7 +11,7 @@ import static org.stellar.anchor.util.MathHelper.formatAmount;
 import static org.stellar.anchor.util.MetricConstants.SEP38_PRICE_QUERIED;
 import static org.stellar.anchor.util.MetricConstants.SEP38_QUOTE_CREATED;
 import static org.stellar.anchor.util.NumberHelper.DEFAULT_ROUNDING_MODE;
-import static org.stellar.anchor.util.SepHelper.validateAmount;
+import static org.stellar.anchor.util.SepRequestValidator.validateAmount;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
@@ -31,7 +31,7 @@ import org.stellar.anchor.api.sep.sep38.*;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.config.Sep38Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.Log;
@@ -137,7 +137,7 @@ public class Sep38Service {
     }
   }
 
-  public GetPriceResponse getPrice(Sep10Jwt token, Sep38GetPriceRequest getPriceRequest)
+  public GetPriceResponse getPrice(WebAuthJwt token, Sep38GetPriceRequest getPriceRequest)
       throws AnchorException {
     String sellAssetName = getPriceRequest.getSellAssetName();
     String sellAmount = getPriceRequest.getSellAmount();
@@ -240,7 +240,7 @@ public class Sep38Service {
         .build();
   }
 
-  public Sep38QuoteResponse postQuote(Sep10Jwt token, Sep38PostQuoteRequest request)
+  public Sep38QuoteResponse postQuote(WebAuthJwt token, Sep38PostQuoteRequest request)
       throws AnchorException {
     // validate token
     Pair<String, Pair<String, String>> accountInfo = validateToken(token);
@@ -332,7 +332,7 @@ public class Sep38Service {
   }
 
   private GetRateResponse.Rate getRateFromQuoteRequest(
-      Sep10Jwt token, Sep38PostQuoteRequest request) throws AnchorException {
+      WebAuthJwt token, Sep38PostQuoteRequest request) throws AnchorException {
     GetRateRequest.GetRateRequestBuilder getRateRequestBuilder =
         GetRateRequest.builder()
             .type(GetRateRequest.Type.FIRM)
@@ -363,10 +363,10 @@ public class Sep38Service {
     return rate;
   }
 
-  private Pair<String, Pair<String, String>> validateToken(Sep10Jwt token)
+  private Pair<String, Pair<String, String>> validateToken(WebAuthJwt token)
       throws BadRequestException {
     if (token == null) {
-      throw new BadRequestException("missing sep10 jwt token");
+      throw new BadRequestException("missing web auth token");
     }
     String account, memo = null, memoType = null;
     if (!Objects.toString(token.getMuxedAccount(), "").isEmpty()) {
@@ -378,12 +378,12 @@ public class Sep38Service {
         memoType = "id";
       }
     } else {
-      throw new BadRequestException("sep10 token is malformed");
+      throw new BadRequestException("web auth token is malformed");
     }
     return Pair.of(account, Pair.of(memo, memoType));
   }
 
-  public Sep38QuoteResponse getQuote(Sep10Jwt token, String quoteId) throws AnchorException {
+  public Sep38QuoteResponse getQuote(WebAuthJwt token, String quoteId) throws AnchorException {
     if (this.sep38QuoteStore == null) {
       throw new ServerErrorException("internal server error");
     }
@@ -492,7 +492,7 @@ public class Sep38Service {
     return formatAmount(bTotalPrice, pricePrecision);
   }
 
-  private String getClientIdFromToken(Sep10Jwt token) {
+  private String getClientIdFromToken(WebAuthJwt token) {
     if (token == null) return null;
     return token.getAccount();
   }

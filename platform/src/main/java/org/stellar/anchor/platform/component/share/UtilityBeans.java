@@ -3,6 +3,7 @@ package org.stellar.anchor.platform.component.share;
 import com.google.gson.Gson;
 import jakarta.validation.Validator;
 import java.util.List;
+import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -15,7 +16,9 @@ import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.*;
 import org.stellar.anchor.healthcheck.HealthCheckable;
-import org.stellar.anchor.horizon.Horizon;
+import org.stellar.anchor.ledger.Horizon;
+import org.stellar.anchor.ledger.LedgerClient;
+import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.platform.config.*;
 import org.stellar.anchor.platform.service.HealthCheckService;
 import org.stellar.anchor.platform.service.Sep24MoreInfoUrlConstructor;
@@ -37,9 +40,15 @@ public class UtilityBeans {
   }
 
   @Bean
+  @ConfigurationProperties(prefix = "stellar-network")
+  StellarNetworkConfig stellarNetworkConfig(SecretConfig secretConfig) {
+    return new PropertyStellarNetworkConfig(secretConfig);
+  }
+
+  @Bean
   @ConfigurationProperties(prefix = "app")
-  AppConfig appConfig() {
-    return new PropertyAppConfig();
+  LanguageConfig appLanguageConfig() {
+    return new PropertyLanguageConfig();
   }
 
   @Bean
@@ -99,8 +108,13 @@ public class UtilityBeans {
   }
 
   @Bean
-  public Horizon horizon(AppConfig appConfig) {
-    return new Horizon(appConfig);
+  @SneakyThrows
+  public LedgerClient ledgerClient(
+      StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
+    return switch (stellarNetworkConfig.getType()) {
+      case RPC -> new StellarRpc(stellarNetworkConfig, secretConfig);
+      case HORIZON -> new Horizon(stellarNetworkConfig);
+    };
   }
 
   @Bean

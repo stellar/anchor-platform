@@ -104,15 +104,15 @@ public class JdbcSep24Transaction extends JdbcSepTransaction
   @Column(name = "request_asset_issuer")
   String requestAssetIssuer;
 
-  /** The SEP10 account used for authentication. */
-  @SerializedName("sep10_account")
-  @Column(name = "sep10account")
-  String sep10Account;
+  /** The web auth account */
+  @SerializedName("web_auth_account")
+  @Column(name = "web_auth_account")
+  String webAuthAccount;
 
-  /** The SEP10 account memo used for authentication. */
-  @SerializedName("sep10_account_memo")
-  @Column(name = "sep10account_memo")
-  String sep10AccountMemo;
+  /** The web auth account memo */
+  @SerializedName("web_auth_account_memo")
+  @Column(name = "web_auth_account_memo")
+  String webAuthAccountMemo;
 
   @SerializedName("client_domain")
   @Column(name = "client_domain")
@@ -125,10 +125,6 @@ public class JdbcSep24Transaction extends JdbcSepTransaction
   @SerializedName("claimable_balance_supported")
   @Column(name = "claimable_balance_supported")
   Boolean claimableBalanceSupported;
-
-  @SerializedName("amount_expected")
-  @Column(name = "amount_expected")
-  String amountExpected;
 
   @SerializedName("refund_memo")
   @Column(name = "refund_memo")

@@ -17,6 +17,8 @@ import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MemoHelper.makeMemo;
 import static org.stellar.anchor.util.MemoHelper.memoType;
 import static org.stellar.anchor.util.MetricConstants.*;
+import static org.stellar.anchor.util.SepHelper.*;
+import static org.stellar.anchor.util.SepHelper.AccountType.*;
 import static org.stellar.anchor.util.SepHelper.generateSepTransactionId;
 import static org.stellar.anchor.util.SepHelper.memoTypeString;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
@@ -43,26 +45,32 @@ import org.stellar.anchor.api.sep.sep24.Sep24GetTransactionResponse;
 import org.stellar.anchor.api.sep.sep24.TransactionResponse;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
-import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.client.CustodialClient;
-import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.CustodyConfig;
+import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep24Config;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
-import org.stellar.anchor.sep6.ExchangeAmountsCalculator;
 import org.stellar.anchor.util.*;
-import org.stellar.sdk.KeyPair;
+import org.stellar.anchor.util.ExchangeAmountsCalculator;
+import org.stellar.anchor.util.SepRequestValidator;
 import org.stellar.sdk.Memo;
 
 public class Sep24Service {
 
-  final AppConfig appConfig;
+  public static final List<String> INTERACTIVE_URL_JWT_REQUIRED_FIELDS_FROM_REQUEST =
+      List.of("amount", "client_domain", "lang", "customer_id");
+  public static String ERR_TOKEN_ACCOUNT_MISMATCH = "'account' does not match the one in the token";
+  final LanguageConfig languageConfig;
+  final StellarNetworkConfig stellarNetworkConfig;
   final Sep24Config sep24Config;
   final ClientService clientService;
   final AssetService assetService;
+  final SepRequestValidator requestValidator;
   final JwtService jwtService;
   final ClientFinder clientFinder;
   final Sep24TransactionStore txnStore;
@@ -71,7 +79,6 @@ public class Sep24Service {
   final MoreInfoUrlConstructor moreInfoUrlConstructor;
   final CustodyConfig custodyConfig;
   final ExchangeAmountsCalculator exchangeAmountsCalculator;
-
   final Counter sep24TransactionRequestedCounter =
       counter(MetricConstants.SEP24_TRANSACTION_REQUESTED);
   final Counter sep24TransactionQueriedCounter = counter(MetricConstants.SEP24_TRANSACTION_QUERIED);
@@ -86,15 +93,13 @@ public class Sep24Service {
           MetricConstants.TYPE,
           MetricConstants.TV_SEP24_DEPOSIT);
 
-  public static final List<String> INTERACTIVE_URL_JWT_REQUIRED_FIELDS_FROM_REQUEST =
-      List.of("amount", "client_domain", "lang", "customer_id");
-  public static String ERR_TOKEN_ACCOUNT_MISMATCH = "'account' does not match the one in the token";
-
   public Sep24Service(
-      AppConfig appConfig,
+      LanguageConfig languageConfig,
+      StellarNetworkConfig stellarNetworkConfig,
       Sep24Config sep24Config,
       ClientService clientsService,
       AssetService assetService,
+      SepRequestValidator requestValidator,
       JwtService jwtService,
       ClientFinder clientFinder,
       Sep24TransactionStore txnStore,
@@ -103,12 +108,14 @@ public class Sep24Service {
       MoreInfoUrlConstructor moreInfoUrlConstructor,
       CustodyConfig custodyConfig,
       ExchangeAmountsCalculator exchangeAmountsCalculator) {
-    debug("appConfig:", appConfig);
+    debug("appConfig:", stellarNetworkConfig);
     debug("sep24Config:", sep24Config);
-    this.appConfig = appConfig;
+    this.languageConfig = languageConfig;
+    this.stellarNetworkConfig = stellarNetworkConfig;
     this.sep24Config = sep24Config;
     this.clientService = clientsService;
     this.assetService = assetService;
+    this.requestValidator = requestValidator;
     this.jwtService = jwtService;
     this.clientFinder = clientFinder;
     this.txnStore = txnStore;
@@ -121,7 +128,7 @@ public class Sep24Service {
   }
 
   public InteractiveTransactionResponse withdraw(
-      Sep10Jwt token, Map<String, String> withdrawRequest)
+      WebAuthJwt token, Map<String, String> withdrawRequest)
       throws AnchorException, MalformedURLException, URISyntaxException {
     info("Creating withdrawal transaction.");
     // increment counter
@@ -143,7 +150,7 @@ public class Sep24Service {
     String sourceAccount = withdrawRequest.get("account");
     String strAmount = withdrawRequest.get("amount");
 
-    String lang = validateLanguage(appConfig, withdrawRequest.get("lang"));
+    String lang = validateLanguage(languageConfig, withdrawRequest.get("lang"));
     debugF("language: {}", lang);
 
     if (assetCode == null) {
@@ -185,13 +192,7 @@ public class Sep24Service {
     }
 
     // Validate sourceAccount
-    try {
-      debugF("checking if withdraw source account:{} is valid", sourceAccount);
-      KeyPair.fromAccountId(sourceAccount);
-    } catch (IllegalArgumentException ex) {
-      infoF("invalid account format: {}", sourceAccount);
-      throw new SepValidationException(String.format("invalid account: %s", sourceAccount), ex);
-    }
+    requestValidator.validateAccount(sourceAccount);
 
     if (token.getClientDomain() != null)
       withdrawRequest.put("client_domain", token.getClientDomain());
@@ -212,8 +213,8 @@ public class Sep24Service {
                 sep24Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep24Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .toAccount(asset.getDistributionAccount())
             .clientDomain(token.getClientDomain())
@@ -230,6 +231,7 @@ public class Sep24Service {
                 memoTypeString(memoType(memo)), custodyConfig.getType()));
       }
 
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
     }
@@ -252,8 +254,7 @@ public class Sep24Service {
     String quoteId = withdrawRequest.get("quote_id");
     AssetInfo buyAsset = assetService.getAssetById(withdrawRequest.get("destination_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(
-          quoteId, asset, buyAsset, strAmount, builder, WITHDRAWAL.toString(), txnId);
+      validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
     } else {
       builder.amountExpected(strAmount);
       if (buyAsset != null) {
@@ -290,7 +291,8 @@ public class Sep24Service {
     return response;
   }
 
-  public InteractiveTransactionResponse deposit(Sep10Jwt token, Map<String, String> depositRequest)
+  public InteractiveTransactionResponse deposit(
+      WebAuthJwt token, Map<String, String> depositRequest)
       throws AnchorException, MalformedURLException, URISyntaxException {
     info("Creating deposit transaction.");
     counter(SEP24_TRANSACTION_REQUESTED, TYPE, TV_SEP24_DEPOSIT);
@@ -318,7 +320,7 @@ public class Sep24Service {
       debugF("claimable balance supported: {}", claimableSupported);
     }
 
-    String lang = validateLanguage(appConfig, depositRequest.get("lang"));
+    String lang = validateLanguage(languageConfig, depositRequest.get("lang"));
     debugF("language: {}", lang);
 
     if (assetCode == null) {
@@ -363,6 +365,7 @@ public class Sep24Service {
               "The asset_code (%s) of the deposit request must be a stellar asset.", assetCode));
     }
 
+    // Verify that the asset code exists in our database, with deposit enabled.
     if (!AssetHelper.isDepositEnabled(asset.getSep24())) {
       infoF("invalid operation for asset {}", assetCode);
       throw new SepValidationException(String.format("invalid operation for asset %s", assetCode));
@@ -389,19 +392,12 @@ public class Sep24Service {
       }
     }
 
-    try {
-      debugF("checking if deposit destination account:{} is valid", destinationAccount);
-      KeyPair.fromAccountId(destinationAccount);
-    } catch (IllegalArgumentException ex) {
-      infoF("invalid account format: {}", destinationAccount);
-      throw new SepValidationException(
-          String.format("invalid account: %s", destinationAccount), ex);
-    }
+    // validate destination account
+    requestValidator.validateAccount(destinationAccount);
 
     if (token.getClientDomain() != null)
       depositRequest.put("client_domain", token.getClientDomain());
 
-    Memo memo = makeMemo(depositRequest.get("memo"), depositRequest.get("memo_type"));
     String txnId = generateSepTransactionId();
     Sep24TransactionBuilder builder =
         new Sep24TransactionBuilder(txnStore)
@@ -415,16 +411,26 @@ public class Sep24Service {
                 sep24Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep24Config.getInitialUserDeadlineSeconds()))
-            .sep10Account(token.getAccount())
-            .sep10AccountMemo(token.getAccountMemo())
+            .webAuthAccount(token.getAccount())
+            .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
             .claimableBalanceSupported(claimableSupported);
 
-    if (memo != null) {
-      debug("transaction memo detected.", memo);
+    if (accountType(token.getAccount()) == Contract) {
+      if (depositRequest.get("memo_type") != null
+          && !depositRequest.get("memo_type").equalsIgnoreCase("id")) {
+        infoF(
+            "If the request account:{} is a C-account, the memo_type must be set to 'id'",
+            token.getAccount());
+        throw new SepValidationException(
+            "Contract account requires 'memo_type' to be set to 'id' in the request");
+      }
+    }
 
+    Memo memo = makeMemo(depositRequest.get("memo"), depositRequest.get("memo_type"));
+    if (memo != null) {
       if (!CustodyUtils.isMemoTypeSupported(
           custodyConfig.getType(), memoTypeString(memoType(memo)))) {
         throw new SepValidationException(
@@ -433,6 +439,7 @@ public class Sep24Service {
                 memoTypeString(memoType(memo)), custodyConfig.getType()));
       }
 
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
     }
@@ -440,8 +447,7 @@ public class Sep24Service {
     String quoteId = depositRequest.get("quote_id");
     AssetInfo sellAsset = assetService.getAssetById(depositRequest.get("source_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(
-          quoteId, sellAsset, asset, strAmount, builder, DEPOSIT.toString(), txnId);
+      validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
     } else {
       builder.amountExpected(strAmount);
       if (sellAsset != null) {
@@ -478,7 +484,7 @@ public class Sep24Service {
     return response;
   }
 
-  public GetTransactionsResponse findTransactions(Sep10Jwt token, GetTransactionsRequest txReq)
+  public GetTransactionsResponse findTransactions(WebAuthJwt token, GetTransactionsRequest txReq)
       throws SepException, MalformedURLException, URISyntaxException {
     if (token == null) {
       info("missing SEP-10 token");
@@ -511,7 +517,7 @@ public class Sep24Service {
     List<TransactionResponse> list = new ArrayList<>();
     debugF("found {} transactions", txns.size());
     for (Sep24Transaction txn : txns) {
-      String lang = validateLanguage(appConfig, txReq.getLang());
+      String lang = validateLanguage(languageConfig, txReq.getLang());
       TransactionResponse transactionResponse =
           fromTxn(assetService, moreInfoUrlConstructor, txn, lang);
       list.add(transactionResponse);
@@ -522,7 +528,7 @@ public class Sep24Service {
     return result;
   }
 
-  public Sep24GetTransactionResponse findTransaction(Sep10Jwt token, GetTransactionRequest txReq)
+  public Sep24GetTransactionResponse findTransaction(WebAuthJwt token, GetTransactionRequest txReq)
       throws SepException, IOException, URISyntaxException {
     if (token == null) {
       info("missing SEP-10 token");
@@ -552,7 +558,7 @@ public class Sep24Service {
     }
 
     // We should not return the transaction that belongs to other accounts.
-    if (txn == null || !txn.getSep10Account().equals(token.getAccount())) {
+    if (txn == null || !txn.getWebAuthAccount().equals(token.getAccount())) {
       infoF("no transactions found with account:{}", token.getAccount());
       throw new SepNotFoundException("transaction not found");
     }
@@ -560,7 +566,7 @@ public class Sep24Service {
     // If the token has a memo, make sure the transaction belongs to the account
     // with the same memo.
     if (token.getAccountMemo() != null
-        && txn.getSep10Account().equals(token.getAccount() + ":" + token.getAccountMemo())) {
+        && txn.getWebAuthAccount().equals(token.getAccount() + ":" + token.getAccountMemo())) {
       infoF(
           "no transactions found with account:{} memo:{}",
           token.getAccount(),
@@ -569,7 +575,7 @@ public class Sep24Service {
     }
     // increment counter
     sep24TransactionQueriedCounter.increment();
-    String lang = validateLanguage(appConfig, txReq.getLang());
+    String lang = validateLanguage(languageConfig, txReq.getLang());
     return Sep24GetTransactionResponse.of(fromTxn(assetService, moreInfoUrlConstructor, txn, lang));
   }
 
@@ -609,7 +615,6 @@ public class Sep24Service {
       AssetInfo buyAsset,
       String strAmount,
       Sep24TransactionBuilder builder,
-      String kind,
       String txnId)
       throws AnchorException {
     Sep38Quote quote =

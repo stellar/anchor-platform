@@ -18,6 +18,7 @@ data class AppSettings(
   val isTest: Boolean,
   val port: Int,
   val horizonEndpoint: String,
+  val rpcEndpoint: String,
   val platformApiEndpoint: String,
   val distributionWallet: String,
   val distributionWalletMemo: String,

@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 // The alias call in plugins scope produces IntelliJ false error which is suppressed here.
 @Suppress("DSL_SCOPE_VIOLATION")
 plugins {
@@ -24,9 +26,9 @@ dependencies {
 }
 
 tasks {
-  compileKotlin {
+  named<KotlinCompile>("compileKotlin") {
     dependsOn("spotlessKotlinApply")
-    kotlinOptions.jvmTarget = "17"
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
   }
 
   test { useJUnitPlatform() }

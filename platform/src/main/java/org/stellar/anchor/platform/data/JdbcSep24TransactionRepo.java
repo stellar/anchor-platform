@@ -21,11 +21,17 @@ public interface JdbcSep24TransactionRepo
 
   JdbcSep24Transaction findOneByStellarTransactionId(String stellarTransactionId);
 
-  JdbcSep24Transaction findOneByToAccountAndMemoAndStatus(
-      String toAccount, String memo, String status);
+  JdbcSep24Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      String withdrawAnchorAccount, String memo, String status);
 
-  List<Sep24Transaction> findBySep10AccountAndRequestAssetCodeOrderByStartedAtDesc(
-      String stellarAccount, String assetCode);
+  JdbcSep24Transaction findOneByToAccountAndFromAccountAndStatus(
+      String toAccount, String fromAccount, String status);
+
+  JdbcSep24Transaction findFirstByToAccountAndFromAccountAndStatusOrderByStartedAtDesc(
+      String toAccount, String fromAccount, String status);
+
+  List<Sep24Transaction> findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
+      String webAuthAccount, String assetCode);
 
   Page<JdbcSep24Transaction> findByStatusIn(List<String> allowedStatuses, Pageable pageable);
 }

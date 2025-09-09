@@ -4,10 +4,14 @@ on:
   workflow_dispatch:
   workflow_call:
 
+concurrency:
+  group: ap-test-job
+  cancel-in-progress: false
+
 jobs:
   extended_tests:
     name: Run Extended Tests
-    runs-on: ubuntu-latest-16-cores
+    runs-on: ubuntu-latest
     env:
       # Anchor Platform secrets
       SECRET_SEP10_SIGNING_SEED: ${{ vars.SECRET_SEP10_SIGNING_SEED }}
@@ -16,6 +20,7 @@ jobs:
 
       # Test secrets
       TEST_CLIENT_WALLET_SECRET: ${{ vars.TEST_CLIENT_WALLET_SECRET }}
+      TEST_CLIENT_SMART_WALLET_ACCOUNT: ${{ vars.TEST_CLIENT_SMART_WALLET_ACCOUNT }}
       TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET: ${{ vars.TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET }}
       TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET: ${{ vars.TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET }}
       TEST_WITHDRAW_FUND_CLIENT_SECRET_1: ${{ vars.TEST_WITHDRAW_FUND_CLIENT_SECRET_1 }}
@@ -78,6 +83,7 @@ jobs:
         with:
           url: "http://localhost:8080/.well-known/stellar.toml"
           interval: "1"
+          timeout: "600"
 
       - name: Run `custody` configuration tests
         env:
@@ -102,6 +108,7 @@ jobs:
         with:
           url: "http://localhost:8080/.well-known/stellar.toml"
           interval: "1"
+          timeout: "600"
 
       - name: Run `rpc` configuration tests
         env:
@@ -126,6 +133,7 @@ jobs:
         with:
           url: "http://localhost:8086/health"
           interval: "1"
+          timeout: "600"
 
       - name: Run `auth-apikey-custody` configuration tests
         env:
@@ -150,6 +158,7 @@ jobs:
         with:
           url: "http://localhost:8086/health"
           interval: "1"
+          timeout: "600"
 
       - name: Run `auth-jwt-custody` configuration tests
         env:
@@ -175,6 +184,7 @@ jobs:
           url: "http://localhost:8085/health"
           expected-status: "403"
           interval: "1"
+          timeout: "600"
 
       - name: Run `auth-apikey-platform` configuration tests
         env:
@@ -200,6 +210,7 @@ jobs:
           url: "http://localhost:8085/health"
           expected-status: "403"
           interval: "1"
+          timeout: "600"
 
       - name: Run `auth-jwt-platform` configuration tests
         env:
@@ -208,6 +219,31 @@ jobs:
           cd /home/runner/anchor-platform
           ./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.AuthJwtPlatformTestSuite         
           kill -9 $PID   
+
+      # `default-horizon` end-2-end Tests
+      - name: Start `default-horizon` configuration
+        env:
+          TEST_PROFILE_NAME: default-horizon
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
+        run: |
+          cd /home/runner/anchor-platform
+          ./gradlew startServersWithTestProfile &
+          echo "PID=$!" >> $GITHUB_ENV
+
+      - name: Wait for the sep server to start and get ready
+        uses: mydea/action-wait-for-api@v1
+        with:
+          url: "http://localhost:8080/.well-known/stellar.toml"
+          interval: "1"
+          timeout: "600"
+
+      - name: Run limited `end-2-end` tests
+        env:
+          TEST_PROFILE_NAME: default-horizon
+        run: |
+          cd /home/runner/anchor-platform
+          ./gradlew :service-runner:clean :extended-tests:clean :extended-tests:test --tests org.stellar.anchor.platform.suite.End2EndTestSuite
+          kill -9 $PID
 
       - name: Upload Extended Tests Report
         if: always()

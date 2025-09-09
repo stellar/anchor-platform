@@ -1,0 +1,24 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Test Profile: default - horizon" type="JetRunConfigurationType" folderName="Run Test Profile">
+    <envs>
+      <env name="TEST_PROFILE_NAME" value="default-horizon" />
+    </envs>
+    <option name="MAIN_CLASS_NAME" value="org.stellar.anchor.platform.run_profiles.RunTestProfile" />
+    <module name="anchor-platform.service-runner.main" />
+    <shortenClasspath name="ARGS_FILE" />
+    <extension name="net.ashald.envfile">
+      <option name="IS_ENABLED" value="true" />
+      <option name="IS_SUBST" value="false" />
+      <option name="IS_PATH_MACRO_SUPPORTED" value="false" />
+      <option name="IS_IGNORE_MISSING_FILES" value="false" />
+      <option name="IS_ENABLE_EXPERIMENTAL_INTEGRATIONS" value="false" />
+      <ENTRIES>
+        <ENTRY IS_ENABLED="true" PARSER="runconfig" IS_EXECUTABLE="false" />
+        <ENTRY IS_ENABLED="true" PARSER="env" IS_EXECUTABLE="false" PATH=".env" />
+      </ENTRIES>
+    </extension>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

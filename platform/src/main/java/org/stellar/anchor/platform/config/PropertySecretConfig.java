@@ -1,9 +1,15 @@
 package org.stellar.anchor.platform.config;
 
+import static org.stellar.anchor.util.StringHelper.isEmpty;
+
+import org.jetbrains.annotations.NotNull;
+import org.springframework.validation.Errors;
+import org.springframework.validation.Validator;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.platform.configurator.SecretManager;
+import org.stellar.anchor.util.KeyUtil;
 
-public class PropertySecretConfig implements SecretConfig {
+public class PropertySecretConfig implements SecretConfig, Validator {
 
   public static final String SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET =
       "secret.sep6.more_info_url.jwt_secret";
@@ -13,6 +19,7 @@ public class PropertySecretConfig implements SecretConfig {
       "secret.sep24.interactive_url.jwt_secret";
   public static final String SECRET_SEP_24_MORE_INFO_URL_JWT_SECRET =
       "secret.sep24.more_info_url.jwt_secret";
+  public static final String SECRET_SEP_45_JWT_SECRET = "secret.sep45.jwt_secret";
   public static final String SECRET_CALLBACK_API_AUTH_SECRET = "secret.callback_api.auth_secret";
   public static final String SECRET_PLATFORM_API_AUTH_SECRET = "secret.platform_api.auth_secret";
   public static final String SECRET_DATA_USERNAME = "secret.data.username";
@@ -24,6 +31,7 @@ public class PropertySecretConfig implements SecretConfig {
   public static final String SECRET_SSL_KEYSTORE_PASSWORD = "secret.ssl.keystore.password";
   public static final String SECRET_SSL_KEY_PASSWORD = "secret.ssl.key.password";
   public static final String SECRET_SSL_TRUSTSTORE_PASSWORD = "secret.ssl.truststore.password";
+  public static final String SECRET_RPC_AUTH_SECRET = "secret.stellar_network.rpc.auth.secret";
 
   public String getSep6MoreInfoUrlJwtSecret() {
     return SecretManager.getInstance().get(SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET);
@@ -31,6 +39,10 @@ public class PropertySecretConfig implements SecretConfig {
 
   public String getSep10JwtSecretKey() {
     return SecretManager.getInstance().get(SECRET_SEP_10_JWT_SECRET);
+  }
+
+  public String getSep45JwtSecretKey() {
+    return SecretManager.getInstance().get(SECRET_SEP_45_JWT_SECRET);
   }
 
   public String getSep10SigningSeed() {
@@ -75,5 +87,24 @@ public class PropertySecretConfig implements SecretConfig {
   @Override
   public String getEventsQueueKafkaPassword() {
     return SecretManager.getInstance().get(SECRET_EVENTS_QUEUE_KAFKA_PASSWORD);
+  }
+
+  @Override
+  public String getRpcAuthSecret() {
+    return SecretManager.getInstance().get(SECRET_RPC_AUTH_SECRET);
+  }
+
+  @Override
+  public boolean supports(@NotNull Class<?> clazz) {
+    return PropertySecretConfig.class.isAssignableFrom(clazz);
+  }
+
+  @Override
+  public void validate(@NotNull Object target, @NotNull Errors errors) {
+    PropertySecretConfig config = (PropertySecretConfig) target;
+
+    if (!isEmpty(config.getSep45JwtSecretKey())) {
+      KeyUtil.rejectWeakJWTSecret(config.getSep45JwtSecretKey(), errors, "secret.sep45.jwt_secret");
+    }
   }
 }
