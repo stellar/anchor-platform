@@ -59,7 +59,7 @@ tasks.register("runEssentialTests") {
   group = "github"
   description = "Run the essential tests."
   dependsOn(":essential-tests:test")
-  
+
   doLast {
     if (!isPortActive(port = 8080)) {
       println("************************************************************")
@@ -68,7 +68,7 @@ tasks.register("runEssentialTests") {
       throw GradleException("AnchorPlatform server is not running.")
     }
   }
-  
+
   subprojects {
     if (name == "essential-tests") {
       skipNonCriticalTasks(tasks)
@@ -78,9 +78,9 @@ tasks.register("runEssentialTests") {
 
 // The printVersionName task is used to print the version name of the project. This
 // is useful for CI/CD pipelines to get the version string of the project.
-tasks.register("printVersionName") { 
+tasks.register("printVersionName") {
   doLast {
-    println(rootProject.version.toString()) 
+    println(rootProject.version.toString())
   }
 }
 
