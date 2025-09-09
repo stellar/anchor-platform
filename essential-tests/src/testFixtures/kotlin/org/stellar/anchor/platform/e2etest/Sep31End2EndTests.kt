@@ -293,14 +293,6 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     fail("Transaction wasn't $expectedStatuses in $maxTries tries, last status: $status")
   }
 
-  var uniqueMemoRange = 0
-  private fun uniqueMemo(): String {
-    this.uniqueMemoRange++
-    return (this.uniqueMemoRange * 100000..this.uniqueMemoRange * 100000 + 99999)
-      .random()
-      .toString()
-  }
-
   companion object {
     private val USDC =
       IssuedAssetId("USDC", "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP")
