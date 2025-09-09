@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.e2etest
 
 import io.ktor.http.*
+import kotlin.ranges.random
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -290,6 +291,14 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     }
 
     fail("Transaction wasn't $expectedStatuses in $maxTries tries, last status: $status")
+  }
+
+  var uniqueMemoRange = 0
+  private fun uniqueMemo(): String {
+    this.uniqueMemoRange++
+    return (this.uniqueMemoRange * 100000..this.uniqueMemoRange * 100000 + 99999)
+      .random()
+      .toString()
   }
 
   companion object {
