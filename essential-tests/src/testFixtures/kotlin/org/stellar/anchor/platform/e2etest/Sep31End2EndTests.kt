@@ -1,7 +1,6 @@
 package org.stellar.anchor.platform.e2etest
 
 import io.ktor.http.*
-import kotlin.ranges.random
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
