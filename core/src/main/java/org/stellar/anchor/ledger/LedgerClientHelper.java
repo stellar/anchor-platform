@@ -3,6 +3,7 @@ package org.stellar.anchor.ledger;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.stellar.anchor.ledger.LedgerTransaction.*;
 import static org.stellar.anchor.util.Log.*;
+import static org.stellar.sdk.xdr.CryptoKeyType.KEY_TYPE_ED25519;
 import static org.stellar.sdk.xdr.HostFunctionType.HOST_FUNCTION_TYPE_INVOKE_CONTRACT;
 import static org.stellar.sdk.xdr.OperationType.*;
 
@@ -51,6 +52,25 @@ public class LedgerClientHelper {
     return switch (op.getBody().getDiscriminant()) {
       case PAYMENT -> {
         PaymentOp payment = op.getBody().getPaymentOp();
+        String toAddress =
+            switch (payment.getDestination().getDiscriminant()) {
+              case KEY_TYPE_ED25519 ->
+                  StrKey.encodeEd25519PublicKey(payment.getDestination().getEd25519().getUint256());
+              case KEY_TYPE_MUXED_ED25519 -> {
+                try {
+                  StrKey.encodeMed25519PublicKey(
+                      payment.getDestination().getMed25519().toXdrByteArray());
+                } catch (IOException ioex) {
+                  throw new LedgerException(
+                      "Failed to encode muxed account: " + payment.getDestination(), ioex);
+                }
+                yield null;
+              }
+              default -> {
+                debugF("Unsupported payment destination type: {}", payment.getDestination());
+                yield null;
+              }
+            };
         yield LedgerOperation.builder()
             .type(PAYMENT)
             .paymentOperation(
@@ -60,9 +80,7 @@ public class LedgerClientHelper {
                     .amount(BigInteger.valueOf(payment.getAmount().getInt64()))
                     .from(sourceAccount)
                     .sourceAccount(sourceAccount)
-                    .to(
-                        StrKey.encodeEd25519PublicKey(
-                            payment.getDestination().getEd25519().getUint256()))
+                    .to(toAddress)
                     .build())
             .build();
       }
@@ -73,24 +91,59 @@ public class LedgerClientHelper {
         if (op.getBody().getDiscriminant() == PATH_PAYMENT_STRICT_RECEIVE) {
           asset = op.getBody().getPathPaymentStrictReceiveOp().getDestAsset();
           amount = op.getBody().getPathPaymentStrictReceiveOp().getDestAmount().getInt64();
+          PathPaymentStrictReceiveOp payment = op.getBody().getPathPaymentStrictReceiveOp();
           toAddress =
-              StrKey.encodeEd25519PublicKey(
-                  op.getBody()
-                      .getPathPaymentStrictReceiveOp()
-                      .getDestination()
-                      .getEd25519()
-                      .getUint256());
-
+              switch (payment.getDestination().getDiscriminant()) {
+                case KEY_TYPE_ED25519 ->
+                    StrKey.encodeEd25519PublicKey(
+                        op.getBody()
+                            .getPathPaymentStrictReceiveOp()
+                            .getDestination()
+                            .getEd25519()
+                            .getUint256());
+                case KEY_TYPE_MUXED_ED25519 -> {
+                  try {
+                    StrKey.encodeMed25519PublicKey(
+                        payment.getDestination().getMed25519().toXdrByteArray());
+                  } catch (IOException ioex) {
+                    throw new LedgerException(
+                        "Failed to encode muxed account: " + payment.getDestination(), ioex);
+                  }
+                  yield null;
+                }
+                default -> {
+                  debugF("Unsupported payment destination type: {}", payment.getDestination());
+                  yield null;
+                }
+              };
         } else {
           asset = op.getBody().getPathPaymentStrictSendOp().getDestAsset();
           amount = op.getBody().getPathPaymentStrictSendOp().getSendAmount().getInt64();
+          PathPaymentStrictSendOp payment = op.getBody().getPathPaymentStrictSendOp();
           toAddress =
-              StrKey.encodeEd25519PublicKey(
-                  op.getBody()
-                      .getPathPaymentStrictSendOp()
-                      .getDestination()
-                      .getEd25519()
-                      .getUint256());
+              switch (payment.getDestination().getDiscriminant()) {
+                case KEY_TYPE_ED25519 ->
+                    StrKey.encodeEd25519PublicKey(
+                        op.getBody()
+                            .getPathPaymentStrictReceiveOp()
+                            .getDestination()
+                            .getEd25519()
+                            .getUint256());
+                case KEY_TYPE_MUXED_ED25519 -> {
+                  try {
+                    StrKey.encodeMed25519PublicKey(
+                        payment.getDestination().getMed25519().toXdrByteArray());
+                  } catch (IOException ioex) {
+                    throw new LedgerException(
+                        "Failed to encode muxed account: " + payment.getDestination(), ioex);
+                  }
+                  yield null;
+                }
+                default -> {
+                  debugF("Unsupported payment destination type: {}", payment.getDestination());
+                  yield null;
+                }
+              };
         }
         yield LedgerOperation.builder()
             .type(
