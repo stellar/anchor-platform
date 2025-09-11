@@ -406,10 +406,12 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     assertEquals(completedDepositTxn.transaction.id, transactionByStellarId.transaction.id)
   }
 
-  @Test
+  @ParameterizedTest
+  @MethodSource("destinations")
   @Order(20)
-  fun `test classic asset withdraw`() = runBlocking {
+  fun `test classic asset withdraw`(dest: String?) = runBlocking {
     val memo = uniqueMemo()
+    val destination = dest ?: clientWalletAccount
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
@@ -428,7 +430,12 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
 
     val withdraw =
       wallet.sep6.withdraw(
-        mapOf("asset_code" to USDC.code, "amount" to "1", "type" to "bank_account")
+        mapOf(
+          "account" to destination,
+          "asset_code" to USDC.code,
+          "amount" to "1",
+          "type" to "bank_account"
+        )
       )
     Log.info("Withdrawal initiated: ${withdraw.id}")
     waitStatus(withdraw.id, PENDING_CUSTOMER_INFO_UPDATE, wallet.sep6)
