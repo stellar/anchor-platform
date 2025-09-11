@@ -110,6 +110,17 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSep31Transaction sep31Txn =
           sep31TransactionStore.findByToAccountAndMemoAndStatus(
               ledgerPayment.getTo(), memo, SepTransactionStatus.PENDING_SENDER.toString());
+      if (sep31Txn == null) {
+        if (ledgerPayment.getTo().startsWith("M")) {
+          // Try again if the destination account is a muxed account.
+          MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
+          sep31Txn =
+              sep31TransactionStore.findByToAccountAndMemoAndStatus(
+                  muxedAccount.getAccountId(),
+                  String.valueOf(muxedAccount.getMuxedId()),
+                  SepTransactionStatus.PENDING_SENDER.toString());
+        }
+      }
       if (sep31Txn != null) {
         try {
           handleSep31Transaction(ledgerTransaction, ledgerPayment, sep31Txn);
