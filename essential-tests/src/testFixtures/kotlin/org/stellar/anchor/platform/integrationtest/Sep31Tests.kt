@@ -18,7 +18,6 @@ import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerResponse
-import org.stellar.anchor.api.sep.sep12.Sep12Status
 import org.stellar.anchor.api.sep.sep31.Sep31GetTransactionResponse
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionResponse
@@ -27,7 +26,6 @@ import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.client.Sep12Client
 import org.stellar.anchor.client.Sep31Client
 import org.stellar.anchor.client.Sep38Client
-import org.stellar.anchor.client.TYPE_MULTIPART_FORM_DATA
 import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.gson
