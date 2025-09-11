@@ -124,11 +124,7 @@ public class LedgerClientHelper {
               switch (payment.getDestination().getDiscriminant()) {
                 case KEY_TYPE_ED25519 ->
                     StrKey.encodeEd25519PublicKey(
-                        op.getBody()
-                            .getPathPaymentStrictReceiveOp()
-                            .getDestination()
-                            .getEd25519()
-                            .getUint256());
+                        payment.getDestination().getEd25519().getUint256());
                 case KEY_TYPE_MUXED_ED25519 -> {
                   try {
                     StrKey.encodeMed25519PublicKey(
