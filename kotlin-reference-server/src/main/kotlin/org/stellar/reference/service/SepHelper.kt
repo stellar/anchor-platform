@@ -16,10 +16,8 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.reference.data.*
-import org.stellar.reference.data.Transaction
-import org.stellar.sdk.*
 
-class SepHelper(private val cfg: Config) {
+class SepHelper(cfg: Config) {
   private val log = KotlinLogging.logger {}
   private val gson = GsonUtils.getInstance()
 
@@ -28,8 +26,6 @@ class SepHelper(private val cfg: Config) {
   }
 
   val baseUrl = cfg.appSettings.platformApiEndpoint
-
-  val server = Server(cfg.appSettings.horizonEndpoint)
 
   internal suspend fun patchTransaction(patchRecord: PatchTransactionTransaction) {
     val resp =
