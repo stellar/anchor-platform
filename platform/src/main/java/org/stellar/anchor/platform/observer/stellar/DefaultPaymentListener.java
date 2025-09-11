@@ -156,6 +156,18 @@ public class DefaultPaymentListener implements PaymentListener {
               toAccount,
               memoAsString(memo),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+      if (sep24Txn == null) {
+        if (toAccount.startsWith("M")) {
+          // Try again if the destination account is a muxed account.
+          MuxedAccount muxedAccount = new MuxedAccount(toAccount);
+          sep24Txn =
+                  sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+                          muxedAccount.getAccountId(),
+                          String.valueOf(muxedAccount.getMuxedId()),
+                          SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+        }
+      }
+      
       if (sep24Txn != null) {
         try {
           handleSep24Transaction(ledgerTransaction, ledgerPayment, sep24Txn);
@@ -186,7 +198,6 @@ public class DefaultPaymentListener implements PaymentListener {
                   SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
         }
       }
-
       if (sep6Txn != null) {
         try {
           handleSep6Transaction(ledgerTransaction, ledgerPayment, sep6Txn);
