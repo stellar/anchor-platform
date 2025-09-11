@@ -75,15 +75,12 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
 
     @JvmStatic
     fun destinations(): Stream<Arguments> {
+      val address = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
       return Stream.of(
-        Arguments.of(
-          MuxedAccount(
-              KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId,
-              BigInteger(uniqueMemo())
-            )
-            .address
-        ),
-        Arguments.of(null)
+        // Muxed account
+        Arguments.of(MuxedAccount(address, BigInteger(uniqueMemo())).address),
+        // Classic account
+        Arguments.of(address)
       )
     }
   }
@@ -91,9 +88,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @ParameterizedTest
   @MethodSource("destinations")
   @Order(10)
-  fun `test classic asset deposit`(dest: String?) = runBlocking {
+  fun `test classic asset deposit`(destination: String) = runBlocking {
     val memo = uniqueMemo()
-    val destination = dest ?: clientWalletAccount
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
@@ -409,7 +405,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   @ParameterizedTest
   @MethodSource("destinations")
   @Order(20)
-  fun `test classic asset withdraw`(dest: String?) = runBlocking {
+  fun `test classic asset withdraw`(dest: String) = runBlocking {
     val memo = uniqueMemo()
     val destination = dest ?: clientWalletAccount
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
