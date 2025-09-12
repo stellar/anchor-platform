@@ -64,7 +64,7 @@ class Sep31EventProcessor(
           requestKyc(event)
           return
         }
-        sendExternal(transaction.id)
+        if (transaction.transferReceivedAt != null) sendExternal(transaction.id)
       }
       PENDING_EXTERNAL ->
         sepHelper.rpcAction(
