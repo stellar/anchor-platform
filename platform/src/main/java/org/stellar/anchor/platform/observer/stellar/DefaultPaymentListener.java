@@ -20,6 +20,7 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.ledger.LedgerTransaction;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerInvokeHostFunctionOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPayment;
 import org.stellar.anchor.ledger.PaymentTransferEvent;
 import org.stellar.anchor.platform.config.RpcConfig;
@@ -32,6 +33,7 @@ import org.stellar.sdk.Memo;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.xdr.AssetType;
 import org.stellar.sdk.xdr.MemoType;
+import org.stellar.sdk.xdr.OperationType;
 
 public class DefaultPaymentListener implements PaymentListener {
   final PaymentObservingAccountsManager paymentObservingAccountsManager;
@@ -40,6 +42,7 @@ public class DefaultPaymentListener implements PaymentListener {
   final JdbcSep6TransactionStore sep6TransactionStore;
   private final PlatformApiClient platformApiClient;
   private final RpcConfig rpcConfig;
+  private final SacToAssetMapper sacToAssetMapper;
 
   public DefaultPaymentListener(
       PaymentObservingAccountsManager paymentObservingAccountsManager,
@@ -47,13 +50,16 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSep24TransactionStore sep24TransactionStore,
       JdbcSep6TransactionStore sep6TransactionStore,
       PlatformApiClient platformApiClient,
-      RpcConfig rpcConfig) {
+      RpcConfig rpcConfig,
+      SacToAssetMapper sacToAssetMapper) {
     this.paymentObservingAccountsManager = paymentObservingAccountsManager;
     this.sep31TransactionStore = sep31TransactionStore;
     this.sep24TransactionStore = sep24TransactionStore;
     this.sep6TransactionStore = sep6TransactionStore;
     this.platformApiClient = platformApiClient;
     this.rpcConfig = rpcConfig;
+    this.sacToAssetMapper = sacToAssetMapper;
+    ;
   }
 
   @Override
@@ -335,6 +341,15 @@ public class DefaultPaymentListener implements PaymentListener {
             "Transaction {} with an empty text memo. This indicates a potential bug from stellar network events.",
             ledgerTransaction.getHash());
         return false;
+      }
+    }
+
+    if (ledgerPayment.getType() == OperationType.INVOKE_HOST_FUNCTION) {
+      LedgerInvokeHostFunctionOperation invokeOp =
+          (LedgerInvokeHostFunctionOperation) ledgerPayment;
+      // Make sure the contract an SAC
+      if (invokeOp.getAsset(false) == null) {
+        invokeOp.setAsset(sacToAssetMapper.getAssetFromSac(invokeOp.getContractId()));
       }
     }
 
