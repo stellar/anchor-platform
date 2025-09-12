@@ -109,16 +109,20 @@ public class LedgerTransaction {
       return OperationType.INVOKE_HOST_FUNCTION;
     }
 
-    public Asset getAsset() {
+    public Asset getAsset(boolean checkContractId) {
       if (asset == null) {
-        if (contractId != null) {
+        if (checkContractId && contractId != null) {
           // The SAC to Asset conversion requires a network call to the ledger. This should be
           // converted before using the operation.
           throw new IllegalStateException(
-              "Please convert stellarAssetContractId to Asset before calling getAsset()");
+              "Please convert stellarAssetContractId to Asset before calling getAsset(true)");
         }
       }
       return asset;
+    }
+
+    public Asset getAsset() {
+      return getAsset(true);
     }
   }
 

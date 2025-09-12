@@ -31,6 +31,7 @@ class DefaultPaymentListenerTest {
   @MockK(relaxed = true) private lateinit var sep6TransactionStore: JdbcSep6TransactionStore
   @MockK(relaxed = true) private lateinit var platformApiClient: PlatformApiClient
   @MockK(relaxed = true) private lateinit var rpcConfig: RpcConfig
+  @MockK(relaxed = true) private lateinit var sacToAssetMapper: SacToAssetMapper
 
   private lateinit var paymentListener: DefaultPaymentListener
 
@@ -55,6 +56,7 @@ class DefaultPaymentListenerTest {
           sep6TransactionStore,
           platformApiClient,
           rpcConfig,
+          sacToAssetMapper
         )
       )
   }

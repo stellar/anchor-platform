@@ -11,6 +11,7 @@ import static org.stellar.anchor.util.ReflectionUtil.getField;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse.*;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -28,6 +29,7 @@ import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentOb
 import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.Log;
+import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.requests.EventListener;
 import org.stellar.sdk.requests.PaymentsRequestBuilder;
@@ -38,6 +40,7 @@ import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
 import org.stellar.sdk.responses.operations.PaymentOperationResponse;
+import org.stellar.sdk.xdr.SCVal;
 
 public class HorizonPaymentObserver extends AbstractPaymentObserver {
 
@@ -256,27 +259,41 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
         return null;
       }
     } else if (operation instanceof InvokeHostFunctionOperationResponse invokeOp) {
-      if (invokeOp.getFunction().equals("transfer")) {
-        AssetContractBalanceChange assetBalanceChange = invokeOp.getAssetBalanceChanges().get(0);
-        if (assetBalanceChange == null
-            || (!paymentObservingAccountsManager.lookupAndUpdate(assetBalanceChange.getFrom())
-                && !paymentObservingAccountsManager.lookupAndUpdate(assetBalanceChange.getTo()))) {
+      if (invokeOp.getParameters() != null
+          && invokeOp.getParameters().size() == 5
+          && "HostFunctionTypeHostFunctionTypeInvokeContract".equals(invokeOp.getFunction())) {
+        try {
+          SCVal scVal = SCVal.fromXdrBase64(invokeOp.getParameters().get(1).getValue());
+          if ("transfer".equals(scVal.getSym().getSCSymbol().toString())) {
+            AssetContractBalanceChange assetBalanceChange =
+                invokeOp.getAssetBalanceChanges().get(0);
+            if (assetBalanceChange == null) return null;
+            String lookupToAccount = assetBalanceChange.getTo();
+            if (assetBalanceChange.getTo().startsWith("M")) {
+              lookupToAccount = new MuxedAccount(lookupToAccount).getAccountId();
+            }
+            if (!paymentObservingAccountsManager.lookupAndUpdate(assetBalanceChange.getFrom())
+                && !paymentObservingAccountsManager.lookupAndUpdate(lookupToAccount)) {
+              return null;
+            }
+            return PaymentTransferEvent.builder()
+                .from(assetBalanceChange.getFrom())
+                .to(assetBalanceChange.getTo())
+                .sep11Asset(AssetHelper.getSep11AssetName(assetBalanceChange.getAsset().toXdr()))
+                .amount(AssetHelper.toXdrAmount(assetBalanceChange.getAmount()).toBigInteger())
+                .txHash(invokeOp.getTransactionHash())
+                .operationId(String.valueOf(invokeOp.getId()))
+                .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
+                .build();
+          }
+        } catch (IOException ioex) {
           return null;
         }
-        return PaymentTransferEvent.builder()
-            .from(assetBalanceChange.getFrom())
-            .to(assetBalanceChange.getTo())
-            .sep11Asset(AssetHelper.getSep11AssetName(assetBalanceChange.getAsset().toXdr()))
-            .amount(AssetHelper.toXdrAmount(assetBalanceChange.getAmount()).toBigInteger())
-            .txHash(invokeOp.getTransactionHash())
-            .operationId(String.valueOf(invokeOp.getId()))
-            .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
-            .build();
+      } else {
+        return null;
       }
-      return null;
-    } else {
-      return null;
     }
+    return null;
   }
 
   @Override

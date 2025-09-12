@@ -92,7 +92,6 @@ fun Route.sep24(
               transaction.amountExpected?.asset
                 ?: throw ClientException("Missing amountExpected.asset field")
             val memo = transaction.memo
-            val memoType = transaction.memoType
 
             call.respond(Success(sessionId))
 
@@ -105,8 +104,7 @@ fun Route.sep24(
                 deposit.amount.toBigDecimal(),
                 account,
                 stellarAsset,
-                memo,
-                memoType,
+                memo
               )
             }
           }

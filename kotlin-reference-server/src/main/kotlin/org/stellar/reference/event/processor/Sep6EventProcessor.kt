@@ -17,6 +17,7 @@ import org.stellar.reference.log
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.transactionWithRetry
 import org.stellar.sdk.Asset
+import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse.GetTransactionStatus.SUCCESS
 
 class Sep6EventProcessor(
   private val config: Config,
@@ -128,14 +129,16 @@ class Sep6EventProcessor(
           onchainPayments[transaction.id] = stellarTxnId
 
           log.info { "Waiting for transaction $stellarTxnId to be available..." }
-          repeat(3) { attempt ->
-            try {
-              val resp = paymentClient.getTransaction(stellarTxnId)
-              if (resp.successful) return@repeat
-            } catch (e: Exception) {
-              log.warn(e) { "Attempt ${attempt + 1}: Failed to fetch transaction $stellarTxnId" }
+          run loop@{
+            repeat(5) { attempt ->
+              try {
+                val resp = paymentClient.getTransaction(stellarTxnId)
+                if (resp != null && resp.status == SUCCESS) return@loop
+              } catch (e: Exception) {
+                log.warn(e) { "Attempt ${attempt + 1}: Failed to fetch transaction $stellarTxnId" }
+              }
+              delay(2_000)
             }
-            delay(5_000)
           }
 
           // After the transaction is available, call notify_onchain_funds_sent
@@ -310,12 +313,12 @@ class Sep6EventProcessor(
                         transaction.amountExpected.amount
                       } else {
                         transaction.amountOut.amount
-                      }
+                      },
                   ),
                 feeDetails =
                   FeeDetails(
                     total = transaction.feeDetails.total ?: "0",
-                    asset = transaction.amountIn.asset
+                    asset = transaction.amountIn.asset,
                   ),
                 instructions = instructions,
               ),
@@ -371,12 +374,12 @@ class Sep6EventProcessor(
                         transaction.amountExpected.amount
                       } else {
                         transaction.amountOut.amount
-                      }
+                      },
                   ),
                 feeDetails =
                   FeeDetails(
                     total = transaction.feeDetails.total ?: "0",
-                    asset = transaction.amountIn.asset
+                    asset = transaction.amountIn.asset,
                   ),
               ),
             )

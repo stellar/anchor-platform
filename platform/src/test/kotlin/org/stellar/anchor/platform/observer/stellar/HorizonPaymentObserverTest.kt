@@ -12,9 +12,14 @@ import org.stellar.anchor.util.AssetHelper
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse
+import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse.HostFunctionParameter
 import org.stellar.sdk.responses.operations.OperationResponse
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.sdk.xdr.SCSymbol
+import org.stellar.sdk.xdr.SCVal
+import org.stellar.sdk.xdr.SCValType
+import org.stellar.sdk.xdr.XdrString
 
 class HorizonPaymentObserverTest {
   private lateinit var horizon: Horizon
@@ -111,10 +116,18 @@ class HorizonPaymentObserverTest {
     every { assetBalanceChange.asset } returns Asset.createNativeAsset()
     every { assetBalanceChange.amount } returns "300.0"
     val invokeOp = mockk<InvokeHostFunctionOperationResponse>()
-    every { invokeOp.function } returns "transfer"
+    every { invokeOp.function } returns "HostFunctionTypeHostFunctionTypeInvokeContract"
     every { invokeOp.assetBalanceChanges } returns listOf(assetBalanceChange)
     every { invokeOp.transactionHash } returns "txHash3"
     every { invokeOp.id } returns 789L
+    val transferXdr =
+      SCVal.builder()
+        .discriminant(SCValType.SCV_SYMBOL)
+        .sym(SCSymbol(XdrString("transfer")))
+        .build()
+        .toXdrBase64()
+    every { invokeOp.parameters } returns
+      List(5) { HostFunctionParameter("mock type", transferXdr) }
     every { horizon.getTransaction(any()) } returns mockk()
 
     val event = observer.toPaymentTransferEvent(invokeOp)
