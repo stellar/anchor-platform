@@ -3,18 +3,14 @@ package org.stellar.reference.sep24
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.math.BigDecimal
 import java.math.RoundingMode
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.retryWhen
-import kotlinx.coroutines.flow.single
 import org.stellar.reference.client.PaymentClient
 import org.stellar.reference.data.*
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.transactionWithRetry
 import org.stellar.sdk.Asset
-import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse
-import org.stellar.sdk.responses.operations.PaymentOperationResponse
 
 private val log = KotlinLogging.logger {}
 
@@ -27,8 +23,7 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
     amount: BigDecimal,
     account: String,
     asset: String,
-    memo: String?,
-    memoType: String?,
+    memo: String?
   ) {
     try {
       var transaction = sep24.getTransaction(transactionId)
@@ -62,12 +57,11 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
               account,
               Asset.create(asset.replace("stellar:", "")),
               transaction.amountOut!!.amount!!,
-              memo,
-              memoType,
+              memo
             )
 
           // 6. Finalize Stellar anchor transaction
-          finalizeStellarTransaction(transactionId, txHash, asset, amount)
+          finalizeStellarTransaction(transactionId, txHash)
         }
       }
 
@@ -155,9 +149,7 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
 
   private suspend fun finalizeStellarTransaction(
     transactionId: String,
-    stellarTransactionId: String,
-    asset: String,
-    amount: BigDecimal,
+    stellarTransactionId: String
   ) {
     // SAC transfers submitted to RPC are asynchronous, we will need to retry
     // until the RPC returns a success response
@@ -180,57 +172,7 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
           }
         }
         .collect {}
-    } else {
-      val operationId: Long = getFirstOperationIdWithRetry(stellarTransactionId)
-
-      sep24.patchTransaction(
-        PatchTransactionTransaction(
-          transactionId,
-          "completed",
-          message = "completed",
-          stellarTransactions =
-            listOf(
-              StellarTransaction(
-                stellarTransactionId,
-                payments =
-                  listOf(
-                    StellarPayment(
-                      id = operationId.toString(),
-                      Amount(amount.toPlainString(), asset),
-                    )
-                  ),
-              )
-            ),
-        )
-      )
     }
-  }
-
-  private suspend fun getFirstOperationIdWithRetry(
-    stellarTransactionId: String,
-    maxAttempts: Int = 5,
-    delaySeconds: Int = 5,
-  ): Long {
-    return flow {
-        val operationId =
-          sep24.server
-            .operations()
-            .forTransaction(stellarTransactionId)
-            .execute()
-            .records
-            .first { it is PaymentOperationResponse || it is InvokeHostFunctionOperationResponse }
-            .id
-        emit(operationId)
-      }
-      .retryWhen { _, attempt ->
-        if (attempt < maxAttempts) {
-          delay(delaySeconds.seconds)
-          true
-        } else {
-          false
-        }
-      }
-      .single()
   }
 
   private suspend fun failTransaction(transactionId: String, message: String?) {
