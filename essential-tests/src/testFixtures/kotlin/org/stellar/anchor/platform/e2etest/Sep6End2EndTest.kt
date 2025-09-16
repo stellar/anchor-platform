@@ -1,6 +1,8 @@
 package org.stellar.anchor.platform.e2etest
 
 import io.ktor.http.*
+import java.math.BigInteger
+import java.util.stream.Stream
 import kotlin.test.DefaultAsserter.fail
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
@@ -8,6 +10,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
@@ -25,6 +30,7 @@ import org.stellar.anchor.util.Log
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.MuxedAccount
 import org.stellar.walletsdk.anchor.customer
 import org.stellar.walletsdk.asset.IssuedAssetId
 
@@ -57,11 +63,32 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         "bank_number" to "123",
         "bank_branch_number" to "121122676",
       )
+
+    var uniqueMemoRange = 0
+
+    private fun uniqueMemo(): String {
+      this.uniqueMemoRange++
+      return (this.uniqueMemoRange * 100000..this.uniqueMemoRange * 100000 + 99999)
+        .random()
+        .toString()
+    }
+
+    @JvmStatic
+    fun destinations(): Stream<Arguments> {
+      val address = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
+      return Stream.of(
+        // Muxed account
+        Arguments.of(MuxedAccount(address, BigInteger(uniqueMemo())).address),
+        // Classic account
+        Arguments.of(address)
+      )
+    }
   }
 
-  @Test
+  @ParameterizedTest
+  @MethodSource("destinations")
   @Order(10)
-  fun `test classic asset deposit`() = runBlocking {
+  fun `test classic asset deposit`(destination: String) = runBlocking {
     val memo = uniqueMemo()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
@@ -82,7 +109,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
       wallet.sep6.deposit(
         mapOf(
           "asset_code" to USDC.code,
-          "account" to clientWalletAccount,
+          "account" to destination,
           "amount" to "1",
           "type" to "SWIFT",
         )
@@ -375,10 +402,12 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     assertEquals(completedDepositTxn.transaction.id, transactionByStellarId.transaction.id)
   }
 
-  @Test
+  @ParameterizedTest
+  @MethodSource("destinations")
   @Order(20)
-  fun `test classic asset withdraw`() = runBlocking {
+  fun `test classic asset withdraw`(dest: String) = runBlocking {
     val memo = uniqueMemo()
+    val destination = dest ?: clientWalletAccount
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
@@ -397,7 +426,12 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
 
     val withdraw =
       wallet.sep6.withdraw(
-        mapOf("asset_code" to USDC.code, "amount" to "1", "type" to "bank_account")
+        mapOf(
+          "account" to destination,
+          "asset_code" to USDC.code,
+          "amount" to "1",
+          "type" to "bank_account"
+        )
       )
     Log.info("Withdrawal initiated: ${withdraw.id}")
     waitStatus(withdraw.id, PENDING_CUSTOMER_INFO_UPDATE, wallet.sep6)
@@ -748,14 +782,5 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     fail(
       "Transaction status [$status] did not match any of the expected statuses [$expectedStatuses]"
     )
-  }
-
-  var uniqueMemoRange = 0
-
-  private fun uniqueMemo(): String {
-    this.uniqueMemoRange++
-    return (this.uniqueMemoRange * 100000..this.uniqueMemoRange * 100000 + 99999)
-      .random()
-      .toString()
   }
 }
