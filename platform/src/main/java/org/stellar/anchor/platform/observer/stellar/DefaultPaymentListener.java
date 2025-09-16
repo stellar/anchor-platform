@@ -59,7 +59,6 @@ public class DefaultPaymentListener implements PaymentListener {
     this.platformApiClient = platformApiClient;
     this.rpcConfig = rpcConfig;
     this.sacToAssetMapper = sacToAssetMapper;
-    ;
   }
 
   @Override

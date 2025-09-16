@@ -82,14 +82,14 @@ class WalletClient(
     }
 
     return when (account[0]) {
-      'C' -> sendFromContractAccount(destination, asset, amount, memo)
+      'C',
       'G',
-      'M' -> sendFromContractAccount(destination, asset, amount, memo)
+      'M' -> sendFund(destination, asset, amount, memo)
       else -> throw Exception("Unsupported destination account type")
     }
   }
 
-  private fun sendFromContractAccount(
+  private fun sendFund(
     destination: String,
     asset: Asset,
     amount: String,
