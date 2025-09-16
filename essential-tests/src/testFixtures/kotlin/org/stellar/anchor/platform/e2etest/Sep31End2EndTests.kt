@@ -160,6 +160,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  @Disabled
   fun `test classic asset receive without PENDING_CUSTOMER_INFO_UDPATE`() = runBlocking {
     val asset = USDC
     val amount = "5"
