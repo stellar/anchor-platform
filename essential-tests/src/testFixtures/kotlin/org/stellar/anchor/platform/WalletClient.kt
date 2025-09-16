@@ -1,10 +1,7 @@
 package org.stellar.anchor.platform
 
-import java.math.BigDecimal
 import java.math.BigInteger
 import java.net.URI
-import java.util.Base64
-import org.apache.commons.codec.binary.Hex
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest
 import org.stellar.anchor.client.*
 import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
@@ -13,10 +10,7 @@ import org.stellar.anchor.util.Sep1Helper.TomlContent
 import org.stellar.sdk.*
 import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
 import org.stellar.sdk.Auth.authorizeEntry
-import org.stellar.sdk.exception.BadRequestException
 import org.stellar.sdk.operations.InvokeHostFunctionOperation
-import org.stellar.sdk.operations.PaymentOperation
-import org.stellar.sdk.responses.TransactionResponse
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.SCVal
 import org.stellar.sdk.xdr.SCValType
@@ -33,7 +27,6 @@ class WalletClient(
   val sep24: Sep24Client
   val sep6: Sep6Client
   val sep31: Sep31Client
-  private val horizon = Server("https://horizon-testnet.stellar.org")
   private val rpc = SorobanServer("https://soroban-testnet.stellar.org")
 
   init {
@@ -89,60 +82,14 @@ class WalletClient(
     }
 
     return when (account[0]) {
-      'C' -> sendFromContractAccount(destination, asset, amount, memo)
+      'C',
       'G',
-      'M' -> sendFromClassicAccount(destination, asset, amount, memo, memoType)
+      'M' -> sendFund(destination, asset, amount, memo)
       else -> throw Exception("Unsupported destination account type")
     }
   }
 
-  private fun sendFromClassicAccount(
-    destination: String,
-    asset: Asset,
-    amount: String,
-    memo: String?,
-    memoType: String?,
-  ): String {
-    val keyPair = KeyPair.fromSecretSeed(signingKey)
-    val account = horizon.accounts().account(keyPair.accountId)
-    val transactionBuilder =
-      TransactionBuilder(account, Network.TESTNET)
-        .setBaseFee(100)
-        .addPreconditions(
-          TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(60)).build()
-        )
-        .addOperation(
-          PaymentOperation.builder()
-            .destination(destination)
-            .asset(asset)
-            .amount(BigDecimal(amount))
-            .build()
-        )
-
-    if (memo != null && memoType != null) {
-      transactionBuilder.addMemo(
-        when (memoType) {
-          "text" -> Memo.text(memo)
-          "id" -> Memo.id(memo.toLong())
-          "hash" -> Memo.hash(Hex.encodeHexString(Base64.getDecoder().decode(memo)))
-          else -> throw Exception("Unsupported memo type")
-        }
-      )
-    }
-
-    val transaction = transactionBuilder.build()
-    transaction.sign(keyPair)
-    val txnResponse: TransactionResponse
-    try {
-      txnResponse = horizon.submitTransaction(transaction)
-    } catch (e: BadRequestException) {
-      throw RuntimeException("Error submitting transaction: ${e.problem?.extras?.resultCodes}")
-    }
-    assert(txnResponse.successful)
-    return txnResponse.hash
-  }
-
-  private fun sendFromContractAccount(
+  private fun sendFund(
     destination: String,
     asset: Asset,
     amount: String,

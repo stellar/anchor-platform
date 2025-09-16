@@ -71,7 +71,8 @@ public class KafkaSession implements EventService.Session {
         producer = createProducer();
       }
       String serialized = GsonUtils.getInstance().toJson(event);
-      ProducerRecord<String, String> record = new ProducerRecord<>(topic, serialized);
+      ProducerRecord<String, String> record =
+          new ProducerRecord<>(topic, event.getId(), serialized);
       record.headers().add(new RecordHeader("type", event.getType().type.getBytes()));
       // If the queue is offline, throw an exception
       try {

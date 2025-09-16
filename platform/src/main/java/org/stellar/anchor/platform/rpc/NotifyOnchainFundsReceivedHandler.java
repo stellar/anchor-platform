@@ -27,6 +27,7 @@ import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.ledger.LedgerTransaction;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep31Transaction;
@@ -38,6 +39,7 @@ import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
+import org.stellar.sdk.xdr.OperationType;
 
 public class NotifyOnchainFundsReceivedHandler
     extends RpcTransactionStatusHandler<NotifyOnchainFundsReceivedRequest> {
@@ -170,7 +172,12 @@ public class NotifyOnchainFundsReceivedHandler
 
       if (Sep.SEP_31.equals(Sep.from(txn.getProtocol()))) {
         JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
-        txn31.setFromAccount(ledgerTxn.getOperations().get(0).getPaymentOperation().getFrom());
+        LedgerOperation operation = ledgerTxn.getOperations().get(0);
+        if (operation.getType() == OperationType.INVOKE_HOST_FUNCTION) {
+          txn31.setFromAccount(operation.getInvokeHostFunctionOperation().getFrom());
+        } else {
+          txn31.setFromAccount(ledgerTxn.getOperations().get(0).getPaymentOperation().getFrom());
+        }
       }
     } catch (LedgerException ex) {
       errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
