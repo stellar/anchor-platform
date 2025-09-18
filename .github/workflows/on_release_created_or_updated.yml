@@ -22,8 +22,8 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'adopt'
+          java-version: '17.0.16+8'
+          distribution: 'temurin'
 
       # Enable multi-arch emulation
       - name: Set up QEMU
