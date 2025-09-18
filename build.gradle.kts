@@ -229,6 +229,9 @@ allprojects {
 // Ensure JDK version is 17.0.16 or above to support Sectigo root CA certificate
 // Check the Sectigo certification additions at https://www.oracle.com/java/technologies/javase/17-0-16-relnotes.html
 fun isJdkVersionValid(): Boolean {
+  if (System.getProperty("ignoreJdkCheck") == "true") {
+    return true
+  }
   val version = System.getProperty("java.version")
   val regex = Regex("^(\\d+)\\.(\\d+)\\.(\\d+)")
   val match = regex.find(version)
