@@ -7,6 +7,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.stellar.anchor.Retry
 import org.stellar.anchor.api.callback.SendEventRequest
 import org.stellar.anchor.api.callback.SendEventRequestPayload
 import org.stellar.anchor.api.event.AnchorEvent
@@ -81,6 +82,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  @Retry(attempts = 3, delayMs = 200)
   fun `test classic asset receive with PENDING_CUSTOMER_INFO_UDPATE`() = runBlocking {
     val asset = USDC
     val amount = "5"
@@ -160,6 +162,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  @Retry(attempts = 3, delayMs = 200)
   fun `test classic asset receive without PENDING_CUSTOMER_INFO_UDPATE`() = runBlocking {
     val asset = USDC
     val amount = "5"

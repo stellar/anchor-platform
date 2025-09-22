@@ -59,7 +59,7 @@ tasks.register("runEssentialTests") {
   group = "github"
   description = "Run the essential tests."
   dependsOn(":essential-tests:test")
-
+  
   doLast {
     if (!isPortActive(port = 8080)) {
       println("************************************************************")
@@ -68,7 +68,7 @@ tasks.register("runEssentialTests") {
       throw GradleException("AnchorPlatform server is not running.")
     }
   }
-
+  
   subprojects {
     if (name == "essential-tests") {
       skipNonCriticalTasks(tasks)
@@ -78,9 +78,9 @@ tasks.register("runEssentialTests") {
 
 // The printVersionName task is used to print the version name of the project. This
 // is useful for CI/CD pipelines to get the version string of the project.
-tasks.register("printVersionName") {
+tasks.register("printVersionName") { 
   doLast {
-    println(rootProject.version.toString())
+    println(rootProject.version.toString()) 
   }
 }
 
@@ -213,7 +213,7 @@ subprojects {
 
 allprojects {
   group = "org.stellar.anchor-sdk"
-  version = "4.0.0"
+  version = "4.0.1"
 
   tasks.jar {
     manifest {
@@ -222,6 +222,32 @@ allprojects {
               "Implementation-Title" to project.name, "Implementation-Version" to project.version))
     }
   }
+}
+
+
+// *******************************************************************************
+// Ensure JDK version is 17.0.16 or above to support Sectigo root CA certificate
+// Check the Sectigo certification additions at https://www.oracle.com/java/technologies/javase/17-0-16-relnotes.html
+fun isJdkVersionValid(): Boolean {
+  if (System.getProperty("ignoreJdkCheck") == "true") {
+    return true
+  }
+  val version = System.getProperty("java.version")
+  val regex = Regex("^(\\d+)\\.(\\d+)\\.(\\d+)")
+  val match = regex.find(version)
+  if (match != null) {
+    val (major, minor, patch) = match.destructured
+    if (major.toInt() == 17) {
+      val patchInt = patch.toInt()
+      val minorInt = minor.toInt()
+      // Accept 17.0.16 and above
+      return minorInt > 0 || patchInt >= 16
+    }
+  }
+  return false
+}
+if (!isJdkVersionValid()) {
+  throw GradleException("JDK 17.0.16 or above is required. Current version: ${System.getProperty("java.version")}")
 }
 
 // *******************************************************************************
@@ -249,5 +275,7 @@ tasks.register("printUsage") {
             .trimIndent())
   }
 }
+
+
 
 defaultTasks("printUsage")

@@ -12,7 +12,7 @@ assignees: ''
 ### Release Preparation
 - [ ] Decide on a version number based on the current version number and the common rules defined in [Semantic Versioning](https://semver.org). E.g. `4.x.x`.
 - [ ] Update this ticket name to reflect the new version number, following the pattern "Release `4.x.x`".
-- [ ] Update `version` string (Eg: `4.x.x`) attribute in the `build.gradle.kts`
+- [ ] Update `allprojects.version` string (Eg: `4.x.x`) attribute in the `build.gradle.kts` file.
 - [ ] Code freeze and cut a branch for the new release out of the `develop` branch, following the Gitflow naming pattern `release/4.x.x`.
 - [ ] Update the badges versions in [docs/README.md].
 - [ ] In general, only bug fixes and security patches will be applied to the `release/4.x.x` branch.
