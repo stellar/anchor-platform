@@ -1,18 +1,20 @@
-ARG BASE_IMAGE=gradle:8.2.1-jdk17
-
-FROM ${BASE_IMAGE} AS build
-WORKDIR /code
-COPY --chown=gradle:gradle . .
-
-RUN gradle clean bootJar --stacktrace -x test -DignoreJdkCheck=true
+#ARG BASE_IMAGE=gradle:8.2.1-jdk17
+#
+#FROM ${BASE_IMAGE} AS build
+#WORKDIR /code
+#COPY --chown=gradle:gradle . .
+#
+#RUN gradle clean bootJar --stacktrace -x test -DignoreJdkCheck=true
 
 FROM ubuntu:24.04
 ARG JDK_VER=17.0.16_8
 ARG TEMURIN_RELEASE=jdk-17.0.16+8
 ARG TARGETARCH
 
-COPY --from=build /code/service-runner/build/libs/anchor-platform-runner*.jar /app/anchor-platform-runner.jar
-COPY --from=build /code/scripts/docker-start.sh /app/start.sh
+#COPY --from=build /code/service-runner/build/libs/anchor-platform-runner*.jar /app/anchor-platform-runner.jar
+#COPY --from=build /code/scripts/docker-start.sh /app/start.sh
+COPY ./temp/anchor-platform/service-runner/build/libs/anchor-platform-runner*.jar /app/anchor-platform-runner.jar
+COPY ./temp/anchor-platform/scripts/docker-start.sh /app/start.sh
 
 # Install curl and ca-certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
