@@ -1,7 +1,6 @@
 name: Release Published
 
 on:
-  pull_request:
   workflow_dispatch:
   release:
     types: [ created, edited ]
