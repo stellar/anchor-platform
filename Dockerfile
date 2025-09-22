@@ -6,11 +6,10 @@ COPY --chown=gradle:gradle . .
 
 RUN gradle clean bootJar --stacktrace -x test -DignoreJdkCheck=true
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 ARG JDK_VER=17.0.16_8
 ARG TEMURIN_RELEASE=jdk-17.0.16+8
 ARG TARGETARCH
-ARG GRADLE_VERSION=8.14.2
 
 COPY --from=build /code/service-runner/build/libs/anchor-platform-runner*.jar /app/anchor-platform-runner.jar
 COPY --from=build /code/scripts/docker-start.sh /app/start.sh
@@ -41,7 +40,5 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # Sanity check
 RUN java --version
-
-
 
 ENTRYPOINT ["/bin/bash", "/app/start.sh"]
