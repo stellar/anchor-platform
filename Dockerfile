@@ -12,7 +12,7 @@ FROM ubuntu:24.04
 COPY --from=build /code/service-runner/build/libs/anchor-platform-runner*.jar /app/anchor-platform-runner.jar
 COPY --from=build /code/scripts/docker-start.sh /app/start.sh
 
-# Refresh keyrings and install Temurin 11 JRE (headless = smaller)
+# Refresh keyrings and install Temurin 11 JRE
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates wget gnupg ubuntu-keyring && \
@@ -28,7 +28,7 @@ RUN apt-get update && \
 RUN apt-get install -y --no-install-recommends temurin-11-jre && \
     rm -rf /var/lib/apt/lists/*
 
-# Optional sanity check
+# Quick sanity check
 RUN java -version
 
 ENTRYPOINT ["/bin/bash", "/app/start.sh"]
