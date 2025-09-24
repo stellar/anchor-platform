@@ -265,6 +265,7 @@ class NotifyOffchainFundsSentHandlerTest {
     val txn24 = JdbcSep24Transaction()
     txn24.status = PENDING_USR_TRANSFER_START.toString()
     txn24.kind = DEPOSIT.kind
+    txn24.userActionRequiredBy = Instant.now()
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
 

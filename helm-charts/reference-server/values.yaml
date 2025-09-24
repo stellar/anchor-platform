@@ -1,0 +1,31 @@
+fullName: reference-server
+namespace: default
+
+secretStoreRefName: fake-secret-store
+
+container:
+  image: anchor-platform:local
+  imagePullPolicy: Never
+
+config:
+  app:
+    horizonEndpoint: https://horizon-testnet.stellar.org
+    platformApiEndpoint: http://anchor-platform-svc-platform:8085
+  data:
+    url: postgresql-ref:5432
+
+services:
+  ref:
+    containerPort: 8091
+    servicePort: 8091
+    type: ClusterIP
+    name: reference-server
+    deployment:
+      replicas: 1
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 500m
+        limits:
+          memory: 1Gi
+          cpu: 1

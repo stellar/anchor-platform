@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.stellar.anchor.api.sep.operation.Sep31Operation;
+import org.stellar.anchor.api.shared.FeeDetails;
 
 /**
  * The response to the GET /transaction endpoint of SEP-31.
@@ -47,6 +48,12 @@ public class Sep31GetTransactionResponse {
     @SerializedName("amount_fee")
     String amountFee;
 
+    @SerializedName("fee_details")
+    FeeDetails feeDetails;
+
+    @SerializedName("quote_id")
+    String quoteId;
+
     @SerializedName("amount_fee_asset")
     String amountFeeAsset;
 
@@ -64,6 +71,9 @@ public class Sep31GetTransactionResponse {
 
     @SerializedName("completed_at")
     Instant completedAt;
+
+    @SerializedName("user_action_required_by")
+    Instant userActionRequiredBy;
 
     @SerializedName("stellar_transaction_id")
     String stellarTransactionId;

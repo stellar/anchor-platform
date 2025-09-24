@@ -50,7 +50,11 @@ public enum SepTransactionStatus {
   @SerializedName("pending_external")
   PENDING_EXTERNAL("pending_external", "waiting on an external entity"),
   @SerializedName("pending_stellar")
-  PENDING_STELLAR("pending_stellar", "stellar is executing the transaction");
+  PENDING_STELLAR("pending_stellar", "stellar is executing the transaction"),
+  @SerializedName("on_hold")
+  ON_HOLD(
+      "on_hold",
+      "deposit/withdrawal is currently on hold for additional checks after receiving user's funds");
 
   private final String status;
   private final String description;

@@ -1,8 +1,10 @@
 package org.stellar.anchor.api.callback;
 
 import com.google.gson.annotations.SerializedName;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * The request body of GET /rate endpoint.
@@ -12,6 +14,8 @@ import lombok.Data;
  *     API</a>
  */
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class GetRateRequest {
   Type type;
@@ -43,8 +47,6 @@ public class GetRateRequest {
   @SerializedName("client_id")
   String clientId;
 
-  String id;
-
   public enum Type {
     @SerializedName("indicative")
     INDICATIVE("indicative"),
@@ -56,6 +58,15 @@ public class GetRateRequest {
 
     Type(String name) {
       this.name = name;
+    }
+
+    public static Type from(String name) {
+      for (Type type : values()) {
+        if (type.name.equals(name)) {
+          return type;
+        }
+      }
+      throw new RuntimeException("Invalid type: " + name);
     }
 
     @Override

@@ -53,6 +53,15 @@ public interface SepTransaction {
   Instant getCompletedAt();
 
   void setCompletedAt(Instant completedAt);
+
+  /**
+   * The date and time user action is required by. See SEP protocols for more details.
+   *
+   * @return date and time of user action required by.
+   */
+  Instant getUserActionRequiredBy();
+
+  void setUserActionRequiredBy(Instant requiredBy);
   /**
    * <code>transaction_id</code> on Stellar network of the transfer that either completed the
    * deposit or started the withdrawal.

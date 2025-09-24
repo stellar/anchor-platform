@@ -12,7 +12,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Map;
-import lombok.SneakyThrows;
 import okhttp3.*;
 import okhttp3.HttpUrl.Builder;
 import org.springframework.http.HttpStatus;
@@ -56,32 +55,34 @@ public class RestCustomerIntegration implements CustomerIntegration {
             urlBuilder.addQueryParameter(key, value);
           }
         });
+
     HttpUrl url = urlBuilder.build();
 
     // Make request
-    Response response =
+    try (Response response =
         PlatformIntegrationHelper.call(
             httpClient,
-            PlatformIntegrationHelper.getRequestBuilder(authHelper).url(url).get().build());
-    String responseContent = PlatformIntegrationHelper.getContent(response);
+            PlatformIntegrationHelper.getRequestBuilder(authHelper).url(url).get().build())) {
+      String responseContent = PlatformIntegrationHelper.getContent(response);
 
-    if (response.code() != HttpStatus.OK.value()) {
-      throw PlatformIntegrationHelper.httpError(responseContent, response.code(), gson);
-    }
+      if (response.code() != HttpStatus.OK.value()) {
+        throw PlatformIntegrationHelper.httpError(responseContent, response.code(), gson);
+      }
 
-    GetCustomerResponse getCustomerResponse;
-    try {
-      getCustomerResponse = gson.fromJson(responseContent, GetCustomerResponse.class);
-    } catch (Exception e) { // cannot read body from response
-      throw new ServerErrorException("internal server error", e);
-    }
+      GetCustomerResponse getCustomerResponse;
+      try {
+        getCustomerResponse = gson.fromJson(responseContent, GetCustomerResponse.class);
+      } catch (Exception e) { // cannot read body from response
+        throw new ServerErrorException("internal server error", e);
+      }
 
-    if (getCustomerResponse.getStatus() == null) {
-      Log.error("GET {callbackAPI}/customer response is missing the status field");
-      throw new ServerErrorException(
-          "internal server error: result from Anchor backend is invalid");
+      if (getCustomerResponse.getStatus() == null) {
+        Log.error("GET {callbackAPI}/customer response is missing the status field");
+        throw new ServerErrorException(
+            "internal server error: result from Anchor backend is invalid");
+      }
+      return getCustomerResponse;
     }
-    return getCustomerResponse;
   }
 
   @Override
@@ -90,18 +91,19 @@ public class RestCustomerIntegration implements CustomerIntegration {
     Request callbackRequest = createCallbackRequest(putCustomerRequest);
 
     // Call anchor
-    Response response = PlatformIntegrationHelper.call(httpClient, callbackRequest);
-    String responseContent = PlatformIntegrationHelper.getContent(response);
+    try (Response response = PlatformIntegrationHelper.call(httpClient, callbackRequest)) {
+      String responseContent = PlatformIntegrationHelper.getContent(response);
 
-    if (!List.of(HttpStatus.OK.value(), HttpStatus.CREATED.value(), HttpStatus.ACCEPTED.value())
-        .contains(response.code())) {
-      throw PlatformIntegrationHelper.httpError(responseContent, response.code(), gson);
-    }
+      if (!List.of(HttpStatus.OK.value(), HttpStatus.CREATED.value(), HttpStatus.ACCEPTED.value())
+          .contains(response.code())) {
+        throw PlatformIntegrationHelper.httpError(responseContent, response.code(), gson);
+      }
 
-    try {
-      return gson.fromJson(responseContent, PutCustomerResponse.class);
-    } catch (Exception e) {
-      throw new ServerErrorException("internal server error", e);
+      try {
+        return gson.fromJson(responseContent, PutCustomerResponse.class);
+      } catch (Exception e) {
+        throw new ServerErrorException("internal server error", e);
+      }
     }
   }
 
@@ -182,20 +184,14 @@ public class RestCustomerIntegration implements CustomerIntegration {
         PlatformIntegrationHelper.getRequestBuilder(authHelper).url(url).delete().build();
 
     // Call anchor
-    Response response = PlatformIntegrationHelper.call(httpClient, callbackRequest);
-    String responseContent = PlatformIntegrationHelper.getContent(response);
+    try (Response response = PlatformIntegrationHelper.call(httpClient, callbackRequest)) {
+      String responseContent = PlatformIntegrationHelper.getContent(response);
 
-    if (!List.of(HttpStatus.OK.value(), HttpStatus.NO_CONTENT.value()).contains(response.code())) {
-      throw PlatformIntegrationHelper.httpError(responseContent, response.code(), gson);
+      if (!List.of(HttpStatus.OK.value(), HttpStatus.NO_CONTENT.value())
+          .contains(response.code())) {
+        throw PlatformIntegrationHelper.httpError(responseContent, response.code(), gson);
+      }
     }
-  }
-
-  @SneakyThrows
-  @Override
-  public PutCustomerVerificationResponse putVerification(PutCustomerVerificationRequest request) {
-    // the Platform Callback API doesn't support verification.
-    // if it does in the future we can implement this method
-    throw new UnsupportedOperationException("not implemented");
   }
 
   Builder getCustomerUrlBuilder() {

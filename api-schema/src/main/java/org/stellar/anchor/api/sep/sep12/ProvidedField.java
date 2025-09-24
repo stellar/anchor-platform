@@ -20,6 +20,6 @@ public class ProvidedField {
   String description;
   List<String> choices;
   Boolean optional;
-  Sep12Status status;
+  ProvidedFieldStatus status;
   String error;
 }

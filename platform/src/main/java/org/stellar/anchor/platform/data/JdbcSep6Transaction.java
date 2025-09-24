@@ -31,10 +31,6 @@ public class JdbcSep6Transaction extends JdbcSepTransaction implements Sep6Trans
   @Column(name = "status_eta")
   Long statusEta;
 
-  @SerializedName("more_info_url")
-  @Column(name = "more_info_url")
-  String moreInfoUrl;
-
   @SerializedName("kind")
   @Column(name = "kind")
   String kind;

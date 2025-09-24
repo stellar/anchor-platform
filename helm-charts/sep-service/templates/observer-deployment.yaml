@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.fullName }}-svc-{{ .Values.services.observer.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.fullName }}-observer
+    helm.sh/chart: {{ include "common.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.services.observer.deployment.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ .Values.fullName }}-svc-{{ .Values.services.observer.name }}
+  template:
+    metadata:
+      {{- if .Values.services.observer.deployment.annotations }}
+      annotations:
+        {{- toYaml .Values.services.observer.deployment.annotations | nindent 8 }}
+      {{- end }}
+      namespace: {{ .Values.namespace }}
+      labels:
+        app: {{ .Values.fullName }}-svc-{{ .Values.services.observer.name }}
+    spec:
+      containers:
+        - name: stellar-observer
+          image: {{ .Values.container.image }}
+          args: [ "--stellar-observer" ]
+          imagePullPolicy: {{ .Values.container.imagePullPolicy | default "Always" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.services.observer.containerPort | default 8083 }}
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.observer.containerPort | default 8083 }}
+            initialDelaySeconds: 120
+            failureThreshold: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.observer.containerPort | default 8083 }}
+            initialDelaySeconds: 120
+            failureThreshold: 2
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.observer.containerPort | default 8083 }}
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+              readOnly: true
+          env:
+            - name: STELLAR_ANCHOR_CONFIG
+              value: file:/config/anchor-config.yaml
+            - name: ASSETS_TYPE
+              value: file
+            - name: ASSETS_VALUE
+              value: /config/assets.yaml
+            - name: SECRET_DATA_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: POSTGRES_USER
+            - name: SECRET_DATA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: POSTGRES_PASSWORD
+            - name: SECRET_SEP24_INTERACTIVE_URL_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP24_INTERACTIVE_URL_JWT_SECRET
+            - name: SECRET_SEP24_MORE_INFO_URL_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP24_MORE_INFO_URL_JWT_SECRET
+            - name: SECRET_SEP6_MORE_INFO_URL_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP6_MORE_INFO_URL_JWT_SECRET
+          resources:
+            requests:
+              memory: {{ .Values.services.observer.deployment.resources.requests.memory }}
+              cpu: {{ .Values.services.observer.deployment.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.services.observer.deployment.resources.limits.memory }}
+              cpu: {{ .Values.services.observer.deployment.resources.limits.cpu }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: anchor-config

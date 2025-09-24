@@ -17,6 +17,7 @@ import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.ClientsConfig.ClientConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep10Config;
+import org.stellar.anchor.util.KeyUtil;
 import org.stellar.anchor.util.NetUtil;
 import org.stellar.anchor.util.StringHelper;
 import org.stellar.sdk.*;
@@ -35,6 +36,7 @@ public class PropertySep10Config implements Sep10Config, Validator {
   private AppConfig appConfig;
   private final PropertyClientsConfig clientsConfig;
   private SecretConfig secretConfig;
+  private boolean requireAuthHeader = false;
 
   public PropertySep10Config(
       AppConfig appConfig, PropertyClientsConfig clientsConfig, SecretConfig secretConfig) {
@@ -43,9 +45,8 @@ public class PropertySep10Config implements Sep10Config, Validator {
     this.secretConfig = secretConfig;
     this.knownCustodialAccountList =
         clientsConfig.getClients().stream()
-            .filter(
-                cfg -> cfg.getType() == CUSTODIAL && StringHelper.isNotEmpty(cfg.getSigningKey()))
-            .map(ClientConfig::getSigningKey)
+            .filter(cfg -> cfg.getType() == CUSTODIAL && !cfg.getSigningKeys().isEmpty())
+            .flatMap(cfg -> cfg.getSigningKeys().stream())
             .collect(Collectors.toList());
   }
 
@@ -100,6 +101,9 @@ public class PropertySep10Config implements Sep10Config, Validator {
           "Please set the secret.sep10.jwt_secret or SECRET_SEP10_JWT_SECRET environment variable");
     }
 
+    KeyUtil.rejectWeakJWTSecret(
+        secretConfig.getSep10JwtSecretKey(), errors, "secret.sep10.jwt_secret");
+
     if (isEmpty(homeDomain) && (homeDomains == null || homeDomains.isEmpty())) {
       // Default to localhost:8080 if neither is defined.
       homeDomains = List.of("localhost:8080");
@@ -127,7 +131,7 @@ public class PropertySep10Config implements Sep10Config, Validator {
             "webAuthDomain",
             "sep10-web-auth-domain-too-long",
             format(
-                "The sep10.web_auth_home_domain (%s) is longer than the maximum length (64) of a domain. Error=%s",
+                "The sep10.web_auth_home_domain (%s) is longer than the maximum length (59) of a domain. Error=%s",
                 webAuthDomain, iaex));
       }
 
@@ -165,7 +169,7 @@ public class PropertySep10Config implements Sep10Config, Validator {
     if (clientAttributionRequired) {
       List<String> nonCustodialClientNames =
           clientsConfig.clients.stream()
-              .filter(cfg -> cfg.getType() == NONCUSTODIAL && isNotEmpty(cfg.getDomain()))
+              .filter(cfg -> cfg.getType() == NONCUSTODIAL)
               .map(ClientConfig::getName)
               .collect(Collectors.toList());
 
@@ -208,7 +212,7 @@ public class PropertySep10Config implements Sep10Config, Validator {
           "homeDomain",
           "sep10-home-domain-too-long",
           format(
-              "The sep10.home_domain (%s) is longer than the maximum length (64) of a domain. Error=%s",
+              "The sep10.home_domain (%s) is longer than the maximum length (59) of a domain. Error=%s",
               domain, iaex));
     }
 
@@ -225,18 +229,16 @@ public class PropertySep10Config implements Sep10Config, Validator {
     // if clientAllowList is not defined, all client domains from the clients section are allowed.
     if (clientAllowList == null || clientAllowList.isEmpty()) {
       return clientsConfig.clients.stream()
-          .map(ClientConfig::getDomain)
-          .filter(StringHelper::isNotEmpty)
+          .filter(cfg -> cfg.getDomains() != null && !cfg.getDomains().isEmpty())
+          .flatMap(cfg -> cfg.getDomains().stream())
           .collect(Collectors.toList());
     }
 
     // If clientAllowList is defined, only the clients in the allow list are allowed.
     return clientAllowList.stream()
-        .map(
-            domain ->
-                (clientsConfig.getClientConfigByName(domain) == null)
-                    ? null
-                    : clientsConfig.getClientConfigByName(domain).getDomain())
+        .filter(name -> clientsConfig.getClientConfigByName(name) != null)
+        .filter(name -> clientsConfig.getClientConfigByName(name).getDomains() != null)
+        .flatMap(name -> clientsConfig.getClientConfigByName(name).getDomains().stream())
         .filter(StringHelper::isNotEmpty)
         .collect(Collectors.toList());
   }

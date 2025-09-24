@@ -1,21 +1,23 @@
 package org.stellar.anchor.platform.config;
 
+import static io.jsonwebtoken.lang.Collections.setOf;
 import static org.stellar.anchor.util.Log.debugF;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import javax.annotation.PostConstruct;
 import lombok.Data;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
-import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.config.ClientsConfig;
-import org.stellar.anchor.sep10.Sep10Helper;
 
 @Data
 public class PropertyClientsConfig implements ClientsConfig, Validator {
@@ -24,14 +26,31 @@ public class PropertyClientsConfig implements ClientsConfig, Validator {
   Map<String, String> domainToClientNameMap = null;
   Map<String, String> signingKeyToClientNameMap = null;
 
+  @PostConstruct
+  public void postConstruct() {
+    // In favor of migrating to signingKeys and domains, copy signingKey to signingKeys and domain
+    // to domains if signingKeys and domains are not set.
+    clients.forEach(
+        clientConfig -> {
+          if (!isEmpty(clientConfig.getSigningKey())) {
+            clientConfig.setSigningKeys(setOf(clientConfig.getSigningKey()));
+          }
+          if (!isEmpty(clientConfig.getDomain())) {
+            clientConfig.setDomains(setOf(clientConfig.getDomain()));
+          }
+        });
+  }
+
   @Override
   public ClientsConfig.ClientConfig getClientConfigBySigningKey(String signingKey) {
     if (signingKeyToClientNameMap == null) {
       signingKeyToClientNameMap = Maps.newHashMap();
       clients.forEach(
           clientConfig -> {
-            if (clientConfig.getSigningKey() != null) {
-              signingKeyToClientNameMap.put(clientConfig.getSigningKey(), clientConfig.getName());
+            if (clientConfig.getSigningKeys() != null && !clientConfig.getSigningKeys().isEmpty()) {
+              for (String key : clientConfig.getSigningKeys()) {
+                signingKeyToClientNameMap.put(key, clientConfig.getName());
+              }
             }
           });
     }
@@ -44,8 +63,10 @@ public class PropertyClientsConfig implements ClientsConfig, Validator {
       domainToClientNameMap = Maps.newHashMap();
       clients.forEach(
           clientConfig -> {
-            if (clientConfig.getDomain() != null) {
-              domainToClientNameMap.put(clientConfig.getDomain(), clientConfig.getName());
+            if (clientConfig.getDomains() != null && !clientConfig.getDomains().isEmpty()) {
+              for (String domainName : clientConfig.getDomains()) {
+                domainToClientNameMap.put(domainName, clientConfig.getName());
+              }
             }
           });
     }
@@ -84,52 +105,67 @@ public class PropertyClientsConfig implements ClientsConfig, Validator {
   }
 
   public void validateCustodialClient(ClientConfig clientConfig, Errors errors) {
-    if (isEmpty(clientConfig.getSigningKey())) {
+    if (isEmpty(clientConfig.getSigningKey())
+        && (clientConfig.getSigningKeys() == null || clientConfig.getSigningKeys().isEmpty())) {
       errors.reject(
-          "empty-client-signing-key", "The client.signingKey cannot be empty and must be defined");
+          "empty-client-signing-keys",
+          "The client.signingKeys cannot be empty and must be defined");
     }
-    if (!isEmpty(clientConfig.getCallbackUrl())) {
-      try {
-        new URL(clientConfig.getCallbackUrl());
-      } catch (MalformedURLException e) {
-        errors.reject("client-invalid-callback_url", "The client.callbackUrl is invalid");
-      }
+    if (!isEmpty(clientConfig.getSigningKey())
+        && clientConfig.getSigningKeys() != null
+        && !clientConfig.getSigningKeys().isEmpty()) {
+      errors.reject(
+          "client-signing-keys-conflict",
+          "The client.signingKey and The client.signingKeys cannot coexist, please choose one to use");
     }
+
+    validateCallbackUrls(clientConfig, errors);
   }
 
   public void validateNonCustodialClient(ClientConfig clientConfig, Errors errors) {
-    if (isEmpty(clientConfig.getDomain())) {
-      errors.reject("empty-client-domain", "The client.domain cannot be empty and must be defined");
+    if (isEmpty(clientConfig.getDomain())
+        && (clientConfig.getDomains() == null || clientConfig.getDomains().isEmpty())) {
+      errors.reject(
+          "empty-client-domains", "The client.domains cannot be empty and must be defined");
+    }
+    if (!isEmpty(clientConfig.getDomain())
+        && clientConfig.getDomains() != null
+        && !clientConfig.getDomains().isEmpty()) {
+      errors.reject(
+          "client-domains-conflict",
+          "The client.domain and the client.domains cannot coexist, please choose one to use");
     }
 
-    if (!isEmpty(clientConfig.getSigningKey())) {
-      try {
-        String clientSigningKey =
-            Sep10Helper.fetchSigningKeyFromClientDomain(clientConfig.getDomain());
-        if (!clientConfig.getSigningKey().equals(clientSigningKey)) {
-          errors.reject(
-              "client-signing-key-does-not-match",
-              "The client.signingKey does not matched any valid registered keys");
-        }
-      } catch (SepException e) {
-        errors.reject(
-            "client-signing-key-toml-read-failure",
-            "SIGNING_KEY not present in 'client_domain' TOML or TOML file does not exist");
-      }
-    }
-
-    if (!isEmpty(clientConfig.getCallbackUrl())) {
-      try {
-        new URL(clientConfig.getCallbackUrl());
-      } catch (MalformedURLException e) {
-        errors.reject("client-invalid-callback_url", "The client.callbackUrl is invalid");
-      }
-    }
+    validateCallbackUrls(clientConfig, errors);
 
     if (clientConfig.getDestinationAccounts() != null) {
       errors.reject(
           "destination-accounts-noncustodial",
           "Destination accounts list is not a valid configuration option for a non-custodial client");
     }
+  }
+
+  void validateCallbackUrls(ClientConfig client, Errors errors) {
+    ImmutableMap.of(
+            "callback_url",
+            Optional.ofNullable(client.getCallbackUrl()).orElse(""),
+            "callback_url_sep6",
+            Optional.ofNullable(client.getCallbackUrlSep6()).orElse(""),
+            "callback_url_sep24",
+            Optional.ofNullable(client.getCallbackUrlSep24()).orElse(""),
+            "callback_url_sep31",
+            Optional.ofNullable(client.getCallbackUrlSep31()).orElse(""),
+            "callback_url_sep12",
+            Optional.ofNullable(client.getCallbackUrlSep12()).orElse(""))
+        .forEach(
+            (key, value) -> {
+              if (!isEmpty(value)) {
+                try {
+                  new URL(value);
+                } catch (MalformedURLException e) {
+                  errors.reject("client-invalid-" + key, "The client." + key + " is invalid");
+                }
+              }
+            });
   }
 }

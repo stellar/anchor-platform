@@ -24,12 +24,7 @@ import static org.stellar.sdk.xdr.MemoType.MEMO_NONE;
 import io.micrometer.core.instrument.Counter;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 import javax.transaction.Transactional;
 import lombok.Data;
@@ -58,6 +53,7 @@ import org.stellar.anchor.api.sep.sep31.Sep31PatchTransactionRequest;
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest;
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionResponse;
 import org.stellar.anchor.api.shared.Amount;
+import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.SepDepositInfo;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
@@ -187,15 +183,24 @@ public class Sep31Service {
             .memo(sep10Jwt.getAccountMemo())
             .build();
 
-    Amount fee = Context.get().getFee();
+    Sep38Quote quote = Context.get().getQuote();
+    FeeDetails feeDetails;
+
+    if (quote != null) {
+      feeDetails = quote.getFee();
+    } else {
+      Amount fee = Context.get().getFee();
+
+      feeDetails = new FeeDetails(fee.getAmount(), fee.getAsset(), null);
+    }
+
     Instant now = Instant.now();
     Sep31Transaction txn =
         new Sep31TransactionBuilder(sep31TransactionStore)
             .id(generateSepTransactionId())
             .status(SepTransactionStatus.PENDING_SENDER.getStatus())
             .statusEta(null)
-            .amountFee(fee.getAmount())
-            .amountFeeAsset(fee.getAsset())
+            .feeDetails(feeDetails)
             .startedAt(now)
             .updatedAt(now) // this will be overwritten by the sep31TransactionStore#save method.
             .completedAt(null)
@@ -586,9 +591,8 @@ public class Sep31Service {
     if (sep10Config.isClientAttributionRequired() && client == null) {
       throw new BadRequestException("Client not found");
     }
-    if (client != null && !sep10Config.getAllowedClientDomains().contains(client.getDomain())) {
+    if (client != null && !sep10Config.getAllowedClientNames().contains(client.getName()))
       client = null;
-    }
     return client == null ? null : client.getName();
   }
 

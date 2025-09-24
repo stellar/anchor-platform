@@ -11,6 +11,7 @@ dependencies {
   implementation(libs.coroutines.core)
   implementation(libs.google.gson)
   implementation(libs.jjwt)
+  implementation(libs.bcastle)
   implementation(variantOf(libs.java.stellar.sdk) { classifier("uber") })
   implementation(libs.okhttp3)
   implementation(project(":api-schema"))

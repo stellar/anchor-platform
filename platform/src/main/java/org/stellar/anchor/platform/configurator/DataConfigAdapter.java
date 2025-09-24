@@ -166,6 +166,7 @@ public class DataConfigAdapter extends SpringConfigAdapter {
           "spring.flyway.password",
           SecretManager.getInstance().get(PropertySecretConfig.SECRET_DATA_PASSWORD));
       set("spring.flyway.url", constructPostgressUrl(config));
+      set("spring.flyway.validate-migration-naming", true);
       boolean baselineOnMigrate =
           config.getString("data.flyway_baseline_on_migrate").equalsIgnoreCase("true");
       if (baselineOnMigrate) {

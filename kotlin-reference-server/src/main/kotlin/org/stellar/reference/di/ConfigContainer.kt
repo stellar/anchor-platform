@@ -33,8 +33,6 @@ class ConfigContainer(envMap: Map<String, String>?) {
       envMap?.run { cfgBuilder.addMapSource(this) }
       // Add config file as a property source if valid
       locationCfg.fold({}, { cfgBuilder.addFileSource(it.ktReferenceServerConfig) })
-      // Add default config file as a property source.
-      cfgBuilder.addResourceSource("/default-config.yaml")
 
       return cfgBuilder.build().loadConfigOrThrow<Config>()
     }

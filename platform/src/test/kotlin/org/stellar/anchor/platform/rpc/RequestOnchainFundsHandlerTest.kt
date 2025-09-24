@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.event.AnchorEvent
@@ -27,10 +28,7 @@ import org.stellar.anchor.api.rpc.method.AmountAssetRequest
 import org.stellar.anchor.api.rpc.method.AmountRequest
 import org.stellar.anchor.api.rpc.method.RequestOnchainFundsRequest
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
-import org.stellar.anchor.api.shared.Amount
-import org.stellar.anchor.api.shared.Customers
-import org.stellar.anchor.api.shared.SepDepositInfo
-import org.stellar.anchor.api.shared.StellarId
+import org.stellar.anchor.api.shared.*
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.config.CustodyConfig
@@ -44,6 +42,7 @@ import org.stellar.anchor.metrics.MetricsService
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep6Transaction
 import org.stellar.anchor.platform.service.*
+import org.stellar.anchor.platform.utils.toRate
 import org.stellar.anchor.platform.validator.RequestValidator
 import org.stellar.anchor.sep24.Sep24Transaction
 import org.stellar.anchor.sep24.Sep24TransactionStore
@@ -64,7 +63,6 @@ class RequestOnchainFundsHandlerTest {
     private const val STELLAR_USDC_ISSUER =
       "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
     private const val TEXT_MEMO = "testMemo"
-    private const val TEXT_MEMO_2 = "testMemo2"
     private const val HASH_MEMO = "YWYwOTk2M2QtNzU3Mi00NGQ4LWE5MDktMmY2YzMzNTY="
     private const val TEXT_MEMO_TYPE = "text"
     private const val HASH_MEMO_TYPE = "hash"
@@ -194,13 +192,14 @@ class RequestOnchainFundsHandlerTest {
   }
 
   @Test
-  fun test_handle_withoutAmounts_amount_out_absent() {
+  fun test_handle_withoutAmounts_fee_absent() {
     val request = RequestOnchainFundsRequest.builder().transactionId(TX_ID).build()
     val txn24 = JdbcSep24Transaction()
     txn24.status = INCOMPLETE.toString()
     txn24.kind = WITHDRAWAL.kind
     txn24.amountIn = "1"
     txn24.amountInAsset = STELLAR_USDC
+    txn24.feeDetails = FeeDetails()
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
 
     every { txn6Store.findByTransactionId(any()) } returns null
@@ -209,7 +208,7 @@ class RequestOnchainFundsHandlerTest {
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
-    assertEquals("amount_out is required", ex.message)
+    assertEquals("fee_details or amount_fee is required", ex.message)
 
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
@@ -235,7 +234,7 @@ class RequestOnchainFundsHandlerTest {
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
-    assertEquals("amount_fee is required", ex.message)
+    assertEquals("fee_details or amount_fee is required", ex.message)
 
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
@@ -263,7 +262,7 @@ class RequestOnchainFundsHandlerTest {
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
     assertEquals(
-      "All or none of the amount_in, amount_out, and amount_fee should be set",
+      "All (amount_out is optional) or none of the amount_in, amount_out, and (fee_details or amount_fee) should be set",
       ex.message
     )
 
@@ -467,6 +466,11 @@ class RequestOnchainFundsHandlerTest {
     ex = assertThrows { handler.handle(request) }
     assertEquals("amount_fee.asset should be stellar asset", ex.message)
 
+    request.amountFee = null
+    request.feeDetails = Amount("10", FIAT_USD).toRate()
+    ex = assertThrows { handler.handle(request) }
+    assertEquals("fee_details.asset should be stellar asset", ex.message)
+
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
     verify(exactly = 0) { txn31Store.save(any()) }
@@ -544,16 +548,73 @@ class RequestOnchainFundsHandlerTest {
   }
 
   @Test
+  fun test_handle_sep24_with_quote_amount_out_missing() {
+    val request =
+      RequestOnchainFundsRequest.builder()
+        .amountIn(AmountAssetRequest("1", STELLAR_USDC))
+        .feeDetails(Amount("0.1", STELLAR_USDC).toRate())
+        .transactionId(TX_ID)
+        .build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = INCOMPLETE.toString()
+    txn24.kind = WITHDRAWAL.kind
+    txn24.quoteId = "testQuoteId"
+    val sep24TxnCapture = slot<JdbcSep24Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn24Store.save(capture(sep24TxnCapture)) } returns null
+
+    val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
+    assertEquals("amount_out is required for transactions with firm quotes", ex.message)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @Test
+  fun test_handle_sep24_with_simple_quote() {
+    val request =
+      RequestOnchainFundsRequest.builder()
+        .amountIn(AmountAssetRequest("1", STELLAR_USDC))
+        .feeDetails(Amount("0.1", STELLAR_USDC).toRate())
+        .transactionId(TX_ID)
+        .build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = INCOMPLETE.toString()
+    txn24.kind = WITHDRAWAL.kind
+    txn24.amountInAsset = STELLAR_USDC
+    txn24.amountOutAsset = STELLAR_USDC
+    val sep24TxnCapture = slot<JdbcSep24Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn24Store.save(capture(sep24TxnCapture)) } returns null
+
+    val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
+    assertEquals("amount_out is required for non-exchange transactions", ex.message)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @Test
   fun test_handle_ok_sep24_withExpectedAmount() {
     val request =
       RequestOnchainFundsRequest.builder()
         .transactionId(TX_ID)
         .amountIn(AmountAssetRequest("1", STELLAR_USDC))
         .amountOut(AmountAssetRequest("0.9", FIAT_USD))
-        .amountFee(AmountAssetRequest("0.1", STELLAR_USDC))
+        .feeDetails(Amount("0.1", STELLAR_USDC).toRate())
         .amountExpected(AmountRequest("1"))
-        .memo(TEXT_MEMO)
-        .memoType(TEXT_MEMO_TYPE)
+        .memo(HASH_MEMO)
+        .memoType(HASH_MEMO_TYPE)
         .destinationAccount(DESTINATION_ACCOUNT)
         .build()
     val txn24 = JdbcSep24Transaction()
@@ -561,6 +622,7 @@ class RequestOnchainFundsHandlerTest {
     txn24.kind = WITHDRAWAL.kind
     txn24.requestAssetCode = STELLAR_USDC_CODE
     txn24.requestAssetIssuer = STELLAR_USDC_ISSUER
+    txn24.userActionRequiredBy = Instant.now()
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
 
@@ -596,8 +658,8 @@ class RequestOnchainFundsHandlerTest {
     expectedSep24Txn.amountFee = "0.1"
     expectedSep24Txn.amountFeeAsset = STELLAR_USDC
     expectedSep24Txn.amountExpected = "1"
-    expectedSep24Txn.memo = TEXT_MEMO
-    expectedSep24Txn.memoType = TEXT_MEMO_TYPE
+    expectedSep24Txn.memo = HASH_MEMO
+    expectedSep24Txn.memoType = HASH_MEMO_TYPE
     expectedSep24Txn.toAccount = DESTINATION_ACCOUNT
     expectedSep24Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT
 
@@ -614,10 +676,11 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", STELLAR_USDC)
     expectedResponse.amountOut = Amount("0.9", FIAT_USD)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = Amount("0.1", STELLAR_USDC).toRate()
     expectedResponse.amountExpected = Amount("1", STELLAR_USDC)
     expectedResponse.updatedAt = sep24TxnCapture.captured.updatedAt
-    expectedResponse.memo = TEXT_MEMO
-    expectedResponse.memoType = TEXT_MEMO_TYPE
+    expectedResponse.memo = HASH_MEMO
+    expectedResponse.memoType = HASH_MEMO_TYPE
     expectedResponse.destinationAccount = DESTINATION_ACCOUNT
 
     JSONAssert.assertEquals(
@@ -677,7 +740,7 @@ class RequestOnchainFundsHandlerTest {
     txn24.requestAssetIssuer = STELLAR_USDC_ISSUER
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
-    val depositInfo = SepDepositInfo(DESTINATION_ACCOUNT_2, TEXT_MEMO_2, TEXT_MEMO_TYPE)
+    val depositInfo = SepDepositInfo(DESTINATION_ACCOUNT_2, TEXT_MEMO, TEXT_MEMO_TYPE)
 
     every { txn6Store.findByTransactionId(any()) } returns null
     every { txn24Store.findByTransactionId(TX_ID) } returns txn24
@@ -713,7 +776,7 @@ class RequestOnchainFundsHandlerTest {
     expectedSep24Txn.amountFee = "0.1"
     expectedSep24Txn.amountFeeAsset = STELLAR_USDC
     expectedSep24Txn.amountExpected = "1"
-    expectedSep24Txn.memo = TEXT_MEMO_2
+    expectedSep24Txn.memo = TEXT_MEMO
     expectedSep24Txn.memoType = TEXT_MEMO_TYPE
     expectedSep24Txn.toAccount = DESTINATION_ACCOUNT_2
     expectedSep24Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT_2
@@ -731,9 +794,10 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", STELLAR_USDC)
     expectedResponse.amountOut = Amount("0.9", FIAT_USD)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = Amount("0.1", STELLAR_USDC).toRate()
     expectedResponse.amountExpected = Amount("1", STELLAR_USDC)
     expectedResponse.updatedAt = sep24TxnCapture.captured.updatedAt
-    expectedResponse.memo = TEXT_MEMO_2
+    expectedResponse.memo = TEXT_MEMO
     expectedResponse.memoType = TEXT_MEMO_TYPE
     expectedResponse.destinationAccount = DESTINATION_ACCOUNT_2
 
@@ -839,6 +903,7 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", STELLAR_USDC)
     expectedResponse.amountOut = Amount("0.9", FIAT_USD)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = Amount("0.1", STELLAR_USDC).toRate()
     expectedResponse.amountExpected = Amount("1", STELLAR_USDC)
     expectedResponse.updatedAt = sep24TxnCapture.captured.updatedAt
     expectedResponse.memo = TEXT_MEMO
@@ -870,16 +935,18 @@ class RequestOnchainFundsHandlerTest {
   }
 
   @Test
-  fun test_handle_sep24_ok_withoutAmountExpected() {
+  fun test_handle_sep24_ok_withUserActionRequiredBy() {
+    val actionRequiredBy = Instant.now().plusSeconds(100)
     val request =
       RequestOnchainFundsRequest.builder()
         .transactionId(TX_ID)
         .amountIn(AmountAssetRequest("1", STELLAR_USDC))
         .amountOut(AmountAssetRequest("0.9", FIAT_USD))
         .amountFee(AmountAssetRequest("0.1", STELLAR_USDC))
-        .memo(TEXT_MEMO)
-        .memoType(TEXT_MEMO_TYPE)
+        .memo(HASH_MEMO)
+        .memoType(HASH_MEMO_TYPE)
         .destinationAccount(DESTINATION_ACCOUNT)
+        .userActionRequiredBy(actionRequiredBy)
         .build()
     val txn24 = JdbcSep24Transaction()
     txn24.status = INCOMPLETE.toString()
@@ -921,10 +988,11 @@ class RequestOnchainFundsHandlerTest {
     expectedSep24Txn.amountFee = "0.1"
     expectedSep24Txn.amountFeeAsset = STELLAR_USDC
     expectedSep24Txn.amountExpected = "1"
-    expectedSep24Txn.memo = TEXT_MEMO
-    expectedSep24Txn.memoType = TEXT_MEMO_TYPE
+    expectedSep24Txn.memo = HASH_MEMO
+    expectedSep24Txn.memoType = HASH_MEMO_TYPE
     expectedSep24Txn.toAccount = DESTINATION_ACCOUNT
     expectedSep24Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT
+    expectedSep24Txn.userActionRequiredBy = actionRequiredBy
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep24Txn),
@@ -939,11 +1007,13 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", STELLAR_USDC)
     expectedResponse.amountOut = Amount("0.9", FIAT_USD)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = Amount("0.1", STELLAR_USDC).toRate()
     expectedResponse.amountExpected = Amount("1", STELLAR_USDC)
     expectedResponse.updatedAt = sep24TxnCapture.captured.updatedAt
-    expectedResponse.memo = TEXT_MEMO
-    expectedResponse.memoType = TEXT_MEMO_TYPE
+    expectedResponse.memo = HASH_MEMO
+    expectedResponse.memoType = HASH_MEMO_TYPE
     expectedResponse.destinationAccount = DESTINATION_ACCOUNT
+    expectedResponse.userActionRequiredBy = actionRequiredBy
 
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
@@ -974,8 +1044,8 @@ class RequestOnchainFundsHandlerTest {
     val request =
       RequestOnchainFundsRequest.builder()
         .transactionId(TX_ID)
-        .memo(TEXT_MEMO)
-        .memoType(TEXT_MEMO_TYPE)
+        .memo(HASH_MEMO)
+        .memoType(HASH_MEMO_TYPE)
         .destinationAccount(DESTINATION_ACCOUNT)
         .build()
     val txn24 = JdbcSep24Transaction()
@@ -1025,8 +1095,8 @@ class RequestOnchainFundsHandlerTest {
     expectedSep24Txn.amountFee = "0.1"
     expectedSep24Txn.amountFeeAsset = STELLAR_USDC
     expectedSep24Txn.amountExpected = "1"
-    expectedSep24Txn.memo = TEXT_MEMO
-    expectedSep24Txn.memoType = TEXT_MEMO_TYPE
+    expectedSep24Txn.memo = HASH_MEMO
+    expectedSep24Txn.memoType = HASH_MEMO_TYPE
     expectedSep24Txn.toAccount = DESTINATION_ACCOUNT
     expectedSep24Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT
 
@@ -1043,10 +1113,11 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", STELLAR_USDC)
     expectedResponse.amountOut = Amount("0.9", FIAT_USD)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = Amount("0.1", STELLAR_USDC).toRate()
     expectedResponse.amountExpected = Amount("1", STELLAR_USDC)
     expectedResponse.updatedAt = sep24TxnCapture.captured.updatedAt
-    expectedResponse.memo = TEXT_MEMO
-    expectedResponse.memoType = TEXT_MEMO_TYPE
+    expectedResponse.memo = HASH_MEMO
+    expectedResponse.memoType = HASH_MEMO_TYPE
     expectedResponse.destinationAccount = DESTINATION_ACCOUNT
 
     JSONAssert.assertEquals(
@@ -1112,7 +1183,9 @@ class RequestOnchainFundsHandlerTest {
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
     assertEquals(
-      "Anchor is not configured to accept memo, memo_type and destination_account",
+      "Anchor is not configured to accept memo, memo_type and destination_account. " +
+        "Please set configuration sep24.deposit_info_generator_type to 'none' " +
+        "if you want to enable this feature",
       ex.message
     )
 
@@ -1195,6 +1268,65 @@ class RequestOnchainFundsHandlerTest {
     verify(exactly = 0) { sepTransactionCounter.increment() }
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = ["withdrawal", "withdrawal-exchange"])
+  fun test_handle_sep6_with_quote_amount_out_missing(kind: String) {
+    val request =
+      RequestOnchainFundsRequest.builder()
+        .amountIn(AmountAssetRequest("1", STELLAR_USDC))
+        .feeDetails(Amount("0.1", STELLAR_USDC).toRate())
+        .transactionId(TX_ID)
+        .build()
+    val txn6 = JdbcSep6Transaction()
+    txn6.status = INCOMPLETE.toString()
+    txn6.kind = kind
+    txn6.quoteId = "testQuoteId"
+    val sep6TxnCapture = slot<JdbcSep6Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns txn6
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn6Store.save(capture(sep6TxnCapture)) } returns null
+
+    val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
+    assertEquals("amount_out is required for transactions with firm quotes", ex.message)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["withdrawal", "withdrawal-exchange"])
+  fun test_handle_sep6_with_simple_quote(kind: String) {
+    val request =
+      RequestOnchainFundsRequest.builder()
+        .amountIn(AmountAssetRequest("1", STELLAR_USDC))
+        .feeDetails(Amount("0.1", STELLAR_USDC).toRate())
+        .transactionId(TX_ID)
+        .build()
+    val txn6 = JdbcSep6Transaction()
+    txn6.status = INCOMPLETE.toString()
+    txn6.kind = kind
+    txn6.amountInAsset = STELLAR_USDC
+    txn6.amountOutAsset = STELLAR_USDC
+    val sep6TxnCapture = slot<JdbcSep6Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns txn6
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn6Store.save(capture(sep6TxnCapture)) } returns null
+
+    val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
+    assertEquals("amount_out is required for non-exchange transactions", ex.message)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
   @CsvSource(value = ["withdrawal", "withdrawal-exchange"])
   @ParameterizedTest
   fun test_handle_ok_sep6_withExpectedAmount(kind: String) {
@@ -1203,10 +1335,10 @@ class RequestOnchainFundsHandlerTest {
         .transactionId(TX_ID)
         .amountIn(AmountAssetRequest("1", STELLAR_USDC))
         .amountOut(AmountAssetRequest("0.9", FIAT_USD))
-        .amountFee(AmountAssetRequest("0.1", STELLAR_USDC))
+        .feeDetails(Amount("0.1", STELLAR_USDC).toRate())
         .amountExpected(AmountRequest("1"))
-        .memo(TEXT_MEMO)
-        .memoType(TEXT_MEMO_TYPE)
+        .memo(HASH_MEMO)
+        .memoType(HASH_MEMO_TYPE)
         .destinationAccount(DESTINATION_ACCOUNT)
         .build()
     val txn6 = JdbcSep6Transaction()
@@ -1251,8 +1383,8 @@ class RequestOnchainFundsHandlerTest {
     expectedSep6Txn.amountFee = "0.1"
     expectedSep6Txn.amountFeeAsset = STELLAR_USDC
     expectedSep6Txn.amountExpected = "1"
-    expectedSep6Txn.memo = TEXT_MEMO
-    expectedSep6Txn.memoType = TEXT_MEMO_TYPE
+    expectedSep6Txn.memo = HASH_MEMO
+    expectedSep6Txn.memoType = HASH_MEMO_TYPE
     expectedSep6Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT
 
     JSONAssert.assertEquals(
@@ -1274,10 +1406,11 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", STELLAR_USDC)
     expectedResponse.amountOut = Amount("0.9", FIAT_USD)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = Amount("0.1", STELLAR_USDC).toRate()
     expectedResponse.amountExpected = Amount("1", STELLAR_USDC)
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
-    expectedResponse.memo = TEXT_MEMO
-    expectedResponse.memoType = TEXT_MEMO_TYPE
+    expectedResponse.memo = HASH_MEMO
+    expectedResponse.memoType = HASH_MEMO_TYPE
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
 
     JSONAssert.assertEquals(
@@ -1338,7 +1471,7 @@ class RequestOnchainFundsHandlerTest {
     txn6.requestAssetIssuer = STELLAR_USDC_ISSUER
     val sep6TxnCapture = slot<JdbcSep6Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
-    val depositInfo = SepDepositInfo(DESTINATION_ACCOUNT_2, TEXT_MEMO_2, TEXT_MEMO_TYPE)
+    val depositInfo = SepDepositInfo(DESTINATION_ACCOUNT_2, TEXT_MEMO, TEXT_MEMO_TYPE)
 
     every { txn6Store.findByTransactionId(TX_ID) } returns txn6
     every { txn24Store.findByTransactionId(any()) } returns null
@@ -1373,7 +1506,7 @@ class RequestOnchainFundsHandlerTest {
     expectedSep6Txn.amountFee = "0.1"
     expectedSep6Txn.amountFeeAsset = STELLAR_USDC
     expectedSep6Txn.amountExpected = "1"
-    expectedSep6Txn.memo = TEXT_MEMO_2
+    expectedSep6Txn.memo = TEXT_MEMO
     expectedSep6Txn.memoType = TEXT_MEMO_TYPE
     expectedSep6Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT_2
 
@@ -1390,9 +1523,10 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", STELLAR_USDC)
     expectedResponse.amountOut = Amount("0.9", FIAT_USD)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = Amount("0.1", STELLAR_USDC).toRate()
     expectedResponse.amountExpected = Amount("1", STELLAR_USDC)
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
-    expectedResponse.memo = TEXT_MEMO_2
+    expectedResponse.memo = TEXT_MEMO
     expectedResponse.memoType = TEXT_MEMO_TYPE
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
 
@@ -1429,8 +1563,8 @@ class RequestOnchainFundsHandlerTest {
         .amountIn(AmountAssetRequest("1", STELLAR_USDC))
         .amountOut(AmountAssetRequest("0.9", FIAT_USD))
         .amountFee(AmountAssetRequest("0.1", STELLAR_USDC))
-        .memo(TEXT_MEMO)
-        .memoType(TEXT_MEMO_TYPE)
+        .memo(HASH_MEMO)
+        .memoType(HASH_MEMO_TYPE)
         .destinationAccount(DESTINATION_ACCOUNT)
         .build()
     val txn6 = JdbcSep6Transaction()
@@ -1470,8 +1604,8 @@ class RequestOnchainFundsHandlerTest {
     expectedSep6Txn.amountFee = "0.1"
     expectedSep6Txn.amountFeeAsset = STELLAR_USDC
     expectedSep6Txn.amountExpected = "1"
-    expectedSep6Txn.memo = TEXT_MEMO
-    expectedSep6Txn.memoType = TEXT_MEMO_TYPE
+    expectedSep6Txn.memo = HASH_MEMO
+    expectedSep6Txn.memoType = HASH_MEMO_TYPE
     expectedSep6Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT
 
     JSONAssert.assertEquals(
@@ -1487,10 +1621,11 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", STELLAR_USDC)
     expectedResponse.amountOut = Amount("0.9", FIAT_USD)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = Amount("0.1", STELLAR_USDC).toRate()
     expectedResponse.amountExpected = Amount("1", STELLAR_USDC)
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
-    expectedResponse.memo = TEXT_MEMO
-    expectedResponse.memoType = TEXT_MEMO_TYPE
+    expectedResponse.memo = HASH_MEMO
+    expectedResponse.memoType = HASH_MEMO_TYPE
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
 
     JSONAssert.assertEquals(
@@ -1523,8 +1658,8 @@ class RequestOnchainFundsHandlerTest {
     val request =
       RequestOnchainFundsRequest.builder()
         .transactionId(TX_ID)
-        .memo(TEXT_MEMO)
-        .memoType(TEXT_MEMO_TYPE)
+        .memo(HASH_MEMO)
+        .memoType(HASH_MEMO_TYPE)
         .destinationAccount(DESTINATION_ACCOUNT)
         .build()
     val txn6 = JdbcSep6Transaction()
@@ -1572,8 +1707,8 @@ class RequestOnchainFundsHandlerTest {
     expectedSep6Txn.amountFee = "0.1"
     expectedSep6Txn.amountFeeAsset = STELLAR_USDC
     expectedSep6Txn.amountExpected = "1"
-    expectedSep6Txn.memo = TEXT_MEMO
-    expectedSep6Txn.memoType = TEXT_MEMO_TYPE
+    expectedSep6Txn.memo = HASH_MEMO
+    expectedSep6Txn.memoType = HASH_MEMO_TYPE
     expectedSep6Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT
 
     JSONAssert.assertEquals(
@@ -1589,10 +1724,11 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", STELLAR_USDC)
     expectedResponse.amountOut = Amount("0.9", FIAT_USD)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = expectedResponse.amountFee.toRate()
     expectedResponse.amountExpected = Amount("1", STELLAR_USDC)
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
-    expectedResponse.memo = TEXT_MEMO
-    expectedResponse.memoType = TEXT_MEMO_TYPE
+    expectedResponse.memo = HASH_MEMO
+    expectedResponse.memoType = HASH_MEMO_TYPE
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
 
     JSONAssert.assertEquals(
@@ -1659,7 +1795,9 @@ class RequestOnchainFundsHandlerTest {
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
     assertEquals(
-      "Anchor is not configured to accept memo, memo_type and destination_account",
+      "Anchor is not configured to accept memo, memo_type and destination_account. " +
+        "Please set configuration sep24.deposit_info_generator_type to 'none' " +
+        "if you want to enable this feature",
       ex.message
     )
 

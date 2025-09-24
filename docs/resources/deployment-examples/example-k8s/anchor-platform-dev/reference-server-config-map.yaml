@@ -23,8 +23,8 @@ data:
 
     integration-auth:
       authType: none
-      platformToAnchorSecret: myPlatformToAnchorSecret
-      anchorToPlatformSecret: myAnchorToPlatformSecret
+      platformToAnchorSecret: myPlatformToAnchorSecret1234567890
+      anchorToPlatformSecret: myAnchorToPlatformSecret1234567890
       expirationMilliseconds: 30000
     
     event:

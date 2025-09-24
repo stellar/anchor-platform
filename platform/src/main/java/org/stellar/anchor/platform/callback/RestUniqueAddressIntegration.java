@@ -44,12 +44,14 @@ public class RestUniqueAddressIntegration implements UniqueAddressIntegration {
             .build();
     Request request =
         PlatformIntegrationHelper.getRequestBuilder(authHelper).url(url).get().build();
-    Response response = PlatformIntegrationHelper.call(httpClient, request);
-    String content = PlatformIntegrationHelper.getContent(response);
+    try (Response response = PlatformIntegrationHelper.call(httpClient, request)) {
+      String content = PlatformIntegrationHelper.getContent(response);
 
-    if (!List.of(HttpStatus.OK.value(), HttpStatus.NO_CONTENT.value()).contains(response.code())) {
-      throw PlatformIntegrationHelper.httpError(content, response.code(), gson);
+      if (!List.of(HttpStatus.OK.value(), HttpStatus.NO_CONTENT.value())
+          .contains(response.code())) {
+        throw PlatformIntegrationHelper.httpError(content, response.code(), gson);
+      }
+      return gson.fromJson(content, GetUniqueAddressResponse.class);
     }
-    return gson.fromJson(content, GetUniqueAddressResponse.class);
   }
 }

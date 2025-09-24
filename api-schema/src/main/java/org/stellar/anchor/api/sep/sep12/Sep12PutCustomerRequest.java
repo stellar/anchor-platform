@@ -1,8 +1,8 @@
 package org.stellar.anchor.api.sep.sep12;
 
 import com.google.gson.annotations.SerializedName;
-import lombok.Builder;
 import lombok.Data;
+import lombok.experimental.SuperBuilder;
 
 /**
  * The request body of the PUT /customer endpoint of SEP-12.
@@ -12,15 +12,8 @@ import lombok.Data;
  *     to SEP-12</a>
  */
 @Data
-@Builder
-public class Sep12PutCustomerRequest implements Sep12CustomerRequestBase {
-  String id;
-  String account;
-  String memo;
-
-  @SerializedName("memo_type")
-  String memoType;
-
+@SuperBuilder
+public class Sep12PutCustomerRequest extends Sep12CustomerRequestBase {
   String type;
 
   @SerializedName("first_name")
@@ -60,6 +53,9 @@ public class Sep12PutCustomerRequest implements Sep12CustomerRequestBase {
   @SerializedName("birth_country_code")
   String birthCountryCode;
 
+  @SerializedName("bank_name")
+  String bankName;
+
   @SerializedName("bank_account_number")
   String bankAccountNumber;
 
@@ -75,6 +71,9 @@ public class Sep12PutCustomerRequest implements Sep12CustomerRequestBase {
   @SerializedName("bank_branch_number")
   String bankBranchNumber;
 
+  @SerializedName("external_transfer_memo")
+  String externalTransferMemo;
+
   @SerializedName("clabe_number")
   String clabeNumber;
 
@@ -84,9 +83,16 @@ public class Sep12PutCustomerRequest implements Sep12CustomerRequestBase {
   @SerializedName("cbu_alias")
   String cbuAlias;
 
+  @SerializedName("mobile_money_number")
+  String mobileMoneyNumber;
+
+  @SerializedName("mobile_money_provider")
+  String mobileMoneyProvider;
+
   @SerializedName("crypto_address")
   String cryptoAddress;
 
+  @Deprecated
   @SerializedName("crypto_memo")
   String cryptoMemo;
 
@@ -147,4 +153,10 @@ public class Sep12PutCustomerRequest implements Sep12CustomerRequestBase {
 
   @SerializedName("referral_id")
   String referralId;
+
+  @SerializedName("mobile_number_verification")
+  String mobileNumberVerification;
+
+  @SerializedName("email_address_verification")
+  String emailAddressVerification;
 }

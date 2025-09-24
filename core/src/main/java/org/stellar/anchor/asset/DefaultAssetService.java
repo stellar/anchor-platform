@@ -66,6 +66,7 @@ public class DefaultAssetService implements AssetService {
   public static DefaultAssetService fromJson(String assetsJson) throws InvalidConfigException {
     DefaultAssetService assetService = new DefaultAssetService();
     assetService.assets = gson.fromJson(assetsJson, Assets.class);
+    assetService.assets.assets.removeIf(Objects::isNull);
     AssetServiceValidator.validate(assetService);
     return assetService;
   }
@@ -88,7 +89,6 @@ public class DefaultAssetService implements AssetService {
   @Override
   public AssetInfo getAsset(String code) {
     for (AssetInfo asset : assets.getAssets()) {
-      // FIXME: ANCHOR-346
       if (asset != null && asset.getCode().equals(code)) {
         return asset;
       }

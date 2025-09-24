@@ -76,8 +76,8 @@ public interface ISep10Service {
    * @return The challenge transaction.
    * @throws SepException If the challenge transaction cannot be created.
    */
-  ChallengeResponse createChallengeResponse(ChallengeRequest request, Memo memo)
-      throws SepException;
+  ChallengeResponse createChallengeResponse(
+      ChallengeRequest request, Memo memo, String clientSigningKey) throws SepException;
 
   /**
    * Validate the validation request. The default implementation is NOOP. This is used for the

@@ -1,17 +1,19 @@
 package org.stellar.anchor.api.sep.sep12;
 
-public interface Sep12CustomerRequestBase {
-  String getId();
+import com.google.gson.annotations.SerializedName;
+import lombok.Data;
+import lombok.experimental.SuperBuilder;
 
-  String getAccount();
+@Data
+@SuperBuilder
+public class Sep12CustomerRequestBase {
+  String id;
+  String account;
+  String memo;
 
-  void setAccount(String account);
+  @SerializedName("memo_type")
+  String memoType;
 
-  String getMemo();
-
-  void setMemo(String memo);
-
-  String getMemoType();
-
-  void setMemoType(String memoType);
+  @SerializedName("transaction_id")
+  String transactionId;
 }

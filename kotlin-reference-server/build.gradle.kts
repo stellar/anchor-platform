@@ -15,6 +15,7 @@ dependencies {
   implementation(libs.hoplite.yaml)
   implementation(variantOf(libs.java.stellar.sdk) { classifier("uber") })
   implementation(libs.jjwt)
+  implementation(libs.bcastle)
   implementation(libs.javax.jaxb.api)
   implementation(libs.kotlin.logging)
   implementation(libs.slf4j.simple)
@@ -26,7 +27,7 @@ dependencies {
 tasks {
   compileKotlin {
     dependsOn("spotlessKotlinApply")
-    kotlinOptions.jvmTarget = "11"
+    kotlinOptions.jvmTarget = "17"
   }
 
   test { useJUnitPlatform() }

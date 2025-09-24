@@ -3,10 +3,7 @@ package org.stellar.anchor.platform.rpc;
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHDRAWAL;
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHDRAWAL_EXCHANGE;
 import static org.stellar.anchor.api.rpc.method.RpcMethod.NOTIFY_ONCHAIN_FUNDS_RECEIVED;
-import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_ANCHOR;
-import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_RECEIVER;
-import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_SENDER;
-import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_USR_TRANSFER_START;
+import static org.stellar.anchor.api.sep.SepTransactionStatus.*;
 import static org.stellar.anchor.platform.utils.PaymentsUtil.addStellarTransaction;
 import static org.stellar.anchor.util.Log.errorEx;
 
@@ -73,19 +70,21 @@ public class NotifyOnchainFundsReceivedHandler
 
     if (!((request.getAmountIn() == null
             && request.getAmountOut() == null
-            && request.getAmountFee() == null)
+            && request.getAmountFee() == null
+            && request.getFeeDetails() == null)
         || (request.getAmountIn() != null
             && request.getAmountOut() != null
-            && request.getAmountFee() != null)
+            && (request.getAmountFee() != null || request.getFeeDetails() != null))
         || (request.getAmountIn() != null
             && request.getAmountOut() == null
-            && request.getAmountFee() == null))) {
+            && request.getAmountFee() == null
+            && request.getFeeDetails() == null))) {
       throw new InvalidParamsException(
           "Invalid amounts combination provided: all, none or only amount_in should be set");
     }
 
     if (request.getAmountIn() != null) {
-      AssetValidationUtils.validateAsset(
+      AssetValidationUtils.validateAssetAmount(
           "amount_in",
           AmountAssetRequest.builder()
               .amount(request.getAmountIn().getAmount())
@@ -94,7 +93,7 @@ public class NotifyOnchainFundsReceivedHandler
           assetService);
     }
     if (request.getAmountOut() != null) {
-      AssetValidationUtils.validateAsset(
+      AssetValidationUtils.validateAssetAmount(
           "amount_out",
           AmountAssetRequest.builder()
               .amount(request.getAmountOut().getAmount())
@@ -103,7 +102,7 @@ public class NotifyOnchainFundsReceivedHandler
           assetService);
     }
     if (request.getAmountFee() != null) {
-      AssetValidationUtils.validateAsset(
+      AssetValidationUtils.validateAssetAmount(
           "amount_fee",
           AmountAssetRequest.builder()
               .amount(request.getAmountFee().getAmount())
@@ -111,6 +110,9 @@ public class NotifyOnchainFundsReceivedHandler
               .build(),
           true,
           assetService);
+    }
+    if (request.getFeeDetails() != null) {
+      AssetValidationUtils.validateFeeDetails(request.getFeeDetails(), txn, assetService);
     }
   }
 
@@ -145,12 +147,14 @@ public class NotifyOnchainFundsReceivedHandler
         JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
         if (ImmutableSet.of(WITHDRAWAL, WITHDRAWAL_EXCHANGE).contains(Kind.from(txn6.getKind()))) {
           supportedStatuses.add(PENDING_USR_TRANSFER_START);
+          supportedStatuses.add(ON_HOLD);
         }
         break;
       case SEP_24:
         JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
         if (WITHDRAWAL == Kind.from(txn24.getKind())) {
           supportedStatuses.add(PENDING_USR_TRANSFER_START);
+          supportedStatuses.add(ON_HOLD);
         }
         break;
       case SEP_31:
@@ -180,6 +184,10 @@ public class NotifyOnchainFundsReceivedHandler
     }
     if (request.getAmountFee() != null) {
       txn.setAmountFee(request.getAmountFee().getAmount());
+    }
+    if (request.getFeeDetails() != null) {
+      txn.setAmountFee(request.getFeeDetails().getTotal());
+      txn.setFeeDetailsList(request.getFeeDetails().getDetails());
     }
   }
 }

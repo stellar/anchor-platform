@@ -236,6 +236,7 @@ class DoStellarPaymentHandlerTest {
     txn24.transferReceivedAt = transferReceivedAt
     txn24.toAccount = TO_ACCOUNT
     txn24.amountOutAsset = AMOUNT_OUT_ASSET
+    txn24.userActionRequiredBy = Instant.now()
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
 

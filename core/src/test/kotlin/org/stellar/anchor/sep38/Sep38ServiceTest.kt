@@ -26,6 +26,8 @@ import org.stellar.anchor.api.sep.operation.Sep38Operation
 import org.stellar.anchor.api.sep.sep38.*
 import org.stellar.anchor.api.sep.sep38.Sep38Context.SEP31
 import org.stellar.anchor.api.sep.sep38.Sep38Context.SEP6
+import org.stellar.anchor.api.shared.FeeDescription
+import org.stellar.anchor.api.shared.FeeDetails
 import org.stellar.anchor.api.shared.StellarId
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.config.SecretConfig
@@ -33,6 +35,7 @@ import org.stellar.anchor.config.Sep38Config
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
 import org.stellar.anchor.event.EventService.Session
+import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.StringHelper.json
 
@@ -78,7 +81,7 @@ class Sep38ServiceTest {
     assertEquals(4, assets.size)
 
     // sep10 related:
-    every { secretConfig.sep10JwtSecretKey } returns "secret"
+    secretConfig.setupMock()
     // store/db related:
     every { mockQuoteStore.newInstance() } returns PojoSep38Quote()
     // events related:
@@ -421,12 +424,12 @@ class Sep38ServiceTest {
     assertEquals("sell_amount exceeds max limit", ex.message)
   }
 
-  private fun mockSellAssetFee(sellAsset: String?): RateFee {
+  private fun mockSellAssetFee(sellAsset: String?): FeeDetails {
     assertNotNull(sellAsset)
 
-    val rateFee = RateFee("0", sellAsset)
-    rateFee.addFeeDetail(RateFeeDetail("Sell fee", "1.00"))
-    return rateFee
+    val feeDetails = FeeDetails("0", sellAsset)
+    feeDetails.addFeeDetail(FeeDescription("Sell fee", "1.00"))
+    return feeDetails
   }
 
   @Test

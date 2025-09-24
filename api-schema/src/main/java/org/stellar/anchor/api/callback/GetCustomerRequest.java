@@ -20,6 +20,9 @@ public class GetCustomerRequest {
   String account;
   String memo;
 
+  @SerializedName("transaction_id")
+  String transactionId;
+
   @SerializedName("memo_type")
   String memoType;
 

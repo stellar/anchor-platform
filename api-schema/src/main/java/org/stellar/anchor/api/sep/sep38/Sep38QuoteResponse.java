@@ -4,6 +4,7 @@ import com.google.gson.annotations.SerializedName;
 import java.time.Instant;
 import lombok.Builder;
 import lombok.Data;
+import org.stellar.anchor.api.shared.FeeDetails;
 
 /**
  * The response body of the POST /quote endpoint of SEP-38.
@@ -37,5 +38,5 @@ public class Sep38QuoteResponse {
   @SerializedName("buy_amount")
   String buyAmount;
 
-  RateFee fee;
+  FeeDetails fee;
 }

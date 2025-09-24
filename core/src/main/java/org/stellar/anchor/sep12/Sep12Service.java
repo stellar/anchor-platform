@@ -1,8 +1,10 @@
 package org.stellar.anchor.sep12;
 
+import static org.stellar.anchor.api.platform.PlatformTransactionData.Sep.SEP_12;
 import static org.stellar.anchor.util.Log.infoF;
 import static org.stellar.anchor.util.MetricConstants.*;
 import static org.stellar.anchor.util.MetricConstants.SEP12_CUSTOMER;
+import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
@@ -17,10 +19,12 @@ import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.stellar.anchor.api.callback.*;
+import org.stellar.anchor.api.callback.GetCustomerRequest.GetCustomerRequestBuilder;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.*;
-import org.stellar.anchor.api.platform.CustomerUpdatedResponse;
+import org.stellar.anchor.api.platform.GetTransactionResponse;
 import org.stellar.anchor.api.sep.sep12.*;
+import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.event.EventService;
@@ -39,11 +43,13 @@ public class Sep12Service {
 
   private final Set<String> knownTypes;
 
+  private final PlatformApiClient platformApiClient;
   private final EventService.Session eventSession;
 
   public Sep12Service(
       CustomerIntegration customerIntegration,
       AssetService assetService,
+      PlatformApiClient platformApiClient,
       EventService eventService) {
     this.customerIntegration = customerIntegration;
     Stream<String> receiverTypes =
@@ -55,15 +61,32 @@ public class Sep12Service {
             .filter(x -> x.getSep31() != null)
             .flatMap(x -> x.getSep31().getSep12().getSender().getTypes().keySet().stream());
     this.knownTypes = Stream.concat(receiverTypes, senderTypes).collect(Collectors.toSet());
+    this.platformApiClient = platformApiClient;
     this.eventSession =
         eventService.createSession(this.getClass().getName(), EventService.EventQueue.TRANSACTION);
 
     Log.info("Sep12Service initialized.");
   }
 
+  public void populateRequestFromTransactionId(Sep12CustomerRequestBase requestBase)
+      throws SepNotFoundException {
+    if (requestBase.getTransactionId() != null) {
+      try {
+        GetTransactionResponse txn =
+            platformApiClient.getTransaction(requestBase.getTransactionId());
+        requestBase.setAccount(txn.getCustomers().getSender().getAccount());
+        requestBase.setMemo(txn.getCustomers().getSender().getMemo());
+      } catch (Exception e) {
+        throw new SepNotFoundException("The transaction specified does not exist");
+      }
+    }
+  }
+
   public Sep12GetCustomerResponse getCustomer(Sep10Jwt token, Sep12GetCustomerRequest request)
       throws AnchorException {
-    validateGetOrPutRequest(request, token);
+    populateRequestFromTransactionId(request);
+
+    validateRequest(request, token);
     if (request.getId() == null && request.getAccount() == null && token.getAccount() != null) {
       request.setAccount(token.getAccount());
     }
@@ -79,7 +102,9 @@ public class Sep12Service {
 
   public Sep12PutCustomerResponse putCustomer(Sep10Jwt token, Sep12PutCustomerRequest request)
       throws AnchorException {
-    validateGetOrPutRequest(request, token);
+    populateRequestFromTransactionId(request);
+
+    validateRequest(request, token);
 
     if (request.getAccount() == null && token.getAccount() != null) {
       request.setAccount(token.getAccount());
@@ -103,14 +128,21 @@ public class Sep12Service {
 
     PutCustomerResponse response =
         customerIntegration.putCustomer(PutCustomerRequest.from(request));
+    GetCustomerRequestBuilder gcrBuilder = GetCustomerRequest.builder().id(response.getId());
+
+    // Forward the transaction_id to the getCustomer call if it was provided in the request.
+    if (!isEmpty(request.getTransactionId())) {
+      gcrBuilder.transactionId(request.getTransactionId());
+    }
+    GetCustomerResponse updatedCustomer = customerIntegration.getCustomer(gcrBuilder.build());
 
     // Only publish event if the customer was updated.
     eventSession.publish(
         AnchorEvent.builder()
             .id(UUID.randomUUID().toString())
-            .sep("12")
+            .sep(SEP_12.getSep().toString())
             .type(AnchorEvent.Type.CUSTOMER_UPDATED)
-            .customer(CustomerUpdatedResponse.builder().id(response.getId()).build())
+            .customer(GetCustomerResponse.to(updatedCustomer))
             .build());
 
     // increment counter
@@ -166,11 +198,10 @@ public class Sep12Service {
     sep12DeleteCustomerCounter.increment();
   }
 
-  void validateGetOrPutRequest(Sep12CustomerRequestBase requestBase, Sep10Jwt token)
-      throws SepException {
-    validateRequestAndTokenAccounts(requestBase, token);
-    validateRequestAndTokenMemos(requestBase, token);
-    updateRequestMemoAndMemoType(requestBase, token);
+  void validateRequest(Sep12CustomerRequestBase request, Sep10Jwt token) throws SepException {
+    validateRequestAndTokenAccounts(request, token);
+    validateRequestAndTokenMemos(request, token);
+    updateRequestMemoAndMemoType(request, token);
   }
 
   void validateRequestAndTokenAccounts(

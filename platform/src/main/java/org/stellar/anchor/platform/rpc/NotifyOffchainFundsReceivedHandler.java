@@ -3,9 +3,7 @@ package org.stellar.anchor.platform.rpc;
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.DEPOSIT;
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.DEPOSIT_EXCHANGE;
 import static org.stellar.anchor.api.rpc.method.RpcMethod.NOTIFY_OFFCHAIN_FUNDS_RECEIVED;
-import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_ANCHOR;
-import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_EXTERNAL;
-import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_USR_TRANSFER_START;
+import static org.stellar.anchor.api.sep.SepTransactionStatus.*;
 
 import com.google.common.collect.ImmutableSet;
 import java.time.Instant;
@@ -69,21 +67,35 @@ public class NotifyOffchainFundsReceivedHandler
       throws InvalidParamsException, InvalidRequestException, BadRequestException {
     super.validate(txn, request);
 
-    if (!((request.getAmountIn() == null
+    // If none of the accepted combinations of input parameters satisfies -> throw an exception
+    if (!
+    // None of the amounts are provided
+    ((request.getAmountIn() == null
             && request.getAmountOut() == null
-            && request.getAmountFee() == null)
-        || (request.getAmountIn() != null
+            && request.getAmountFee() == null
+            && request.getFeeDetails() == null)
+        ||
+        // All the amounts are provided (allow either amount_fee or fee_details)
+        (request.getAmountIn() != null
             && request.getAmountOut() != null
-            && request.getAmountFee() != null)
-        || (request.getAmountIn() != null
+            && (request.getAmountFee() != null || request.getFeeDetails() != null))
+        ||
+        // Only amount_in is provided
+        (request.getAmountIn() != null
             && request.getAmountOut() == null
-            && request.getAmountFee() == null))) {
+            && request.getAmountFee() == null
+            && request.getFeeDetails() == null))) {
       throw new InvalidParamsException(
           "Invalid amounts combination provided: all, none or only amount_in should be set");
     }
 
+    // In case 2nd predicate in previous IF statement was TRUE
+    if (request.getAmountFee() != null && request.getFeeDetails() != null) {
+      throw new InvalidParamsException("Either amount_fee or fee_details should be set");
+    }
+
     if (request.getAmountIn() != null) {
-      AssetValidationUtils.validateAsset(
+      AssetValidationUtils.validateAssetAmount(
           "amount_in",
           AmountAssetRequest.builder()
               .amount(request.getAmountIn().getAmount())
@@ -92,7 +104,7 @@ public class NotifyOffchainFundsReceivedHandler
           assetService);
     }
     if (request.getAmountOut() != null) {
-      AssetValidationUtils.validateAsset(
+      AssetValidationUtils.validateAssetAmount(
           "amount_out",
           AmountAssetRequest.builder()
               .amount(request.getAmountOut().getAmount())
@@ -101,7 +113,7 @@ public class NotifyOffchainFundsReceivedHandler
           assetService);
     }
     if (request.getAmountFee() != null) {
-      AssetValidationUtils.validateAsset(
+      AssetValidationUtils.validateAssetAmount(
           "amount_fee",
           AmountAssetRequest.builder()
               .amount(request.getAmountFee().getAmount())
@@ -109,6 +121,9 @@ public class NotifyOffchainFundsReceivedHandler
               .build(),
           true,
           assetService);
+    }
+    if (request.getFeeDetails() != null) {
+      AssetValidationUtils.validateFeeDetails(request.getFeeDetails(), txn, assetService);
     }
   }
 
@@ -132,18 +147,16 @@ public class NotifyOffchainFundsReceivedHandler
         JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
         if (ImmutableSet.of(DEPOSIT, DEPOSIT_EXCHANGE).contains(Kind.from(txn6.getKind()))) {
           supportedStatuses.add(PENDING_USR_TRANSFER_START);
-          if (areFundsReceived(txn6)) {
-            supportedStatuses.add(PENDING_EXTERNAL);
-          }
+          supportedStatuses.add(ON_HOLD);
+          supportedStatuses.add(PENDING_EXTERNAL);
         }
         break;
       case SEP_24:
         JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
         if (DEPOSIT == Kind.from(txn24.getKind())) {
           supportedStatuses.add(PENDING_USR_TRANSFER_START);
-          if (areFundsReceived(txn24)) {
-            supportedStatuses.add(PENDING_EXTERNAL);
-          }
+          supportedStatuses.add(ON_HOLD);
+          supportedStatuses.add(PENDING_EXTERNAL);
         }
         break;
       default:
@@ -173,6 +186,10 @@ public class NotifyOffchainFundsReceivedHandler
     }
     if (request.getAmountFee() != null) {
       txn.setAmountFee(request.getAmountFee().getAmount());
+    }
+    if (request.getFeeDetails() != null) {
+      txn.setAmountFee(request.getFeeDetails().getTotal());
+      txn.setFeeDetailsList(request.getFeeDetails().getDetails());
     }
 
     switch (Sep.from(txn.getProtocol())) {

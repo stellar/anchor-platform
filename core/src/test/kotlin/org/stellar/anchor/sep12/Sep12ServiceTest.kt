@@ -6,20 +6,29 @@ import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import java.time.Instant
 import kotlin.test.assertNotNull
-import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
+import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.NullSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.stellar.anchor.api.callback.*
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.*
-import org.stellar.anchor.api.platform.CustomerUpdatedResponse
+import org.stellar.anchor.api.platform.GetTransactionResponse
 import org.stellar.anchor.api.sep.sep12.Sep12CustomerRequestBase
 import org.stellar.anchor.api.sep.sep12.Sep12GetCustomerRequest
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep12.Sep12Status
 import org.stellar.anchor.api.shared.CustomerField
+import org.stellar.anchor.api.shared.Customers
 import org.stellar.anchor.api.shared.ProvidedCustomerField
+import org.stellar.anchor.api.shared.StellarId
+import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.Sep10Jwt
@@ -34,6 +43,7 @@ class Sep12ServiceTest {
       "MBFZNZTFSI6TWLVAID7VOLCIFX2PMUOS2X7U6H4TNK4PAPSHPWMMUAAAAAAAAAPCIA2IM"
     private const val CLIENT_DOMAIN = "demo-wallet.stellar.org"
     private const val TEST_HOST_URL = "http://localhost:8080"
+    private const val TEST_TRANSACTION_ID = "test-transaction-id"
     private const val wantedSep12GetCustomerResponse =
       """
 {
@@ -84,6 +94,7 @@ class Sep12ServiceTest {
   private lateinit var sep12Service: Sep12Service
   @MockK(relaxed = true) private lateinit var customerIntegration: CustomerIntegration
   @MockK(relaxed = true) private lateinit var assetService: AssetService
+  @MockK(relaxed = true) private lateinit var platformApiClient: PlatformApiClient
   @MockK(relaxed = true) private lateinit var eventService: EventService
   @MockK(relaxed = true) private lateinit var eventSession: EventService.Session
 
@@ -97,7 +108,7 @@ class Sep12ServiceTest {
     every { assetService.listAllAssets() } returns assets
     every { eventService.createSession(any(), any()) } returns eventSession
 
-    sep12Service = Sep12Service(customerIntegration, assetService, eventService)
+    sep12Service = Sep12Service(customerIntegration, assetService, platformApiClient, eventService)
   }
 
   @Test
@@ -172,6 +183,30 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test get and put sets request account and memo using transaction`() {
+    val transaction =
+      GetTransactionResponse.builder()
+        .customers(
+          Customers.builder()
+            .sender(StellarId.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).build())
+            .build()
+        )
+        .build()
+    every { platformApiClient.getTransaction(any()) } returns transaction
+
+    val putRequest = Sep12PutCustomerRequest.builder().transactionId(TEST_TRANSACTION_ID).build()
+    assertDoesNotThrow { sep12Service.populateRequestFromTransactionId(putRequest) }
+    assertEquals(TEST_ACCOUNT, putRequest.account)
+    assertEquals(TEST_MEMO, putRequest.memo)
+
+    val getRequestBase =
+      Sep12GetCustomerRequest.builder().transactionId(TEST_TRANSACTION_ID).build()
+    assertDoesNotThrow { sep12Service.populateRequestFromTransactionId(getRequestBase) }
+    assertEquals(TEST_ACCOUNT, getRequestBase.account)
+    assertEquals(TEST_MEMO, getRequestBase.memo)
+  }
+
+  @Test
   fun `test update request memo and memo type`() {
     val mockRequestBase = mockk<Sep12CustomerRequestBase>(relaxed = true)
 
@@ -224,16 +259,30 @@ class Sep12ServiceTest {
     assertEquals("Invalid 'memo' for 'memo_type'", ex.message)
   }
 
-  @Test
-  fun `Test put customer request ok`() {
+  @ParameterizedTest
+  @ValueSource(strings = [TEST_TRANSACTION_ID])
+  @NullSource
+  fun `Test put customer request ok`(transactionId: String?) {
     // mock `PUT {callbackApi}/customer` response
     val callbackApiPutRequestSlot = slot<PutCustomerRequest>()
+    val callbackApiGetRequestSlot = slot<GetCustomerRequest>()
     val kycUpdateEventSlot = slot<AnchorEvent>()
     val mockCallbackApiPutCustomerResponse = PutCustomerResponse()
+    val mockCallbackApiGetCustomerResponse = GetCustomerResponse()
     mockCallbackApiPutCustomerResponse.id = "customer-id"
     every { customerIntegration.putCustomer(capture(callbackApiPutRequestSlot)) } returns
       mockCallbackApiPutCustomerResponse
+    every { customerIntegration.getCustomer(capture(callbackApiGetRequestSlot)) } returns
+      mockCallbackApiGetCustomerResponse
     every { eventSession.publish(capture(kycUpdateEventSlot)) } returns Unit
+    every { platformApiClient.getTransaction(any()) } returns
+      GetTransactionResponse.builder()
+        .customers(
+          Customers.builder()
+            .sender(StellarId.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).build())
+            .build()
+        )
+        .build()
 
     // Execute the request
     val mockPutRequest =
@@ -246,6 +295,12 @@ class Sep12ServiceTest {
         .birthDate("2000-01-01")
         .idIssueDate("2023-12-13")
         .idExpirationDate("2023-12-13T19:33:07Z")
+        .emailAddressVerification("12345678")
+        .bankName("Bank of America")
+        .mobileMoneyNumber("12345678")
+        .mobileMoneyProvider("M-PESA")
+        .externalTransferMemo("memo")
+        .transactionId(transactionId)
         .build()
     val jwtToken = createJwtToken(TEST_ACCOUNT)
     assertDoesNotThrow { sep12Service.putCustomer(jwtToken, mockPutRequest) }
@@ -261,16 +316,26 @@ class Sep12ServiceTest {
         .birthDate("2000-01-01")
         .idIssueDate("2023-12-13")
         .idExpirationDate("2023-12-13T19:33:07Z")
+        .emailAddressVerification("12345678")
+        .bankName("Bank of America")
+        .mobileMoneyNumber("12345678")
+        .mobileMoneyProvider("M-PESA")
+        .externalTransferMemo("memo")
+        .transactionId(transactionId)
         .build()
     assertEquals(wantCallbackApiPutRequest, callbackApiPutRequestSlot.captured)
+
+    val wantCallbackApiGetCustomerResponse =
+      GetCustomerRequest.builder().id("customer-id").transactionId(transactionId).build()
+    assertEquals(wantCallbackApiGetCustomerResponse, callbackApiGetRequestSlot.captured)
 
     // validate the published event
     assertNotNull(kycUpdateEventSlot.captured.id)
     assertEquals("12", kycUpdateEventSlot.captured.sep)
     assertEquals(AnchorEvent.Type.CUSTOMER_UPDATED, kycUpdateEventSlot.captured.type)
     assertEquals(
-      CustomerUpdatedResponse(mockCallbackApiPutCustomerResponse.id),
-      kycUpdateEventSlot.captured.customer
+      GetCustomerResponse.to(mockCallbackApiGetCustomerResponse),
+      kycUpdateEventSlot.captured.customer,
     )
 
     // validate the response

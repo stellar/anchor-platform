@@ -5,7 +5,7 @@ import java.time.Instant;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.stellar.anchor.api.sep.sep38.RateFee;
+import org.stellar.anchor.api.shared.FeeDetails;
 import reactor.util.annotation.Nullable;
 
 /**
@@ -37,7 +37,7 @@ public class GetRateResponse {
    * @return a GET /rate response with price, total_price, sell_amount, buy_amount and fee.
    */
   public static GetRateResponse indicativePrice(
-      String price, String sellAmount, String buyAmount, RateFee fee) {
+      String price, String sellAmount, String buyAmount, FeeDetails fee) {
     Rate rate =
         Rate.builder().price(price).sellAmount(sellAmount).buyAmount(buyAmount).fee(fee).build();
     return new GetRateResponse(rate);
@@ -60,6 +60,6 @@ public class GetRateResponse {
     @Nullable
     Instant expiresAt;
 
-    @Nullable RateFee fee;
+    @Nullable FeeDetails fee;
   }
 }

@@ -8,8 +8,8 @@ import org.stellar.anchor.auth.ApiAuthJwt.PlatformAuthJwt;
 import org.stellar.anchor.auth.JwtService;
 
 public class PlatformAuthJwtFilter extends AbstractJwtFilter {
-  public PlatformAuthJwtFilter(JwtService jwtService) {
-    super(jwtService);
+  public PlatformAuthJwtFilter(JwtService jwtService, String authorizationHeader) {
+    super(jwtService, authorizationHeader);
   }
 
   @Override

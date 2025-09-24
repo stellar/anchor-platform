@@ -7,7 +7,6 @@ import com.palantir.docker.compose.configuration.ProjectName
 import com.palantir.docker.compose.connection.waiting.HealthChecks
 import java.io.File
 import java.lang.Thread.sleep
-import java.lang.reflect.Field
 import java.util.*
 import kotlinx.coroutines.*
 import org.springframework.context.ConfigurableApplicationContext
@@ -140,13 +139,14 @@ class TestProfileExecutor(val config: TestConfig) {
   private fun startDocker() {
     if (shouldStartDockerCompose) {
       info("Starting docker compose...")
-      if (isWindows()) {
-        setupWindowsEnv()
-      }
-
-      info("Initializing TestProfileRunner...")
       val dockerComposeFile = getResourceFile("docker-compose-test.yaml")
       val userHomeFolder = File(System.getProperty("user.home"))
+      if (isWindows()) {
+        System.getenv("DOCKER_LOCATION")
+          ?: throw RuntimeException("DOCKER_LOCATION env variable is not set")
+        System.getenv("DOCKER_COMPOSE_LOCATION")
+          ?: throw RuntimeException("DOCKER_COMPOSE_LOCATION env variable is not set")
+      }
       docker =
         DockerComposeExtension.builder()
           .saveLogsTo("${userHomeFolder}/docker-logs/anchor-platform-integration-test")
@@ -160,9 +160,6 @@ class TestProfileExecutor(val config: TestConfig) {
           .build()
 
       docker.beforeAll(null)
-
-      // TODO: Check server readiness instead of wait for 5 seconds
-      sleep(5000)
     }
   }
 
@@ -188,47 +185,5 @@ class TestProfileExecutor(val config: TestConfig) {
 
   private fun isWindows(): Boolean {
     return System.getProperty("os.name").lowercase(Locale.getDefault()).contains("win")
-  }
-
-  private fun setupWindowsEnv() {
-    val windowsDockerLocation =
-      System.getenv("WIN_DOCKER_LOCATION")
-        ?: throw RuntimeException("WIN_DOCKER_LOCATION env variable is not set")
-
-    setEnv(mapOf("DOCKER_LOCATION" to File(windowsDockerLocation, "docker.exe").absolutePath))
-    setEnv(
-      mapOf(
-        "DOCKER_COMPOSE_LOCATION" to File(windowsDockerLocation, "docker-compose.exe").absolutePath
-      )
-    )
-  }
-
-  @Suppress("UNCHECKED_CAST")
-  private fun setEnv(envs: Map<String, String>?) {
-    try {
-      val processEnvironmentClass = Class.forName("java.lang.ProcessEnvironment")
-      val theEnvironmentField: Field = processEnvironmentClass.getDeclaredField("theEnvironment")
-      theEnvironmentField.isAccessible = true
-      val env = theEnvironmentField.get(null) as MutableMap<String, String>
-      env.putAll(envs!!)
-      val theCaseInsensitiveEnvironmentField: Field =
-        processEnvironmentClass.getDeclaredField("theCaseInsensitiveEnvironment")
-      theCaseInsensitiveEnvironmentField.isAccessible = true
-      val cienv = theCaseInsensitiveEnvironmentField.get(null) as MutableMap<String, String>
-      cienv.putAll(envs)
-    } catch (e: NoSuchFieldException) {
-      val classes = Collections::class.java.declaredClasses
-      val env = System.getenv()
-      for (cl in classes) {
-        if ("java.util.Collections\$UnmodifiableMap" == cl.name) {
-          val field: Field = cl.getDeclaredField("m")
-          field.isAccessible = true
-          val obj: Any = field.get(env)
-          val map = obj as MutableMap<String, String>
-          map.clear()
-          map.putAll(envs!!)
-        }
-      }
-    }
   }
 }

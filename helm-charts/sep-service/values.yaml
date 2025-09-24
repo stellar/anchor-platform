@@ -1,0 +1,435 @@
+fullName: anchor-platform
+namespace: default
+
+secretStoreRefName: fake-secret-store
+
+container:
+  image: anchor-platform:local
+  imagePullPolicy: Never
+
+services:
+  sep:
+    containerPort: 8080
+    servicePort: 8080
+    type: ClusterIP
+    name: sep
+    deployment:
+      replicas: 1
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 500m
+        limits:
+          memory: 1Gi
+          cpu: 1
+  
+  platform:
+    containerPort: 8085
+    servicePort: 8085
+    type: ClusterIP
+    name: platform
+    deployment:
+      replicas: 1
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 500m
+        limits:
+          memory: 1Gi
+          cpu: 1
+  
+  eventProcessor:
+    containerPort: 8088
+    servicePort: 8088
+    type: ClusterIP
+    name: event-processor
+    deployment:
+      replicas: 1
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 500m
+        limits:
+          memory: 1Gi
+          cpu: 1
+
+  observer:
+    containerPort: 8083
+    servicePort: 8083
+    type: ClusterIP
+    name: observer
+    deployment:
+      replicas: 1
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 500m
+        limits:
+          memory: 1Gi
+          cpu: 1
+
+config:
+  app_logging:
+    stellar_level: DEBUG
+    request_logger_enabled: true
+
+  stellar_network:
+    network: TESTNET
+    network_passphrase: "Test SDF Network ; September 2015"
+    horizon_url: "https://horizon-testnet.stellar.org"
+
+  data:
+    type: postgres
+    server: postgresql:5432
+    database: postgres
+    flyway_enabled: true
+    ddl_auto: update
+
+  callback_api:
+    base_url: http://reference-server-svc-reference-server:8091
+
+  platform_api:
+    base_url: http://anchor-platform-svc-platform:8085
+
+  events:
+    enabled: true
+    queue:
+      type: kafka
+      kafka:
+        bootstrap_server: kafka:9092
+        security_protocol: SASL_PLAINTEXT
+        sasl_mechanism: PLAIN
+
+  sep1:
+    enabled: true
+    toml:
+      type: file
+      value: /config/sep1.toml
+
+  sep6:
+    enabled: true
+
+  sep10:
+    enabled: true
+    web_auth_domain: localhost:8080
+    home_domains: localhost:8080
+
+  sep12:
+    enabled: true
+
+  sep31:
+    enabled: true
+
+  sep38:
+    enabled: true
+
+  sep24:
+    enabled: true
+    interactive_url:
+      base_url: http://localhost:8091
+    more_info_url:
+      base_url: http://localhost:8091
+
+ingress:
+  name: ingress-anchor-platform
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+
+sep1_toml: |
+  ACCOUNTS = ["GCSGSR6KQQ5BP2FXVPWRL6SWPUSFWLVONLIBJZUKTVQB5FYJFVL6XOXE"]
+  VERSION = "0.1.0"
+  SIGNING_KEY = "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+  NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
+
+  WEB_AUTH_ENDPOINT = "http://localhost:8080/auth"
+  KYC_SERVER = "http://localhost:8080/sep12"
+  TRANSFER_SERVER = "http://localhost:8080/sep6"
+  TRANSFER_SERVER_SEP0024 = "http://localhost:8080/sep24"
+  DIRECT_PAYMENT_SERVER = "http://localhost:8080/sep31"
+  ANCHOR_QUOTE_SERVER = "http://localhost:8080/sep38"
+
+  [[CURRENCIES]]
+  code = "USDC"
+  issuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+  status = "test"
+  is_asset_anchored = false
+  desc = "Circle USDC Token"
+  anchor_asset_type = "crypto"
+
+  [[CURRENCIES]]
+  code = "USDC"
+  issuer = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+  status = "test"
+  is_asset_anchored = false
+  desc = "Circle USDC Token"
+  anchor_asset_type = "crypto"
+
+  [[CURRENCIES]]
+  code = "native"
+  status = "test"
+  is_asset_anchored = false
+  anchor_asset_type = "crypto"
+  desc = "XLM, the native token of the Stellar network."
+
+  [DOCUMENTATION]
+  ORG_NAME = "Stellar Development Foundation"
+  ORG_URL = "https://stellar.org"
+  ORG_DESCRIPTION = "SEP 24 reference server."
+  ORG_KEYBASE = "stellar.public"
+  ORG_TWITTER = "StellarOrg"
+  ORG_GITHUB = "stellar"
+
+assets_config: |
+  assets:
+  - schema: stellar
+    code: USDC
+    issuer: GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
+    distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+    significant_decimals: 2
+    deposit:
+      enabled: true
+      min_amount: 1
+      methods:
+        - SEPA
+        - SWIFT
+    withdraw:
+      enabled: true
+      max_amount: 1000000
+      methods:
+        - bank_account
+        - cash
+    send:
+      fee_fixed: 0
+      fee_percent: 0
+      max_amount: 1000000
+    sep31:
+      quotes_supported: true
+      quotes_required: false
+      sep12:
+        sender:
+          types:
+            sep31-sender:
+              description: U.S. citizens limited to sending payments of less than $10,000
+                in value
+            sep31-large-sender:
+              description: U.S. citizens that do not have sending limits
+            sep31-foreign-sender:
+              description: non-U.S. citizens sending payments of less than $10,000 in
+                value
+        receiver:
+          types:
+            sep31-receiver:
+              description: U.S. citizens receiving USD
+            sep31-foreign-receiver:
+              description: non-U.S. citizens receiving USD
+      fields:
+        transaction:
+          receiver_routing_number:
+            description: routing number of the destination bank account
+          receiver_account_number:
+            description: bank account number of the destination
+          type:
+            description: type of deposit to make
+            choices:
+              - SEPA
+              - SWIFT
+    sep38:
+      exchangeable_assets:
+        - iso4217:USD
+    sep6_enabled: true
+    sep24_enabled: true
+    sep31_enabled: true
+    sep38_enabled: true
+  - schema: stellar
+    code: USDC
+    issuer: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+    distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+    significant_decimals: 2
+    deposit:
+      enabled: true
+      min_amount: 1
+      max_amount: 1000000
+    withdraw:
+      enabled: true
+      min_amount: 1
+      max_amount: 1000000
+    send:
+      fee_fixed: 0
+      fee_percent: 0
+      min_amount: 1
+      max_amount: 1000000
+    sep31:
+      quotes_supported: true
+      quotes_required: false
+      sep12:
+        sender:
+          types:
+            sep31-sender:
+              description: U.S. citizens limited to sending payments of less than $10,000
+                in value
+            sep31-large-sender:
+              description: U.S. citizens that do not have sending limits
+            sep31-foreign-sender:
+              description: non-U.S. citizens sending payments of less than $10,000 in
+                value
+        receiver:
+          types:
+            sep31-receiver:
+              description: U.S. citizens receiving USD
+            sep31-foreign-receiver:
+              description: non-U.S. citizens receiving USD
+      fields:
+        transaction:
+          receiver_routing_number:
+            description: routing number of the destination bank account
+          receiver_account_number:
+            description: bank account number of the destination
+          type:
+            description: type of deposit to make
+            choices:
+              - SEPA
+              - SWIFT
+    sep38:
+      exchangeable_assets:
+        - iso4217:USD
+    sep24_enabled: true
+    sep31_enabled: true
+    sep38_enabled: true
+  - schema: stellar
+    code: JPYC
+    issuer: GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
+    distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+    significant_decimals: 4
+    deposit:
+      enabled: true
+    withdraw:
+      enabled: true
+    send:
+      fee_fixed: 0
+      fee_percent: 0
+    sep31:
+      quotes_supported: true
+      quotes_required: false
+      sep12:
+        sender:
+          types:
+            sep31-sender:
+              description: U.S. citizens limited to sending payments of less than $10,000
+                in value
+            sep31-large-sender:
+              description: U.S. citizens that do not have sending limits
+            sep31-foreign-sender:
+              description: non-U.S. citizens sending payments of less than $10,000 in
+                value
+        receiver:
+          types:
+            sep31-receiver:
+              description: U.S. citizens receiving JPY
+            sep31-foreign-receiver:
+              description: non-U.S. citizens receiving JPY
+      fields:
+        transaction:
+          receiver_routing_number:
+            description: routing number of the destination bank account
+          receiver_account_number:
+            description: bank account number of the destination
+          type:
+            description: type of deposit to make
+            choices:
+              - SEPA
+              - SWIFT
+    sep38:
+      exchangeable_assets:
+        - iso4217:USD
+    sep6_enabled: false
+    sep24_enabled: true
+    sep31_enabled: true
+    sep38_enabled: true
+  - schema: iso4217
+    code: USD
+    significant_decimals: 7
+    deposit:
+      enabled: true
+      min_amount: 0
+      max_amount: 10000
+    withdraw:
+      enabled: true
+      min_amount: 0
+      max_amount: 10000
+    send:
+      fee_fixed: 0
+      fee_percent: 0
+      min_amount: 0
+      max_amount: 10000
+    sep38:
+      exchangeable_assets:
+        - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
+        - stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
+      country_codes:
+        - USA
+      decimals: 4
+      sell_delivery_methods:
+        - name: WIRE
+          description: Send USD directly to the Anchor's bank account.
+      buy_delivery_methods:
+        - name: WIRE
+          description: Have USD sent directly to your bank account.
+    sep6_enabled: false
+    sep24_enabled: false
+    sep31_enabled: false
+    sep38_enabled: true
+  - schema: stellar
+    code: native
+    distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+    significant_decimals: 7
+    deposit:
+      enabled: true
+      max_amount: 1000000
+    withdraw:
+      enabled: true
+      max_amount: 1000000
+    send:
+      fee_fixed: 0
+      fee_percent: 0
+      max_amount: 1000000
+    sep31:
+      quotes_supported: true
+      quotes_required: true
+      sep12:
+        sender:
+          types:
+            sep31-sender:
+              description: U.S. citizens limited to sending payments of less than $10,000
+                in value
+            sep31-large-sender:
+              description: U.S. citizens that do not have sending limits
+            sep31-foreign-sender:
+              description: non-U.S. citizens sending payments of less than $10,000 in
+                value
+        receiver:
+          types:
+            sep31-receiver:
+              description: U.S. citizens receiving USD
+            sep31-foreign-receiver:
+              description: non-U.S. citizens receiving USD
+      # todo assume this is right for now
+      fields:
+        transaction:
+          receiver_routing_number:
+            description: routing number of the destination bank account
+          receiver_account_number:
+            description: bank account number of the destination
+          type:
+            description: type of deposit to make
+            choices:
+              - SEPA
+              - SWIFT
+    sep38:
+      exchangeable_assets:
+        - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
+      decimals: 7
+    sep6_enabled: false
+    sep31_enabled: true
+    sep38_enabled: true
+    sep24_enabled: true

@@ -11,6 +11,8 @@ import javax.persistence.Transient;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.Type;
+import org.stellar.anchor.api.shared.FeeDescription;
+import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarTransaction;
 import org.stellar.anchor.util.GsonUtils;
 
@@ -52,6 +54,11 @@ public abstract class JdbcSepTransaction {
   @Column(name = "amount_fee_asset")
   String amountFeeAsset;
 
+  @SerializedName("fee_details")
+  @Column(name = "fee_details")
+  @Type(type = "json")
+  List<FeeDescription> feeDetailsList;
+
   @SerializedName("started_at")
   @Column(name = "started_at")
   Instant startedAt;
@@ -63,6 +70,10 @@ public abstract class JdbcSepTransaction {
   @SerializedName("transfer_received_at")
   @Column(name = "transfer_received_at")
   Instant transferReceivedAt;
+
+  @SerializedName("user_action_required_by")
+  @Column(name = "user_action_required_by")
+  Instant userActionRequiredBy;
 
   @SerializedName("stellar_transaction_id")
   @Column(name = "stellar_transaction_id")
@@ -77,4 +88,17 @@ public abstract class JdbcSepTransaction {
   List<StellarTransaction> stellarTransactions;
 
   public abstract String getProtocol();
+
+  public void setFeeDetails(FeeDetails feeDetails) {
+    setAmountFee(feeDetails.getTotal());
+    setAmountFeeAsset(feeDetails.getAsset());
+    setFeeDetailsList(feeDetails.getDetails());
+  }
+
+  public FeeDetails getFeeDetails() {
+    if (getAmountFee() == null) {
+      return null;
+    }
+    return new FeeDetails(getAmountFee(), getAmountFeeAsset(), getFeeDetailsList());
+  }
 }

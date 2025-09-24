@@ -5,8 +5,8 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
-import org.junit.Assert.assertTrue
 import org.junit.jupiter.api.*
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.skyscreamer.jsonassert.Customization
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
@@ -23,25 +23,14 @@ import org.stellar.anchor.client.Sep24Client
 import org.stellar.anchor.platform.AbstractIntegrationTests
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.gson
+import org.stellar.anchor.platform.inject
 import org.stellar.anchor.util.RSAUtil
 
 class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
-  private val custodyApiClient =
-    CustodyApiClient(
-      config.env["custody.server.url"]!!,
-      token.token,
-      RSAUtil.generatePrivateKey(config.env["secret.custody.fireblocks.secret_key"])
-    )
-  private val sep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), token.token)
-  private val platformApiClient =
-    PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
-
   companion object {
-    const val TX_ID_KEY = "TX_ID"
-    const val CUSTODY_TX_ID_KEY = "CUSTODY_TX_ID"
+    const val CUSTODY_TX_ID_KEY = "%CUSTODY_TX_ID%"
     private val custodyTxnId = UUID.randomUUID().toString()
     private val refundCustodyTxnId = UUID.randomUUID().toString()
-    //    private val custodyTxnId = "df0442b4-6d53-44cd-82d7-3c48edc0b1ad"
     private val custodyMockServer = MockWebServer()
 
     @BeforeAll
@@ -60,7 +49,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
               return MockResponse()
                 .setResponseCode(200)
                 .setBody(
-                  CUSTODY_TRANSACTION_PAYMENT_RESPONSE.replace(CUSTODY_TX_ID_KEY, custodyTxnId)
+                  CUSTODY_TRANSACTION_PAYMENT_RESPONSE.inject(CUSTODY_TX_ID_KEY, custodyTxnId)
                 )
             }
             return MockResponse().setResponseCode(404)
@@ -75,6 +64,16 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
       custodyMockServer.shutdown()
     }
   }
+
+  private val custodyApiClient =
+    CustodyApiClient(
+      config.env["custody.server.url"]!!,
+      token.token,
+      RSAUtil.generatePrivateKey(config.env["secret.custody.fireblocks.secret_key"])
+    )
+  private val sep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), token.token)
+  private val platformApiClient =
+    PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
 
   @Test
   fun `test generate deposit address`() {
@@ -98,7 +97,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
       val recordedRequest = custodyMockServer.takeRequest()
       if (
         recordedRequest.method.equals("POST") &&
-          recordedRequest.path.toString().equals("//v1/vault/accounts/1/XLM_USDC_T_CEKS/addresses")
+          recordedRequest.path.toString() == "//v1/vault/accounts/1/XLM_USDC_T_CEKS/addresses"
       ) {
         Assertions.assertEquals(
           "//v1/vault/accounts/1/XLM_USDC_T_CEKS/addresses",
@@ -123,7 +122,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
 
     custodyApiClient.createTransaction(
       gson.fromJson(
-        CUSTODY_TRANSACTION_REQUEST.replace(TX_ID_KEY, txId),
+        CUSTODY_TRANSACTION_REQUEST.inject(TX_ID_KEY, txId),
         CreateCustodyTransactionRequest::class.java
       )
     )
@@ -163,7 +162,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
       val recordedRequest = custodyMockServer.takeRequest()
       if (
         recordedRequest.method.equals("POST") &&
-          recordedRequest.path.toString().equals("//v1/transactions")
+          recordedRequest.path.toString() == "//v1/transactions"
       ) {
         JSONAssert.assertEquals(
           CUSTODY_TRANSACTION_PAYMENT_REQUEST,
@@ -171,7 +170,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
           JSONCompareMode.STRICT
         )
 
-        val webhookRequest = WEBHOOK_REQUEST.replace(CUSTODY_TX_ID_KEY, custodyTxnId)
+        val webhookRequest = WEBHOOK_REQUEST.inject(CUSTODY_TX_ID_KEY, custodyTxnId)
         custodyApiClient.sendWebhook(webhookRequest)
 
         txResponse = platformApiClient.getTransaction(txId)
@@ -179,7 +178,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
         txResponse.updatedAt = null
 
         JSONAssert.assertEquals(
-          EXPECTED_TRANSACTION_RESPONSE.replace(TX_ID_KEY, txId),
+          EXPECTED_TRANSACTION_RESPONSE.inject(TX_ID_KEY, txId),
           gson.toJson(txResponse),
           CustomComparator(
             JSONCompareMode.LENIENT,
@@ -214,7 +213,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
             return MockResponse()
               .setResponseCode(200)
               .setBody(
-                CUSTODY_TRANSACTION_REFUND_RESPONSE.replace(CUSTODY_TX_ID_KEY, refundCustodyTxnId)
+                CUSTODY_TRANSACTION_REFUND_RESPONSE.inject(CUSTODY_TX_ID_KEY, refundCustodyTxnId)
               )
           }
           return MockResponse().setResponseCode(404)
@@ -225,7 +224,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
 
     val requestOnchainFundsParams =
       gson.fromJson(
-        REQUEST_ONCHAIN_FUNDS_REQUEST.replace(TX_ID_KEY, txId),
+        REQUEST_ONCHAIN_FUNDS_REQUEST.inject(TX_ID_KEY, txId),
         RequestOnchainFundsRequest::class.java
       )
     platformApiClient.sendRpcNotification(
@@ -238,7 +237,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
 
     val notifyOnchainFundsReceivedRequest =
       gson.fromJson(
-        NOTIFY_ONCHAIN_FUNDS_RECEIVED_REQUEST.replace(TX_ID_KEY, txId),
+        NOTIFY_ONCHAIN_FUNDS_RECEIVED_REQUEST.inject(TX_ID_KEY, txId),
         NotifyOnchainFundsReceivedRequest::class.java
       )
     platformApiClient.sendRpcNotification(
@@ -251,7 +250,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
 
     val doStellarRefundParams =
       gson.fromJson(
-        DO_STELLAR_REFUND_REQUEST.replace(TX_ID_KEY, txId),
+        DO_STELLAR_REFUND_REQUEST.inject(TX_ID_KEY, txId),
         DoStellarRefundRequest::class.java
       )
     platformApiClient.sendRpcNotification(RpcMethod.DO_STELLAR_REFUND, doStellarRefundParams)
@@ -259,7 +258,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
     Assertions.assertEquals(SepTransactionStatus.PENDING_STELLAR, txResponse.status)
 
     custodyApiClient.sendWebhook(
-      REFUND_WEBHOOK_REQUEST.replace(CUSTODY_TX_ID_KEY, refundCustodyTxnId)
+      REFUND_WEBHOOK_REQUEST.inject(CUSTODY_TX_ID_KEY, refundCustodyTxnId)
     )
 
     txResponse = platformApiClient.getTransaction(txId)
@@ -267,7 +266,7 @@ class CustodyApiTests : AbstractIntegrationTests(TestConfig("custody")) {
     txResponse.updatedAt = null
 
     JSONAssert.assertEquals(
-      EXPECTED_TXN_REFUND_RESPONSE.replace(TX_ID_KEY, txId),
+      EXPECTED_TXN_REFUND_RESPONSE.inject(TX_ID_KEY, txId),
       gson.toJson(txResponse),
       CustomComparator(
         JSONCompareMode.LENIENT,
@@ -324,7 +323,7 @@ private const val CUSTODY_DEPOSIT_ADDRESS_RESPONSE =
 private const val CUSTODY_TRANSACTION_REQUEST =
   """
   {
-    "id" : "TX_ID",
+    "id" : "%TX_ID%",
     "memo":  "testMemo",
     "memoType": "testMemoType",
     "protocol": "24",
@@ -360,7 +359,7 @@ private const val CUSTODY_TRANSACTION_PAYMENT_REQUEST =
 private const val CUSTODY_TRANSACTION_PAYMENT_RESPONSE =
   """
     {
-      "id":"CUSTODY_TX_ID",
+      "id":"%CUSTODY_TX_ID%",
       "status": "SUBMITTED"
     }
 """
@@ -368,7 +367,7 @@ private const val CUSTODY_TRANSACTION_PAYMENT_RESPONSE =
 private const val CUSTODY_TRANSACTION_REFUND_RESPONSE =
   """
     {
-      "id":"CUSTODY_TX_ID",
+      "id":"%CUSTODY_TX_ID%",
       "status": "SUBMITTED"
     }
 """
@@ -380,7 +379,7 @@ private const val WEBHOOK_REQUEST =
   "tenantId": "6ae8e895-7bdb-5021-b865-c65885c61068",
   "timestamp": 1687423621679,
   "data": {
-    "id": "CUSTODY_TX_ID",
+    "id": "%CUSTODY_TX_ID%",
     "createdAt": 1687423599336,
     "lastUpdated": 1687423620808,
     "assetId": "XLM_USDC_T_CEKS",
@@ -399,12 +398,12 @@ private const val WEBHOOK_REQUEST =
     "amount": 1,
     "networkFee": 0.00001,
     "netAmount": 1,
-    "sourceAddress": "GBE7RE3L6VBI3BV722PEEV2GYTWHRSNFZWCX2MXSCE7XBFF2O3PVRTXI",
-    "destinationAddress": "GBH42AJG2G7RPX64SQHLJ23V4HOSKZFC32M5KNVKDNIFLE3MMFBHP6CT",
+    "sourceAddress": "%TESTPAYMENT_SRC_ACCOUNT%",
+    "destinationAddress": "%TESTPAYMENT_DEST_ACCOUNT%",
     "destinationAddressDescription": "",
     "destinationTag": "",
     "status": "CONFIRMING",
-    "txHash": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+    "txHash": "%TESTPAYMENT_TXN_HASH%",
     "subStatus": "CONFIRMED",
     "signedBy": [],
     "createdBy": "1444ed36-5bc0-4e3b-9b17-5df29fc0590f",
@@ -446,7 +445,7 @@ private const val REFUND_WEBHOOK_REQUEST =
   "tenantId": "6ae8e895-7bdb-5021-b865-c65885c61068",
   "timestamp": 1687423621679,
   "data": {
-    "id": "CUSTODY_TX_ID",
+    "id": "%CUSTODY_TX_ID%",
     "createdAt": 1687423599336,
     "lastUpdated": 1687423620808,
     "assetId": "XLM_USDC_T_CEKS",
@@ -465,12 +464,12 @@ private const val REFUND_WEBHOOK_REQUEST =
     "amount": 1,
     "networkFee": 0.00001,
     "netAmount": 1,
-    "sourceAddress": "GBH42AJG2G7RPX64SQHLJ23V4HOSKZFC32M5KNVKDNIFLE3MMFBHP6CT",
+    "sourceAddress": "%TESTPAYMENT_DEST_ACCOUNT%",
     "destinationAddress": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
     "destinationAddressDescription": "",
     "destinationTag": "12345",
     "status": "CONFIRMING",
-    "txHash": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+    "txHash": "%TESTPAYMENT_TXN_HASH%",
     "subStatus": "CONFIRMED",
     "signedBy": [],
     "createdBy": "1444ed36-5bc0-4e3b-9b17-5df29fc0590f",
@@ -505,16 +504,10 @@ private const val REFUND_WEBHOOK_REQUEST =
 }
 """
 
-private const val WEBHOOK_SIGNATURE =
-  "jwWIW/EX4XdkD9sS0YSybaYCnITwdDsCADV99mVyimhLPz6EhQDV6hJEfA4/BcNtXveJNbchKCwVI1l5o0eHc/1F0l4WsfIGNcDl68CDBWpe6LyQ3ZWUS7X/VMEeFFTBkgGcRl7aDjX2Yn9HuLFnSFRR2r4eDKP8y4G7hUbPUdE="
-
-private const val REFUND_WEBHOOK_SIGNATURE =
-  "JQD32Ux2N1pJo61giuvABGyRtkn9Da1nJd8GGoedTKfvdwGFBkU4H78u0s7iHu4dhGgSg5NFL1mkkhSdoeuzkva/jgadFrn3JDQ3t1lFffiBBMNumOcn5c7ImCecIjizhR1uzW4rWmelpeG+Dah5C8q+EQ82qjlmMOVoYYuSzvM="
-
 private const val EXPECTED_TRANSACTION_RESPONSE =
   """
   {
-  "id": "TX_ID",
+  "id": "%TX_ID%",
   "sep": "24",
   "kind": "deposit",
   "status": "completed",
@@ -539,16 +532,16 @@ private const val EXPECTED_TRANSACTION_RESPONSE =
   "external_transaction_id": "1",
   "stellar_transactions": [
     {
-      "id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+      "id": "%TESTPAYMENT_TXN_HASH%",
       "payments": [
         {
           "amount": {
-            "amount": "1.0000000",
-            "asset": "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+            "amount": "%TESTPAYMENT_AMOUNT%",
+            "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
           },
           "payment_type": "payment",
-          "source_account": "GBE7RE3L6VBI3BV722PEEV2GYTWHRSNFZWCX2MXSCE7XBFF2O3PVRTXI",
-          "destination_account": "GBH42AJG2G7RPX64SQHLJ23V4HOSKZFC32M5KNVKDNIFLE3MMFBHP6CT"
+          "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+          "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
         }
       ]
     }
@@ -561,7 +554,7 @@ private const val EXPECTED_TRANSACTION_RESPONSE =
 private const val EXPECTED_TXN_REFUND_RESPONSE =
   """
   {
-  "id": "TX_ID",
+  "id": "%TX_ID%",
   "sep": "24",
   "kind": "withdrawal",
   "status": "refunded",
@@ -594,10 +587,10 @@ private const val EXPECTED_TXN_REFUND_RESPONSE =
     },
     "payments": [
       {
-        "id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+        "id": "%TESTPAYMENT_TXN_HASH%",
         "id_type": "stellar",
         "amount": {
-          "amount": "1.0000000",
+          "amount": "%TESTPAYMENT_AMOUNT%",
           "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
         },
         "fee": {
@@ -609,18 +602,18 @@ private const val EXPECTED_TXN_REFUND_RESPONSE =
   },
   "stellar_transactions": [
     {
-      "id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+      "id": "%TESTPAYMENT_TXN_HASH%",
       "memo": "testTag",
       "memo_type": "id",
       "payments": [
         {
           "amount": {
-            "amount": "1.0000000",
-            "asset": "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+            "amount": "%TESTPAYMENT_AMOUNT%",
+            "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
           },
           "payment_type": "payment",
-          "source_account": "GBE7RE3L6VBI3BV722PEEV2GYTWHRSNFZWCX2MXSCE7XBFF2O3PVRTXI",
-          "destination_account": "GBH42AJG2G7RPX64SQHLJ23V4HOSKZFC32M5KNVKDNIFLE3MMFBHP6CT"
+          "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+          "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
         }
       ]
     }
@@ -678,7 +671,7 @@ private const val NOTIFY_OFFCHAIN_FUNDS_RECEIVED_REQUEST =
 private const val REQUEST_ONCHAIN_FUNDS_REQUEST =
   """
   {
-    "transaction_id": "TX_ID",
+    "transaction_id": "%TX_ID%",
     "message": "test message 1",
     "amount_in": {
       "amount": "1",
@@ -701,16 +694,16 @@ private const val REQUEST_ONCHAIN_FUNDS_REQUEST =
 private const val NOTIFY_ONCHAIN_FUNDS_RECEIVED_REQUEST =
   """
   {
-    "transaction_id": "TX_ID",
+    "transaction_id": "%TX_ID%",
     "message": "test message 1",
-    "stellar_transaction_id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2"
+    "stellar_transaction_id": "%TESTPAYMENT_TXN_HASH%"
   }
 """
 
 private const val DO_STELLAR_REFUND_REQUEST =
   """
   {
-    "transaction_id": "TX_ID",
+    "transaction_id": "%TX_ID%",
     "message": "test message",
     "refund": {
         "amount": {

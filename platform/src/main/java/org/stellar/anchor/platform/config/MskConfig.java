@@ -17,8 +17,25 @@ public class MskConfig extends KafkaConfig {
       int retires,
       int lingerMs,
       int batchSize,
-      int pollTimeoutSeconds) {
-    super(bootstrapServer, clientId, retires, lingerMs, batchSize, pollTimeoutSeconds);
+      int pollTimeoutSeconds,
+      SecurityProtocol securityProtocol,
+      SaslMechanism saslMechanism,
+      Boolean sslVerifyCert,
+      String sslKeystoreLocation,
+      String sslTruststoreLocation) {
+
+    super(
+        bootstrapServer,
+        clientId,
+        retires,
+        lingerMs,
+        batchSize,
+        pollTimeoutSeconds,
+        securityProtocol,
+        saslMechanism,
+        sslVerifyCert,
+        sslKeystoreLocation,
+        sslTruststoreLocation);
     this.useIAM = useIAM;
   }
 }

@@ -1,8 +1,5 @@
 package org.stellar.anchor.platform.extendedtest.rpc
 
-import org.junit.jupiter.api.TestInstance
-import org.junit.jupiter.api.parallel.Execution
-import org.junit.jupiter.api.parallel.ExecutionMode
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.platform.e2etest.Sep24End2EndTests
@@ -10,13 +7,9 @@ import org.stellar.anchor.platform.e2etest.Sep31End2EndTests
 import org.stellar.anchor.platform.e2etest.Sep6End2EndTest
 
 // use TEST_PROFILE_NAME = "rpc"
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@Execution(ExecutionMode.SAME_THREAD)
 class CustodyRpcSep31End2EndTests : Sep31End2EndTests()
 
 // use TEST_PROFILE_NAME = "rpc"
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@Execution(ExecutionMode.SAME_THREAD)
 class CustodyRpcSep24End2EndTests : Sep24End2EndTests() {
   // These are to override the default expected statuses for RPC configuration
   override fun getExpectedDepositStatus(): List<Pair<AnchorEvent.Type, SepTransactionStatus>> {
@@ -41,6 +34,4 @@ class CustodyRpcSep24End2EndTests : Sep24End2EndTests() {
 }
 
 // use TEST_PROFILE_NAME = "rpc"
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@Execution(ExecutionMode.SAME_THREAD)
 class CustodyRpcSep6End2EndTests : Sep6End2EndTest()

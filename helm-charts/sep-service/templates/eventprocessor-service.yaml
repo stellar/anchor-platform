@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.fullName }}-svc-{{ .Values.services.eventProcessor.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- if .Values.services.eventProcessor.labels }}
+      {{- range $key, $value := .Values.services.eventProcessor.labels }}
+        {{ $key }}: {{ $value | quote }}
+      {{- end }}
+    {{- end}}
+    app.kubernetes.io/name: {{ .Values.fullName }}-event-processor
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: {{ .Values.services.sep.type | default "ClusterIP" }}
+  ports:
+    - protocol: TCP
+      port: {{ .Values.services.sep.servicePort | default 8088 }}
+      targetPort: {{ .Values.services.sep.containerPort | default 8088 }}
+  selector:
+    app: {{ .Values.fullName }}-svc-{{ .Values.services.eventProcessor.name }}

@@ -31,3 +31,9 @@ The following callable workflows can be called by typing the following commands 
 Please note that when triggered from comments, these callable workflow are running from the `develop` branch instead of
 the pull request branch. 
 
+
+## How to access the test results of the workflows
+
+The test results of the workflows can be accessed from the `Actions` tab of the repository. The test results are stored
+in the `Artifacts` section of the workflow run. 
+

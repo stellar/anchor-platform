@@ -9,8 +9,8 @@ import org.stellar.anchor.auth.JwtService;
 
 public class CustodyAuthJwtFilter extends AbstractJwtFilter {
 
-  public CustodyAuthJwtFilter(JwtService jwtService) {
-    super(jwtService);
+  public CustodyAuthJwtFilter(JwtService jwtService, String authorizationHeader) {
+    super(jwtService, authorizationHeader);
   }
 
   @Override

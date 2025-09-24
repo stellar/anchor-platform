@@ -8,7 +8,7 @@ import lombok.*;
 @NoArgsConstructor
 public class AuthConfig {
   AuthType type;
-  String secret;
+  String secretString;
   JwtConfig jwt;
   ApiKeyConfig apiKey;
 

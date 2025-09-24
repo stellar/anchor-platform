@@ -5,6 +5,8 @@ import org.stellar.anchor.platform.configurator.SecretManager;
 
 public class PropertySecretConfig implements SecretConfig {
 
+  public static final String SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET =
+      "secret.sep6.more_info_url.jwt_secret";
   public static final String SECRET_SEP_10_JWT_SECRET = "secret.sep10.jwt_secret";
   public static final String SECRET_SEP_10_SIGNING_SEED = "secret.sep10.signing_seed";
   public static final String SECRET_SEP_24_INTERACTIVE_URL_JWT_SECRET =
@@ -15,6 +17,17 @@ public class PropertySecretConfig implements SecretConfig {
   public static final String SECRET_PLATFORM_API_AUTH_SECRET = "secret.platform_api.auth_secret";
   public static final String SECRET_DATA_USERNAME = "secret.data.username";
   public static final String SECRET_DATA_PASSWORD = "secret.data.password";
+  public static final String SECRET_EVENTS_QUEUE_KAFKA_USERNAME =
+      "secret.events.queue.kafka.username";
+  public static final String SECRET_EVENTS_QUEUE_KAFKA_PASSWORD =
+      "secret.events.queue.kafka.password";
+  public static final String SECRET_SSL_KEYSTORE_PASSWORD = "secret.ssl.keystore.password";
+  public static final String SECRET_SSL_KEY_PASSWORD = "secret.ssl.key.password";
+  public static final String SECRET_SSL_TRUSTSTORE_PASSWORD = "secret.ssl.truststore.password";
+
+  public String getSep6MoreInfoUrlJwtSecret() {
+    return SecretManager.getInstance().get(SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET);
+  }
 
   public String getSep10JwtSecretKey() {
     return SecretManager.getInstance().get(SECRET_SEP_10_JWT_SECRET);
@@ -52,5 +65,15 @@ public class PropertySecretConfig implements SecretConfig {
   @Override
   public String getDataSourcePassword() {
     return SecretManager.getInstance().get(SECRET_DATA_PASSWORD);
+  }
+
+  @Override
+  public String getEventsQueueKafkaUsername() {
+    return SecretManager.getInstance().get(SECRET_EVENTS_QUEUE_KAFKA_USERNAME);
+  }
+
+  @Override
+  public String getEventsQueueKafkaPassword() {
+    return SecretManager.getInstance().get(SECRET_EVENTS_QUEUE_KAFKA_PASSWORD);
   }
 }

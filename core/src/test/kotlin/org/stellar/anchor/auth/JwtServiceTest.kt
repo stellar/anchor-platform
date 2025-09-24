@@ -1,13 +1,8 @@
 package org.stellar.anchor.auth
 
-import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.MalformedJwtException
-import io.jsonwebtoken.SignatureAlgorithm
-import io.mockk.every
 import io.mockk.mockk
-import java.nio.charset.StandardCharsets
 import java.util.*
-import org.apache.commons.codec.binary.Base64
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -15,8 +10,10 @@ import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.TestConstants.Companion.TEST_CLIENT_NAME
 import org.stellar.anchor.TestConstants.Companion.TEST_HOME_DOMAIN
 import org.stellar.anchor.auth.JwtService.*
+import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
+import org.stellar.anchor.setupMock
 
 internal class JwtServiceTest {
   companion object {
@@ -36,12 +33,8 @@ internal class JwtServiceTest {
   fun setup() {
     secretConfig = mockk()
     custodySecretConfig = mockk()
-    every { secretConfig.sep10JwtSecretKey } returns "jwt_secret"
-    every { secretConfig.sep24InteractiveUrlJwtSecret } returns "jwt_secret"
-    every { secretConfig.sep24MoreInfoUrlJwtSecret } returns "jwt_secret"
-    every { secretConfig.callbackAuthSecret } returns "jwt_secret"
-    every { secretConfig.platformAuthSecret } returns "jwt_secret"
-    every { custodySecretConfig.custodyAuthSecret } returns "jwt_secret"
+    secretConfig.setupMock()
+    custodySecretConfig.setupMock()
   }
 
   @Test
@@ -112,35 +105,10 @@ internal class JwtServiceTest {
 
   @Test
   fun `make sure decoding bad cipher test throws an error`() {
-    every { secretConfig.sep10JwtSecretKey } returns "jwt_secret"
     val jwtService = JwtService(secretConfig, custodySecretConfig)
 
     assertThrows<MalformedJwtException> {
       jwtService.decode("This is a bad cipher", Sep10Jwt::class.java)
     }
-  }
-
-  @Test
-  fun `make sure JwtService only decodes HS256`() {
-    val jwtService = JwtService(secretConfig, custodySecretConfig)
-    val jwtKey =
-      Base64.encodeBase64String(secretConfig.sep10JwtSecretKey.toByteArray(StandardCharsets.UTF_8))
-
-    val builder =
-      Jwts.builder()
-        .setId("mock_id")
-        .setIssuer(TEST_ISS)
-        .setSubject(TEST_SUB)
-        .setIssuedAt(Date(System.currentTimeMillis()))
-        .setExpiration(Date(System.currentTimeMillis() + 300000))
-
-    var token = builder.signWith(SignatureAlgorithm.HS256, jwtKey).compact()
-    jwtService.decode(token, Sep10Jwt::class.java)
-
-    token = builder.signWith(SignatureAlgorithm.HS384, jwtKey).compact()
-    assertThrows<IllegalArgumentException> { jwtService.decode(token, Sep10Jwt::class.java) }
-
-    token = builder.signWith(SignatureAlgorithm.HS512, jwtKey).compact()
-    assertThrows<IllegalArgumentException> { jwtService.decode(token, Sep10Jwt::class.java) }
   }
 }

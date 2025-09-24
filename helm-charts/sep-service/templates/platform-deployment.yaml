@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.fullName }}-svc-{{ .Values.services.platform.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.fullName }}-platform
+    helm.sh/chart: {{ include "common.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.services.platform.deployment.replicas | default 1}}
+  selector:
+    matchLabels:
+      app: {{ .Values.fullName }}-svc-{{ .Values.services.platform.name }}
+  template:
+    metadata:
+      {{- if .Values.services.platform.deployment.annotations }}
+      annotations:
+        {{- toYaml .Values.services.platform.deployment.annotations | nindent 8 }}
+      {{- end }}
+      labels:
+        app: {{ .Values.fullName }}-svc-{{ .Values.services.platform.name }}
+    spec:
+      containers:
+        - name: platform
+          image: {{ .Values.container.image }}
+          args: [ "--platform-server" ]
+          imagePullPolicy: {{ .Values.container.imagePullPolicy | default "Always" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.services.platform.containerPort | default 8085 }}
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.platform.containerPort | default 8085 }}
+            initialDelaySeconds: 120
+            failureThreshold: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.platform.containerPort | default 8085 }}
+            initialDelaySeconds: 120
+            failureThreshold: 2
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.platform.containerPort | default 8085 }}
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+              readOnly: true
+          env:
+            - name: STELLAR_ANCHOR_CONFIG
+              value: file:/config/anchor-config.yaml
+            - name: ASSETS_TYPE
+              value: file
+            - name: ASSETS_VALUE
+              value: /config/assets.yaml
+            - name: SECRET_DATA_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: POSTGRES_USER
+            - name: SECRET_DATA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: POSTGRES_PASSWORD
+            - name: SECRET_SEP24_INTERACTIVE_URL_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP24_INTERACTIVE_URL_JWT_SECRET
+            - name: SECRET_SEP24_MORE_INFO_URL_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP24_MORE_INFO_URL_JWT_SECRET
+            - name: SECRET_SEP6_MORE_INFO_URL_JWT_SECRET
+              valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.fullName }}-secrets
+                    key: SEP6_MORE_INFO_URL_JWT_SECRET
+            - name: SECRET_SEP10_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP10_JWT_SECRET
+            - name: SECRET_SEP10_SIGNING_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP10_SIGNING_SEED
+            - name: SECRET_EVENTS_QUEUE_KAFKA_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: EVENTS_QUEUE_KAFKA_USERNAME
+            - name: SECRET_EVENTS_QUEUE_KAFKA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: EVENTS_QUEUE_KAFKA_PASSWORD
+          resources:
+            requests:
+              memory: {{ .Values.services.platform.deployment.resources.requests.memory }}
+              cpu: {{ .Values.services.platform.deployment.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.services.platform.deployment.resources.limits.memory }}
+              cpu: {{ .Values.services.platform.deployment.resources.limits.cpu }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: anchor-config

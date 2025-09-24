@@ -7,7 +7,9 @@ import io.micrometer.core.instrument.Metrics;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,7 +83,19 @@ public class Log {
    * @param detail The additional object to be logged.
    */
   public static void error(final String message, final Object detail) {
-    logMessageWithJson(message, detail, getLogger()::error);
+    if (detail instanceof Exception) {
+      Exception ex = (Exception) detail;
+
+      logMessageWithJson(
+          message,
+          Arrays.stream(ex.getStackTrace())
+              .map(StackTraceElement::toString)
+              .collect(Collectors.joining("\n")),
+          getLogger()::error);
+      return;
+    } else {
+      logMessageWithJson(message, detail, getLogger()::error);
+    }
     Metrics.counter("logger", "type", "error").increment();
   }
 

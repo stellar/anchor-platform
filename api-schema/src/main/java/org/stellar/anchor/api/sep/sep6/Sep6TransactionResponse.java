@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.Builder;
 import lombok.Data;
+import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.InstructionField;
 import org.stellar.anchor.api.shared.Refunds;
 
@@ -36,10 +37,15 @@ public class Sep6TransactionResponse {
   String amountOutAsset;
 
   @SerializedName("amount_fee")
+  @Deprecated // ANCHOR-636
   String amountFee;
 
   @SerializedName("amount_fee_asset")
+  @Deprecated // ANCHOR-636
   String amountFeeAsset;
+
+  @SerializedName("fee_details")
+  FeeDetails feeDetails;
 
   @SerializedName("quote_id")
   String quoteId;
@@ -72,6 +78,9 @@ public class Sep6TransactionResponse {
   @SerializedName("completed_at")
   String completedAt;
 
+  @SerializedName("user_action_required_by")
+  String userActionRequiredBy;
+
   @SerializedName("stellar_transaction_id")
   String stellarTransactionId;
 
@@ -88,9 +97,11 @@ public class Sep6TransactionResponse {
   @SerializedName("required_info_updates")
   List<String> requiredInfoUpdates;
 
+  @Deprecated
   @SerializedName("required_customer_info_message")
   String requiredCustomerInfoMessage;
 
+  @Deprecated
   @SerializedName("required_customer_info_updates")
   List<String> requiredCustomerInfoUpdates;
 

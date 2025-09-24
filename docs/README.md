@@ -1,6 +1,6 @@
 [![License](https://badgen.net/badge/license/Apache%202/blue?icon=github&label=License)](https://github.com/stellar/java-stellar-anchor-sdk/blob/develop/LICENSE)
 [![GitHub Version](https://badgen.net/github/release/stellar/java-stellar-anchor-sdk?icon=github&label=Latest%20release)](https://github.com/stellar/java-stellar-anchor-sdk/releases)
-[![Docker](https://badgen.net/badge/Latest%20Release/v2.6.1/blue?icon=docker)](https://hub.docker.com/r/stellar/anchor-platform/tags?page=1&name=2.6.1)
+[![Docker](https://badgen.net/badge/Latest%20Release/v2.11.3/blue?icon=docker)](https://hub.docker.com/r/stellar/anchor-platform/tags?page=1&name=2.11.3)
 ![Develop Branch](https://github.com/stellar/java-stellar-anchor-sdk/actions/workflows/on_push_to_develop.yml/badge.svg?branch=develop)
 
 <div style="text-align: center">
@@ -55,8 +55,8 @@ Anchor Platform can be run locally using Docker Compose. This will start an inst
 Kotlin reference server.
 
 ```shell
-docker build --build-arg BASE_IMAGE=gradle:7.6.4-jdk11 -t anchor-platform:local ./
-docker-compose -f service-runner/src/main/resources/docker-compose.yaml up -d
+docker build --build-arg BASE_IMAGE=gradle:7.6.4-jdk17 -t anchor-platform:local ./
+docker compose -f service-runner/src/main/resources/docker-compose.yaml up -d
 ```
 
 The [Stellar Demo Wallet](https://demo-wallet.stellar.org) can be used to interact with the Anchor Platform. To get

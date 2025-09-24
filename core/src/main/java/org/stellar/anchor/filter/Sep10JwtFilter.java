@@ -10,7 +10,8 @@ import org.stellar.anchor.auth.Sep10Jwt;
 
 public class Sep10JwtFilter extends AbstractJwtFilter {
   public Sep10JwtFilter(JwtService jwtService) {
-    super(jwtService);
+    // SEP-10 tokens are passed in the Authorization header.
+    super(jwtService, "Authorization");
   }
 
   @Override

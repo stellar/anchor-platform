@@ -8,6 +8,7 @@ data class LocationConfig(val ktReferenceServerConfig: String)
 data class Config(
   @ConfigAlias("app") val appSettings: AppSettings,
   @ConfigAlias("auth") val authSettings: AuthSettings,
+  @ConfigAlias("data") val dataSettings: DataSettings,
   val sep24: Sep24,
 )
 
@@ -42,3 +43,10 @@ data class AuthSettings(
     JWT
   }
 }
+
+data class DataSettings(
+  val url: String,
+  val database: String,
+  val user: String,
+  val password: String
+)

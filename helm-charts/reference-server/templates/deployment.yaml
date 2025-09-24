@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.fullName }}-svc-{{ .Values.services.ref.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.fullName }}-reference-server
+    helm.sh/chart: {{ include "common.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.fullName }}-svc-{{ .Values.services.ref.name }}
+  template:
+    metadata:
+      {{- if .Values.services.ref.deployment.annotations }}
+      annotations:
+        {{- toYaml .Values.services.ref.deployment.annotations | nindent 8 }}
+      {{- end }}
+      labels:
+        app: {{ .Values.fullName }}-svc-{{ .Values.services.ref.name }}
+    spec:
+      containers:
+        - name: reference
+          image: {{ .Values.container.image }}
+          args: [ "--kotlin-reference-server" ]
+          imagePullPolicy: {{ .Values.container.imagePullPolicy | default "Always" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.services.ref.containerPort | default 8091 }}
+              protocol: TCP
+          resources:
+            requests:
+              memory: {{ .Values.services.ref.deployment.resources.requests.memory }}
+              cpu: {{ .Values.services.ref.deployment.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.services.ref.deployment.resources.limits.memory }}
+              cpu: {{ .Values.services.ref.deployment.resources.limits.cpu }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+              readOnly: true
+          env:
+            - name: KT_REFERENCE_SERVER_CONFIG
+              value: /config/config.yaml
+            - name: APP.PLATFORM_API_ENDPOINT
+              value: {{ .Values.config.app.platformApiEndpoint }}
+            - name: APP.HORIZON_ENDPOINT
+              value: {{ .Values.config.app.horizonEndpoint }}
+            - name: DATA.URL
+              value: {{ .Values.config.data.url }}
+            - name: DATA.USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: POSTGRES_USER
+            - name: DATA.PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: POSTGRES_PASSWORD
+            - name: APP.SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP6_SECRET
+            - name: SEP24.INTERACTIVE_JWT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP24_INTERACTIVE_JWT_KEY
+            - name: SEP24.SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP24_SECRET
+            - name: AUTH.PLATFORM_TO_ANCHOR_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: PLATFORM_ANCHOR_SECRET
+            - name: AUTH.ANCHOR_TO_PLATFORM_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: ANCHOR_PLATFORM_SECRET
+            - name: AUTH.EXPIRATION_MILLISECONDS
+              value: "30000"
+      volumes:
+        - name: config-volume
+          configMap:
+            name: reference-config

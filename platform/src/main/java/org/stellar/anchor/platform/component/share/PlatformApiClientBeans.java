@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.auth.AuthHelper;
+import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.platform.config.PlatformApiConfig;
 
 @Configuration
@@ -15,9 +16,18 @@ public class PlatformApiClientBeans {
 
   @Bean
   AuthHelper authHelper(PlatformApiConfig platformApiConfig) {
-    return AuthHelper.from(
-        platformApiConfig.getAuth().getType(),
-        platformApiConfig.getAuth().getSecret(),
-        Long.parseLong(platformApiConfig.getAuth().getJwt().getExpirationMilliseconds()));
+    String secret = platformApiConfig.getAuth().getSecretString();
+    switch (platformApiConfig.getAuth().getType()) {
+      case JWT:
+        return AuthHelper.forJwtToken(
+            platformApiConfig.getAuth().getJwt().getHttpHeader(),
+            JwtService.builder().platformAuthSecret(secret).build(),
+            Long.parseLong(platformApiConfig.getAuth().getJwt().getExpirationMilliseconds()));
+      case API_KEY:
+        return AuthHelper.forApiKey(
+            platformApiConfig.getAuth().getApiKey().getHttpHeader(), secret);
+      default:
+        return AuthHelper.forNone();
+    }
   }
 }

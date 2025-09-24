@@ -180,48 +180,56 @@ event_processor:
 #   - type: (required) `custodial` or `noncustodial`
 #
 #   If the type is `custodial`,
-#   - signing_key: (required) the custodial SEP-10 signing key of the client. If the signing key of the client
-#                  is the same as the `signing_key`, the callback will be activated.
+#   - signing_keys: (required) the custodial SEP-10 signing keys of the client.
 #   - callback_url: (optional) the URL of the client's callback API endpoint. Optional due to some wallets may opt to
-#                  poll instead, or may use polling first before implementing callbacks at a later stage.
+#                  poll instead, or may use polling first before implementing callbacks at a later stage. If one of
+#                  SEP-specific URLs is also provided, then this URL will be used as a fallback. For example, if
+#                  `callback_url_sep6` is not provided, but `callback_url_sep24` is, SEP-6 transactions will use the
+#                  `callback_url` as the callback URL. This field is deprecated and will be removed in 3.0.
+#   - callback_url_sep6: (optional) the URL of the client's SEP-6 callback API endpoint. If set, it will be used as
+#                  the callback URL for SEP-6 transactions.
+#   - callback_url_sep24: (optional) the URL of the client's SEP-24 callback API endpoint. If set, it will be used as
+#                  the callback URL for SEP-24 transactions.
+#   - callback_url_sep31: (optional) the URL of the client's SEP-31 callback API endpoint. If set, it will be used as
+#                  the callback URL for SEP-31 transactions.
+#   - callback_url_sep12: (optional) the URL of the client's SEP-12 callback API endpoint. If set, it will be used as
+#                  the callback URL for SEP-12 transactions.
 #   - allow_any_destination: (optional) default to false. If set to true, allows any destination for deposits.
 #   - destination_accounts: (optional) list of accounts allowed to be used for the deposit. By default, only SEP-10
 #                  authenticated account can be used to deposit funds into. If allows_any_destinations set to true,
 #                  this configuration option is ignored.
 #   If the type is `noncustodial`,
-#   - domain: (required) the domain of the client. If the `client_domain` field of the transaction is the same as this
-#             domain, the callback will be activated.
+#   - domains: (required) the domain of the client.
 #   - callback_url: (optional) the URL of the client's callback API endpoint
-#   - signing_key: (optional) the signing key of the client. If the public key is specified, the client domain's TOML
-#                 file will be fetched and the `SIGNING_KEY` of the TOML file will be compared with the public key.
-#                 If they don't match, a validation error will be thrown.
+#   - callback_url_sep6: (optional) the URL of the client's SEP-6 callback API endpoint.
+#   - callback_url_sep24: (optional) the URL of the client's SEP-24 callback API endpoint.
+#   - callback_url_sep31: (optional) the URL of the client's SEP-31 callback API endpoint.
+#   - callback_url_sep12: (optional) the URL of the client's SEP-12 callback API endpoint.
 #
 # Examples:
 #     - name: circle
 #       type: custodial
-#       signing_key: GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2
+#       signing_keys: GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2,GACYKME36AI6UYAV7A5ZUA6MG4C4K2VAPNYMW5YLOM6E7GS6FSHDPV4F
 #       callback_url: https://callback.circle.com/api/v1/anchor/callback
 #     - name: lobstr
 #       type: noncustodial
-#       domain: lobstr.co
+#       domains: lobstr.co,lobstr.com
 #       callback_url: https://callback.lobstr.co/api/v2/anchor/callback
 #     - name: vibrant
 #       type: noncustodial
 #       domain: vibrant.co
 #       callback_url: https://callback.vibrant.com/api/v2/anchor/callback
-#       signing_key: GA22WORKYRXB6AW7XR5GIOAOQUY4KKCENEAI34FN3KJNWHKDZTZSVLTU
 clients:
 #     - name:
 #       type: custodial
-#       signing_key:
+#       signing_keys:
 #       callback_url:
 #       allow_any_destination:
 #       destination_accounts:
 #     - name:
 #       type: noncustodial
-#       domain:
+#       domains:
 #       callback_url:
-#       signing_key:
 
 ######################
 ## Platform Server Configuration
@@ -295,9 +303,21 @@ sep1:
 sep6:
   # Whether to enable SEP-6
   enabled: false
+  # Configures the more_info_url of the transaction response when calling GET /transaction and GET /transactions endpoints.
+  # For details, please refer to https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0006.md#transaction-history
+  #   base_uri: is the base_uri used to construct the more_info_url
+  #   jwt_expiration: the timeout in seconds of the JWT returned with the embedded interactive url of the SEP-6 process.
+  #       The jwt secret must be set by the environment variable: secret.sep6.more_info_url.jwt_secret
+  #   txn_fields: is an optional list of transaction fields that will be appended to the jwt of the more_info url. If empty, no fields from transaction will be appended.
+  #   In addition to the txn_fields, the following fields are also added to the query parameters.
+  #       `transaction_id`: the transaction ID
+  #       `token`: the JWT token
+  more_info_url:
+    base_url: http://localhost:8080/sep6/transaction/more_info
+    jwt_expiration: 600
+    txn_fields:
   # Configures the features flag returned by the SEP-6 /info endpoint
   # For details, please refer to https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0006.md#response-4
-  #
   features:
     account_creation: false
     claimable_balances: false
@@ -312,6 +332,12 @@ sep6:
   ##     none: deposit address, memo and memo type should be provided by the business in PATCH/RPC request.
   #
   deposit_info_generator_type: self
+  # Deadline set for the user on transaction creation.
+  # This value indicates to user that they have to take this amount of minutes before transaction will automatically
+  # be moved to the next status (e.g. expired). Business should handle status movement, and the Anchor Platform does
+  # NOT support automatic status movement.
+  # If value is zero, negative or null, no deadline is set (default behaviour)
+  initial_user_deadline_seconds: -1
 
 ######################
 # SEP-10 Configuration
@@ -396,10 +422,10 @@ sep24:
   interactive_url:
     # The base URL of the SEP-24 interactive flow
     base_url: http://localhost:8080/sep24/interactive
-    # The list of transaction fields that will be appended to the JWT of the interactive URL
-    txn_fields:
     # The timeout in seconds of the JWT returned with the embedded interactive URL of the SEP-24 process.
     jwt_expiration: 600
+    # The list of transaction fields that will be appended to the JWT of the interactive URL
+    txn_fields:
   # Configures the more_info_url of the transaction response when calling GET /transaction and GET /transactions endpoints.
   # For details, please refer to https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0024.md#shared-fields-for-both-deposits-and-withdrawals
   #   base_uri: is the base_uri used to construct the more_info_url
@@ -412,10 +438,10 @@ sep24:
   more_info_url:
     # The base URL of the SEP-24 more_info_url
     base_url: http://localhost:8080/sep24/transaction/more_info
-    # The list of transaction fields that will be appended to the JWT of the more_info_url
-    txn_fields:
     # The timeout in seconds of the JWT returned with the embedded more_info_url of the SEP-24 process.
     jwt_expiration: 600
+    # The list of transaction fields that will be appended to the JWT of the more_info_url
+    txn_fields:
 
   # Configures the features flag returned by the SEP-24 /info endpoint
   # For details, please refer to https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0024.md#response-2
@@ -442,6 +468,14 @@ sep24:
   kyc_fields_forwarding:
     # Whether to enable the KYC fields forwarding.
     enabled: true
+
+  # Deadline set for the user on transaction creation.
+  # This value indicates to user that they have to take this amount of minutes before transaction will automatically
+  # be moved to the next status (e.g. expired). Business should handle status movement, and the Anchor Platform does
+  # NOT support automatic status movement.
+  # If value is zero, negative or null, no deadline is set (default behaviour)
+  initial_user_deadline_seconds: -1
+
 
 ######################
 # SEP-31 Configuration
@@ -612,6 +646,8 @@ custody:
 metrics:
   # If true, enable metrics will be enabled.
   enabled: false
+  # If set, all metrics will be prefixed with the specified prefix.
+  prefix:
 
 
 #########################
@@ -643,6 +679,38 @@ events:
       batch_size: 10
       # Determines the maximum amount of time to wait for the batch to be filled before returning from poll().
       poll_timeout_seconds: 60
+      # The security protocol used to communicate with the brokers.
+      # `security_protocol` can be one of the following:
+      #   `PLAINTEXT`: no encryption
+      #   `SASL_PLAINTEXT`: SASL authentication with no encryption
+      #   `SASL_SSL`: SASL authentication with SSL encryption
+      #
+      # If SASL_PLAINTEXT or SASL_SSL is used, the following secrets must be set
+      #   - SECRET_EVENTS_QUEUE_KAFKA_USERNAME
+      #   - SECRET_EVENTS_QUEUE_KAFKA_PASSWORD
+      #
+      # If the SASL_SSL is used, the following values must be set
+      #   - ssl_keystore_location
+      #   - ssl_keystore_password
+      # the following secrets must be set:
+      #   - SECRET_SSL_KEYSTORE_PASSWORD
+      #   - SECRET_SSL_TRUSTSTORE_PASSWORD
+      #   - SECRET_SSL_KEY_PASSWORD
+      #
+      security_protocol: PLAINTEXT
+      # The SASL mechanism used for authentication and must match what is used on the broker.
+      # `sasl_mechanism` can be one of the following supported mechanisms:
+      #   `PLAIN`: PLAIN SASL mechanism
+      sasl_mechanism: PLAIN
+      # The configuration to enable SSL certificate verification. If true, the SSL certificate will be verified.
+      # For dev and test environments, it can be used to disable SSL certificate verification.
+      # For production environments, it is strongly recommended to set to true to avoid man-in-the-middle attacks.
+      ssl_verify_cert: true
+      # The SSL keystore location. The file path to the keystore file (jks).
+      ssl_keystore_location:
+      # The SSL truststore location. The file path to the truststore file (jks).
+      ssl_truststore_location:
+
     # If the value of `publisher.type` is "sqs", the `events.publisher.sqs` field must be defined.
     sqs:
       # Use IAM authentication for AWS MSK or AWS SQS.

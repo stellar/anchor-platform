@@ -1,5 +1,8 @@
 package org.stellar.anchor.auth;
 
+import io.jsonwebtoken.JwtBuilder;
+import io.jsonwebtoken.JwtParserBuilder;
+import io.jsonwebtoken.Jwts;
 import java.util.Calendar;
 import javax.annotation.Nullable;
 import org.stellar.anchor.api.exception.InvalidConfigException;
@@ -10,35 +13,39 @@ import org.stellar.anchor.util.AuthHeader;
 
 public class AuthHelper {
   public final AuthType authType;
+
+  public final String authorizationHeader;
   private JwtService jwtService;
   private long jwtExpirationMilliseconds;
   private String apiKey;
 
   private AuthHelper(AuthType authType) {
-    this.authType = authType;
+    this(authType, "Authorization");
   }
 
-  public static AuthHelper from(AuthType type, String secret, long jwtExpirationMilliseconds) {
-    switch (type) {
-      case JWT:
-        return AuthHelper.forJwtToken(
-            new JwtService(null, null, null, secret, secret, secret), jwtExpirationMilliseconds);
-      case API_KEY:
-        return AuthHelper.forApiKey(secret);
-      default:
-        return AuthHelper.forNone();
-    }
+  private AuthHelper(AuthType authType, String authorizationHeader) {
+    this.authType = authType;
+    this.authorizationHeader = authorizationHeader;
   }
 
   public static AuthHelper forJwtToken(JwtService jwtService, long jwtExpirationMilliseconds) {
-    AuthHelper authHelper = new AuthHelper(AuthType.JWT);
+    return forJwtToken("Authorization", jwtService, jwtExpirationMilliseconds);
+  }
+
+  public static AuthHelper forJwtToken(
+      String authorizationHeader, JwtService jwtService, long jwtExpirationMilliseconds) {
+    AuthHelper authHelper = new AuthHelper(AuthType.JWT, authorizationHeader);
     authHelper.jwtService = jwtService;
     authHelper.jwtExpirationMilliseconds = jwtExpirationMilliseconds;
     return authHelper;
   }
 
   public static AuthHelper forApiKey(String apiKey) {
-    AuthHelper authHelper = new AuthHelper(AuthType.API_KEY);
+    return forApiKey("X-Api-Key", apiKey);
+  }
+
+  public static AuthHelper forApiKey(String authorizationHeader, String apiKey) {
+    AuthHelper authHelper = new AuthHelper(AuthType.API_KEY, authorizationHeader);
     authHelper.apiKey = apiKey;
     return authHelper;
   }
@@ -62,14 +69,22 @@ public class AuthHelper {
     return createAuthHeader(CustodyAuthJwt.class);
   }
 
+  public static JwtBuilder jwtsBuilder() {
+    return Jwts.builder().json(JwtsGsonSerializer.newInstance());
+  }
+
+  public static JwtParserBuilder jwtsParser() {
+    return Jwts.parser().json(JwtsGsonDeserializer.newInstance());
+  }
+
   @Nullable
   private <T extends ApiAuthJwt> AuthHeader<String, String> createAuthHeader(Class<T> jwtClass)
       throws InvalidConfigException {
     switch (authType) {
       case JWT:
-        return new AuthHeader<>("Authorization", "Bearer " + createJwt(jwtClass));
+        return new AuthHeader<>(authorizationHeader, "Bearer " + createJwt(jwtClass));
       case API_KEY:
-        return new AuthHeader<>("X-Api-Key", apiKey);
+        return new AuthHeader<>(authorizationHeader, apiKey);
       default:
         return null;
     }

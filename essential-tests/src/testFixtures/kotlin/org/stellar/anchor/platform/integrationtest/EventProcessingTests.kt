@@ -21,6 +21,7 @@ class EventProcessingServerTests : AbstractIntegrationTests(TestConfig()) {
     val session = eventService.createSession("testOk", TRANSACTION)
     val quoteEvent = GsonUtils.getInstance().fromJson(testQuoteEvent, AnchorEvent::class.java)
 
+    // TODO: this test doesn't fail when the event is not published
     session.publish(quoteEvent)
   }
 }
@@ -67,7 +68,8 @@ val eventConfigJson =
         "retries": 0,
         "lingerMs": 1000,
         "batchSize": 10,
-        "pollTimeoutSeconds": 10
+        "pollTimeoutSeconds": 10,
+        "securityProtocol": "PLAINTEXT"
       }
     }
   }

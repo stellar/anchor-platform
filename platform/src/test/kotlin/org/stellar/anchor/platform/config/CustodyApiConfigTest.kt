@@ -2,6 +2,7 @@ package org.stellar.anchor.platform.config
 
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -24,11 +25,12 @@ class CustodyApiConfigTest {
   @BeforeEach
   fun setUp() {
     secretConfig = mockk()
-    every { secretConfig.custodyAuthSecret } returns "testCustodyApiSecret"
+    every { secretConfig.custodyAuthSecret } returns "testCustodyApiSecrettestCustodyApiSecret"
     config = CustodyApiConfig(secretConfig)
     config.baseUrl = "https://test.com"
-    config.auth = AuthConfig()
-    config.auth.type = JWT
+    val authConfig = AuthConfig()
+    authConfig.type = JWT
+    config.auth = authConfig
     config.httpClient = HttpClientConfig(10, 30, 30, 60)
     errors = BindException(config, "config")
   }
@@ -145,5 +147,21 @@ class CustodyApiConfigTest {
     config.httpClient.callTimeout = callTimeout
     config.validate(config, errors)
     assertErrorCode(errors, "custody-server-http-client-call-timeout-invalid")
+  }
+
+  @Test
+  fun `validate JWT`() {
+    every { secretConfig.custodyAuthSecret }.returns("tooshort")
+    config.setAuth(
+      AuthConfig(
+        JWT,
+        null,
+        AuthConfig.JwtConfig("30000", "Authorization"),
+        AuthConfig.ApiKeyConfig("X-Api-Key")
+      )
+    )
+    config.validate(config, errors)
+    Assertions.assertTrue(errors.hasErrors())
+    assertErrorCode(errors, "hmac-weak-secret")
   }
 }

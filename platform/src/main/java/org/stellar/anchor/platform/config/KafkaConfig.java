@@ -1,12 +1,14 @@
 package org.stellar.anchor.platform.config;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 public class KafkaConfig {
   /**
    * A comma-separated list of host:port pairs that are the addresses of one or more brokers in a
@@ -31,4 +33,39 @@ public class KafkaConfig {
 
   /** Determines the maximum amount of time to wait for the batch to be filled. */
   int pollTimeoutSeconds;
+
+  /** The security protocol used to communicate with brokers. */
+  SecurityProtocol securityProtocol;
+
+  /** The SASL mechanism used for authentication. */
+  SaslMechanism saslMechanism;
+
+  /** The certificate verification flag. */
+  Boolean sslVerifyCert = Boolean.TRUE;
+
+  /** the SSL keystore location. */
+  String sslKeystoreLocation;
+
+  /** the SSL truststore location. */
+  String sslTruststoreLocation;
+
+  public enum SecurityProtocol {
+    PLAINTEXT,
+    SASL_PLAINTEXT,
+    SASL_SSL
+  }
+
+  public enum SaslMechanism {
+    PLAIN("PLAIN");
+
+    String value;
+
+    SaslMechanism(String value) {
+      this.value = value;
+    }
+
+    public String getValue() {
+      return value;
+    }
+  }
 }

@@ -64,6 +64,12 @@ public class RequestLoggerFilter extends OncePerRequestFilter {
             .durationMilliseconds(duration)
             .build();
 
+    Log.infoF(
+        " {} - {} {} {}",
+        getClientIpAddress(request),
+        request.getMethod(),
+        request.getRequestURI(),
+        response.getStatus());
     Log.debugF("{} {} takes {} ms", request.getMethod(), request.getRequestURI(), duration);
     Log.trace(requestResponseMessage.toString());
 

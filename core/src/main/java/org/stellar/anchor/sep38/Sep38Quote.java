@@ -1,7 +1,7 @@
 package org.stellar.anchor.sep38;
 
 import java.time.Instant;
-import org.stellar.anchor.api.sep.sep38.RateFee;
+import org.stellar.anchor.api.shared.FeeDetails;
 
 public interface Sep38Quote {
   String getId();
@@ -65,7 +65,7 @@ public interface Sep38Quote {
 
   void setTransactionId(String transactionId);
 
-  RateFee getFee();
+  FeeDetails getFee();
 
-  void setFee(RateFee fee);
+  void setFee(FeeDetails fee);
 }

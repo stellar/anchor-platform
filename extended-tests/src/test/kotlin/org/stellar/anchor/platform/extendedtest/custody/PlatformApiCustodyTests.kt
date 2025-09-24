@@ -21,13 +21,11 @@ import org.stellar.anchor.client.Sep24Client
 import org.stellar.anchor.client.Sep31Client
 import org.stellar.anchor.platform.AbstractIntegrationTests
 import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.inject
 import org.stellar.anchor.util.GsonUtils
 
 class PlatformApiCustodyTests : AbstractIntegrationTests(TestConfig("custody")) {
   companion object {
-    private const val TX_ID_KEY = "TX_ID"
-    private const val RECEIVER_ID_KEY = "RECEIVER_ID"
-    private const val SENDER_ID_KEY = "SENDER_ID"
     private val custodyMockServer = MockWebServer()
 
     @BeforeAll
@@ -56,7 +54,6 @@ class PlatformApiCustodyTests : AbstractIntegrationTests(TestConfig("custody")) 
   }
 
   private val gson = GsonUtils.getInstance()
-
   private val platformApiClient =
     PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
   private val sep12Client = Sep12Client(toml.getString("KYC_SERVER"), token.token)
@@ -74,7 +71,7 @@ class PlatformApiCustodyTests : AbstractIntegrationTests(TestConfig("custody")) 
   fun `SEP-24 deposit complete full`() {
     `test deposit flow`(
       SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_REQUESTS,
-      SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_RESPONSES
+      SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_RESPONSES,
     )
   }
 
@@ -90,7 +87,7 @@ class PlatformApiCustodyTests : AbstractIntegrationTests(TestConfig("custody")) 
   fun `SEP-24 withdraw full refund`() {
     `test withdraw flow`(
       SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_REQUESTS,
-      SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES
+      SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES,
     )
   }
 
@@ -104,10 +101,11 @@ class PlatformApiCustodyTests : AbstractIntegrationTests(TestConfig("custody")) 
   fun `SEP-31 refunded do_stellar_refund`() {
     `test receive flow`(
       SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_REQUESTS,
-      SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_RESPONSES
+      SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_RESPONSES,
     )
   }
 
+  @Suppress("UNCHECKED_CAST")
   private fun `test deposit flow`(actionRequests: String, actionResponse: String) {
     val depositRequest = gson.fromJson(SEP_24_DEPOSIT_FLOW_REQUEST, HashMap::class.java)
     val depositResponse = sep24Client.deposit(depositRequest as HashMap<String, String>)
@@ -123,23 +121,24 @@ class PlatformApiCustodyTests : AbstractIntegrationTests(TestConfig("custody")) 
     val senderCustomer = sep12Client.putCustomer(senderCustomerRequest)
 
     val receiveRequestJson =
-      SEP_31_RECEIVE_FLOW_REQUEST.replace(RECEIVER_ID_KEY, receiverCustomer!!.id)
-        .replace(SENDER_ID_KEY, senderCustomer!!.id)
+      SEP_31_RECEIVE_FLOW_REQUEST.inject(RECEIVER_ID_KEY, receiverCustomer!!.id)
+        .inject(SENDER_ID_KEY, senderCustomer!!.id)
     val receiveRequest = gson.fromJson(receiveRequestJson, Sep31PostTransactionRequest::class.java)
     val receiveResponse = sep31Client.postTransaction(receiveRequest)
 
     val updatedActionRequests =
       actionRequests
-        .replace(RECEIVER_ID_KEY, receiverCustomer.id)
-        .replace(SENDER_ID_KEY, senderCustomer.id)
+        .inject(RECEIVER_ID_KEY, receiverCustomer.id)
+        .inject(SENDER_ID_KEY, senderCustomer.id)
     val updatedActionResponses =
       actionResponses
-        .replace(RECEIVER_ID_KEY, receiverCustomer.id)
-        .replace(SENDER_ID_KEY, senderCustomer.id)
+        .inject(RECEIVER_ID_KEY, receiverCustomer.id)
+        .inject(SENDER_ID_KEY, senderCustomer.id)
 
     `test flow`(receiveResponse.id, updatedActionRequests, updatedActionResponses)
   }
 
+  @Suppress("UNCHECKED_CAST")
   private fun `test withdraw flow`(actionRequests: String, actionResponse: String) {
     val withdrawRequest = gson.fromJson(SEP_24_WITHDRAW_FLOW_REQUEST, HashMap::class.java)
     val withdrawResponse = sep24Client.withdraw(withdrawRequest as HashMap<String, String>)
@@ -149,11 +148,11 @@ class PlatformApiCustodyTests : AbstractIntegrationTests(TestConfig("custody")) 
   private fun `test flow`(txId: String, actionRequests: String, actionResponses: String) {
     val rpcActionRequestsType = object : TypeToken<List<RpcRequest>>() {}.type
     val rpcActionRequests: List<RpcRequest> =
-      gson.fromJson(actionRequests.replace(TX_ID_KEY, txId), rpcActionRequestsType)
+      gson.fromJson(actionRequests.inject(TX_ID_KEY, txId), rpcActionRequestsType)
 
     val rpcActionResponses = platformApiClient.sendRpcRequest(rpcActionRequests)
 
-    val expectedResult = actionResponses.replace(TX_ID_KEY, txId).trimIndent()
+    val expectedResult = actionResponses.inject(TX_ID_KEY, txId)
     val actualResult = rpcActionResponses.body?.string()?.trimIndent()
 
     JSONAssert.assertEquals(
@@ -163,8 +162,8 @@ class PlatformApiCustodyTests : AbstractIntegrationTests(TestConfig("custody")) 
         JSONCompareMode.LENIENT,
         Customization("[*].result.started_at") { _, _ -> true },
         Customization("[*].result.updated_at") { _, _ -> true },
-        Customization("[*].result.completed_at") { _, _ -> true }
-      )
+        Customization("[*].result.completed_at") { _, _ -> true },
+      ),
     )
   }
 }
@@ -177,7 +176,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_REQUESTS =
     "method": "notify_interactive_flow_completed",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 1",
       "amount_in": {
         "amount": "100",
@@ -201,7 +200,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_REQUESTS =
     "method": "request_offchain_funds",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 2",
       "amount_in": {
         "amount": "100",
@@ -225,7 +224,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_REQUESTS =
     "method": "notify_offchain_funds_received",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 3",
       "funds_received_at": "2023-07-04T12:34:56Z",
       "external_transaction_id": "ext-123456",
@@ -245,7 +244,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_REQUESTS =
     "method": "do_stellar_payment",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 4"
     }
   }
@@ -258,7 +257,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_RESPONSES =
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "24",
       "kind": "deposit",
       "status": "pending_anchor",
@@ -289,7 +288,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_RESPONSES =
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "24",
       "kind": "deposit",
       "status": "pending_user_transfer_start",
@@ -320,7 +319,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_RESPONSES =
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "24",
       "kind": "deposit",
       "status": "pending_anchor",
@@ -352,7 +351,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_FLOW_ACTION_RESPONSES =
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "24",
       "kind": "deposit",
       "status": "pending_stellar",
@@ -392,7 +391,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_REQUESTS =
     "method": "notify_interactive_flow_completed",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 1",
       "amount_in": {
         "amount": "3",
@@ -416,7 +415,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_REQUESTS =
     "method": "request_onchain_funds",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 2",
       "amount_in": {
         "amount": "1",
@@ -440,9 +439,9 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_REQUESTS =
     "method": "notify_onchain_funds_received",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 3",
-      "stellar_transaction_id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+      "stellar_transaction_id": "%TESTPAYMENT_TXN_HASH%",
       "amount_in": {
         "amount": "1"
       }
@@ -453,7 +452,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_REQUESTS =
     "method": "do_stellar_refund",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 4",
       "refund": {
         "id": "123456",
@@ -473,7 +472,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_REQUESTS =
     "method": "notify_refund_sent",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 5",
       "refund": {
         "id": "123456",
@@ -497,7 +496,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "24",
       "kind": "withdrawal",
       "status": "pending_anchor",
@@ -529,7 +528,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "24",
       "kind": "withdrawal",
       "status": "pending_user_transfer_start",
@@ -563,7 +562,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "24",
       "kind": "withdrawal",
       "status": "pending_anchor",
@@ -588,18 +587,18 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
       "message": "test message 3",
       "stellar_transactions": [
         {
-          "id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+          "id": "%TESTPAYMENT_TXN_HASH%",
           "memo": "testMemo",
           "memo_type": "id",
           "payments": [
             {
               "amount": {
-                "amount": "1.0000000",
-                "asset": "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "amount": "%TESTPAYMENT_AMOUNT%",
+                "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
               },
               "payment_type": "payment",
-              "source_account": "GBE7RE3L6VBI3BV722PEEV2GYTWHRSNFZWCX2MXSCE7XBFF2O3PVRTXI",
-              "destination_account": "GBH42AJG2G7RPX64SQHLJ23V4HOSKZFC32M5KNVKDNIFLE3MMFBHP6CT"
+              "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+              "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
             }
           ]
         }
@@ -615,7 +614,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "24",
       "kind": "withdrawal",
       "status": "pending_stellar",
@@ -640,18 +639,18 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
       "message": "test message 4",
       "stellar_transactions": [
         {
-          "id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+          "id": "%TESTPAYMENT_TXN_HASH%",
           "memo": "testMemo",
           "memo_type": "id",
           "payments": [
             {
               "amount": {
-                "amount": "1.0000000",
-                "asset": "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "amount": "%TESTPAYMENT_AMOUNT%",
+                "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
               },
               "payment_type": "payment",
-              "source_account": "GBE7RE3L6VBI3BV722PEEV2GYTWHRSNFZWCX2MXSCE7XBFF2O3PVRTXI",
-              "destination_account": "GBH42AJG2G7RPX64SQHLJ23V4HOSKZFC32M5KNVKDNIFLE3MMFBHP6CT"
+              "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+              "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
             }
           ]
         }
@@ -667,7 +666,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "24",
       "kind": "withdrawal",
       "status": "refunded",
@@ -717,18 +716,18 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
       },
       "stellar_transactions": [
         {
-          "id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+          "id": "%TESTPAYMENT_TXN_HASH%",
           "memo": "testMemo",
           "memo_type": "id",
           "payments": [
             {
               "amount": {
-                "amount": "1.0000000",
-                "asset": "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "amount": "%TESTPAYMENT_AMOUNT%",
+                "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
               },
               "payment_type": "payment",
-              "source_account": "GBE7RE3L6VBI3BV722PEEV2GYTWHRSNFZWCX2MXSCE7XBFF2O3PVRTXI",
-              "destination_account": "GBH42AJG2G7RPX64SQHLJ23V4HOSKZFC32M5KNVKDNIFLE3MMFBHP6CT"
+              "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+              "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
             }
           ]
         }
@@ -752,9 +751,9 @@ private const val SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_REQUESTS
     "method": "notify_onchain_funds_received",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 1",
-      "stellar_transaction_id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2"
+      "stellar_transaction_id": "%TESTPAYMENT_TXN_HASH%"
     }
   },
   {
@@ -762,7 +761,7 @@ private const val SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_REQUESTS
     "method": "do_stellar_refund",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 2",
       "refund": {
         "id": "123456",
@@ -782,7 +781,7 @@ private const val SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_REQUESTS
     "method": "notify_refund_sent",
     "jsonrpc": "2.0",
     "params": {
-      "transaction_id": "TX_ID",
+      "transaction_id": "%TX_ID%",
       "message": "test message 3",
       "refund": {
         "id": "123456",
@@ -806,7 +805,7 @@ private const val SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_RESPONSE
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "31",
       "kind": "receive",
       "status": "pending_receiver",
@@ -828,28 +827,28 @@ private const val SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_RESPONSE
       "message": "test message 1",
       "stellar_transactions": [
         {
-          "id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+          "id": "%TESTPAYMENT_TXN_HASH%",
           "memo": "testMemo",
           "memo_type": "id",
           "payments": [
             {
               "amount": {
-                "amount": "1.0000000",
-                "asset": "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "amount": "%TESTPAYMENT_AMOUNT%",
+                "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
               },
               "payment_type": "payment",
-              "source_account": "GBE7RE3L6VBI3BV722PEEV2GYTWHRSNFZWCX2MXSCE7XBFF2O3PVRTXI",
-              "destination_account": "GBH42AJG2G7RPX64SQHLJ23V4HOSKZFC32M5KNVKDNIFLE3MMFBHP6CT"
+              "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+              "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
             }
           ]
         }
       ],
       "customers": {
         "sender": {
-          "id": "SENDER_ID"
+          "id": "%SENDER_ID%"
         },
         "receiver": {
-          "id": "RECEIVER_ID"
+          "id": "%RECEIVER_ID%"
         }
       },
       "creator": {
@@ -861,7 +860,7 @@ private const val SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_RESPONSE
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "31",
       "kind": "receive",
       "status": "pending_stellar",
@@ -883,28 +882,28 @@ private const val SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_RESPONSE
       "message": "test message 2",
       "stellar_transactions": [
         {
-          "id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+          "id": "%TESTPAYMENT_TXN_HASH%",
           "memo": "testMemo",
           "memo_type": "id",
           "payments": [
             {
               "amount": {
-                "amount": "1.0000000",
-                "asset": "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "amount": "%TESTPAYMENT_AMOUNT%",
+                "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
               },
               "payment_type": "payment",
-              "source_account": "GBE7RE3L6VBI3BV722PEEV2GYTWHRSNFZWCX2MXSCE7XBFF2O3PVRTXI",
-              "destination_account": "GBH42AJG2G7RPX64SQHLJ23V4HOSKZFC32M5KNVKDNIFLE3MMFBHP6CT"
+              "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+              "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
             }
           ]
         }
       ],
       "customers": {
         "sender": {
-          "id": "SENDER_ID"
+          "id": "%SENDER_ID%"
         },
         "receiver": {
-          "id": "RECEIVER_ID"
+          "id": "%RECEIVER_ID%"
         }
       },
       "creator": {
@@ -916,7 +915,7 @@ private const val SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_RESPONSE
   {
     "jsonrpc": "2.0",
     "result": {
-      "id": "TX_ID",
+      "id": "%TX_ID%",
       "sep": "31",
       "kind": "receive",
       "status": "refunded",
@@ -963,28 +962,28 @@ private const val SEP_31_RECEIVE_REFUNDED_DO_STELLAR_REFUND_FLOW_ACTION_RESPONSE
       },
       "stellar_transactions": [
         {
-          "id": "68eafbdf2aa95c4a5aaddb7021f321a607096b2aa1913096b8d6f06e44ea0ec2",
+          "id": "%TESTPAYMENT_TXN_HASH%",
           "memo": "testMemo",
           "memo_type": "id",
           "payments": [
             {
               "amount": {
-                "amount": "1.0000000",
-                "asset": "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "amount": "%TESTPAYMENT_AMOUNT%",
+                "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
               },
               "payment_type": "payment",
-              "source_account": "GBE7RE3L6VBI3BV722PEEV2GYTWHRSNFZWCX2MXSCE7XBFF2O3PVRTXI",
-              "destination_account": "GBH42AJG2G7RPX64SQHLJ23V4HOSKZFC32M5KNVKDNIFLE3MMFBHP6CT"
+              "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+              "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
             }
           ]
         }
       ],
       "customers": {
         "sender": {
-          "id": "SENDER_ID"
+          "id": "%SENDER_ID%"
         },
         "receiver": {
-          "id": "RECEIVER_ID"
+          "id": "%RECEIVER_ID%"
         }
       },
       "creator": {
@@ -1017,8 +1016,8 @@ private const val SEP_31_RECEIVE_FLOW_REQUEST =
   "amount": "10",
   "asset_code": "USDC",
   "asset_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
-  "receiver_id": "RECEIVER_ID",
-  "sender_id": "SENDER_ID",
+  "receiver_id": "%RECEIVER_ID%",
+  "sender_id": "%SENDER_ID%",
   "fields": {
     "transaction": {
       "receiver_routing_number": "r0123",

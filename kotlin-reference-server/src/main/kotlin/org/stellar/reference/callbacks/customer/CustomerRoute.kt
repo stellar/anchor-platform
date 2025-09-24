@@ -30,6 +30,7 @@ fun Route.customer(customerService: CustomerService) {
             .account(call.parameters["account"])
             .memo(call.parameters["memo"])
             .memoType(call.parameters["memo_type"])
+            .transactionId(call.parameters["transaction_id"])
             .type(call.parameters["type"])
             .lang(call.parameters["lang"])
             .build()

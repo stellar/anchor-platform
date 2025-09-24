@@ -4,9 +4,11 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.sep.sep38.Sep38Context.SEP31
+import org.stellar.anchor.api.sep.sep38.Sep38Context.SEP6
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.platform.AbstractIntegrationTests
 import org.stellar.anchor.platform.TestConfig
@@ -36,9 +38,9 @@ class Sep38Tests : AbstractIntegrationTests(TestConfig()) {
         "iso4217:USD",
         "100",
         "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-        SEP31
+        SEP31,
       )
-    printResponse(price)
+    assertEquals(price.sellAmount, "100")
 
     // POST {SEP38}/quote
     printRequest("Calling POST /quote")
@@ -47,9 +49,9 @@ class Sep38Tests : AbstractIntegrationTests(TestConfig()) {
         "iso4217:USD",
         "100",
         "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-        SEP31
+        SEP31,
       )
-    printResponse(postQuote)
+    assertEquals(postQuote.sellAmount, "100")
 
     // POST {SEP38}/quote with `expires_after`
     printRequest("Calling POST /quote")
@@ -60,9 +62,14 @@ class Sep38Tests : AbstractIntegrationTests(TestConfig()) {
         "100",
         "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
         SEP31,
-        expireAfter = expireAfter
+        expireAfter = expireAfter,
       )
-    printResponse(postQuote)
+    assertEquals(postQuote.sellAmount, "100")
+    assertEquals(postQuote.sellAsset, "iso4217:USD")
+    assertEquals(
+      postQuote.buyAsset,
+      "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    )
 
     // GET {SEP38}/quote/{id}
     printRequest("Calling GET /quote")
@@ -72,7 +79,7 @@ class Sep38Tests : AbstractIntegrationTests(TestConfig()) {
   }
 
   @Test
-  fun `test selling over asset limit throws an exception`() {
+  fun `test selling over asset limit for SEP-31 throws an exception`() {
     printRequest("Calling GET /price")
 
     assertThrows<SepException> {
@@ -80,7 +87,39 @@ class Sep38Tests : AbstractIntegrationTests(TestConfig()) {
         "iso4217:USD",
         "10000000000",
         "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-        SEP31
+        SEP31,
+      )
+    }
+
+    assertThrows<SepException> {
+      sep38Client.postQuote(
+        "iso4217:USD",
+        "10000000000",
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        SEP31,
+      )
+    }
+  }
+
+  @Test
+  fun `test selling over asset limit for SEP-6 does throws an exception`() {
+    printRequest("Calling GET /price")
+
+    assertDoesNotThrow {
+      sep38Client.getPrice(
+        "iso4217:USD",
+        "10000000000",
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        SEP6,
+      )
+    }
+
+    assertDoesNotThrow {
+      sep38Client.postQuote(
+        "iso4217:USD",
+        "10000000000",
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        SEP6,
       )
     }
   }

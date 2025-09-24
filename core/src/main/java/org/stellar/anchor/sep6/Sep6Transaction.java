@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.stellar.anchor.SepTransaction;
+import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.InstructionField;
 import org.stellar.anchor.api.shared.Refunds;
 
@@ -64,15 +65,6 @@ public interface Sep6Transaction extends SepTransaction {
   Long getStatusEta();
 
   void setStatusEta(Long statusEta);
-
-  /**
-   * A URL that the user can visit if they want more infomration about their account / status.
-   *
-   * @return the more info URL.
-   */
-  String getMoreInfoUrl();
-
-  void setMoreInfoUrl(String moreInfoUrl);
 
   /**
    * <code>deposit</code>, <code>deposit-exchange</code>, <code>withdrawal</code> or <code>
@@ -184,8 +176,10 @@ public interface Sep6Transaction extends SepTransaction {
    *
    * @return the amount of fee charged by the anchor.
    */
+  @Deprecated // ANCHOR-636
   String getAmountFee();
 
+  @Deprecated // ANCHOR-636
   void setAmountFee(String amountFee);
 
   /**
@@ -194,9 +188,21 @@ public interface Sep6Transaction extends SepTransaction {
    *
    * @return the asset in which fees are calculated in.
    */
+  @Deprecated // ANCHOR-636
   String getAmountFeeAsset();
 
+  @Deprecated // ANCHOR-636
   void setAmountFeeAsset(String amountFeeAsset);
+
+  void setFeeDetails(FeeDetails feeDetails);
+
+  /**
+   * Description of fee charged by the anchor. Includes total break down of all fees that were
+   * charged.
+   *
+   * @return Description of fee charged by the anchor.
+   */
+  FeeDetails getFeeDetails();
 
   /**
    * The amount requested by the user to deposit or withdraw.

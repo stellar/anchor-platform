@@ -230,6 +230,7 @@ class NotifyTransactionExpiredHandlerTest {
     txn24.id = TX_ID
     txn24.status = PENDING_ANCHOR.toString()
     txn24.kind = DEPOSIT.kind
+    txn24.userActionRequiredBy = Instant.now()
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
 

@@ -207,7 +207,7 @@ class NotifyOffchainFundsAvailableHandlerTest {
   }
 
   @Test
-  fun test_handle_sep24_ok_deposit_withExternalTxId() {
+  fun test_handle_sep24_ok_deposit_withExternalTxIdNoActionRequiredBy() {
     val transferReceivedAt = Instant.now()
     val request =
       NotifyOffchainFundsAvailableRequest.builder()
@@ -218,6 +218,7 @@ class NotifyOffchainFundsAvailableHandlerTest {
     txn24.status = PENDING_ANCHOR.toString()
     txn24.kind = WITHDRAWAL.kind
     txn24.transferReceivedAt = transferReceivedAt
+    txn24.userActionRequiredBy = Instant.now()
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
 
@@ -283,9 +284,14 @@ class NotifyOffchainFundsAvailableHandlerTest {
   }
 
   @Test
-  fun test_handle_sep24_ok_deposit_withoutExternalTxId() {
+  fun test_handle_sep24_ok_deposit_withoutExternalTxIdWithActionRequiredBy() {
+    val actionRequiredBy = Instant.now().plusSeconds(100)
     val transferReceivedAt = Instant.now()
-    val request = NotifyOffchainFundsAvailableRequest.builder().transactionId(TX_ID).build()
+    val request =
+      NotifyOffchainFundsAvailableRequest.builder()
+        .transactionId(TX_ID)
+        .userActionRequiredBy(actionRequiredBy)
+        .build()
     val txn24 = JdbcSep24Transaction()
     txn24.status = PENDING_ANCHOR.toString()
     txn24.kind = WITHDRAWAL.kind
@@ -314,6 +320,7 @@ class NotifyOffchainFundsAvailableHandlerTest {
     expectedSep24Txn.status = PENDING_USR_TRANSFER_COMPLETE.toString()
     expectedSep24Txn.updatedAt = sep24TxnCapture.captured.updatedAt
     expectedSep24Txn.transferReceivedAt = transferReceivedAt
+    expectedSep24Txn.userActionRequiredBy = actionRequiredBy
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep24Txn),
@@ -327,6 +334,7 @@ class NotifyOffchainFundsAvailableHandlerTest {
     expectedResponse.status = PENDING_USR_TRANSFER_COMPLETE
     expectedResponse.updatedAt = sep24TxnCapture.captured.updatedAt
     expectedResponse.amountExpected = Amount(null, "")
+    expectedResponse.userActionRequiredBy = actionRequiredBy
 
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),

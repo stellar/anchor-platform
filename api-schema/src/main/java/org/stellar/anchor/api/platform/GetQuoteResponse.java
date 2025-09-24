@@ -6,7 +6,7 @@ import java.time.Instant;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
-import org.stellar.anchor.api.sep.sep38.RateFee;
+import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarId;
 
 @Data
@@ -51,5 +51,5 @@ public class GetQuoteResponse {
   @SerializedName("created_at")
   Instant createdAt;
 
-  RateFee fee;
+  FeeDetails fee;
 }

@@ -28,7 +28,7 @@ internal class ApiKeyFilterTest {
   fun setup() {
     this.request = mockk(relaxed = true)
     this.response = mockk(relaxed = true)
-    this.apiKeyFilter = ApiKeyFilter(API_KEY)
+    this.apiKeyFilter = ApiKeyFilter(API_KEY, "X-Api-Key")
     this.mockFilterChain = mockk(relaxed = true)
   }
 
@@ -109,5 +109,24 @@ internal class ApiKeyFilterTest {
     apiKeyFilter.doFilter(request, response, mockFilterChain)
 
     verify { mockFilterChain.doFilter(request, response) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["GET", "PUT", "POST", "DELETE"])
+  fun `make sure FORBIDDEN is returned when the filter requires header names other than X-Api-Key`(
+    method: String
+  ) {
+    val filterChain = mockk<FilterChain>(relaxed = true)
+
+    every { request.method } returns method
+    every { request.getHeader("X-Api-Key") } returns API_KEY
+    apiKeyFilter = ApiKeyFilter(API_KEY, "X-Api-Key-custom")
+
+    apiKeyFilter.doFilter(request, response, filterChain)
+    verify(exactly = 1) {
+      response.setStatus(HttpStatus.SC_FORBIDDEN)
+      response.contentType = APPLICATION_JSON_VALUE
+    }
+    verify { filterChain wasNot Called }
   }
 }

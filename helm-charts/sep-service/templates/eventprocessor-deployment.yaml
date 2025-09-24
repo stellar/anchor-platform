@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.fullName }}-svc-{{ .Values.services.eventProcessor.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.fullName }}-event-processor
+    helm.sh/chart: {{ include "common.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.services.eventProcessor.deployment.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ .Values.fullName }}-svc-{{ .Values.services.eventProcessor.name }}
+  template:
+    metadata:
+      {{- if .Values.services.eventProcessor.deployment.annotations }}
+      annotations:
+        {{- toYaml .Values.services.eventProcessor.deployment.annotations | nindent 8 }}
+      {{- end }}
+      namespace: {{ .Values.namespace }}
+      labels:
+        app: {{ .Values.fullName }}-svc-{{ .Values.services.eventProcessor.name }}
+    spec:
+      containers:
+        - name: event-processor
+          image: {{ .Values.container.image }}
+          args: [ "--event-processor" ]
+          imagePullPolicy: {{ .Values.container.imagePullPolicy | default "Always" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.services.sep.containerPort | default 8088 }}
+              protocol: TCP
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+              readOnly: true
+          env:
+            - name: STELLAR_ANCHOR_CONFIG
+              value: file:/config/anchor-config.yaml
+            - name: ASSETS_TYPE
+              value: file
+            - name: ASSETS_VALUE
+              value: /config/assets.yaml
+            - name: SECRET_DATA_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: POSTGRES_USER
+            - name: SECRET_DATA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: POSTGRES_PASSWORD
+            - name: SECRET_SEP24_INTERACTIVE_URL_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP24_INTERACTIVE_URL_JWT_SECRET
+            - name: SECRET_SEP24_MORE_INFO_URL_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP24_MORE_INFO_URL_JWT_SECRET
+            - name: SECRET_SEP6_MORE_INFO_URL_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: SEP6_MORE_INFO_URL_JWT_SECRET
+            - name: SECRET_EVENTS_QUEUE_KAFKA_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: EVENTS_QUEUE_KAFKA_USERNAME
+            - name: SECRET_EVENTS_QUEUE_KAFKA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: EVENTS_QUEUE_KAFKA_PASSWORD
+          resources:
+            requests:
+              memory: {{ .Values.services.eventProcessor.deployment.resources.requests.memory }}
+              cpu: {{ .Values.services.eventProcessor.deployment.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.services.eventProcessor.deployment.resources.limits.memory }}
+              cpu: {{ .Values.services.eventProcessor.deployment.resources.limits.cpu }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: anchor-config

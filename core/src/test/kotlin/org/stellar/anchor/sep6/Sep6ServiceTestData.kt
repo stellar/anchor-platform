@@ -108,6 +108,9 @@ class Sep6ServiceTestData {
                   "amount_out": "98",
                   "amount_out_asset": "stellar:USDC:GABCD",
                   "amount_fee": "2",
+                  "fee_details": {
+                      "total": "2"
+                  },
                   "from": "GABCD",
                   "to": "GABCD",
                   "deposit_memo": "some memo",

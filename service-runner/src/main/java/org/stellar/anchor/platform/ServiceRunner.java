@@ -1,6 +1,6 @@
 package org.stellar.anchor.platform;
 
-import static org.stellar.anchor.util.Log.info;
+import static org.stellar.anchor.util.Log.*;
 
 import java.util.Map;
 import org.apache.commons.cli.CommandLine;
@@ -57,7 +57,7 @@ public class ServiceRunner {
       }
 
       if (cmd.hasOption("wallet-reference-server") || cmd.hasOption("all")) {
-        startWalletServer(null, false);
+        startWalletServer(null, true);
         anyServerStarted = true;
       }
 
@@ -124,13 +124,23 @@ public class ServiceRunner {
   }
 
   public static void startKotlinReferenceServer(Map<String, String> envMap, boolean wait) {
-    info("Starting Kotlin reference server...");
-    ReferenceServerStartKt.start(envMap, wait);
+    try {
+      info("Starting Kotlin reference server...");
+      ReferenceServerStartKt.start(envMap, wait);
+    } catch (Exception e) {
+      errorEx("Error starting reference server", e);
+      throw e;
+    }
   }
 
   public static void startWalletServer(Map<String, String> envMap, boolean wait) {
-    info("Starting wallet server...");
-    WalletServerStartKt.start(envMap, wait);
+    try {
+      info("Starting wallet server...");
+      WalletServerStartKt.start(envMap, wait);
+    } catch (Exception e) {
+      errorEx("Error starting wallet server", e);
+      throw e;
+    }
   }
 
   public static void startTestProfileRunner() {

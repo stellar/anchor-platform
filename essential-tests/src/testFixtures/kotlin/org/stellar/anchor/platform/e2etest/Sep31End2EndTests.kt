@@ -10,8 +10,6 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.fail
-import org.junit.jupiter.api.parallel.Execution
-import org.junit.jupiter.api.parallel.ExecutionMode
 import org.stellar.anchor.api.callback.SendEventRequest
 import org.stellar.anchor.api.callback.SendEventRequestPayload
 import org.stellar.anchor.api.event.AnchorEvent
@@ -42,7 +40,6 @@ import org.stellar.walletsdk.horizon.SigningKeyPair
 import org.stellar.walletsdk.horizon.sign
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@Execution(ExecutionMode.CONCURRENT)
 open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
 
   private val gson = GsonUtils.getInstance()
@@ -171,7 +168,12 @@ open class Sep31End2EndTests : AbstractIntegrationTests(TestConfig()) {
     var retries = 30
     var callbacks: List<Sep31GetTransactionResponse>? = null
     while (retries > 0) {
-      callbacks = walletServerClient.getCallbacks(txnId, Sep31GetTransactionResponse::class.java)
+      callbacks =
+        walletServerClient.getTransactionCallbacks(
+          "sep31",
+          txnId,
+          Sep31GetTransactionResponse::class.java
+        )
       if (callbacks.size == count) {
         return callbacks
       }

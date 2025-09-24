@@ -44,14 +44,16 @@ public class Sep12Controller {
       @RequestParam(required = false) String account,
       @RequestParam(required = false) String memo,
       @RequestParam(required = false, name = "memo_type") String memoType,
+      @RequestParam(required = false, name = "transaction_id") String transactionId,
       @RequestParam(required = false) String lang) {
     debugF(
-        "GET /customer type={} id={} account={} memo={}, memoType={}, lang={}",
+        "GET /customer type={} id={} account={} memo={}, memoType={}, transactionId={}, lang={}",
         type,
         id,
         account,
         memo,
         memoType,
+        transactionId,
         lang);
     Sep10Jwt sep10Jwt = Sep10Helper.getSep10Token(request);
     Sep12GetCustomerRequest getCustomerRequest =
@@ -61,6 +63,7 @@ public class Sep12Controller {
             .account(account)
             .memo(memo)
             .memoType(memoType)
+            .transactionId(transactionId)
             .lang(lang)
             .build();
 

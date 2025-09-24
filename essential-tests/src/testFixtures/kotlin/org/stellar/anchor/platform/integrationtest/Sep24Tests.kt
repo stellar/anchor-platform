@@ -18,8 +18,8 @@ import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
+import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
-import org.stellar.anchor.auth.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.platform.AbstractIntegrationTests
 import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.gson
@@ -39,6 +39,7 @@ import org.stellar.walletsdk.asset.IssuedAssetId
 class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
   private val jwtService: JwtService =
     JwtService(
+      config.env["secret.sep6.more_info_url.jwt_secret"],
       config.env["secret.sep10.jwt_secret"]!!,
       config.env["secret.sep24.interactive_url.jwt_secret"]!!,
       config.env["secret.sep24.more_info_url.jwt_secret"]!!,
@@ -89,6 +90,19 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
       "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
       savedWithdrawTxn.from?.address
     )
+
+    val requestLang = "es-AR"
+    val langTx = anchor.sep24().getTransactionBy(token, id = response.id, lang = requestLang)
+    val claims =
+      jwtService
+        .decode(
+          UriComponentsBuilder.fromUriString(langTx.moreInfoUrl).build().queryParams["token"]!![0],
+          Sep24MoreInfoUrlJwt::class.java
+        )
+        .claims["data"]
+    var lang = (claims as Map<String, String>)["lang"]
+    assertEquals(requestLang, lang)
+
     // check the returning Sep24InteractiveUrlJwt
     val params = UriComponentsBuilder.fromUriString(response.url).build().queryParams
     val cipher = params["token"]!![0]
@@ -126,7 +140,7 @@ class Sep24Tests : AbstractIntegrationTests(TestConfig()) {
     val jwt = jwtService.decode(cipher, Sep24InteractiveUrlJwt::class.java)
     assertEquals(response.id, jwt.jti)
     assertNotNull(jwt.claims["data"])
-    assertNotNull((jwt.claims["data"] as HashMap<*, *>)["asset"])
+    assertNotNull((jwt.claims["data"] as Map<*, *>)["asset"])
   }
 
   /*
@@ -320,6 +334,7 @@ private const val patchWithdrawTransactionRequest =
           "payments": [
             {
               "id": 1,
+              "id_type": "stellar",
               "amount": {
                 "amount": "0.6",
                 "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
@@ -331,6 +346,7 @@ private const val patchWithdrawTransactionRequest =
             },
             {
               "id": 2,
+              "id_type": "stellar",
               "amount": {
                 "amount": "0.4",
                 "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
@@ -446,54 +462,19 @@ private const val expectedAfterPatchDeposit =
 
 private const val expectedSep24Info =
   """
-{
-  "deposit": {
-    "JPYC": {
-      "enabled": true
+  {
+    "deposit": {
+      "native": { "enabled": true, "minAmount": 0.0, "maxAmount": 10.0 },
+      "USDC": { "enabled": true, "minAmount": 0.0, "maxAmount": 10.0 }
     },
-    "native": {
-      "enabled": true,
-      "maxAmount": 1000000.0
+    "withdraw": {
+      "native": { "enabled": true, "minAmount": 0.0, "maxAmount": 10.0 },
+      "USDC": { "enabled": true, "minAmount": 0.0, "maxAmount": 10.0 }
     },
-    "USD": {
-      "enabled": true,
-      "minAmount": 0.0,
-      "maxAmount": 10000.0
-    },
-    "USDC": {
-      "enabled": true,
-      "minAmount": 1.0,
-      "maxAmount": 1000000.0
-    }
-  },
-  "withdraw": {
-    "JPYC": {
-      "enabled": true
-    },
-    "native": {
-      "enabled": true,
-      "maxAmount": 1000000.0
-    },
-    "USD": {
-      "enabled": true,
-      "minAmount": 0.0,
-      "maxAmount": 10000.0
-    },
-    "USDC": {
-      "enabled": true,
-      "minAmount": 1.0,
-      "maxAmount": 1000000.0
-    }
-  },
-  "fee": {
-    "enabled": false
-  },
-  "features": {
-    "accountCreation": false,
-    "claimableBalances": false
+    "fee": { "enabled": false },
+    "features": { "accountCreation": false, "claimableBalances": false }
   }
-}
-"""
+  """
 
 private const val expectedWithdrawTransactionResponse =
   """

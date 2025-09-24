@@ -4,7 +4,6 @@ host_url: http://localhost:8080
 
 stellar_network:
   network: TESTNET
-  network_passphrase: Test SDF Network ; September 2015
   horizon_url: https://horizon-testnet.stellar.org
 
 callback_api:

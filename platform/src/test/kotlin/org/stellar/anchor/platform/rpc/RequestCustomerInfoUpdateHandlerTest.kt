@@ -154,7 +154,12 @@ class RequestCustomerInfoUpdateHandlerTest {
 
   @Test
   fun test_handle_sep31_ok() {
-    val request = RequestCustomerInfoUpdateRequest.builder().transactionId(TX_ID).build()
+    val actionRequiredBy = Instant.now().plusSeconds(100)
+    val request =
+      RequestCustomerInfoUpdateRequest.builder()
+        .transactionId(TX_ID)
+        .userActionRequiredBy(actionRequiredBy)
+        .build()
     val txn31 = JdbcSep31Transaction()
     txn31.status = PENDING_RECEIVER.toString()
     val sep31TxnCapture = slot<JdbcSep31Transaction>()
@@ -177,6 +182,7 @@ class RequestCustomerInfoUpdateHandlerTest {
     val expectedSep31Txn = JdbcSep31Transaction()
     expectedSep31Txn.status = PENDING_CUSTOMER_INFO_UPDATE.toString()
     expectedSep31Txn.updatedAt = sep31TxnCapture.captured.updatedAt
+    expectedSep31Txn.userActionRequiredBy = actionRequiredBy
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep31Txn),
@@ -194,6 +200,7 @@ class RequestCustomerInfoUpdateHandlerTest {
     expectedResponse.amountExpected = Amount()
     expectedResponse.updatedAt = sep31TxnCapture.captured.updatedAt
     expectedResponse.customers = Customers(StellarId(), StellarId())
+    expectedResponse.userActionRequiredBy = actionRequiredBy
 
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),

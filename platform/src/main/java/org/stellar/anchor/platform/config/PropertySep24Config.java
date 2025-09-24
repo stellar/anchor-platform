@@ -8,6 +8,7 @@ import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import javax.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,6 +22,7 @@ import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
+import org.stellar.anchor.util.KeyUtil;
 import org.stellar.anchor.util.NetUtil;
 
 @Getter
@@ -38,6 +40,7 @@ public class PropertySep24Config implements Sep24Config, Validator {
   SecretConfig secretConfig;
   Features features;
   DepositInfoGeneratorType depositInfoGeneratorType;
+  Long initialUserDeadlineSeconds;
   CustodyConfig custodyConfig;
   KycFieldsForwarding kycFieldsForwarding;
   AssetService assetService;
@@ -54,18 +57,6 @@ public class PropertySep24Config implements Sep24Config, Validator {
   @AllArgsConstructor
   @NoArgsConstructor
   public static class InteractiveUrlConfig {
-
-    String baseUrl;
-    long jwtExpiration;
-    List<String> txnFields;
-  }
-
-  @Getter
-  @Setter
-  @AllArgsConstructor
-  @NoArgsConstructor
-  public static class MoreInfoUrlConfig {
-
     String baseUrl;
     long jwtExpiration;
     List<String> txnFields;
@@ -76,8 +67,14 @@ public class PropertySep24Config implements Sep24Config, Validator {
   @AllArgsConstructor
   @NoArgsConstructor
   public static class KycFieldsForwarding {
-
     boolean enabled;
+  }
+
+  @PostConstruct
+  public void postConstruct() {
+    if (initialUserDeadlineSeconds != null && initialUserDeadlineSeconds <= 0) {
+      initialUserDeadlineSeconds = null;
+    }
   }
 
   @Override
@@ -134,13 +131,18 @@ public class PropertySep24Config implements Sep24Config, Validator {
             "sep24-interactive-url-jwt-secret-not-defined",
             "Please set the secret.sep24.interactive_url.jwt_secret or SECRET_SEP24_INTERACTIVE_URL_JWT_SECRET environment variable");
       }
+
+      KeyUtil.rejectWeakJWTSecret(
+          secretConfig.getSep24InteractiveUrlJwtSecret(),
+          errors,
+          "secret.sep24.interactive_url.jwt_secret");
     }
   }
 
   void validateMoreInfoUrlConfig(Errors errors) {
     if (moreInfoUrl == null) {
       errors.rejectValue(
-          "moreInfoUrl", "sep24-moreinfo-url-invalid", "sep24.more-info-url is not defined.");
+          "moreInfoUrl", "sep24-more-info-url-invalid", "sep24.more-info-url is not defined.");
     } else {
       if (!NetUtil.isUrlValid(moreInfoUrl.baseUrl)) {
         errors.rejectValue(
@@ -174,6 +176,11 @@ public class PropertySep24Config implements Sep24Config, Validator {
             "sep24-more-info-url-jwt-secret-not-defined",
             "Please set the secret.sep24.more_info_url.jwt_secret or SECRET_SEP24_MORE_INFO_URL_JWT_SECRET environment variable");
       }
+
+      KeyUtil.rejectWeakJWTSecret(
+          secretConfig.getSep24MoreInfoUrlJwtSecret(),
+          errors,
+          "secret.sep24.more_info_url.jwt_secret");
     }
   }
 

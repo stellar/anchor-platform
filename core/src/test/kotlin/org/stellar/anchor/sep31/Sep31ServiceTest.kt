@@ -20,7 +20,6 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import org.skyscreamer.jsonassert.JSONAssert
-import org.stellar.anchor.TestConstants
 import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.callback.*
 import org.stellar.anchor.api.exception.*
@@ -30,13 +29,14 @@ import org.stellar.anchor.api.sep.operation.Sep31Operation
 import org.stellar.anchor.api.sep.sep12.Sep12Status
 import org.stellar.anchor.api.sep.sep31.*
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest.Sep31TxnFields
-import org.stellar.anchor.api.sep.sep38.RateFee
 import org.stellar.anchor.api.shared.Amount
+import org.stellar.anchor.api.shared.FeeDetails
 import org.stellar.anchor.api.shared.SepDepositInfo
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.config.*
+import org.stellar.anchor.config.ClientsConfig.ClientConfig
 import org.stellar.anchor.config.CustodyConfig.CustodyType.NONE
 import org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_RECEIVE
 import org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_SEND
@@ -47,6 +47,7 @@ import org.stellar.anchor.event.EventService.Session
 import org.stellar.anchor.sep31.Sep31Service.Context
 import org.stellar.anchor.sep38.PojoSep38Quote
 import org.stellar.anchor.sep38.Sep38QuoteStore
+import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.Network.TESTNET
 
@@ -272,23 +273,21 @@ class Sep31ServiceTest {
       }
   """
     private val lobstrClientConfig =
-      ClientsConfig.ClientConfig(
-        "lobstr",
-        ClientsConfig.ClientType.NONCUSTODIAL,
-        "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO",
-        "lobstr.co",
-        "https://callback.lobstr.co/api/v2/anchor/callback",
-        false,
-        null
-      )
+      ClientConfig.builder()
+        .name("lobstr")
+        .type(ClientsConfig.ClientType.NONCUSTODIAL)
+        .signingKeys(setOf("GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO"))
+        .domains(setOf("lobstr.co"))
+        .callbackUrl("https://callback.lobstr.co/api/v2/anchor/callback")
+        .build()
 
     @JvmStatic
     fun generateGetClientNameTestConfig(): Stream<Arguments> {
       return Stream.of(
         Arguments.of(listOf<String>(), false, null, false),
         Arguments.of(listOf<String>(), true, null, true),
-        Arguments.of(listOf(lobstrClientConfig.domain), false, lobstrClientConfig.name, false),
-        Arguments.of(listOf(lobstrClientConfig.domain), true, lobstrClientConfig.name, true),
+        Arguments.of(listOf(lobstrClientConfig.name), false, lobstrClientConfig.name, false),
+        Arguments.of(listOf(lobstrClientConfig.name), true, lobstrClientConfig.name, true),
       )
     }
   }
@@ -325,7 +324,7 @@ class Sep31ServiceTest {
   fun setUp() {
     MockKAnnotations.init(this, relaxUnitFun = true)
     every { appConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
-    every { secretConfig.sep10JwtSecretKey } returns TestConstants.TEST_JWT_SECRET
+    secretConfig.setupMock()
     every { appConfig.languages } returns listOf("en")
     every { sep31Config.paymentType } returns STRICT_SEND
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
@@ -492,6 +491,8 @@ class Sep31ServiceTest {
           .amountOutAsset("USD")
           .amountFee("2")
           .amountFeeAsset("USDC")
+          .feeDetails(FeeDetails("2", "USDC"))
+          .quoteId("quote_id")
           .stellarAccountId("GAYR3FVW2PCXTNHHWHEAFOCKZQV4PEY2ZKGIKB47EKPJ3GSBYA52XJBY")
           .stellarMemo("123456")
           .stellarMemoType("text")
@@ -746,7 +747,7 @@ class Sep31ServiceTest {
     quote.totalPrice = "0.008"
     quote.price = "0.0072"
     quote.expiresAt = Instant.now()
-    quote.fee = RateFee("10", stellarUSDC)
+    quote.fee = FeeDetails("10", stellarUSDC)
     every { quoteStore.findByQuoteId("my_quote_id") } returns quote
 
     val senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"
@@ -785,10 +786,10 @@ class Sep31ServiceTest {
       }
 
     // mock client config
-    every { sep10Config.allowedClientDomains } returns listOf("vibrant.stellar.org")
+    every { sep10Config.allowedClientNames } returns listOf("vibrant")
     every { clientsConfig.getClientConfigBySigningKey(any()) } returns
       ClientsConfig.ClientConfig().apply {
-        domain = "vibrant.stellar.org"
+        domains = setOf("vibrant.stellar.org")
         name = "vibrant"
       }
 
@@ -1087,18 +1088,19 @@ class Sep31ServiceTest {
   @ParameterizedTest
   @MethodSource("generateGetClientNameTestConfig")
   fun `test getClientName when`(
-    allowedClientDomains: List<String>,
+    allowedClientNames: List<String>,
     isClientAttributionRequired: Boolean,
     expectedClientName: String?,
     shouldThrowExceptionWithInvalidInput: Boolean,
   ) {
-    every { sep10Config.allowedClientDomains } returns allowedClientDomains
+    every { sep10Config.allowedClientNames } returns allowedClientNames
     every { sep10Config.isClientAttributionRequired } returns isClientAttributionRequired
-    every { clientsConfig.getClientConfigBySigningKey(lobstrClientConfig.signingKey) } returns
-      lobstrClientConfig
+    every {
+      clientsConfig.getClientConfigBySigningKey(lobstrClientConfig.signingKeys.first())
+    } returns lobstrClientConfig
 
     // client name should be returned for valid input
-    val clientName = sep31Service.getClientName(lobstrClientConfig.signingKey)
+    val clientName = sep31Service.getClientName(lobstrClientConfig.signingKeys.first())
     assertEquals(expectedClientName, clientName)
 
     // exception maybe thrown for invalid input

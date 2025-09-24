@@ -2,6 +2,8 @@ package org.stellar.anchor.platform.controller.sep;
 
 import static org.stellar.anchor.util.Log.debugF;
 
+import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import javax.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -222,7 +224,7 @@ public class Sep6Controller {
       @RequestParam(required = false, value = "external_transaction_id")
           String externalTransactionId,
       @RequestParam(required = false, value = "lang") String lang)
-      throws AnchorException {
+      throws AnchorException, MalformedURLException, URISyntaxException {
     debugF(
         "/transaction id={} stellar_transaction_id={} external_transaction_id={} lang={}",
         id,

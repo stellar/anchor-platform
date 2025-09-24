@@ -1,53 +1,50 @@
 package org.stellar.anchor.platform.service;
 
 import java.net.URI;
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.SneakyThrows;
 import org.apache.http.client.utils.URIBuilder;
+import org.stellar.anchor.MoreInfoUrlConstructor;
+import org.stellar.anchor.SepTransaction;
 import org.stellar.anchor.auth.JwtService;
-import org.stellar.anchor.auth.Sep24MoreInfoUrlJwt;
+import org.stellar.anchor.auth.MoreInfoUrlJwt;
+import org.stellar.anchor.platform.config.MoreInfoUrlConfig;
 import org.stellar.anchor.platform.config.PropertyClientsConfig;
-import org.stellar.anchor.platform.config.PropertySep24Config;
-import org.stellar.anchor.sep24.MoreInfoUrlConstructor;
-import org.stellar.anchor.sep24.Sep24Transaction;
-import org.stellar.anchor.util.ConfigHelper;
 
-public class SimpleMoreInfoUrlConstructor extends MoreInfoUrlConstructor {
-  private final PropertyClientsConfig clientsConfig;
-  private final PropertySep24Config.MoreInfoUrlConfig config;
+public abstract class SimpleMoreInfoUrlConstructor implements MoreInfoUrlConstructor {
+  PropertyClientsConfig clientsConfig;
+  final MoreInfoUrlConfig config;
   private final JwtService jwtService;
 
   public SimpleMoreInfoUrlConstructor(
-      PropertyClientsConfig clientsConfig,
-      PropertySep24Config.MoreInfoUrlConfig config,
-      JwtService jwtService) {
+      PropertyClientsConfig clientsConfig, MoreInfoUrlConfig config, JwtService jwtService) {
     this.clientsConfig = clientsConfig;
     this.config = config;
     this.jwtService = jwtService;
   }
 
-  @Override
+  public abstract String construct(SepTransaction txn, String lang);
+
   @SneakyThrows
-  public String construct(Sep24Transaction txn) {
-    PropertyClientsConfig.ClientConfig clientConfig =
-        ConfigHelper.getClientConfig(clientsConfig, txn);
+  public String construct(
+      String clientDomain,
+      String memo,
+      String sep10Account,
+      String transactionId,
+      SepTransaction txn,
+      String lang) {
 
-    Sep24MoreInfoUrlJwt token =
-        new Sep24MoreInfoUrlJwt(
-            UrlConstructorHelper.getAccount(txn),
-            txn.getTransactionId(),
-            Instant.now().getEpochSecond() + config.getJwtExpiration(),
-            txn.getClientDomain(),
-            clientConfig != null ? clientConfig.getName() : null);
+    MoreInfoUrlJwt token = getBaseToken(clientDomain, memo, sep10Account, transactionId);
 
+    // add lang to token
     Map<String, String> data = new HashMap<>();
-
-    // Add fields defined in txnFields
+    data.put("lang", lang);
+    // add txn_fields to token
     UrlConstructorHelper.addTxnFields(data, txn, config.getTxnFields());
     token.claim("data", data);
 
+    // build url
     String baseUrl = config.getBaseUrl();
     URI uri = new URI(baseUrl);
     return new URIBuilder()
@@ -55,10 +52,13 @@ public class SimpleMoreInfoUrlConstructor extends MoreInfoUrlConstructor {
         .setHost(uri.getHost())
         .setPort(uri.getPort())
         .setPath(uri.getPath())
-        .addParameter("transaction_id", txn.getTransactionId())
+        .addParameter("transaction_id", transactionId)
         .addParameter("token", jwtService.encode(token))
         .build()
         .toURL()
         .toString();
   }
+
+  public abstract MoreInfoUrlJwt getBaseToken(
+      String clientDomain, String sep10Account, String sep10AccountMemo, String transactionId);
 }

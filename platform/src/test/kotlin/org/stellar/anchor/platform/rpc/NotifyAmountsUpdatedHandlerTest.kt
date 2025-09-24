@@ -39,6 +39,7 @@ import org.stellar.anchor.metrics.MetricsService
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep6Transaction
 import org.stellar.anchor.platform.service.AnchorMetrics.PLATFORM_RPC_TRANSACTION
+import org.stellar.anchor.platform.utils.toRate
 import org.stellar.anchor.platform.validator.RequestValidator
 import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31TransactionStore
@@ -260,6 +261,7 @@ class NotifyAmountsUpdatedHandlerTest {
     txn24.amountFeeAsset = STELLAR_USDC
     txn24.amountFee = "0.2"
     txn24.transferReceivedAt = transferReceivedAt
+    txn24.userActionRequiredBy = Instant.now()
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
 
@@ -301,6 +303,7 @@ class NotifyAmountsUpdatedHandlerTest {
     expectedResponse.amountExpected = Amount(null, FIAT_USD)
     expectedResponse.amountOut = Amount("0.9", STELLAR_USDC)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = Amount("0.1", STELLAR_USDC).toRate()
     expectedResponse.updatedAt = sep24TxnCapture.captured.updatedAt
 
     JSONAssert.assertEquals(
@@ -437,6 +440,7 @@ class NotifyAmountsUpdatedHandlerTest {
     expectedResponse.amountExpected = Amount(null, FIAT_USD)
     expectedResponse.amountOut = Amount("0.9", STELLAR_USDC)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = Amount("0.1", STELLAR_USDC).toRate()
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
     expectedResponse.transferReceivedAt = transferReceivedAt
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))

@@ -1,8 +1,7 @@
 package org.stellar.anchor.platform.config;
 
 import static org.stellar.anchor.util.StringHelper.isEmpty;
-import static org.stellar.sdk.Network.PUBLIC;
-import static org.stellar.sdk.Network.TESTNET;
+import static org.stellar.sdk.Network.*;
 
 import java.util.List;
 import lombok.Data;
@@ -93,6 +92,8 @@ public class PropertyAppConfig implements AppConfig, Validator {
         return TESTNET.getNetworkPassphrase();
       case "PUBLIC":
         return PUBLIC.getNetworkPassphrase();
+      case "FUTURENET":
+        return FUTURENET.getNetworkPassphrase();
       default:
         throw new RuntimeException(
             "Invalid stellar network " + stellarNetwork + ". Please check the configuration.");

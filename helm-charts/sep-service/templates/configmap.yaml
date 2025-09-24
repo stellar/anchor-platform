@@ -1,18 +1,13 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.fullName }}-config-env-vars
+  name: anchor-config
+  namespace: {{ .Values.namespace }}
 data:
-  {{- range $key, $value := .Values.app_config }}
-  {{ include "common.addField" (list $key $value ) }}
-  {{- end }}
-  {{ include "common.addMultiline" (list "assets.value" .Values.assets_config ) }}
-  {{ include "common.addMultiline" (list "sep1.toml.value" .Values.toml_config ) }}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Values.fullName }}
-data:
+  {{ include "common.addMultiline" (list "sep1.toml" .Values.sep1_toml )}}
+  {{ include "common.addMultiline" (list "assets.yaml" .Values.assets_config )}}
   anchor-config.yaml: |
     version: 1
+    {{- range $key, $value := .Values.config }}
+    {{ $key }}: {{ toYaml $value | nindent 6 }}
+    {{- end }}

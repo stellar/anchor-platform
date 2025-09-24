@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.event.AnchorEvent
@@ -27,10 +28,7 @@ import org.stellar.anchor.api.rpc.method.AmountAssetRequest
 import org.stellar.anchor.api.rpc.method.AmountRequest
 import org.stellar.anchor.api.rpc.method.RequestOffchainFundsRequest
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
-import org.stellar.anchor.api.shared.Amount
-import org.stellar.anchor.api.shared.Customers
-import org.stellar.anchor.api.shared.InstructionField
-import org.stellar.anchor.api.shared.StellarId
+import org.stellar.anchor.api.shared.*
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.event.EventService
@@ -40,6 +38,7 @@ import org.stellar.anchor.metrics.MetricsService
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep6Transaction
 import org.stellar.anchor.platform.service.AnchorMetrics.PLATFORM_RPC_TRANSACTION
+import org.stellar.anchor.platform.utils.toRate
 import org.stellar.anchor.platform.validator.RequestValidator
 import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31TransactionStore
@@ -188,7 +187,7 @@ class RequestOffchainFundsHandlerTest {
   }
 
   @Test
-  fun test_handle_withoutAmounts_amount_out_absent() {
+  fun test_handle_withoutAmounts_fee_absent() {
     val request = RequestOffchainFundsRequest.builder().transactionId(TX_ID).build()
     val txn24 = JdbcSep24Transaction()
     txn24.status = INCOMPLETE.toString()
@@ -203,7 +202,7 @@ class RequestOffchainFundsHandlerTest {
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
-    assertEquals("amount_out is required", ex.message)
+    assertEquals("fee_details or amount_fee is required", ex.message)
 
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
@@ -229,7 +228,7 @@ class RequestOffchainFundsHandlerTest {
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
-    assertEquals("amount_fee is required", ex.message)
+    assertEquals("fee_details or amount_fee is required", ex.message)
 
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
@@ -257,7 +256,7 @@ class RequestOffchainFundsHandlerTest {
 
     val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
     assertEquals(
-      "All or none of the amount_in, amount_out, and amount_fee should be set",
+      "All (amount_out is optional) or none of the amount_in, amount_out, and (fee_details or amount_fee) should be set",
       ex.message
     )
 
@@ -274,7 +273,7 @@ class RequestOffchainFundsHandlerTest {
         .transactionId(TX_ID)
         .amountIn(AmountAssetRequest("1", FIAT_USD))
         .amountOut(AmountAssetRequest("1", STELLAR_USDC))
-        .amountFee(AmountAssetRequest("1", FIAT_USD))
+        .feeDetails(FeeDetails("1", FIAT_USD, null))
         .amountExpected(AmountRequest("1"))
         .build()
     val txn24 = JdbcSep24Transaction()
@@ -288,10 +287,10 @@ class RequestOffchainFundsHandlerTest {
     every { txn31Store.findByTransactionId(any()) } returns null
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
 
-    request.amountFee.amount = "-1"
+    request.feeDetails.total = "-1"
     var ex = assertThrows<BadRequestException> { handler.handle(request) }
-    assertEquals("amount_fee.amount should be non-negative", ex.message)
-    request.amountFee.amount = "1"
+    assertEquals("fee_details.amount should be non-negative", ex.message)
+    request.feeDetails.total = "1"
 
     request.amountExpected.amount = "-1"
     ex = assertThrows { handler.handle(request) }
@@ -310,7 +309,7 @@ class RequestOffchainFundsHandlerTest {
         .transactionId(TX_ID)
         .amountIn(AmountAssetRequest("1", FIAT_USD))
         .amountOut(AmountAssetRequest("1", STELLAR_USDC))
-        .amountFee(AmountAssetRequest("1", FIAT_USD))
+        .feeDetails(FeeDetails("1", FIAT_USD, null))
         .amountExpected(AmountRequest("1"))
         .build()
     val txn24 = JdbcSep24Transaction()
@@ -334,9 +333,9 @@ class RequestOffchainFundsHandlerTest {
     assertEquals("amount_out.asset should be stellar asset", ex.message)
     request.amountOut.asset = STELLAR_USDC
 
-    request.amountFee.asset = STELLAR_USDC
+    request.feeDetails.asset = STELLAR_USDC
     ex = assertThrows { handler.handle(request) }
-    assertEquals("amount_fee.asset should be non-stellar asset", ex.message)
+    assertEquals("fee_details.asset should be non-stellar asset", ex.message)
 
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
@@ -392,19 +391,77 @@ class RequestOffchainFundsHandlerTest {
   }
 
   @Test
+  fun test_handle_sep24_with_quote_amount_out_missing() {
+    val request =
+      RequestOffchainFundsRequest.builder()
+        .amountIn(AmountAssetRequest("1", FIAT_USD))
+        .feeDetails(Amount("0.1", FIAT_USD).toRate())
+        .transactionId(TX_ID)
+        .build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = INCOMPLETE.toString()
+    txn24.kind = DEPOSIT.kind
+    txn24.quoteId = "testQuoteId"
+    val sep24TxnCapture = slot<JdbcSep24Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn24Store.save(capture(sep24TxnCapture)) } returns null
+
+    val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
+    assertEquals("amount_out is required for transactions with firm quotes", ex.message)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @Test
+  fun test_handle_sep24_with_simple_quote() {
+    val request =
+      RequestOffchainFundsRequest.builder()
+        .amountIn(AmountAssetRequest("1", FIAT_USD))
+        .feeDetails(Amount("0.1", FIAT_USD).toRate())
+        .transactionId(TX_ID)
+        .build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = INCOMPLETE.toString()
+    txn24.kind = DEPOSIT.kind
+    txn24.amountInAsset = STELLAR_USDC
+    txn24.amountOutAsset = STELLAR_USDC
+    val sep24TxnCapture = slot<JdbcSep24Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn24Store.save(capture(sep24TxnCapture)) } returns null
+
+    val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
+    assertEquals("amount_out is required for non-exchange transactions", ex.message)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @Test
   fun test_handle_sep24_ok_withExpectedAmount() {
     val request =
       RequestOffchainFundsRequest.builder()
         .transactionId(TX_ID)
         .amountIn(AmountAssetRequest("1", FIAT_USD))
         .amountOut(AmountAssetRequest("0.9", STELLAR_USDC))
-        .amountFee(AmountAssetRequest("0.1", FIAT_USD))
+        .feeDetails(FeeDetails("0.1", FIAT_USD))
         .amountExpected(AmountRequest("1"))
         .build()
     val txn24 = JdbcSep24Transaction()
     txn24.status = INCOMPLETE.toString()
     txn24.kind = DEPOSIT.kind
     txn24.requestAssetCode = FIAT_USD_CODE
+    txn24.userActionRequiredBy = Instant.now()
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
 
@@ -450,6 +507,7 @@ class RequestOffchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", FIAT_USD)
     expectedResponse.amountOut = Amount("0.9", STELLAR_USDC)
     expectedResponse.amountFee = Amount("0.1", FIAT_USD)
+    expectedResponse.feeDetails = FeeDetails("0.1", FIAT_USD, null)
     expectedResponse.amountExpected = Amount("1", FIAT_USD)
     expectedResponse.updatedAt = sep24TxnCapture.captured.updatedAt
 
@@ -478,13 +536,15 @@ class RequestOffchainFundsHandlerTest {
   }
 
   @Test
-  fun test_handle_sep24_ok_withoutAmountExpected() {
+  fun test_handle_sep24_ok_withUserActionRequiredBy() {
+    val actionRequiredBy = Instant.now().plusSeconds(100)
     val request =
       RequestOffchainFundsRequest.builder()
         .transactionId(TX_ID)
         .amountIn(AmountAssetRequest("1", FIAT_USD))
         .amountOut(AmountAssetRequest("0.9", STELLAR_USDC))
-        .amountFee(AmountAssetRequest("0.1", FIAT_USD))
+        .feeDetails(FeeDetails("0.1", FIAT_USD, null))
+        .userActionRequiredBy(actionRequiredBy)
         .build()
     val txn24 = JdbcSep24Transaction()
     txn24.status = INCOMPLETE.toString()
@@ -520,6 +580,7 @@ class RequestOffchainFundsHandlerTest {
     expectedSep24Txn.amountFee = "0.1"
     expectedSep24Txn.amountFeeAsset = FIAT_USD
     expectedSep24Txn.amountExpected = "1"
+    expectedSep24Txn.userActionRequiredBy = actionRequiredBy
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep24Txn),
@@ -534,8 +595,10 @@ class RequestOffchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", FIAT_USD)
     expectedResponse.amountOut = Amount("0.9", STELLAR_USDC)
     expectedResponse.amountFee = Amount("0.1", FIAT_USD)
+    expectedResponse.feeDetails = FeeDetails("0.1", FIAT_USD, null)
     expectedResponse.amountExpected = Amount("1", FIAT_USD)
     expectedResponse.updatedAt = sep24TxnCapture.captured.updatedAt
+    expectedResponse.userActionRequiredBy = actionRequiredBy
 
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
@@ -620,6 +683,7 @@ class RequestOffchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", FIAT_USD)
     expectedResponse.amountOut = Amount("0.9", STELLAR_USDC)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = FeeDetails("0.1", STELLAR_USDC, null)
     expectedResponse.amountExpected = Amount("1", FIAT_USD)
     expectedResponse.updatedAt = sep24TxnCapture.captured.updatedAt
 
@@ -695,6 +759,65 @@ class RequestOffchainFundsHandlerTest {
     verify(exactly = 0) { sepTransactionCounter.increment() }
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "deposit-exchange"])
+  fun test_handle_sep6_with_quote_amount_out_missing(kind: String) {
+    val request =
+      RequestOffchainFundsRequest.builder()
+        .amountIn(AmountAssetRequest("1", FIAT_USD))
+        .feeDetails(Amount("0.1", FIAT_USD).toRate())
+        .transactionId(TX_ID)
+        .build()
+    val txn6 = JdbcSep6Transaction()
+    txn6.status = INCOMPLETE.toString()
+    txn6.kind = kind
+    txn6.quoteId = "testQuoteId"
+    val sep6TxnCapture = slot<JdbcSep6Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns txn6
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn6Store.save(capture(sep6TxnCapture)) } returns null
+
+    val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
+    assertEquals("amount_out is required for transactions with firm quotes", ex.message)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "deposit-exchange"])
+  fun test_handle_sep6_with_simple_quote(kind: String) {
+    val request =
+      RequestOffchainFundsRequest.builder()
+        .amountIn(AmountAssetRequest("1", FIAT_USD))
+        .feeDetails(Amount("0.1", FIAT_USD).toRate())
+        .transactionId(TX_ID)
+        .build()
+    val txn6 = JdbcSep6Transaction()
+    txn6.status = INCOMPLETE.toString()
+    txn6.kind = kind
+    txn6.amountInAsset = FIAT_USD
+    txn6.amountOutAsset = FIAT_USD
+    val sep6TxnCapture = slot<JdbcSep6Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns txn6
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn6Store.save(capture(sep6TxnCapture)) } returns null
+
+    val ex = assertThrows<InvalidParamsException> { handler.handle(request) }
+    assertEquals("amount_out is required for non-exchange transactions", ex.message)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
   @CsvSource(
     value =
       [
@@ -713,7 +836,7 @@ class RequestOffchainFundsHandlerTest {
         .transactionId(TX_ID)
         .amountIn(AmountAssetRequest("1", FIAT_USD))
         .amountOut(AmountAssetRequest("0.9", STELLAR_USDC))
-        .amountFee(AmountAssetRequest("0.1", FIAT_USD))
+        .feeDetails(FeeDetails("0.1", FIAT_USD, null))
         .amountExpected(AmountRequest("1"))
         .instructions(mapOf("first_name" to InstructionField.builder().build()))
         .build()
@@ -767,6 +890,7 @@ class RequestOffchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", FIAT_USD)
     expectedResponse.amountOut = Amount("0.9", STELLAR_USDC)
     expectedResponse.amountFee = Amount("0.1", FIAT_USD)
+    expectedResponse.feeDetails = FeeDetails("0.1", FIAT_USD, null)
     expectedResponse.amountExpected = Amount("1", FIAT_USD)
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
@@ -814,7 +938,7 @@ class RequestOffchainFundsHandlerTest {
         .transactionId(TX_ID)
         .amountIn(AmountAssetRequest("1", FIAT_USD))
         .amountOut(AmountAssetRequest("0.9", STELLAR_USDC))
-        .amountFee(AmountAssetRequest("0.1", FIAT_USD))
+        .feeDetails(FeeDetails("0.1", FIAT_USD, null))
         .instructions(mapOf("first_name" to InstructionField.builder().build()))
         .build()
     val txn6 = JdbcSep6Transaction()
@@ -866,6 +990,7 @@ class RequestOffchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", FIAT_USD)
     expectedResponse.amountOut = Amount("0.9", STELLAR_USDC)
     expectedResponse.amountFee = Amount("0.1", FIAT_USD)
+    expectedResponse.feeDetails = FeeDetails("0.1", FIAT_USD, null)
     expectedResponse.amountExpected = Amount("1", FIAT_USD)
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
@@ -970,6 +1095,7 @@ class RequestOffchainFundsHandlerTest {
     expectedResponse.amountIn = Amount("1", FIAT_USD)
     expectedResponse.amountOut = Amount("0.9", STELLAR_USDC)
     expectedResponse.amountFee = Amount("0.1", STELLAR_USDC)
+    expectedResponse.feeDetails = FeeDetails("0.1", STELLAR_USDC, null)
     expectedResponse.amountExpected = Amount("1", FIAT_USD)
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))

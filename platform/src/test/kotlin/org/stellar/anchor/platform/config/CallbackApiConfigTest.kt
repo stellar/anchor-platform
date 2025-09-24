@@ -2,6 +2,7 @@ package org.stellar.anchor.platform.config
 
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -12,6 +13,7 @@ import org.springframework.validation.BindException
 import org.springframework.validation.Errors
 import org.stellar.anchor.auth.AuthConfig
 import org.stellar.anchor.auth.AuthType.JWT
+import org.stellar.anchor.platform.utils.setupMock
 
 class CallbackApiConfigTest {
   lateinit var config: CallbackApiConfig
@@ -56,7 +58,7 @@ class CallbackApiConfigTest {
 
   @Test
   fun `test JWT_TOKEN callback api secret`() {
-    every { secretConfig.callbackAuthSecret } returns "secret"
+    secretConfig.setupMock()
     config.setAuth(
       AuthConfig(
         JWT,
@@ -85,5 +87,21 @@ class CallbackApiConfigTest {
     config.validateAuth(errors)
     assertEquals(1, errors.errorCount)
     assertEquals("empty-secret-callback-api-secret", errors.allErrors[0].code)
+  }
+
+  @Test
+  fun `validate JWT`() {
+    every { secretConfig.callbackAuthSecret }.returns("tooshort")
+    config.setAuth(
+      AuthConfig(
+        JWT,
+        null,
+        AuthConfig.JwtConfig("30000", "Authorization"),
+        AuthConfig.ApiKeyConfig("X-Api-Key")
+      )
+    )
+    config.validateAuth(errors)
+    Assertions.assertTrue(errors.hasErrors())
+    assertErrorCode(errors, "hmac-weak-secret")
   }
 }

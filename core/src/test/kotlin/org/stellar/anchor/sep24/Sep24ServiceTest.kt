@@ -8,29 +8,29 @@ import java.net.URI
 import java.nio.charset.Charset
 import java.time.Instant
 import org.apache.http.client.utils.URLEncodedUtils
+import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.stellar.anchor.MoreInfoUrlConstructor
 import org.stellar.anchor.TestConstants.Companion.TEST_ACCOUNT
+import org.stellar.anchor.TestConstants.Companion.TEST_AMOUNT
 import org.stellar.anchor.TestConstants.Companion.TEST_ASSET
 import org.stellar.anchor.TestConstants.Companion.TEST_ASSET_ISSUER_ACCOUNT_ID
 import org.stellar.anchor.TestConstants.Companion.TEST_CLIENT_DOMAIN
 import org.stellar.anchor.TestConstants.Companion.TEST_CLIENT_NAME
 import org.stellar.anchor.TestConstants.Companion.TEST_HOME_DOMAIN
-import org.stellar.anchor.TestConstants.Companion.TEST_JWT_SECRET
 import org.stellar.anchor.TestConstants.Companion.TEST_MEMO
+import org.stellar.anchor.TestConstants.Companion.TEST_OFFCHAIN_ASSET
+import org.stellar.anchor.TestConstants.Companion.TEST_QUOTE_ID
 import org.stellar.anchor.TestConstants.Companion.TEST_TRANSACTION_ID_0
 import org.stellar.anchor.TestConstants.Companion.TEST_TRANSACTION_ID_1
 import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.callback.FeeIntegration
-import org.stellar.anchor.api.exception.BadRequestException
-import org.stellar.anchor.api.exception.SepException
-import org.stellar.anchor.api.exception.SepNotAuthorizedException
-import org.stellar.anchor.api.exception.SepNotFoundException
-import org.stellar.anchor.api.exception.SepValidationException
+import org.stellar.anchor.api.exception.*
 import org.stellar.anchor.api.sep.sep24.GetTransactionRequest
 import org.stellar.anchor.api.sep.sep24.GetTransactionsRequest
 import org.stellar.anchor.asset.AssetService
@@ -45,6 +45,7 @@ import org.stellar.anchor.event.EventService
 import org.stellar.anchor.sep38.PojoSep38Quote
 import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.sep6.ExchangeAmountsCalculator
+import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.MemoHelper.makeMemo
 import org.stellar.sdk.MemoHash
@@ -65,13 +66,13 @@ internal class Sep24ServiceTest {
         "expires_at": "2021-04-30T07:42:23",
         "total_price": "5.42",
         "price": "5.00",
-        "sell_asset": "iso4217:BRL",
+        "sell_asset": "iso4217:USD",
         "sell_amount": "542",
         "buy_asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
         "buy_amount": "100",
         "fee": {
           "total": "42.00",
-          "asset": "iso4217:BRL"
+          "asset": "iso4217:USD"
         }
       }
       """
@@ -85,7 +86,7 @@ internal class Sep24ServiceTest {
         "price": "0.5",
         "sell_asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
         "sell_amount": "542",
-        "buy_asset": "iso4217:BRL",
+        "buy_asset": "iso4217:USD",
         "buy_amount": "1000",
         "fee": {
           "total": "42",
@@ -138,9 +139,7 @@ internal class Sep24ServiceTest {
   fun setUp() {
     MockKAnnotations.init(this, relaxUnitFun = true)
     every { appConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
-    every { secretConfig.sep10JwtSecretKey } returns TEST_JWT_SECRET
-    every { secretConfig.sep24MoreInfoUrlJwtSecret } returns TEST_JWT_SECRET
-    every { secretConfig.sep24InteractiveUrlJwtSecret } returns TEST_JWT_SECRET
+    secretConfig.setupMock()
     every { txnStore.newInstance() } returns PojoSep24Transaction()
 
     jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
@@ -148,7 +147,7 @@ internal class Sep24ServiceTest {
     val strToken = jwtService.encode(testInteractiveUrlJwt)
     every { interactiveUrlConstructor.construct(any(), any(), any(), any()) } returns
       "${TEST_SEP24_INTERACTIVE_URL}?lang=en&token=$strToken"
-    every { moreInfoUrlConstructor.construct(any()) } returns
+    every { moreInfoUrlConstructor.construct(any(), any()) } returns
       "${TEST_SEP24_MORE_INFO_URL}?lang=en&token=$strToken"
     every { clientsConfig.getClientConfigByDomain(any()) } returns clientConfig
     every { clientFinder.getClientName(any()) } returns TEST_CLIENT_NAME
@@ -201,6 +200,9 @@ internal class Sep24ServiceTest {
     assertEquals(TEST_ACCOUNT, slotTxn.captured.fromAccount)
     assertEquals(TEST_CLIENT_DOMAIN, slotTxn.captured.clientDomain)
     assertEquals(TEST_CLIENT_NAME, slotTxn.captured.clientName)
+    assertEquals(TEST_AMOUNT, slotTxn.captured.amountExpected)
+    assertEquals(TEST_OFFCHAIN_ASSET, slotTxn.captured.amountOutAsset)
+    assertNull(slotTxn.captured.amountInAsset)
 
     val params = URLEncodedUtils.parse(URI(response.url), Charset.forName("UTF-8"))
     val tokenStrings = params.filter { pair -> pair.name.equals("token") }
@@ -263,7 +265,26 @@ internal class Sep24ServiceTest {
       createTestTransactionRequest(withdrawQuote.id)
     )
     assertEquals(withdrawQuote.id, slotTxn.captured.quoteId)
-    assertEquals(withdrawQuote.buyAsset, slotTxn.captured.destinationAsset)
+    assertEquals(withdrawQuote.buyAsset, slotTxn.captured.amountOutAsset)
+  }
+
+  @Test
+  fun `test withdraw with user_action_required_by`() {
+    val slotTxn = slot<Sep24Transaction>()
+    val deadline = 100L
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { sep24Config.initialUserDeadlineSeconds } returns deadline
+    sep24Service.withdraw(createTestSep10JwtWithMemo(), createTestTransactionRequest())
+    val dbDeadline = slotTxn.captured.userActionRequiredBy.epochSecond
+    val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
+    Assertions.assertTrue(
+      dbDeadline >= expectedDeadline - 2,
+      "Expected $expectedDeadline got $dbDeadline}"
+    )
+    Assertions.assertTrue(
+      dbDeadline <= expectedDeadline,
+      "Expected $expectedDeadline got $dbDeadline}"
+    )
   }
 
   @Test
@@ -351,6 +372,9 @@ internal class Sep24ServiceTest {
     assertEquals(TEST_ACCOUNT, slotTxn.captured.toAccount)
     assertEquals(TEST_CLIENT_DOMAIN, slotTxn.captured.clientDomain)
     assertEquals(TEST_CLIENT_NAME, slotTxn.captured.clientName)
+    assertEquals(TEST_AMOUNT, slotTxn.captured.amountExpected)
+    assertEquals(TEST_OFFCHAIN_ASSET, slotTxn.captured.amountInAsset)
+    assertNull(slotTxn.captured.amountOutAsset)
   }
 
   @Test
@@ -398,7 +422,26 @@ internal class Sep24ServiceTest {
       createTestTransactionRequest(depositQuote.id)
     )
     assertEquals(depositQuote.id, slotTxn.captured.quoteId)
-    assertEquals(depositQuote.sellAsset, slotTxn.captured.sourceAsset)
+    assertEquals(depositQuote.sellAsset, slotTxn.captured.amountInAsset)
+  }
+
+  @Test
+  fun `test deposit with user_action_required_by`() {
+    val slotTxn = slot<Sep24Transaction>()
+    val deadline = 100L
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { sep24Config.initialUserDeadlineSeconds } returns deadline
+    sep24Service.deposit(createTestSep10JwtWithMemo(), createTestTransactionRequest())
+    val dbDeadline = slotTxn.captured.userActionRequiredBy.epochSecond
+    val expectedDeadline = Instant.now().plusSeconds(deadline).epochSecond
+    Assertions.assertTrue(
+      dbDeadline >= expectedDeadline - 2,
+      "Expected $expectedDeadline got $dbDeadline}"
+    )
+    Assertions.assertTrue(
+      dbDeadline <= expectedDeadline,
+      "Expected $expectedDeadline got $dbDeadline}"
+    )
   }
 
   @Test
@@ -517,12 +560,14 @@ internal class Sep24ServiceTest {
     assertEquals(response.transactions[0].kind, kind)
     assertEquals(response.transactions[0].startedAt, TEST_STARTED_AT)
     assertEquals(response.transactions[0].completedAt, TEST_COMPLETED_AT)
+    assertEquals(response.transactions[0].quoteId, TEST_QUOTE_ID)
 
     assertEquals(response.transactions[1].id, TEST_TRANSACTION_ID_1)
     assertEquals(response.transactions[1].status, "completed")
     assertEquals(response.transactions[1].kind, kind)
     assertEquals(response.transactions[1].startedAt, TEST_STARTED_AT)
     assertEquals(response.transactions[1].completedAt, TEST_COMPLETED_AT)
+    assertEquals(response.transactions[1].quoteId, TEST_QUOTE_ID)
   }
 
   @ParameterizedTest
@@ -630,7 +675,7 @@ internal class Sep24ServiceTest {
   fun `test GET info`() {
     val response = sep24Service.info
 
-    assertEquals(4, response.deposit.size)
+    assertEquals(3, response.deposit.size)
     assertEquals(2, response.withdraw.size)
     assertNotNull(response.deposit["USDC"])
     assertNotNull(response.withdraw["USDC"])

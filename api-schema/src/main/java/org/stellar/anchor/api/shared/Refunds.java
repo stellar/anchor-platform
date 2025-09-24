@@ -9,7 +9,7 @@ import lombok.Data;
 @Data
 @Builder
 @AllArgsConstructor
-public class Refunds {
+public class Refunds implements SepRefunds {
 
   @JsonProperty("amount_refunded")
   @SerializedName("amount_refunded")
@@ -22,4 +22,9 @@ public class Refunds {
   RefundPayment[] payments;
 
   public Refunds() {}
+
+  @Override
+  public boolean hasRefundPayments() {
+    return payments != null;
+  }
 }

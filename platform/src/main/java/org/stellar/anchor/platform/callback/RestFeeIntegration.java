@@ -55,20 +55,21 @@ public class RestFeeIntegration implements FeeIntegration {
 
     Request httpRequest =
         PlatformIntegrationHelper.getRequestBuilder(authHelper).url(url).get().build();
-    Response response = PlatformIntegrationHelper.call(httpClient, httpRequest);
-    String responseContent = PlatformIntegrationHelper.getContent(response);
 
-    if (response.code() != HttpStatus.OK.value()) {
-      throw PlatformIntegrationHelper.httpError(responseContent, response.code(), gson);
+    try (Response response = PlatformIntegrationHelper.call(httpClient, httpRequest)) {
+      String responseContent = PlatformIntegrationHelper.getContent(response);
+
+      if (response.code() != HttpStatus.OK.value()) {
+        throw PlatformIntegrationHelper.httpError(responseContent, response.code(), gson);
+      }
+
+      GetFeeResponse feeResponse;
+      try {
+        feeResponse = gson.fromJson(responseContent, GetFeeResponse.class);
+      } catch (Exception e) { // cannot read body from response
+        throw new ServerErrorException("internal server error", e);
+      }
+      return feeResponse;
     }
-
-    GetFeeResponse feeResponse;
-    try {
-      feeResponse = gson.fromJson(responseContent, GetFeeResponse.class);
-    } catch (Exception e) { // cannot read body from response
-      throw new ServerErrorException("internal server error", e);
-    }
-
-    return feeResponse;
   }
 }

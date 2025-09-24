@@ -3,7 +3,7 @@
 <!-- TOC -->
 
 * [How to set up the development environment](#how-to-set-up-the-development-environment)
-    * [Install JDK 11](#install-jdk-11)
+    * [Install JDK 17](#install-jdk-17)
     * [Checkout the Project](#checkout-the-project)
     * [Set up `docker`](#set-up-docker)
     * [Set up your hosts file](#set-up-your-hosts-file)
@@ -11,7 +11,7 @@
         * [Clean](#clean)
         * [Build](#build)
         * [Running Unit Tests](#running-unit-tests)
-        * [Running `docker-compose` up for development](#running-docker-compose-up-for-development)
+        * [Running `docker compose` up for development](#running-docker-compose-up-for-development)
         * [Starting all servers](#starting-all-servers)
     * [Set up the Git Hooks](#set-up-the-git-hooks)
 * [Set up the Development Environment with IntelliJ IDEA](#set-up-the-development-environment-with-intellij-idea)
@@ -27,10 +27,10 @@
 
 <!-- TOC -->
 
-## Install JDK 11
+## Install JDK 17
 
 Before you start, please make sure you
-have [JDK-11](https://www.oracle.com/java/technologies/javase-jdk11-downloads.html) installed on your machine.
+have [JDK-17](https://www.oracle.com/java/technologies/javase/jdk17-archive-downloads.html) installed on your machine.
 
 To check if you have it installed, run:
 
@@ -111,17 +111,22 @@ Run all tests: `./gradlew test`
 
 Run subproject tests: `./gradlew :[subproject]:test`
 
-### Running `docker-compose start` for Kafka, Postgres, and SEP24 Reference UI
+### Running `docker compose start` for Kafka, Postgres, and SEP24 Reference UI
 
 `./gradlew dockerComposeStart`
 
-### Running `docker-compose stop` to shutdown Kafka, Postgres, and SEP24 Reference UI
+### Running `docker compose stop` to shutdown Kafka, Postgres, and SEP24 Reference UI
 
 `./gradlew dockerComposeStop`
 
 ### Starting all servers
 
 `./gradlew startAllServers`
+
+### Run essential tests
+After the docker compose start and starting all servers, you can run the essential tests by running:
+
+`./gradlew runEssentialTests`
 
 ### Starting the servers with a specific test profile
 
@@ -191,6 +196,7 @@ Several IntelliJ run configurations are provided to make it easier to run the pr
 - `Test Profile: auth-apikey-platform`: runs the tests with the auth-apikey-platform profile.
 - `Test Profile: auth-jwt-platform`: runs the tests with the auth-jwt-platform profile.
 - `Test Profile: host-docker-internal`: runs the tests with the host-docker-internal profile.
+- `Test Profile: deployment`: runs all servers so that all SEPs can be tested using the demo wallet.
 - `Sep Server: default`: runs the SEP server locally with `default` profile.
 - `Stellar Observer: default`: runs the Stellar Observer locally with `default` profile.
 - `Platform Server: default`: runs the Platform server locally with `default` profile.
@@ -211,6 +217,7 @@ the `service-runner/src/main/resources/profiles` folder.
 - `auth-jwt-custody`: starts the custody servers with the JWT authentication enabled.
 - `auth-apikey-platform`: starts the platform servers with the API key authentication enabled.
 - `auth-jwt-platform`: starts the platform servers with the JWT authentication enabled.
+- `deployment`: starts all servers so that all SEPs can be tested using the demo wallet.
 
 ## Development Scenarios
 
@@ -218,7 +225,7 @@ the `service-runner/src/main/resources/profiles` folder.
 
 If you would like to debug the Platform server, you can do so by running the
 
-- Make sure `docker` and `docker-compose` is available on your local machine.
+- Make sure `docker` is available on your local machine.
 - Check if there are previous docker containers running on your machine. If there are, please stop and delete them.
 - Run `Docker - Run Dev Stack - Kafka, Postgres, SEP24 Reference UI` to start the development stack.
 - Debug `Sep Server: default` to start the SEP server.
@@ -229,7 +236,7 @@ If you would like to debug the unit tests or the end-to-end tests, there are two
 
 #### Option 1: Run the servers from IntelliJ
 
-- Make sure `docker` and `docker-compose` is available on your local machine.
+- Make sure `docker` is available on your local machine.
 - Check if there are previous docker containers running on your machine. If there are, please stop and delete them.
 - Run `Docker - Run Dev Stack - Kafka, Postgres, SEP24 Reference UI` to start the development stack.
 - Run `Test Profile: default` to run the servers with the `default` profile.
@@ -237,7 +244,7 @@ If you would like to debug the unit tests or the end-to-end tests, there are two
 
 ### Option 2: Run the servers and tests from Gradle
 
-- Make sure `docker` and `docker-compose` is available on your local machine.
+- Make sure `docker` is available on your local machine.
 - Check if there are previous docker containers running on your machine. If there are, please stop and delete them.
 - Navigate to the directory to the project folder
 - `./gradlew dockerComposeStart` to start the development stack.

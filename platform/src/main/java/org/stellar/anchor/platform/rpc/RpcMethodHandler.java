@@ -24,6 +24,7 @@ import org.stellar.anchor.api.platform.GetTransactionResponse;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep;
 import org.stellar.anchor.api.rpc.method.RpcMethod;
 import org.stellar.anchor.api.rpc.method.RpcMethodParamsRequest;
+import org.stellar.anchor.api.rpc.method.features.SupportsUserActionRequiredBy;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.event.EventService;
@@ -40,6 +41,7 @@ import org.stellar.anchor.sep31.Sep31Transaction;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
 import org.stellar.anchor.util.GsonUtils;
+import org.stellar.anchor.util.Log;
 
 public abstract class RpcMethodHandler<T extends RpcMethodParamsRequest> {
 
@@ -75,7 +77,9 @@ public abstract class RpcMethodHandler<T extends RpcMethodParamsRequest> {
 
   public GetTransactionResponse handle(Object requestParams) throws AnchorException {
     T request = gson.fromJson(gson.toJson(requestParams), requestType);
+    Log.infoF("Processing RPC request {}", request);
     JdbcSepTransaction txn = getTransaction(request.getTransactionId());
+    Log.debugF("SEP transaction before request is executed {}", txn);
 
     if (txn == null) {
       throw new InvalidRequestException(
@@ -106,6 +110,8 @@ public abstract class RpcMethodHandler<T extends RpcMethodParamsRequest> {
 
     updateTransaction(txn, request);
 
+    Log.debugF("Transaction after update is executed {}", txn);
+
     GetTransactionResponse txResponse = toGetTransactionResponse(txn, assetService);
 
     eventSession.publish(
@@ -122,7 +128,7 @@ public abstract class RpcMethodHandler<T extends RpcMethodParamsRequest> {
   public abstract RpcMethod getRpcMethod();
 
   protected abstract SepTransactionStatus getNextStatus(JdbcSepTransaction txn, T request)
-      throws InvalidRequestException, InvalidParamsException;
+      throws AnchorException;
 
   protected abstract Set<SepTransactionStatus> getSupportedStatuses(JdbcSepTransaction txn);
 
@@ -143,10 +149,19 @@ public abstract class RpcMethodHandler<T extends RpcMethodParamsRequest> {
 
   protected void validate(JdbcSepTransaction txn, T request)
       throws InvalidParamsException, InvalidRequestException, BadRequestException {
+    if (request instanceof SupportsUserActionRequiredBy
+        && ((SupportsUserActionRequiredBy) request).getUserActionRequiredBy() != null) {
+      if (((SupportsUserActionRequiredBy) request)
+          .getUserActionRequiredBy()
+          .isBefore(Instant.now())) {
+        throw new InvalidParamsException("user_action_required_by can not be in the past");
+      }
+    }
+
     requestValidator.validate(request);
   }
 
-  private void updateTransaction(JdbcSepTransaction txn, T request) throws AnchorException {
+  protected void updateTransaction(JdbcSepTransaction txn, T request) throws AnchorException {
     validate(txn, request);
 
     SepTransactionStatus nextStatus = getNextStatus(txn, request);
@@ -157,6 +172,13 @@ public abstract class RpcMethodHandler<T extends RpcMethodParamsRequest> {
 
     boolean shouldClearMessageStatus =
         !isErrorStatus(nextStatus) && isErrorStatus(SepTransactionStatus.from(txn.getStatus()));
+
+    txn.setUserActionRequiredBy(null);
+    if (request instanceof SupportsUserActionRequiredBy
+        && ((SupportsUserActionRequiredBy) request).getUserActionRequiredBy() != null) {
+      txn.setUserActionRequiredBy(
+          ((SupportsUserActionRequiredBy) request).getUserActionRequiredBy());
+    }
 
     updateTransactionWithRpcRequest(txn, request);
 

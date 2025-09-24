@@ -31,6 +31,7 @@ import org.stellar.anchor.platform.config.PropertyClientsConfig
 import org.stellar.anchor.platform.config.PropertySep24Config
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.service.SimpleInteractiveUrlConstructor.FORWARD_KYC_CUSTOMER_TYPE
+import org.stellar.anchor.platform.utils.setupMock
 import org.stellar.anchor.util.GsonUtils
 
 @Suppress("UNCHECKED_CAST")
@@ -58,36 +59,31 @@ class SimpleInteractiveUrlConstructorTest {
   @BeforeEach
   fun setup() {
     MockKAnnotations.init(this, relaxUnitFun = true)
-    every { secretConfig.sep24InteractiveUrlJwtSecret } returns "sep24_jwt_secret"
+    secretConfig.setupMock()
 
     val clientConfig =
-      ClientConfig(
-        "lobstr",
-        NONCUSTODIAL,
-        "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO",
-        "lobstr.co",
-        "https://callback.lobstr.co/api/v2/anchor/callback",
-        false,
-        null
-      )
+      ClientConfig.builder()
+        .name("lobstr")
+        .type(NONCUSTODIAL)
+        .signingKeys(setOf("GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO"))
+        .domains(setOf("lobstr.co"))
+        .callbackUrl("https://callback.lobstr.co/api/v2/anchor/callback")
+        .build()
     every { clientsConfig.getClientConfigByDomain(any()) } returns null
-    every { clientsConfig.getClientConfigByDomain(clientConfig.domain) } returns clientConfig
-    every { clientsConfig.getClientConfigBySigningKey(clientConfig.signingKey) } returns
+    every { clientsConfig.getClientConfigByDomain(clientConfig.domains.first()) } returns
+      clientConfig
+    every { clientsConfig.getClientConfigBySigningKey(clientConfig.signingKeys.first()) } returns
       clientConfig
     every {
       clientsConfig.getClientConfigBySigningKey(
         "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       )
     } returns
-      ClientConfig(
-        "some-wallet",
-        CUSTODIAL,
-        "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-        null,
-        null,
-        false,
-        null
-      )
+      ClientConfig.builder()
+        .name("some-wallet")
+        .type(CUSTODIAL)
+        .signingKeys(setOf("GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"))
+        .build()
     every { testAsset.sep38AssetName } returns
       "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     every { sep10Jwt.homeDomain } returns TEST_HOME_DOMAIN
@@ -210,6 +206,7 @@ class SimpleInteractiveUrlConstructorTest {
     assertEquals("deposit", data["kind"] as String)
     assertEquals("100", data["amount"] as String)
     assertEquals("en", data["lang"] as String)
+    assertEquals("123", data["customer_id"] as String)
     assertEquals(
       "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       data["amount_in_asset"] as String
@@ -250,6 +247,7 @@ private const val REQUEST_JSON_1 =
   "last_name": "Doe",
   "email_address": "john_doe@stellar.org",
   "lang": "en",
+  "customer_id": "123",  
   "amount": "100"
 }
 """

@@ -126,8 +126,8 @@ class ConfigManagerTestExt {
       }
     val ex = assertThrows<InvalidConfigException> { configManager.processConfigurations(null) }
     assertEquals(2, ex.messages.size)
-    assertEquals("Invalid configuration: stellar.apollo=star. (version=1)", ex.messages[0])
-    assertEquals("Invalid configuration: horizon.aster=star. (version=1)", ex.messages[1])
+    assertEquals("Invalid configuration: horizon.aster=star. (version=1)", ex.messages[0])
+    assertEquals("Invalid configuration: stellar.apollo=star. (version=1)", ex.messages[1])
   }
 
   @Test

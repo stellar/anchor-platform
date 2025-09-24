@@ -3,7 +3,7 @@ package org.stellar.anchor.sep38;
 import com.google.gson.annotations.SerializedName;
 import java.time.Instant;
 import lombok.Data;
-import org.stellar.anchor.api.sep.sep38.RateFee;
+import org.stellar.anchor.api.shared.FeeDetails;
 
 @Data
 public class PojoSep38Quote implements Sep38Quote {
@@ -30,5 +30,5 @@ public class PojoSep38Quote implements Sep38Quote {
   String creatorMemo;
   String creatorMemoType;
   String transactionId;
-  RateFee fee;
+  FeeDetails fee;
 }

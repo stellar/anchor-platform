@@ -3,6 +3,7 @@ package org.stellar.anchor.platform.config
 import io.mockk.every
 import io.mockk.mockk
 import java.lang.Long.MIN_VALUE
+import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
@@ -18,7 +19,7 @@ import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep24Config.DepositInfoGeneratorType
 import org.stellar.anchor.config.Sep24Config.Features
 import org.stellar.anchor.platform.config.PropertySep24Config.InteractiveUrlConfig
-import org.stellar.anchor.platform.config.PropertySep24Config.MoreInfoUrlConfig
+import org.stellar.anchor.platform.utils.setupMock
 
 class Sep24ConfigTest {
   lateinit var config: PropertySep24Config
@@ -32,8 +33,7 @@ class Sep24ConfigTest {
     secretConfig = mockk()
     custodyConfig = mockk()
     assetService = DefaultAssetService.fromJsonResource("test_assets.json")
-    every { secretConfig.sep24MoreInfoUrlJwtSecret } returns "more_info url jwt secret"
-    every { secretConfig.sep24InteractiveUrlJwtSecret } returns "interactive url jwt secret"
+    secretConfig.setupMock()
     every { custodyConfig.isCustodyIntegrationEnabled } returns false
 
     config = PropertySep24Config(secretConfig, custodyConfig, assetService)
@@ -90,6 +90,22 @@ class Sep24ConfigTest {
     every { secretConfig.sep24InteractiveUrlJwtSecret } returns null
     config.validate(config, errors)
     assertEquals("sep24-interactive-url-jwt-secret-not-defined", errors.allErrors[0].code)
+  }
+
+  @Test
+  fun `validate interactive JWT`() {
+    every { secretConfig.sep24InteractiveUrlJwtSecret }.returns("tooshort")
+    config.validate(config, errors)
+    Assertions.assertTrue(errors.hasErrors())
+    assertErrorCode(errors, "hmac-weak-secret")
+  }
+
+  @Test
+  fun `validate more_info JWT`() {
+    every { secretConfig.sep24MoreInfoUrlJwtSecret }.returns("tooshort")
+    config.validate(config, errors)
+    Assertions.assertTrue(errors.hasErrors())
+    assertErrorCode(errors, "hmac-weak-secret")
   }
 
   @ParameterizedTest

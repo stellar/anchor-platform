@@ -31,15 +31,17 @@ import org.stellar.anchor.api.rpc.method.NotifyTransactionErrorRequest;
 import org.stellar.anchor.api.rpc.method.RpcMethod;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.auth.AuthHelper;
+import org.stellar.anchor.util.AuthHeader;
 import org.stellar.anchor.util.OkHttpUtil;
 
 /** The client for the PlatformAPI endpoints. */
 public class PlatformApiClient extends BaseApiClient {
-
+  private final AuthHelper authHelper;
   public static final String JSON_RPC_VERSION = "2.0";
 
   public PlatformApiClient(AuthHelper authHelper, String endpoint) {
-    super(authHelper, endpoint);
+    super(endpoint);
+    this.authHelper = authHelper;
   }
 
   /**
@@ -225,5 +227,10 @@ public class PlatformApiClient extends BaseApiClient {
     if (val != null) {
       builder.addQueryParameter(name, f.apply(val));
     }
+  }
+
+  @Override
+  AuthHeader<String, String> createAuthHeader() throws InvalidConfigException {
+    return authHelper.createPlatformServerAuthHeader();
   }
 }

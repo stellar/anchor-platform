@@ -5,10 +5,12 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
+import io.ktor.server.http.content.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.routing.*
+import java.io.File
 import mu.KotlinLogging
 
 val log = KotlinLogging.logger {}
@@ -66,4 +68,6 @@ fun stopServer() {
 
 fun Application.configureRouting(cfg: Config) {
   routing { callback(cfg, CallbackService()) }
+  routing { noncustodial(cfg) }
+  routing { staticFiles("/.well-known", File(cfg.toml.path)) }
 }

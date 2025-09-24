@@ -28,6 +28,7 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.time.Instant;
 import java.util.*;
+import org.stellar.anchor.MoreInfoUrlConstructor;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.sep.AssetInfo;
@@ -49,10 +50,7 @@ import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
 import org.stellar.anchor.sep6.ExchangeAmountsCalculator;
-import org.stellar.anchor.util.ConfigHelper;
-import org.stellar.anchor.util.CustodyUtils;
-import org.stellar.anchor.util.MetricConstants;
-import org.stellar.anchor.util.TransactionHelper;
+import org.stellar.anchor.util.*;
 import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.Memo;
 
@@ -86,7 +84,7 @@ public class Sep24Service {
           MetricConstants.TV_SEP24_DEPOSIT);
 
   public static final List<String> INTERACTIVE_URL_JWT_REQUIRED_FIELDS_FROM_REQUEST =
-      List.of("amount", "client_domain", "lang");
+      List.of("amount", "client_domain", "lang", "customer_id");
   public static String ERR_TOKEN_ACCOUNT_MISMATCH = "'account' does not match the one in the token";
 
   public Sep24Service(
@@ -194,9 +192,6 @@ public class Sep24Service {
     if (token.getClientDomain() != null)
       withdrawRequest.put("client_domain", token.getClientDomain());
 
-    // TODO - jamie - should we be allowing user to specify memo? transaction are looked up
-    // by PaymentObserver
-    // by account+memo, could be collisions
     Memo memo = makeMemo(withdrawRequest.get("memo"), withdrawRequest.get("memo_type"));
     Memo refundMemo =
         makeMemo(withdrawRequest.get("refund_memo"), withdrawRequest.get("refund_memo_type"));
@@ -209,6 +204,10 @@ public class Sep24Service {
             .assetCode(assetCode)
             .assetIssuer(asset.getIssuer())
             .startedAt(Instant.now())
+            .userActionRequiredBy(
+                sep24Config.getInitialUserDeadlineSeconds() == null
+                    ? null
+                    : Instant.now().plusSeconds(sep24Config.getInitialUserDeadlineSeconds()))
             .sep10Account(token.getAccount())
             .sep10AccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
@@ -220,7 +219,6 @@ public class Sep24Service {
       builder.withdrawAnchorAccount(asset.getDistributionAccount());
     }
 
-    // TODO - jamie to look into memo vs withdrawal_memo
     if (memo != null) {
       debug("transaction memo detected.", memo);
 
@@ -252,10 +250,16 @@ public class Sep24Service {
     }
 
     String quoteId = withdrawRequest.get("quote_id");
+    AssetInfo buyAsset = assetService.getAssetByName(withdrawRequest.get("destination_asset"));
     if (quoteId != null) {
-      AssetInfo buyAsset = assetService.getAssetByName(withdrawRequest.get("destination_asset"));
-      this.validatedAndPopulateQuote(
+      validateAndPopulateQuote(
           quoteId, asset, buyAsset, strAmount, builder, WITHDRAWAL.toString(), txnId);
+    } else {
+      builder.amountExpected(strAmount);
+      if (buyAsset != null) {
+        builder.amountOut("0");
+        builder.amountOutAsset(buyAsset.getSep38AssetName());
+      }
     }
 
     Sep24Transaction txn = builder.build();
@@ -397,6 +401,10 @@ public class Sep24Service {
             .assetCode(assetCode)
             .assetIssuer(depositRequest.get("asset_issuer"))
             .startedAt(Instant.now())
+            .userActionRequiredBy(
+                sep24Config.getInitialUserDeadlineSeconds() == null
+                    ? null
+                    : Instant.now().plusSeconds(sep24Config.getInitialUserDeadlineSeconds()))
             .sep10Account(token.getAccount())
             .sep10AccountMemo(token.getAccountMemo())
             .toAccount(destinationAccount)
@@ -420,10 +428,16 @@ public class Sep24Service {
     }
 
     String quoteId = depositRequest.get("quote_id");
+    AssetInfo sellAsset = assetService.getAssetByName(depositRequest.get("source_asset"));
     if (quoteId != null) {
-      AssetInfo sellAsset = assetService.getAssetByName(depositRequest.get("source_asset"));
-      this.validatedAndPopulateQuote(
+      validateAndPopulateQuote(
           quoteId, sellAsset, asset, strAmount, builder, DEPOSIT.toString(), txnId);
+    } else {
+      builder.amountExpected(strAmount);
+      if (sellAsset != null) {
+        builder.amountIn("0");
+        builder.amountInAsset(sellAsset.getSep38AssetName());
+      }
     }
 
     Sep24Transaction txn = builder.build();
@@ -487,7 +501,9 @@ public class Sep24Service {
     List<TransactionResponse> list = new ArrayList<>();
     debugF("found {} transactions", txns.size());
     for (Sep24Transaction txn : txns) {
-      TransactionResponse transactionResponse = fromTxn(assetService, moreInfoUrlConstructor, txn);
+      String lang = validateLanguage(appConfig, txReq.getLang());
+      TransactionResponse transactionResponse =
+          fromTxn(assetService, moreInfoUrlConstructor, txn, lang);
       list.add(transactionResponse);
     }
     result.setTransactions(list);
@@ -543,7 +559,8 @@ public class Sep24Service {
     }
     // increment counter
     sep24TransactionQueriedCounter.increment();
-    return Sep24GetTransactionResponse.of(fromTxn(assetService, moreInfoUrlConstructor, txn));
+    String lang = validateLanguage(appConfig, txReq.getLang());
+    return Sep24GetTransactionResponse.of(fromTxn(assetService, moreInfoUrlConstructor, txn, lang));
   }
 
   public InfoResponse getInfo() {
@@ -554,13 +571,17 @@ public class Sep24Service {
     Map<String, InfoResponse.OperationResponse> depositMap = new HashMap<>();
     Map<String, InfoResponse.OperationResponse> withdrawMap = new HashMap<>();
     for (AssetInfo asset : assets) {
-      if (asset.getDeposit().getEnabled())
-        depositMap.put(
-            asset.getCode(), InfoResponse.OperationResponse.fromAssetOperation(asset.getDeposit()));
-      if (asset.getWithdraw().getEnabled())
-        withdrawMap.put(
-            asset.getCode(),
-            InfoResponse.OperationResponse.fromAssetOperation(asset.getWithdraw()));
+      // iso4217 assets do not have deposit/withdraw configurations
+      if (asset.getSchema().equals(AssetInfo.Schema.stellar)) {
+        if (asset.getDeposit().getEnabled())
+          depositMap.put(
+              asset.getCode(),
+              InfoResponse.OperationResponse.fromAssetOperation(asset.getDeposit()));
+        if (asset.getWithdraw().getEnabled())
+          withdrawMap.put(
+              asset.getCode(),
+              InfoResponse.OperationResponse.fromAssetOperation(asset.getWithdraw()));
+      }
     }
 
     return InfoResponse.builder()
@@ -574,7 +595,7 @@ public class Sep24Service {
         .build();
   }
 
-  public void validatedAndPopulateQuote(
+  public void validateAndPopulateQuote(
       String quoteId,
       AssetInfo sellAsset,
       AssetInfo buyAsset,
@@ -594,13 +615,6 @@ public class Sep24Service {
     builder.amountInAsset(quote.getSellAsset());
     builder.amountOut(quote.getBuyAmount());
     builder.amountOutAsset(quote.getBuyAsset());
-    builder.amountFee(quote.getFee().getTotal());
-    builder.amountFeeAsset(quote.getFee().getAsset());
-
-    if (kind.equals(DEPOSIT.toString())) {
-      builder.sourceAsset(quote.getSellAsset());
-    } else {
-      builder.destinationAsset(quote.getBuyAsset());
-    }
+    builder.feeDetails(quote.getFee());
   }
 }

@@ -5,6 +5,7 @@ import static org.stellar.anchor.util.StringHelper.*;
 import java.util.List;
 import java.util.Map;
 import org.apache.commons.beanutils.BeanUtils;
+import org.stellar.anchor.SepTransaction;
 import org.stellar.anchor.sep24.Sep24Transaction;
 import org.stellar.anchor.util.StringHelper;
 
@@ -14,11 +15,11 @@ public class UrlConstructorHelper {
    * extracted from txn and added to the data.
    *
    * @param data the data map
-   * @param txn the transaction
+   * @param txn the SEP6 or SEP24 transaction
    * @param extractingFields the fields to extract from txn
    */
   public static void addTxnFields(
-      Map<String, String> data, Sep24Transaction txn, List<String> extractingFields) {
+      Map<String, String> data, SepTransaction txn, List<String> extractingFields) {
     for (String field : extractingFields) {
       try {
         field = camelToSnake(field);
@@ -36,5 +37,9 @@ public class UrlConstructorHelper {
     return isEmpty(txn.getSep10AccountMemo())
         ? txn.getSep10Account()
         : txn.getSep10Account() + ":" + txn.getSep10AccountMemo();
+  }
+
+  public static String getAccount(String sep10Account, String sep10AccountMemo) {
+    return isEmpty(sep10AccountMemo) ? sep10Account : sep10Account + ":" + sep10AccountMemo;
   }
 }

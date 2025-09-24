@@ -1,6 +1,7 @@
 package org.stellar.anchor.sep24;
 
 import java.time.Instant;
+import org.stellar.anchor.api.shared.FeeDetails;
 
 @SuppressWarnings("unused")
 public class Sep24TransactionBuilder {
@@ -37,6 +38,11 @@ public class Sep24TransactionBuilder {
 
   public Sep24TransactionBuilder startedAt(Instant time) {
     txn.setStartedAt(time);
+    return this;
+  }
+
+  public Sep24TransactionBuilder userActionRequiredBy(Instant time) {
+    txn.setUserActionRequiredBy(time);
     return this;
   }
 
@@ -105,11 +111,6 @@ public class Sep24TransactionBuilder {
     return this;
   }
 
-  public Sep24TransactionBuilder amountFee(String amountFee) {
-    txn.setAmountFee(amountFee);
-    return this;
-  }
-
   public Sep24TransactionBuilder amountInAsset(String amountInAsset) {
     txn.setAmountInAsset(amountInAsset);
     return this;
@@ -120,8 +121,8 @@ public class Sep24TransactionBuilder {
     return this;
   }
 
-  public Sep24TransactionBuilder amountFeeAsset(String amountFeeAsset) {
-    txn.setAmountFeeAsset(amountFeeAsset);
+  public Sep24TransactionBuilder feeDetails(FeeDetails feeDetails) {
+    txn.setFeeDetails(feeDetails);
     return this;
   }
 
@@ -142,14 +143,6 @@ public class Sep24TransactionBuilder {
 
   public void quoteId(String quoteId) {
     txn.setQuoteId(quoteId);
-  }
-
-  public void sourceAsset(String sourceAsset) {
-    txn.setSourceAsset(sourceAsset);
-  }
-
-  public void destinationAsset(String destinationAsset) {
-    txn.setDestinationAsset(destinationAsset);
   }
 
   public Sep24Transaction build() {

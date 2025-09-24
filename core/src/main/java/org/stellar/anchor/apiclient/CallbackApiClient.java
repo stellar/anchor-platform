@@ -1,5 +1,7 @@
 package org.stellar.anchor.apiclient;
 
+import static org.stellar.anchor.util.StringHelper.isEmpty;
+
 import com.google.gson.Gson;
 import java.io.IOException;
 import okhttp3.HttpUrl;
@@ -11,6 +13,7 @@ import org.stellar.anchor.api.callback.SendEventResponse;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.auth.AuthHelper;
+import org.stellar.anchor.util.AuthHeader;
 import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.OkHttpUtil;
 
@@ -18,6 +21,7 @@ import org.stellar.anchor.util.OkHttpUtil;
 public class CallbackApiClient extends BaseApiClient {
   static final Gson gson = GsonUtils.getInstance();
   final HttpUrl url;
+  private final AuthHelper authHelper;
 
   /**
    * Creates a new CallbackApiClient.
@@ -27,7 +31,8 @@ public class CallbackApiClient extends BaseApiClient {
    * @throws InvalidConfigException if the endpoint is invalid.
    */
   public CallbackApiClient(AuthHelper authHelper, String endpoint) throws InvalidConfigException {
-    super(authHelper, endpoint);
+    super(endpoint);
+    this.authHelper = authHelper;
     HttpUrl endpointUrl = HttpUrl.parse(endpoint);
     if (endpointUrl == null)
       throw new InvalidConfigException(
@@ -53,10 +58,14 @@ public class CallbackApiClient extends BaseApiClient {
       throws AnchorException, IOException {
     RequestBody requestBody = OkHttpUtil.buildJsonRequestBody(gson.toJson(sendEventRequest));
     Request request = getRequestBuilder().url(url).post(requestBody).build();
-    Response response = client.newCall(request).execute();
-    SendEventResponse sendEventResponse =
-        gson.fromJson(handleResponse(response), SendEventResponse.class);
-    sendEventResponse.setCode(response.code());
-    return sendEventResponse;
+    Response response = getClient().newCall(request).execute();
+    String responseText = handleResponse(response);
+
+    return new SendEventResponse(response.code(), isEmpty(responseText) ? "" : responseText);
+  }
+
+  @Override
+  AuthHeader<String, String> createAuthHeader() throws InvalidConfigException {
+    return authHelper.createCallbackAuthHeader();
   }
 }

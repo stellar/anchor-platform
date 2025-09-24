@@ -30,7 +30,6 @@ fun Route.rate(rateService: RateService) {
           .countryCode(call.parameters["country_code"])
           .expireAfter(call.parameters["expire_after"])
           .clientId(call.parameters["client_id"])
-          .id(call.parameters["id"])
           .build()
       val response = GsonUtils.getInstance().toJson(rateService.getRate(request))
       call.respond(response)

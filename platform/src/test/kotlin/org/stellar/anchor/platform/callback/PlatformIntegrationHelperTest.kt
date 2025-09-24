@@ -7,8 +7,8 @@ import okhttp3.Request
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
-import org.stellar.anchor.LockAndMockStatic
 import org.stellar.anchor.LockAndMockTest
+import org.stellar.anchor.LockStatic
 import org.stellar.anchor.auth.*
 import org.stellar.anchor.auth.ApiAuthJwt.PlatformAuthJwt
 import org.stellar.anchor.auth.AuthType.*
@@ -23,26 +23,32 @@ class PlatformIntegrationHelperTest {
 
   @ParameterizedTest
   @EnumSource(AuthType::class)
-  @LockAndMockStatic([Calendar::class])
+  @LockStatic([Calendar::class])
   fun test_getRequestBuilder(authType: AuthType) {
     when (authType) {
       JWT -> {
-        // Mock calendar to guarantee the jwt token format
-        val calendarSingleton = Calendar.getInstance()
+        val calendarSingleton = mockk<Calendar>()
+        every { calendarSingleton.timeInMillis } returns System.currentTimeMillis()
         val currentTimeMilliseconds = calendarSingleton.timeInMillis
-        mockkObject(calendarSingleton)
         every { calendarSingleton.timeInMillis } returns currentTimeMilliseconds
         every { calendarSingleton.timeInMillis = any() } answers { callOriginal() }
+        // Mock calendar to guarantee the jwt token format
+        mockkStatic(Calendar::class)
         every { Calendar.getInstance() } returns calendarSingleton
 
         // mock jwt token based on the mocked calendar
         val wantJwtToken =
           PlatformAuthJwt(
             currentTimeMilliseconds / 1000L,
-            (currentTimeMilliseconds + JWT_EXPIRATION_MILLISECONDS) / 1000L
+            (currentTimeMilliseconds + JWT_EXPIRATION_MILLISECONDS) / 1000L,
           )
 
-        val jwtService = JwtService(null, null, null, "secret", "secret", "secret")
+        val jwtService =
+          JwtService.builder()
+            .callbackAuthSecret("secret__________________________________")
+            .platformAuthSecret("secret__________________________________")
+            .custodyAuthSecret("secret__________________________________")
+            .build()
         val authHelper = AuthHelper.forJwtToken(jwtService, JWT_EXPIRATION_MILLISECONDS)
 
         val gotRequestBuilder = PlatformIntegrationHelper.getRequestBuilder(authHelper)

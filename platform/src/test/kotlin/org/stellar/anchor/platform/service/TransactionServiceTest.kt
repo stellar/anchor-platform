@@ -22,10 +22,7 @@ import org.stellar.anchor.api.platform.PatchTransactionRequest
 import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.api.platform.PlatformTransactionData
 import org.stellar.anchor.api.sep.SepTransactionStatus
-import org.stellar.anchor.api.sep.sep38.RateFee
-import org.stellar.anchor.api.shared.Amount
-import org.stellar.anchor.api.shared.RefundPayment
-import org.stellar.anchor.api.shared.Refunds
+import org.stellar.anchor.api.shared.*
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.config.CustodyConfig
@@ -34,6 +31,7 @@ import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
 import org.stellar.anchor.event.EventService.Session
 import org.stellar.anchor.platform.data.*
+import org.stellar.anchor.platform.utils.toRate
 import org.stellar.anchor.sep24.Sep24DepositInfoGenerator
 import org.stellar.anchor.sep24.Sep24Transaction
 import org.stellar.anchor.sep24.Sep24TransactionStore
@@ -635,7 +633,7 @@ class TransactionServiceTest {
     testSep38Quote.sellAsset = fiatUSD
     testSep38Quote.buyAmount = "98"
     testSep38Quote.buyAsset = stellarUSDC
-    testSep38Quote.fee = RateFee("2", fiatUSD)
+    testSep38Quote.fee = FeeDetails("2", fiatUSD)
 
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns testSep38Quote
 
@@ -1123,5 +1121,27 @@ class TransactionServiceTest {
       }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("Transaction is missing.", ex.message)
+  }
+
+  @Test
+  fun `validateAndGetRateFee test`() {
+    val data = PlatformTransactionData()
+    data.amountFee = Amount("10", "USDC")
+
+    assertEquals(Amount("10", "USDC").toRate(), transactionService.validateAndGetRateFee(data))
+
+    data.feeDetails = FeeDetails("10", "USDC", listOf(FeeDescription("test", "10")))
+    assertEquals(
+      FeeDetails("10", "USDC", listOf(FeeDescription("test", "10"))),
+      transactionService.validateAndGetRateFee(data)
+    )
+
+    data.feeDetails = Amount("9", "USDC").toRate()
+    var ex = assertThrows<BadRequestException> { transactionService.validateAndGetRateFee(data) }
+    assertEquals("amount_fee's amount doesn't match amount from fee_details", ex.message)
+
+    data.feeDetails = Amount("10", "NOTUSDC").toRate()
+    ex = assertThrows<BadRequestException> { transactionService.validateAndGetRateFee(data) }
+    assertEquals("amount_fee's asset doesn't match asset from fee_details", ex.message)
   }
 }

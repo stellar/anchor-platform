@@ -10,6 +10,8 @@ import org.springframework.validation.Validator;
 import org.stellar.anchor.auth.AuthConfig;
 import org.stellar.anchor.auth.AuthHelper;
 import org.stellar.anchor.auth.AuthType;
+import org.stellar.anchor.auth.JwtService;
+import org.stellar.anchor.util.KeyUtil;
 import org.stellar.anchor.util.NetUtil;
 
 @Data
@@ -28,7 +30,7 @@ public class CallbackApiConfig implements Validator {
   }
 
   public void setAuth(AuthConfig auth) {
-    auth.setSecret(secretConfig.getCallbackAuthSecret());
+    auth.setSecretString(secretConfig.getCallbackAuthSecret());
     this.auth = auth;
   }
 
@@ -67,6 +69,9 @@ public class CallbackApiConfig implements Validator {
       }
 
       if (AuthType.JWT == auth.getType()) {
+        KeyUtil.rejectWeakJWTSecret(
+            secretConfig.getCallbackAuthSecret(), errors, "secret.callback_api.auth_secret");
+
         if (Long.parseLong(auth.getJwt().getExpirationMilliseconds()) < MIN_EXPIRATION) {
           errors.rejectValue(
               "auth",
@@ -78,6 +83,17 @@ public class CallbackApiConfig implements Validator {
   }
 
   public AuthHelper buildAuthHelper() {
-    return AuthHelper.from(getAuth().getType(), getAuth().getSecret(), 60000);
+    String secret = getAuth().getSecretString();
+    switch (getAuth().getType()) {
+      case JWT:
+        return AuthHelper.forJwtToken(
+            getAuth().getJwt().getHttpHeader(),
+            JwtService.builder().callbackAuthSecret(secret).build(),
+            Long.parseLong(getAuth().getJwt().getExpirationMilliseconds()));
+      case API_KEY:
+        return AuthHelper.forApiKey(getAuth().getApiKey().getHttpHeader(), secret);
+      default:
+        return AuthHelper.forNone();
+    }
   }
 }

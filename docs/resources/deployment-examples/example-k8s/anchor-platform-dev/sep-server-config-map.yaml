@@ -37,8 +37,8 @@ data:
       # integration Auth between Anchor and Platform
       integration-auth:
         authType: JWT_TOKEN
-        platformToAnchorSecret: myPlatformToAnchorSecret
-        anchorToPlatformSecret: myAnchorToPlatformSecret
+        platformToAnchorSecret: myPlatformToAnchorSecret1234567890
+        anchorToPlatformSecret: myAnchorToPlatformSecret1234567890
         expirationMilliseconds: 30000
     
       # sep-1

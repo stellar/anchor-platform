@@ -17,6 +17,7 @@ public class SecretManager
     implements ApplicationContextInitializer<ConfigurableApplicationContext> {
   final List<String> secretVars =
       Arrays.asList(
+          PropertySecretConfig.SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET,
           PropertySecretConfig.SECRET_SEP_10_JWT_SECRET,
           PropertySecretConfig.SECRET_SEP_10_SIGNING_SEED,
           PropertySecretConfig.SECRET_SEP_24_INTERACTIVE_URL_JWT_SECRET,
@@ -26,8 +27,13 @@ public class SecretManager
           PropertyCustodySecretConfig.SECRET_CUSTODY_SERVER_AUTH_SECRET,
           PropertySecretConfig.SECRET_DATA_USERNAME,
           PropertySecretConfig.SECRET_DATA_PASSWORD,
+          PropertySecretConfig.SECRET_EVENTS_QUEUE_KAFKA_USERNAME,
+          PropertySecretConfig.SECRET_EVENTS_QUEUE_KAFKA_PASSWORD,
           PropertyCustodySecretConfig.SECRET_FIREBLOCKS_SECRET_KEY,
-          PropertyCustodySecretConfig.SECRET_FIREBLOCKS_API_KEY);
+          PropertyCustodySecretConfig.SECRET_FIREBLOCKS_API_KEY,
+          PropertySecretConfig.SECRET_SSL_KEYSTORE_PASSWORD,
+          PropertySecretConfig.SECRET_SSL_KEY_PASSWORD,
+          PropertySecretConfig.SECRET_SSL_TRUSTSTORE_PASSWORD);
 
   final Properties props = new Properties();
 
@@ -37,6 +43,10 @@ public class SecretManager
 
   public static SecretManager getInstance() {
     return secretManager;
+  }
+
+  public static String secret(String key) {
+    return getInstance().get(key);
   }
 
   @Override

@@ -15,6 +15,7 @@ import org.stellar.anchor.api.callback.CustomerIntegration;
 import org.stellar.anchor.api.callback.FeeIntegration;
 import org.stellar.anchor.api.callback.RateIntegration;
 import org.stellar.anchor.api.callback.UniqueAddressIntegration;
+import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.AuthHelper;
 import org.stellar.anchor.platform.callback.RestCustomerIntegration;
 import org.stellar.anchor.platform.callback.RestFeeIntegration;
@@ -79,9 +80,16 @@ public class ApiClientBeans {
 
   @Bean
   RateIntegration rateIntegration(
-      CallbackApiConfig callbackApiConfig, OkHttpClient httpClient, Gson gson) {
+      CallbackApiConfig callbackApiConfig,
+      OkHttpClient httpClient,
+      Gson gson,
+      AssetService assetService) {
     return new RestRateIntegration(
-        callbackApiConfig.getBaseUrl(), httpClient, callbackApiConfig.buildAuthHelper(), gson);
+        callbackApiConfig.getBaseUrl(),
+        httpClient,
+        callbackApiConfig.buildAuthHelper(),
+        gson,
+        assetService);
   }
 
   @Bean

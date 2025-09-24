@@ -19,9 +19,11 @@ public abstract class AbstractJwtFilter implements Filter {
   static final String APPLICATION_JSON_VALUE = "application/json";
   static final Gson gson = GsonUtils.builder().setPrettyPrinting().create();
   protected final JwtService jwtService;
+  protected final String authorizationHeader;
 
-  public AbstractJwtFilter(JwtService jwtService) {
+  public AbstractJwtFilter(JwtService jwtService, String authorizationHeader) {
     this.jwtService = jwtService;
+    this.authorizationHeader = authorizationHeader;
   }
 
   @Override
@@ -52,7 +54,7 @@ public abstract class AbstractJwtFilter implements Filter {
       return;
     }
 
-    String authorization = request.getHeader("Authorization");
+    String authorization = request.getHeader(authorizationHeader);
     if (authorization == null) {
       sendForbiddenError(response);
       return;

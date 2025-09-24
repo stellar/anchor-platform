@@ -61,9 +61,9 @@ tasks.register<JavaExec>("startServersWithTestProfile") {
   mainClass.set("org.stellar.anchor.platform.run_profiles.RunTestProfile")
 }
 
-/** Run docker-compose up to start Postgres, Kafka, etc. */
+/** Run docker compose up to start Postgres, Kafka, etc. */
 tasks.register<JavaExec>("dockerComposeStart") {
-  println("Running docker-compose to start Postgres, Kafka ,etc.")
+  println("Running docker compose to start Postgres, Kafka ,etc.")
   group = "application"
   classpath = sourceSets["main"].runtimeClasspath
   mainClass.set("org.stellar.anchor.platform.run_profiles.RunDockerDevStackNoWait")
@@ -97,7 +97,7 @@ val dockerPullAnchorTest by
     tasks.register<DockerPullImage>("pullDockerImage") {
       println("Pulling the docker image.")
       group = "docker"
-      image.set("stellar/anchor-tests:v0.6.10")
+      image.set("stellar/anchor-tests:latest")
     }
 
 val dockerCreateAnchorTest by

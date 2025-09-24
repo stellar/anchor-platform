@@ -2,16 +2,13 @@ package org.stellar.anchor.api.event;
 
 import com.google.gson.annotations.SerializedName;
 import lombok.*;
-import org.stellar.anchor.api.platform.CustomerUpdatedResponse;
 import org.stellar.anchor.api.platform.GetQuoteResponse;
 import org.stellar.anchor.api.platform.GetTransactionResponse;
+import org.stellar.anchor.api.sep.sep12.Sep12GetCustomerResponse;
 
 /**
- * The Event object is used for event notification.
- *
- * @see <a
- *     href="https://github.com/stellar/stellar-docs/blob/main/openapi/anchor-platform/Events%20Schema.yml">Events
- *     Schema</a>
+ * The internal event object is used for event notification. They should be mapped to the
+ * appropriate schemas for the API and status callback use cases.
  */
 @Builder
 @Data
@@ -23,7 +20,7 @@ public class AnchorEvent {
   String sep;
   GetTransactionResponse transaction;
   GetQuoteResponse quote;
-  CustomerUpdatedResponse customer;
+  Sep12GetCustomerResponse customer;
 
   public enum Type {
     @SerializedName("transaction_created")

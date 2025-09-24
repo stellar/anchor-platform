@@ -19,6 +19,7 @@ internal class DefaultAssetServiceTest {
   private val gson: Gson = GsonUtils.getInstance()
 
   @BeforeEach fun setup() {}
+
   @ParameterizedTest
   @ValueSource(strings = ["test_assets.json", "test_assets.yaml"])
   fun `test assets loading and listing`(filename: String) {
@@ -86,6 +87,12 @@ internal class DefaultAssetServiceTest {
     assertThrows<InvalidConfigException> {
       DefaultAssetService.fromYamlResource("test_assets_duplicate_deposit_type.yaml")
     }
+  }
+
+  @Test
+  fun `test trailing comma in JSON does not result in null element`() {
+    val assetsService = DefaultAssetService.fromJson(trailingCommaInAssets)
+    assert(assetsService.assets.assets.all { it != null })
   }
 
   // This is supposed to match the result from loading test_assets.json file.
@@ -387,3 +394,17 @@ internal class DefaultAssetServiceTest {
     """
       .trimIndent()
 }
+
+val trailingCommaInAssets =
+  """
+  {
+    "assets": [
+      {
+        "schema": "stellar",
+        "code": "native",
+        "significant_decimals": 7
+      },
+    ]
+  }
+"""
+    .trimIndent()

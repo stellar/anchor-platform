@@ -12,6 +12,16 @@ public interface Sep24RefundPayment {
   String getId();
 
   void setId(String id);
+
+  /**
+   * "stellar" or "external".
+   *
+   * @return the idType field.
+   */
+  String getIdType();
+
+  void setIdType(String idType);
+
   /**
    * The amount sent back to the user for the payment identified by id, in units of amount_in_asset.
    *
@@ -38,6 +48,7 @@ public interface Sep24RefundPayment {
 
     Sep24RefundPayment refundPayment = factory.newRefundPayment();
     refundPayment.setId(platformApiRefundPayment.getId());
+    refundPayment.setIdType(platformApiRefundPayment.getIdType().toString());
     refundPayment.setAmount(platformApiRefundPayment.getAmount().getAmount());
     refundPayment.setFee(platformApiRefundPayment.getFee().getAmount());
 

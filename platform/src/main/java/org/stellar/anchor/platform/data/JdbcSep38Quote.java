@@ -4,7 +4,7 @@ import com.google.gson.annotations.SerializedName;
 import java.time.Instant;
 import javax.persistence.*;
 import lombok.Data;
-import org.stellar.anchor.api.sep.sep38.RateFee;
+import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.sep38.Sep38Quote;
 
 @Data
@@ -69,5 +69,5 @@ public class JdbcSep38Quote implements Sep38Quote {
 
   @Convert(converter = RateFeeConverter.class)
   @Column(length = 1023)
-  RateFee fee;
+  FeeDetails fee;
 }

@@ -1,15 +1,11 @@
 package org.stellar.anchor.platform.integrationtest
 
 import com.google.gson.Gson
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
-import java.util.*
+import io.mockk.every
+import io.mockk.mockk
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import org.junit.jupiter.api.*
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
 import org.skyscreamer.jsonassert.JSONAssert
@@ -17,7 +13,9 @@ import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.callback.GetFeeRequest
 import org.stellar.anchor.api.callback.GetRateRequest
 import org.stellar.anchor.api.exception.NotFoundException
+import org.stellar.anchor.api.sep.AssetInfo
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
+import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.client.Sep12Client
@@ -53,25 +51,55 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
 
   private val platformToAnchorJwtService =
     JwtService(
+      config.env["secret.sep6.more_info_url.jwt_secret"],
       config.env["secret.sep10.jwt_secret"]!!,
       config.env["secret.sep24.interactive_url.jwt_secret"]!!,
       config.env["secret.sep24.more_info_url.jwt_secret"]!!,
       config.env["secret.callback_api.auth_secret"]!!,
       config.env["secret.platform_api.auth_secret"]!!,
-      null
+      null,
     )
 
   private val authHelper =
-    AuthHelper.forJwtToken(platformToAnchorJwtService, JWT_EXPIRATION_MILLISECONDS)
+    AuthHelper.forJwtToken("Authorization", platformToAnchorJwtService, JWT_EXPIRATION_MILLISECONDS)
 
   private val gson: Gson = GsonUtils.getInstance()
+  private val mockAssetService = mockk<AssetService>()
 
   private val rci =
     RestCustomerIntegration(config.env["reference.server.url"]!!, httpClient, authHelper, gson)
   private val rriClient =
-    RestRateIntegration(config.env["reference.server.url"]!!, httpClient, authHelper, gson)
+    RestRateIntegration(
+      config.env["reference.server.url"]!!,
+      httpClient,
+      authHelper,
+      gson,
+      mockAssetService,
+    )
   private val rfiClient =
     RestFeeIntegration(config.env["reference.server.url"]!!, httpClient, authHelper, gson)
+
+  @BeforeAll
+  fun setup() {
+    val usdc = AssetInfo()
+    usdc.schema = AssetInfo.Schema.stellar
+    usdc.code = "USDC"
+    usdc.issuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    usdc.significantDecimals = 4
+
+    val usd = AssetInfo()
+    usd.schema = AssetInfo.Schema.iso4217
+    usd.code = "USD"
+    usd.significantDecimals = 2
+
+    every {
+      mockAssetService.getAssetByName(
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      )
+    } returns usdc
+    every { mockAssetService.getAssetByName("iso4217:USD") } returns usd
+    every { mockAssetService.getAssetByName(null) } returns null
+  }
 
   @Test
   fun testCustomerIntegration() {
@@ -116,69 +144,6 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
   }
 
   @Test
-  fun testRate_firm() {
-    val rate =
-      rriClient
-        .getRate(
-          GetRateRequest.builder()
-            .type(GetRateRequest.Type.FIRM)
-            .sellAsset(FIAT_USD)
-            .buyAsset(STELLAR_USD)
-            .buyAmount("100")
-            .build()
-        )
-        .rate
-    Assertions.assertNotNull(rate)
-
-    // check if id is a valid UUID
-    val id = rate.id
-    Assertions.assertDoesNotThrow { UUID.fromString(id) }
-    var gotExpiresAt: Instant? = null
-    val expiresAtStr = rate.expiresAt!!.toString()
-    Assertions.assertDoesNotThrow {
-      gotExpiresAt = DateTimeFormatter.ISO_INSTANT.parse(rate.expiresAt!!.toString(), Instant::from)
-    }
-
-    val wantExpiresAt =
-      ZonedDateTime.now(ZoneId.of("UTC"))
-        .plusDays(1)
-        .withHour(12)
-        .withMinute(0)
-        .withSecond(0)
-        .withNano(0)
-    assertEquals(wantExpiresAt.toInstant(), gotExpiresAt)
-
-    // check if rate was persisted by getting the rate with ID
-    val gotQuote = rriClient.getRate(GetRateRequest.builder().id(rate.id).build())
-    assertEquals(rate.id, gotQuote.rate.id)
-    assertEquals("1.02", gotQuote.rate.price)
-
-    val wantBody =
-      """{
-      "rate":{
-        "id": "$id",
-        "price":"1.02",
-        "sell_amount": "103",
-        "buy_amount": "100",
-        "expires_at": "$expiresAtStr",
-        "fee": {
-          "total": "1.00",
-          "asset": "$FIAT_USD",
-          "details": [
-            {
-              "name": "Sell fee",
-              "description": "Fee related to selling the asset.",
-              "amount": "1.00"
-            }
-          ]
-        }
-      }
-    }"""
-        .trimMargin()
-    JSONAssert.assertEquals(wantBody, org.stellar.anchor.platform.gson.toJson(gotQuote), true)
-  }
-
-  @Test
   fun testGetFee() {
     // Create sender customer
     val senderCustomerRequest =
@@ -211,7 +176,7 @@ class CallbackApiTests : AbstractIntegrationTests(TestConfig()) {
             "amount": "0.30"
           }
         }""",
-      true
+      true,
     )
   }
 }

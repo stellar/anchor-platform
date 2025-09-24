@@ -9,6 +9,7 @@ import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MathHelper.formatAmount;
 import static org.stellar.anchor.util.MetricConstants.SEP38_PRICE_QUERIED;
 import static org.stellar.anchor.util.MetricConstants.SEP38_QUOTE_CREATED;
+import static org.stellar.anchor.util.NumberHelper.DEFAULT_ROUNDING_MODE;
 import static org.stellar.anchor.util.SepHelper.validateAmount;
 import static org.stellar.anchor.util.SepHelper.validateAmountLimit;
 import static org.stellar.anchor.util.StringHelper.isNotEmpty;
@@ -16,7 +17,6 @@ import static org.stellar.anchor.util.StringHelper.isNotEmpty;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.*;
 import org.apache.commons.lang3.StringUtils;
@@ -29,6 +29,7 @@ import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.api.platform.GetQuoteResponse;
 import org.stellar.anchor.api.sep.AssetInfo;
 import org.stellar.anchor.api.sep.sep38.*;
+import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.Sep10Jwt;
@@ -201,17 +202,19 @@ public class Sep38Service {
     }
 
     // Check SEP31 send limits
-    if (sellAsset == null) {
-      throw new BadRequestException("Unsupported sell asset.");
-    }
-    String[] assetCode = sellAsset.getAsset().split(":");
-    AssetInfo asset = assetService.getAsset(assetCode[1]);
-    Long sendMinLimit = asset.getSend().getMinAmount();
-    Long sendMaxLimit = asset.getSend().getMaxAmount();
+    if (context == SEP31) {
+      if (sellAsset == null) {
+        throw new BadRequestException("Unsupported sell asset.");
+      }
+      String[] assetCode = sellAsset.getAsset().split(":");
+      AssetInfo asset = assetService.getAsset(assetCode[1]);
+      Long sendMinLimit = asset.getSend().getMinAmount();
+      Long sendMaxLimit = asset.getSend().getMaxAmount();
 
-    // SEP31: when sell_amount is specified
-    if (context == SEP31 && sellAmount != null) {
-      validateAmountLimit("sell_", sellAmount, sendMinLimit, sendMaxLimit);
+      // When sell_amount is specified
+      if (sellAmount != null) {
+        validateAmountLimit("sell_", sellAmount, sendMinLimit, sendMaxLimit);
+      }
     }
 
     GetRateRequest.GetRateRequestBuilder rrBuilder =
@@ -235,8 +238,13 @@ public class Sep38Service {
     GetRateResponse rateResponse = this.rateIntegration.getRate(request);
     GetRateResponse.Rate rate = rateResponse.getRate();
 
-    // SEP31: when buy_amount is specified (sell amount found from rate integration)
-    if (context == SEP31 && buyAmount != null) {
+    // Check SEP31 sell_amount from rate integration when buy_amount is specified
+    if (context == SEP31 && isNotEmpty(buyAmount)) {
+      String[] assetCode = sellAsset.getAsset().split(":");
+      AssetInfo asset = assetService.getAsset(assetCode[1]);
+      Long sendMinLimit = asset.getSend().getMinAmount();
+      Long sendMaxLimit = asset.getSend().getMaxAmount();
+
       validateAmountLimit("sell_", rate.getSellAmount(), sendMinLimit, sendMaxLimit);
     }
 
@@ -245,10 +253,15 @@ public class Sep38Service {
             decimal(rate.getSellAmount(), pricePrecision),
             decimal(rate.getBuyAmount(), pricePrecision));
 
+    FeeDetails feeDetails =
+        (rate.getFee() != null)
+            ? rate.getFee()
+            : new FeeDetails("0", sellAssetName, new ArrayList<>());
+
     return GetPriceResponse.builder()
         .price(rate.getPrice())
         .totalPrice(totalPrice)
-        .fee(rate.getFee())
+        .fee(feeDetails)
         .sellAmount(rate.getSellAmount())
         .buyAmount(rate.getBuyAmount())
         .build();
@@ -341,17 +354,19 @@ public class Sep38Service {
     }
 
     // Check SEP31 send limits
-    if (sellAsset == null) {
-      throw new BadRequestException("Unsupported sell asset.");
-    }
-    String[] assetCode = sellAsset.getAsset().split(":");
-    AssetInfo asset = assetService.getAsset(assetCode[1]);
-    Long sendMinLimit = asset.getSend().getMinAmount();
-    Long sendMaxLimit = asset.getSend().getMaxAmount();
+    if (context == SEP31) {
+      if (sellAsset == null) {
+        throw new BadRequestException("Unsupported sell asset.");
+      }
+      String[] assetCode = sellAsset.getAsset().split(":");
+      AssetInfo asset = assetService.getAsset(assetCode[1]);
+      Long sendMinLimit = asset.getSend().getMinAmount();
+      Long sendMaxLimit = asset.getSend().getMaxAmount();
 
-    // SEP31: when sell_amount is specified
-    if (context == SEP31 && request.getSellAmount() != null) {
-      validateAmountLimit("sell_", request.getSellAmount(), sendMinLimit, sendMaxLimit);
+      // When sell_amount is specified
+      if (request.getSellAmount() != null) {
+        validateAmountLimit("sell_", request.getSellAmount(), sendMinLimit, sendMaxLimit);
+      }
     }
 
     GetRateRequest.GetRateRequestBuilder getRateRequestBuilder =
@@ -401,8 +416,13 @@ public class Sep38Service {
     responseBuilder =
         responseBuilder.totalPrice(totalPrice).sellAmount(sellAmount).buyAmount(buyAmount);
 
-    // SEP31: when buy_amount is specified (sell amount found from rate integration)
+    // Check SEP31 sell_amount from rate integration when buy_amount is specified
     if (context == SEP31 && isNotEmpty(buyAmount)) {
+      String[] assetCode = sellAsset.getAsset().split(":");
+      AssetInfo asset = assetService.getAsset(assetCode[1]);
+      Long sendMinLimit = asset.getSend().getMinAmount();
+      Long sendMaxLimit = asset.getSend().getMaxAmount();
+
       validateAmountLimit("sell_", sellAmount, sendMinLimit, sendMaxLimit);
     }
 
@@ -516,7 +536,7 @@ public class Sep38Service {
 
   private String getTotalPrice(BigDecimal bSellAmount, BigDecimal bBuyAmount) {
     // total_price = sell_amount / buy_amount
-    BigDecimal bTotalPrice = bSellAmount.divide(bBuyAmount, pricePrecision, RoundingMode.FLOOR);
+    BigDecimal bTotalPrice = bSellAmount.divide(bBuyAmount, pricePrecision, DEFAULT_ROUNDING_MODE);
 
     return formatAmount(bTotalPrice, pricePrecision);
   }

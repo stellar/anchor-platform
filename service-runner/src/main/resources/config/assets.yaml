@@ -1,18 +1,21 @@
 assets:
+  # Stellar assets
   - schema: stellar
     code: USDC
     issuer: GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
     distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
-    significant_decimals: 2
+    significant_decimals: 7
     deposit:
       enabled: true
-      min_amount: 1
+      min_amount: 0
+      max_amount: 10
       methods:
         - SEPA
         - SWIFT
     withdraw:
       enabled: true
-      max_amount: 1000000
+      min_amount: 0
+      max_amount: 10
       methods:
         - bank_account
         - cash
@@ -54,6 +57,7 @@ assets:
     sep38:
       exchangeable_assets:
         - iso4217:USD
+        - iso4217:CAD
     sep6_enabled: true
     sep24_enabled: true
     sep31_enabled: true
@@ -62,20 +66,20 @@ assets:
     code: USDC
     issuer: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
     distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
-    significant_decimals: 2
+    significant_decimals: 4
     deposit:
       enabled: true
-      min_amount: 1
-      max_amount: 1000000
+      min_amount: 0
+      max_amount: 10
     withdraw:
       enabled: true
-      min_amount: 1
-      max_amount: 1000000
+      min_amount: 0
+      max_amount: 10
     send:
       fee_fixed: 0
       fee_percent: 0
-      min_amount: 1
-      max_amount: 1000000
+      min_amount: 0
+      max_amount: 10
     sep31:
       quotes_supported: true
       quotes_required: false
@@ -110,6 +114,7 @@ assets:
     sep38:
       exchangeable_assets:
         - iso4217:USD
+        - iso4217:CAD
     sep24_enabled: true
     sep31_enabled: true
     sep38_enabled: true
@@ -119,9 +124,9 @@ assets:
     distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
     significant_decimals: 4
     deposit:
-      enabled: true
+      enabled: false
     withdraw:
-      enabled: true
+      enabled: false
     send:
       fee_fixed: 0
       fee_percent: 0
@@ -160,93 +165,66 @@ assets:
       exchangeable_assets:
         - iso4217:USD
     sep6_enabled: false
-    sep24_enabled: true
+    sep24_enabled: false
     sep31_enabled: true
     sep38_enabled: true
-  - schema: iso4217
-    code: USD
-    significant_decimals: 7
-    deposit:
-      enabled: true
-      min_amount: 0
-      max_amount: 10000
-    withdraw:
-      enabled: true
-      min_amount: 0
-      max_amount: 10000
-    send:
-      fee_fixed: 0
-      fee_percent: 0
-      min_amount: 0
-      max_amount: 10000
-    sep38:
-      exchangeable_assets:
-        - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
-        - stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
-      country_codes:
-        - USA
-      decimals: 4
-      sell_delivery_methods:
-        - name: WIRE
-          description: Send USD directly to the Anchor's bank account.
-      buy_delivery_methods:
-        - name: WIRE
-          description: Have USD sent directly to your bank account.
-    sep6_enabled: false
-    sep24_enabled: false
-    sep31_enabled: false
-    sep38_enabled: true
+
+  # Native asset
   - schema: stellar
     code: native
     distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
     significant_decimals: 7
     deposit:
       enabled: true
-      max_amount: 1000000
+      min_amount: 0
+      max_amount: 10
     withdraw:
       enabled: true
-      max_amount: 1000000
+      min_amount: 0
+      max_amount: 10
+    sep6_enabled: false
+    sep31_enabled: false
+    sep38_enabled: false
+    sep24_enabled: true
+
+  # Fiat
+  - schema: iso4217
+    code: USD
+    significant_decimals: 4
     send:
-      fee_fixed: 0
-      fee_percent: 0
+      min_amount: 0
       max_amount: 1000000
-    sep31:
-      quotes_supported: true
-      quotes_required: true
-      sep12:
-        sender:
-          types:
-            sep31-sender:
-              description: U.S. citizens limited to sending payments of less than $10,000
-                in value
-            sep31-large-sender:
-              description: U.S. citizens that do not have sending limits
-            sep31-foreign-sender:
-              description: non-U.S. citizens sending payments of less than $10,000 in
-                value
-        receiver:
-          types:
-            sep31-receiver:
-              description: U.S. citizens receiving USD
-            sep31-foreign-receiver:
-              description: non-U.S. citizens receiving USD
-      # todo assume this is right for now
-      fields:
-        transaction:
-          receiver_routing_number:
-            description: routing number of the destination bank account
-          receiver_account_number:
-            description: bank account number of the destination
-          type:
-            description: type of deposit to make
-            choices:
-              - SEPA
-              - SWIFT
     sep38:
       exchangeable_assets:
         - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
-      decimals: 7
-    sep6_enabled: false
-    sep31_enabled: true
+        - stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+      country_codes:
+        - USA
+      decimals: 2
+      sell_delivery_methods:
+        - name: WIRE
+          description: Send USD directly to the Anchor's bank account.
+      buy_delivery_methods:
+        - name: WIRE
+          description: Have USD sent directly to your bank account.
     sep38_enabled: true
-    sep24_enabled: true
+  - schema: iso4217
+    code: CAD
+    significant_decimals: 4
+    send:
+      min_amount: 0
+      max_amount: 1000000
+    sep38:
+      exchangeable_assets:
+        - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
+        - stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+      country_codes:
+        - CAN
+      decimals: 2
+      sell_delivery_methods:
+        - name: WIRE
+          description: Send CAD directly to the Anchor's bank account.
+      buy_delivery_methods:
+        - name: WIRE
+          description: Have CAD sent directly to your bank account.
+    sep38_enabled: true

@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reference-config
+  namespace: {{ .Values.namespace }}
+data:
+  config.yaml: |
+    app:
+      version: 0.0.1
+      isTest: false
+      port: 8091
+      distributionWallet: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+      distributionWalletMemo:
+      distributionWalletMemoType:
+      enableTest: true
+      custodyEnabled: false
+      rpcEnabled: false
+
+    auth:
+      type: NONE
+
+    data:
+      database: postgres

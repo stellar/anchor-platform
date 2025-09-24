@@ -95,14 +95,14 @@ public class NotifyRefundSentHandler extends RpcMethodHandler<NotifyRefundSentRe
     }
 
     if (request.getRefund() != null) {
-      AssetValidationUtils.validateAsset(
+      AssetValidationUtils.validateAssetAmount(
           "refund.amount",
           AmountAssetRequest.builder()
               .amount(request.getRefund().getAmount().getAmount())
               .asset(txn.getAmountInAsset())
               .build(),
           assetService);
-      AssetValidationUtils.validateAsset(
+      AssetValidationUtils.validateAssetAmount(
           "refund.amountFee",
           AmountAssetRequest.builder()
               .amount(request.getRefund().getAmountFee().getAmount())
@@ -375,14 +375,17 @@ public class NotifyRefundSentHandler extends RpcMethodHandler<NotifyRefundSentRe
           txn6.setRefunds(refunds);
           break;
         case SEP_24:
+          JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
+          boolean isTxn24Deposit =
+              ImmutableSet.of(DEPOSIT, DEPOSIT_EXCHANGE).contains(Kind.from(txn24.getKind()));
           Sep24RefundPayment sep24RefundPayment =
               JdbcSep24RefundPayment.builder()
                   .id(requestRefund.getId())
+                  .idType(isTxn24Deposit ? EXTERNAL.toString() : STELLAR.toString())
                   .amount(requestRefund.getAmount().getAmount())
                   .fee(requestRefund.getAmountFee().getAmount())
                   .build();
 
-          JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
           Sep24Refunds sep24Refunds = txn24.getRefunds();
           if (sep24Refunds == null) {
             sep24Refunds = new JdbcSep24Refunds();

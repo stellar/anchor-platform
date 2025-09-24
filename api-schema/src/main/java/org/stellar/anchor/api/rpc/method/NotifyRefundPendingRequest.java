@@ -14,7 +14,7 @@ import lombok.experimental.SuperBuilder;
 @EqualsAndHashCode(callSuper = false)
 public class NotifyRefundPendingRequest extends RpcMethodParamsRequest {
 
-  @NotNull private Refund refund;
+  private Refund refund;
 
   @Data
   @Builder

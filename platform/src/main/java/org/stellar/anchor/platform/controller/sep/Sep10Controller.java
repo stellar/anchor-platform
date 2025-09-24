@@ -3,15 +3,12 @@ package org.stellar.anchor.platform.controller.sep;
 import static org.stellar.anchor.util.Log.*;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClientException;
-import org.stellar.anchor.api.exception.SepException;
-import org.stellar.anchor.api.exception.SepNotAuthorizedException;
-import org.stellar.anchor.api.exception.SepValidationException;
+import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.sep.SepAuthorizationExceptionResponse;
 import org.stellar.anchor.api.sep.SepExceptionResponse;
 import org.stellar.anchor.api.sep.sep10.ChallengeRequest;
@@ -42,8 +39,9 @@ public class Sep10Controller {
       @RequestParam String account,
       @RequestParam(required = false) String memo,
       @RequestParam(required = false, name = "home_domain") String homeDomain,
-      @RequestParam(required = false, name = "client_domain") String clientDomain)
-      throws SepException, MalformedURLException {
+      @RequestParam(required = false, name = "client_domain") String clientDomain,
+      @RequestHeader(required = false, name = "Authorization") String authorization)
+      throws SepException, BadRequestException {
     debugF(
         "GET /auth account={} memo={} home_domain={}, client_domain={}",
         account,
@@ -57,7 +55,7 @@ public class Sep10Controller {
             .homeDomain(homeDomain)
             .clientDomain(clientDomain)
             .build();
-    return sep10Service.createChallenge(challengeRequest);
+    return sep10Service.createChallenge(challengeRequest, authorization);
   }
 
   @CrossOrigin(origins = "*")
@@ -104,6 +102,15 @@ public class Sep10Controller {
   public SepAuthorizationExceptionResponse handleSepAuthorizationException(Exception ex) {
     errorEx(ex);
     return new SepAuthorizationExceptionResponse(ex.getMessage());
+  }
+
+  @ExceptionHandler({
+    SepMissingAuthHeaderException.class,
+  })
+  @ResponseStatus(value = HttpStatus.UNAUTHORIZED)
+  public SepExceptionResponse handleSepMissingAuthHeaderExceptionException(Exception ex) {
+    errorEx(ex);
+    return new SepExceptionResponse(ex.getMessage());
   }
 
   @ExceptionHandler(RestClientException.class)

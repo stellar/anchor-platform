@@ -192,6 +192,7 @@ class NotifyTrustSetHandlerTest {
     val txn24 = JdbcSep24Transaction()
     txn24.status = PENDING_TRUST.toString()
     txn24.kind = DEPOSIT.kind
+    txn24.userActionRequiredBy = Instant.now()
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
 
     every { txn6Store.findByTransactionId(any()) } returns null

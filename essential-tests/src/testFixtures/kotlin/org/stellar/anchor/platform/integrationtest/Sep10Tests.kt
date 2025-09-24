@@ -3,20 +3,37 @@ package org.stellar.anchor.platform.integrationtest
 import com.google.gson.*
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonWriter
+import io.ktor.client.plugins.*
+import io.ktor.http.*
 import java.io.IOException
 import java.util.*
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.client.Sep10Client
 import org.stellar.anchor.platform.*
+import org.stellar.sdk.KeyPair
+import org.stellar.sdk.Transaction
+import org.stellar.walletsdk.auth.DefaultAuthHeaderSigner
+import org.stellar.walletsdk.auth.DomainAuthHeaderSigner
+import org.stellar.walletsdk.auth.WalletSigner
+import org.stellar.walletsdk.horizon.AccountKeyPair
+import org.stellar.walletsdk.horizon.SigningKeyPair
+import org.stellar.walletsdk.horizon.sign
 
 class Sep10Tests : AbstractIntegrationTests(TestConfig()) {
   lateinit var sep10Client: Sep10Client
   lateinit var sep10ClientMultiSig: Sep10Client
   lateinit var webAuthDomain: String
+
+  private val walletDomain = config.env["wallet.server.url"]?.replace("http://", "")!!
+  private val walletUrl = config.env["wallet.server.url"]!!
+  private val domainSinger = WalletSigner.DomainSigner("$walletUrl/signChallenge")
 
   init {
     if (!::sep10Client.isInitialized) {
@@ -84,6 +101,78 @@ class Sep10Tests : AbstractIntegrationTests(TestConfig()) {
       exceptionClass = SepNotAuthorizedException::class,
       block = { sep10Client.validate(ValidationRequest.of(challenge.transaction)) },
     )
+  }
+
+  @Test
+  fun testCustodial() = runBlocking {
+    val rnd = wallet.stellar().account().createKeyPair()
+    val memo = 123UL
+    val token = anchor.sep10().authenticate(rnd, memoId = memo)
+    assertEquals(rnd.address, token.account)
+    assertEquals(memo, token.memo)
+  }
+
+  @Test
+  fun testCustodialNoMemo() = runBlocking {
+    val rnd = wallet.stellar().account().createKeyPair()
+    val token = anchor.sep10().authenticate(rnd)
+    assertEquals(rnd.address, token.account)
+  }
+
+  @Test
+  fun testNonCustodial() = runBlocking {
+    val accountKp = SigningKeyPair(KeyPair.random())
+    val token = anchor.sep10().authenticate(accountKp, domainSinger, clientDomain = walletDomain)
+
+    assertEquals(accountKp.address, token.account)
+    assertEquals(walletDomain, token.clientDomain)
+  }
+
+  @Test
+  fun testNonCustodialWrongKey() = runBlocking {
+    val rnd = wallet.stellar().account().createKeyPair()
+    val dummyKey = wallet.stellar().account().createKeyPair()
+    // Sign with incorrect noncustodial key
+    val dummySigner =
+      object : WalletSigner.DefaultSigner() {
+        override suspend fun signWithDomainAccount(
+          transactionXDR: String,
+          networkPassPhrase: String,
+          account: AccountKeyPair
+        ): Transaction {
+          return wallet.stellar().decodeTransaction(transactionXDR).sign(dummyKey) as Transaction
+        }
+      }
+    val ex =
+      assertThrows<ClientRequestException> {
+        anchor.sep10().authenticate(rnd, dummySigner, clientDomain = walletDomain)
+      }
+  }
+
+  @Test
+  fun testCustodialWithAuthHeader() = runBlocking {
+    val signer = DefaultAuthHeaderSigner()
+    val accountKp =
+      SigningKeyPair.fromSecret("SBPPLU2KO3PDBLSDFIWARQSW5SAOIHTJDUQIWN3BQS7KPNMVUDSU37QO")
+    val memo = 1234567UL
+
+    anchor.sep10().authenticate(accountKp, memoId = memo, authHeaderSigner = signer)
+    return@runBlocking
+  }
+
+  @Test
+  fun testNonCustodialWithAuthHeader() = runBlocking {
+    val accountKp = SigningKeyPair(KeyPair.random())
+    val domainAuthHeaderSigner = DomainAuthHeaderSigner("$walletUrl/signHeader")
+    anchor
+      .sep10()
+      .authenticate(
+        accountKp,
+        domainSinger,
+        clientDomain = walletDomain,
+        authHeaderSigner = domainAuthHeaderSigner
+      )
+    return@runBlocking
   }
 
   class RawStringTypeAdapter : TypeAdapter<String>() {

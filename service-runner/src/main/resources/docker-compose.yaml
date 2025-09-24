@@ -1,12 +1,11 @@
-version: '2.4'
 services:
   platform:
     extends:
       file: common/docker-compose.yaml
       service: platform
     env_file:
-      - profiles/${TEST_PROFILE_NAME:-default}/config.env
-      - profiles/${TEST_PROFILE_NAME:-default}/test.env
+      - profiles/${TEST_PROFILE_NAME:-deployment}/config.env
+      - profiles/${TEST_PROFILE_NAME:-deployment}/test.env
     depends_on:
       - db
       - kafka
@@ -18,8 +17,8 @@ services:
       file: common/docker-compose.yaml
       service: observer
     env_file:
-      - profiles/${TEST_PROFILE_NAME:-default}/config.env
-      - profiles/${TEST_PROFILE_NAME:-default}/test.env
+      - profiles/${TEST_PROFILE_NAME:-deployment}/config.env
+      - profiles/${TEST_PROFILE_NAME:-deployment}/test.env
     depends_on:
       - db
       - kafka

@@ -1,6 +1,7 @@
 package org.stellar.anchor.sep24;
 
 import org.stellar.anchor.SepTransaction;
+import org.stellar.anchor.api.shared.FeeDetails;
 
 @SuppressWarnings("unused")
 public interface Sep24Transaction extends SepTransaction {
@@ -205,8 +206,10 @@ public interface Sep24Transaction extends SepTransaction {
    *
    * @return <code>amount_fee</code> field of the SEP-24 transaction history.
    */
+  @Deprecated // ANCHOR-636
   String getAmountFee();
 
+  @Deprecated // ANCHOR-636
   void setAmountFee(String amountFee);
 
   /**
@@ -216,9 +219,22 @@ public interface Sep24Transaction extends SepTransaction {
    *
    * @return <code>amount_fee_asset</code> field of the SEP-24 transaction history.
    */
+  @Deprecated // ANCHOR-636
   String getAmountFeeAsset();
 
+  @Deprecated // ANCHOR-636
   void setAmountFeeAsset(String amountFeeAsset);
+
+  /**
+   * Description of fee charged by the anchor. The schema for this object is defined in the Fee
+   * Details Object Schema and matches the one of SEP-38 quote's fee.
+   *
+   * @return Unified fields of SEP-24 transaction history complied from <code>amount_fee</code>,
+   *     <code>amount_fee_asset</code> and <code>fee_details</code>
+   */
+  FeeDetails getFeeDetails();
+
+  void setFeeDetails(FeeDetails feeDetails);
 
   Boolean getRefunded();
 
@@ -248,14 +264,6 @@ public interface Sep24Transaction extends SepTransaction {
   String getQuoteId();
 
   void setQuoteId(String quoteId);
-
-  String getSourceAsset();
-
-  void setSourceAsset(String sourceAsset);
-
-  String getDestinationAsset();
-
-  void setDestinationAsset(String sourceAsset);
 
   enum Kind {
     DEPOSIT("deposit"),

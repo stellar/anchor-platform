@@ -1,8 +1,8 @@
 package org.stellar.anchor.platform.custody.fireblocks;
 
+import static org.stellar.anchor.auth.AuthHelper.jwtsBuilder;
 import static org.stellar.anchor.util.OkHttpUtil.TYPE_JSON;
 
-import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import java.io.IOException;
 import java.math.BigInteger;
@@ -117,7 +117,7 @@ public class FireblocksApiClient {
     Instant now = Instant.now();
     Instant expirationTime = now.plusSeconds(TOKEN_EXPIRATION_SECONDS);
 
-    return Jwts.builder()
+    return jwtsBuilder()
         .setSubject(apiKey)
         .setIssuedAt(Date.from(now))
         .setExpiration(Date.from(expirationTime))

@@ -26,7 +26,10 @@ public class SendEventRequestPayload {
     SendEventRequestPayload payload = new SendEventRequestPayload();
     switch (event.getType()) {
       case CUSTOMER_UPDATED:
-        payload.setCustomer(event.getCustomer());
+        payload.setCustomer(
+            event.getCustomer() != null
+                ? CustomerUpdatedResponse.builder().id(event.getCustomer().getId()).build()
+                : null);
       case QUOTE_CREATED:
         payload.setQuote(event.getQuote());
       case TRANSACTION_CREATED:

@@ -1,6 +1,5 @@
 package org.stellar.anchor.platform.custody.fireblocks
 
-import io.jsonwebtoken.Jwts
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
@@ -26,6 +25,7 @@ import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.exception.FireblocksException
 import org.stellar.anchor.api.exception.InvalidConfigException
+import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.platform.config.FireblocksConfig
 import org.stellar.anchor.util.FileUtil.getResourceFileAsString
@@ -231,9 +231,10 @@ class FireblocksApiClientTest {
     Assertions.assertTrue(token.startsWith("Bearer "))
 
     val claims =
-      Jwts.parser()
-        .setSigningKey(getPublicKey())
-        .parseClaimsJws(StringUtils.substringAfter(token, "Bearer "))
+      AuthHelper.jwtsParser()
+        .verifyWith(getPublicKey())
+        .build()
+        .parseSignedClaims(StringUtils.substringAfter(token, "Bearer "))
         .body
 
     Assertions.assertEquals(API_KEY, claims.subject)

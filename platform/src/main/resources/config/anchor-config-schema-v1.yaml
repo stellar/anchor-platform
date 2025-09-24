@@ -31,6 +31,13 @@ events.queue.kafka.client_id:
 events.queue.kafka.linger_ms:
 events.queue.kafka.poll_timeout_seconds:
 events.queue.kafka.retries:
+events.queue.kafka.security_protocol:
+events.queue.kafka.sasl_mechanism:
+events.queue.kafka.username:
+events.queue.kafka.password:
+events.queue.kafka.ssl_verify_cert:
+events.queue.kafka.ssl_keystore_location:
+events.queue.kafka.ssl_truststore_location:
 events.queue.msk.batch_size:
 events.queue.msk.bootstrap_server:
 events.queue.msk.client_id:
@@ -42,6 +49,7 @@ events.queue.sqs.use_iam:
 events.queue.type:
 languages:
 metrics.enabled:
+metrics.prefix:
 metrics.extended_metrics.enabled:
 metrics.extended_metrics.run_interval:
 payment_observer.context_path:
@@ -89,6 +97,7 @@ sep24.more_info_url.base_url:
 sep24.more_info_url.jwt_expiration:
 sep24.more_info_url.txn_fields:
 sep24.deposit_info_generator_type:
+sep24.initial_user_deadline_seconds:
 sep31.deposit_info_generator_type:
 sep31.enabled:
 sep31.payment_type:
@@ -96,8 +105,12 @@ sep38.enabled:
 sep38.sep10_enforced:
 sep6.deposit_info_generator_type:
 sep6.enabled:
+sep6.more_info_url.base_url:
+sep6.more_info_url.jwt_expiration:
+sep6.more_info_url.txn_fields:
 sep6.features.account_creation:
 sep6.features.claimable_balances:
+sep6.initial_user_deadline_seconds:
 sep_server.context_path:
 sep_server.management_server_port:
 sep_server.port:

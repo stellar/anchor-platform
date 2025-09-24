@@ -96,6 +96,9 @@ public interface EventService {
     TRANSACTION,
 
     /** The event queue for events that are used for control-plane purposes. */
-    CONTROL
+    CONTROL,
+
+    /** The event queue for testing purposes. */
+    TEST
   }
 }

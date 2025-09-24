@@ -37,7 +37,7 @@ public class MetricConstants {
 
   // SEP-31 metrics
   public static final String SEP31_TRANSACTION_REQUESTED = "sep31.transaction.requested";
-  public static final String SEP31_TRANSACTION_CREATED = "sep31.transaction.requested";
+  public static final String SEP31_TRANSACTION_CREATED = "sep31.transaction.created";
   public static final String SEP31_TRANSACTION_PATCHED = "sep31.transaction.patched";
 
   // SEP-38 metrics

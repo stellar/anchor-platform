@@ -7,8 +7,8 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.reference.model.FeeDetails
 import org.stellar.reference.model.Quote
-import org.stellar.reference.model.RateFee
 
 interface QuoteRepository {
   fun get(id: String): Quote?
@@ -40,7 +40,7 @@ class JdbcQuoteRepository(private val db: Database) : QuoteRepository {
             clientId = it[Quotes.clientId],
             fee =
               it[Quotes.fee]?.let { fee ->
-                GsonUtils.getInstance().fromJson(fee, RateFee::class.java)
+                GsonUtils.getInstance().fromJson(fee, FeeDetails::class.java)
               }
           )
         }

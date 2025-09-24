@@ -14,10 +14,7 @@ import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.operation.Sep31Operation
 import org.stellar.anchor.api.sep.sep31.Sep31GetTransactionResponse
 import org.stellar.anchor.api.sep.sep31.Sep31GetTransactionResponse.Sep31RefundPayment
-import org.stellar.anchor.api.shared.Amount
-import org.stellar.anchor.api.shared.StellarId
-import org.stellar.anchor.api.shared.StellarPayment
-import org.stellar.anchor.api.shared.StellarTransaction
+import org.stellar.anchor.api.shared.*
 
 class Sep31TransactionTest {
   companion object {
@@ -104,8 +101,7 @@ class Sep31TransactionTest {
         .amountInAsset(fiatUSD)
         .amountOut("98.0000000")
         .amountOutAsset(stellarUSDC)
-        .amountFee("2.0000")
-        .amountFeeAsset(fiatUSD)
+        .feeDetails(FeeDetails("2.0000", fiatUSD))
         .stellarAccountId(TEST_ACCOUNT)
         .stellarMemo(TEST_MEMO)
         .stellarMemoType("text")
@@ -161,6 +157,8 @@ class Sep31TransactionTest {
             .amountOutAsset(stellarUSDC)
             .amountFee("2.0000")
             .amountFeeAsset(fiatUSD)
+            .feeDetails(FeeDetails("2.0000", fiatUSD))
+            .quoteId("quote-id")
             .stellarAccountId(TEST_ACCOUNT)
             .stellarMemo(TEST_MEMO)
             .stellarMemoType("text")

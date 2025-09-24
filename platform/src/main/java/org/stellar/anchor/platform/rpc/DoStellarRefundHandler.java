@@ -81,14 +81,14 @@ public class DoStellarRefundHandler extends RpcMethodHandler<DoStellarRefundRequ
           String.format("RPC method[%s] requires enabled custody integration", getRpcMethod()));
     }
 
-    AssetValidationUtils.validateAsset(
+    AssetValidationUtils.validateAssetAmount(
         "refund.amount",
         AmountAssetRequest.builder()
             .amount(request.getRefund().getAmount().getAmount())
             .asset(txn.getAmountInAsset())
             .build(),
         assetService);
-    AssetValidationUtils.validateAsset(
+    AssetValidationUtils.validateAssetAmount(
         "refund.amountFee",
         AmountAssetRequest.builder()
             .amount(request.getRefund().getAmountFee().getAmount())

@@ -1,0 +1,1 @@
+ALTER TABLE sep6_transaction DROP COLUMN more_info_url;

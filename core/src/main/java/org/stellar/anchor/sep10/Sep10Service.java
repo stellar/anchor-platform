@@ -1,26 +1,34 @@
 package org.stellar.anchor.sep10;
 
-import static java.lang.String.*;
+import static java.lang.String.format;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.MetricConstants.SEP10_CHALLENGE_CREATED;
 import static org.stellar.anchor.util.MetricConstants.SEP10_CHALLENGE_VALIDATED;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
+import static org.stellar.sdk.Network.TESTNET;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jws;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
 import java.io.IOException;
 import java.time.Instant;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
-import org.stellar.anchor.api.exception.SepException;
-import org.stellar.anchor.api.exception.SepNotAuthorizedException;
-import org.stellar.anchor.api.exception.SepValidationException;
+import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.sep.sep10.ChallengeRequest;
 import org.stellar.anchor.api.sep.sep10.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep10.ValidationRequest;
 import org.stellar.anchor.api.sep.sep10.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Sep10Jwt;
+import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep10Config;
@@ -38,6 +46,7 @@ public class Sep10Service implements ISep10Service {
   final Sep10Config sep10Config;
   final Horizon horizon;
   final JwtService jwtService;
+  final ClientFinder clientFinder;
   final String serverAccountId;
   final Counter sep10ChallengeCreatedCounter = Metrics.counter(SEP10_CHALLENGE_CREATED);
   final Counter sep10ChallengeValidatedCounter = Metrics.counter(SEP10_CHALLENGE_VALIDATED);
@@ -47,7 +56,8 @@ public class Sep10Service implements ISep10Service {
       SecretConfig secretConfig,
       Sep10Config sep10Config,
       Horizon horizon,
-      JwtService jwtService) {
+      JwtService jwtService,
+      ClientFinder clientFinder) {
     debug("appConfig:", appConfig);
     debug("sep10Config:", sep10Config);
     this.appConfig = appConfig;
@@ -55,12 +65,15 @@ public class Sep10Service implements ISep10Service {
     this.sep10Config = sep10Config;
     this.horizon = horizon;
     this.jwtService = jwtService;
+    this.clientFinder = clientFinder;
     this.serverAccountId =
         KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed()).getAccountId();
     Log.info("Sep10Service initialized.");
   }
 
-  public ChallengeResponse createChallenge(ChallengeRequest request) throws SepException {
+  public ChallengeResponse createChallenge(
+      @NotNull ChallengeRequest request, @Nullable String authorization)
+      throws SepException, BadRequestException {
     info("Creating SEP-10 challenge.");
 
     // pre validation to be defined by the anchor
@@ -71,12 +84,33 @@ public class Sep10Service implements ISep10Service {
     validateChallengeRequestClient(request);
     // Validate the validity of the memo
     Memo memo = validateChallengeRequestMemo(request);
-    // post validations to be defined by the anchor
-    postChallengeRequestValidation(request);
-    // increment counter
-    incrementChallengeRequestCreatedCounter();
-    // Create the challenge
-    return createChallengeResponse(request, memo);
+
+    // Non-custodial case
+    if (!isEmpty(request.getClientDomain())) {
+      debugF("Fetching SIGNING_KEY from client_domain: {}", request.getClientDomain());
+      String clientDomainSigningKey = fetchSigningKeyFromClientDomain(request.getClientDomain());
+      debugF("SIGNING_KEY from client_domain fetched: {}", clientDomainSigningKey);
+
+      // Check authorization
+      validateAuthorization(request, authorization, clientDomainSigningKey);
+      // post validations to be defined by the anchor
+      postChallengeRequestValidation(request);
+      // increment counter
+      incrementChallengeRequestCreatedCounter();
+      // Create the challenge
+      return createChallengeResponse(request, memo, clientDomainSigningKey);
+    }
+    // Custodial case
+    else {
+      // Check authorization
+      validateAuthorization(request, authorization, null);
+      // post validations to be defined by the anchor
+      postChallengeRequestValidation(request);
+      // increment counter
+      incrementChallengeRequestCreatedCounter();
+      // Create the challenge
+      return createChallengeResponse(request, memo, null);
+    }
   }
 
   public ValidationResponse validateChallenge(ValidationRequest request)
@@ -124,16 +158,9 @@ public class Sep10Service implements ISep10Service {
   }
 
   @Override
-  public ChallengeResponse createChallengeResponse(ChallengeRequest request, Memo memo)
-      throws SepException {
+  public ChallengeResponse createChallengeResponse(
+      ChallengeRequest request, Memo memo, String clientSigningKey) throws SepException {
     try {
-      String clientSigningKey = null;
-      if (!isEmpty(request.getClientDomain())) {
-        debugF("Fetching SIGNING_KEY from client_domain: {}", request.getClientDomain());
-        clientSigningKey = fetchSigningKeyFromClientDomain(request.getClientDomain());
-        debugF("SIGNING_KEY from client_domain fetched: {}", clientSigningKey);
-      }
-
       // create challenge transaction
       Transaction txn = newChallenge(request, clientSigningKey, memo);
 
@@ -252,7 +279,85 @@ public class Sep10Service implements ISep10Service {
   }
 
   String fetchSigningKeyFromClientDomain(String clientDomain) throws SepException {
-    return Sep10Helper.fetchSigningKeyFromClientDomain(clientDomain);
+    return Sep10Helper.fetchSigningKeyFromClientDomain(
+        clientDomain,
+        appConfig.getStellarNetworkPassphrase().equals(TESTNET.getNetworkPassphrase()));
+  }
+
+  void validateAuthorization(
+      @NotNull ChallengeRequest request,
+      @Nullable String authorization,
+      @Nullable String clientSigningKey)
+      throws SepException {
+    if (authorization == null || authorization.isEmpty()) {
+      if (sep10Config.isRequireAuthHeader()) {
+        throw new SepMissingAuthHeaderException("Authorization header is required");
+      }
+
+      return;
+    }
+
+    if (!authorization.startsWith("Bearer")) {
+      throw new SepValidationException("Invalid JWT token");
+    }
+
+    String token = authorization.replaceAll("^Bearer", "").stripLeading();
+
+    Jws<Claims> jwt;
+
+    // Non-custodial
+    if (request.getClientDomain() != null) {
+      jwt = jwtService.getHeaderJwt(clientSigningKey, token);
+    } else {
+      // Custodial
+      jwt = jwtService.getHeaderJwt(request.getAccount(), token);
+    }
+
+    Claims payload = jwt.getPayload();
+
+    try {
+      if (payload.get("exp") == null) {
+        throw new SepValidationException("Missing expiration time (exp) in JWT");
+      }
+
+      if (Instant.ofEpochSecond(Long.parseLong(payload.get("exp").toString()))
+          .isBefore(Instant.now())) {
+        throw new SepValidationException("JWT token has expired");
+      }
+    } catch (NumberFormatException e) {
+      throw new SepValidationException("Invalid expiration format: must be UNIX epoch second");
+    }
+
+    if (claimNotEqual(payload.get("web_auth_endpoint"), authUrl())) {
+      if (appConfig.getStellarNetworkPassphrase().equals(TESTNET.getNetworkPassphrase())) {
+        // Allow http for testnet
+        if (claimNotEqual(payload.get("web_auth_endpoint"), authUrl().replace("https", "http"))) {
+          throw new SepValidationException("Invalid web_auth_endpoint in the signed header");
+        }
+      } else {
+        throw new SepValidationException("Invalid web_auth_endpoint in the signed header");
+      }
+    }
+
+    validateQueryParam(payload, "account", request.getAccount());
+    validateQueryParam(payload, "memo", request.getMemo());
+    validateQueryParam(payload, "home_domain", request.getHomeDomain());
+    validateQueryParam(payload, "client_domain", request.getClientDomain());
+
+    // Validate that client is allowed
+    clientFinder.getClientName(request.getClientDomain(), request.getAccount());
+  }
+
+  private boolean claimNotEqual(Object claim, String string) {
+    return !StringUtils.equals(claim == null ? null : claim.toString(), string);
+  }
+
+  void validateQueryParam(Claims payload, String name, String requestParam)
+      throws SepValidationException {
+    if (claimNotEqual(payload.get(name), requestParam)) {
+      throw new SepValidationException(
+          "Request query parameter " + name + " doesn't match signed URL query parameter");
+    }
   }
 
   void validateHomeDomain(ChallengeRequest request) throws SepValidationException {
@@ -425,7 +530,7 @@ public class Sep10Service implements ISep10Service {
     Memo memo = challenge.getTransaction().getMemo();
     Sep10Jwt sep10Jwt =
         Sep10Jwt.of(
-            "https://" + sep10Config.getWebAuthDomain() + "/auth",
+            authUrl(),
             (memo == null || memo instanceof MemoNone)
                 ? challenge.getClientAccountId()
                 : challenge.getClientAccountId() + ":" + memo,
@@ -436,6 +541,10 @@ public class Sep10Service implements ISep10Service {
             homeDomain);
     debug("jwtToken:", sep10Jwt);
     return jwtService.encode(sep10Jwt);
+  }
+
+  private String authUrl() {
+    return "https://" + sep10Config.getWebAuthDomain() + "/auth";
   }
 
   /**

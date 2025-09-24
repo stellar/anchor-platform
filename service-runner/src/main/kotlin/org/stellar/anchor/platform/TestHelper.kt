@@ -3,17 +3,16 @@ package org.stellar.anchor.platform
 import com.google.gson.Gson
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets.UTF_8
-import org.springframework.core.io.DefaultResourceLoader
 import org.springframework.util.FileCopyUtils
+import org.stellar.anchor.platform.utils.ResourceHelper.resource
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.StringHelper.json
 
 val gson: Gson = GsonUtils.getInstance()
-val resourceLoader = DefaultResourceLoader()
 
 fun resourceAsString(path: String): String {
-  val reader = InputStreamReader(resourceLoader.getResource(path).inputStream, UTF_8)
+  val reader = InputStreamReader(resource(path).inputStream, UTF_8)
   return FileCopyUtils.copyToString(reader)
 }
 

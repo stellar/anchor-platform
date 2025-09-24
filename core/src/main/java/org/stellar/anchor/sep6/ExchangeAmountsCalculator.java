@@ -10,7 +10,7 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.sep.AssetInfo;
-import org.stellar.anchor.api.sep.sep38.RateFee;
+import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.sep38.Sep38Quote;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 
@@ -36,8 +36,7 @@ public class ExchangeAmountsCalculator {
         .amountInAsset(quote.getSellAsset())
         .amountOut(quote.getBuyAmount())
         .amountOutAsset(quote.getBuyAsset())
-        .amountFee(quote.getFee().getTotal())
-        .amountFeeAsset(quote.getFee().getAsset())
+        .feeDetails(quote.getFee())
         .build();
   }
 
@@ -81,7 +80,7 @@ public class ExchangeAmountsCalculator {
               sellAmount, quote.getSellAmount()));
     }
 
-    RateFee fee = quote.getFee();
+    FeeDetails fee = quote.getFee();
     if (fee == null) {
       throw new SepValidationException("Quote is missing the 'fee' field");
     }
@@ -97,7 +96,6 @@ public class ExchangeAmountsCalculator {
     String amountInAsset;
     String amountOut;
     String amountOutAsset;
-    String amountFee;
-    String amountFeeAsset;
+    FeeDetails feeDetails;
   }
 }

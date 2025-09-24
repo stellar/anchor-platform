@@ -16,6 +16,8 @@ dependencies {
   // Lombok should be used by all subprojects to reduce Java verbosity
   annotationProcessor(libs.lombok)
 
+  implementation("io.jsonwebtoken:jjwt-gson:0.12.5")
+
   implementation(libs.spring.kafka)
   implementation(libs.spring.data.commons)
 
@@ -39,6 +41,7 @@ dependencies {
   implementation(libs.okhttp3)
   implementation(libs.commons.codec)
   implementation(libs.jjwt)
+  implementation(libs.bcastle)
   implementation(libs.reactor.core)
   implementation(libs.javax.jaxb.api)
   implementation(variantOf(libs.java.stellar.sdk) { classifier("uber") })
@@ -50,6 +53,7 @@ dependencies {
   testImplementation(libs.servlet.api)
   testImplementation(libs.slf4j.api)
   testImplementation(libs.coroutines.core)
+  testImplementation(libs.stellar.wallet.sdk)
 }
 
 publishing {
@@ -117,10 +121,3 @@ publishing {
   apply<SigningPlugin>()
   configure<SigningExtension> { sign(publishing.publications) }
 }
-
-apply(from = "$rootDir/scripts.gradle.kts")
-
-@Suppress("UNCHECKED_CAST")
-val enableTestConcurrency = extra["enableTestConcurrency"] as (Test) -> Unit
-
-tasks.test { enableTestConcurrency(this) }

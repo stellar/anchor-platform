@@ -133,7 +133,11 @@ public class RSAUtil {
     sign.initVerify(publicKey);
     sign.update(dataString.getBytes());
 
-    return sign.verify(Base64.getDecoder().decode(signature));
+    try {
+      return sign.verify(Base64.getDecoder().decode(signature));
+    } catch (SignatureException ignored) {
+      return false;
+    }
   }
 
   /**

@@ -3,6 +3,8 @@ package org.stellar.anchor.sep24;
 import java.time.Instant;
 import java.util.List;
 import lombok.Data;
+import org.stellar.anchor.api.shared.FeeDescription;
+import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarTransaction;
 
 @Data
@@ -17,6 +19,7 @@ public class PojoSep24Transaction implements Sep24Transaction {
   Instant startedAt;
   Instant completedAt;
   Instant updatedAt;
+  Instant userActionRequiredBy;
   String requestAssetCode;
   String requestAssetIssuer;
   String sep10Account;
@@ -46,4 +49,18 @@ public class PojoSep24Transaction implements Sep24Transaction {
   String quoteId;
   String sourceAsset;
   String destinationAsset;
+  List<FeeDescription> feeDetailsList;
+
+  public void setFeeDetails(FeeDetails feeDetails) {
+    setAmountFee(feeDetails.getTotal());
+    setAmountFeeAsset(feeDetails.getAsset());
+    setFeeDetailsList(feeDetails.getDetails());
+  }
+
+  public FeeDetails getFeeDetails() {
+    if (getAmountFee() == null) {
+      return null;
+    }
+    return new FeeDetails(getAmountFee(), getAmountFeeAsset(), getFeeDetailsList());
+  }
 }

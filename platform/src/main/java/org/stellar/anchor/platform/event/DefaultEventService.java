@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.event;
 
+import lombok.SneakyThrows;
 import org.apache.commons.lang3.NotImplementedException;
 import org.stellar.anchor.config.event.EventConfig;
 import org.stellar.anchor.event.EventService;
@@ -13,6 +14,7 @@ public class DefaultEventService implements EventService {
   }
 
   @Override
+  @SneakyThrows
   public Session createSession(String sessionName, EventQueue eventQueue) {
     if (eventConfig.isEnabled()) {
       switch (eventConfig.getQueue().getType()) {

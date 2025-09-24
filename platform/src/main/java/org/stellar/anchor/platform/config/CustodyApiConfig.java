@@ -12,6 +12,7 @@ import org.springframework.validation.Validator;
 import org.stellar.anchor.auth.AuthConfig;
 import org.stellar.anchor.auth.AuthType;
 import org.stellar.anchor.config.CustodySecretConfig;
+import org.stellar.anchor.util.KeyUtil;
 import org.stellar.anchor.util.NetUtil;
 
 @Data
@@ -27,7 +28,7 @@ public class CustodyApiConfig implements Validator {
   }
 
   public void setAuth(AuthConfig auth) {
-    auth.setSecret(secretConfig.getCustodyAuthSecret());
+    auth.setSecretString(secretConfig.getCustodyAuthSecret());
     this.auth = auth;
   }
 
@@ -67,7 +68,12 @@ public class CustodyApiConfig implements Validator {
       }
 
       if (List.of(API_KEY, JWT).contains(auth.getType())) {
-        if (auth.getSecret() == null) {
+        if (AuthType.JWT == auth.getType()) {
+          KeyUtil.rejectWeakJWTSecret(
+              secretConfig.getCustodyAuthSecret(), errors, "secret.custody_server.auth_secret");
+        }
+
+        if (auth.getSecretString() == null) {
           errors.rejectValue(
               "secret",
               "empty-secret",

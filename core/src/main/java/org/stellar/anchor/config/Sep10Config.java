@@ -83,4 +83,11 @@ public interface Sep10Config {
    * @return the list of known custodial accounts.
    */
   List<String> getKnownCustodialAccountList();
+
+  /**
+   * Set if the client must provide a valid Auth header in get challenge request (GET /Auth)
+   *
+   * @return true if functionality is enabled.
+   */
+  boolean isRequireAuthHeader();
 }

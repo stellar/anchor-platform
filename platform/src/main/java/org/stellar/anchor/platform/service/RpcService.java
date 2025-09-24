@@ -19,6 +19,7 @@ import org.stellar.anchor.api.rpc.method.RpcMethod;
 import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.rpc.RpcMethodHandler;
 import org.stellar.anchor.platform.utils.RpcUtil;
+import org.stellar.sdk.requests.ErrorResponse;
 
 public class RpcService {
 
@@ -52,6 +53,15 @@ public class RpcService {
                 return RpcUtil.getRpcErrorResponse(rc, ex);
               } catch (BadRequestException ex) {
                 return RpcUtil.getRpcErrorResponse(rc, ex);
+              } catch (ErrorResponse ex) {
+                var message =
+                    ex.getMessage() + " Code: " + ex.getCode() + " , body: " + ex.getBody();
+                errorEx(
+                    String.format(
+                        "Error response received from Horizon while processing an RPC request with method[%s] and id[%s] with message [%s]",
+                        rc.getMethod(), rpcId, message),
+                    ex);
+                return RpcUtil.getRpcErrorResponse(rc, new InternalErrorException(message));
               } catch (Exception ex) {
                 errorEx(
                     String.format(

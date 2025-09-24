@@ -13,8 +13,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS
-import org.junit.jupiter.api.parallel.Execution
-import org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
@@ -52,7 +50,6 @@ const val DEPOSIT_FUND_CLIENT_SECRET_1 = "SDNZAK6LCYNR4HYEFBZY3I2KLRDLSCE5RCF6HZ
 const val DEPOSIT_FUND_CLIENT_SECRET_2 = "SCW2SJEPTL4K7FFPFOFABFEFZJCG6LHULWVJX6JLIJ7TYIKTL6P473HM"
 
 @TestInstance(PER_CLASS)
-@Execution(CONCURRENT)
 open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
   private val client = HttpClient {
     install(HttpTimeout) {
@@ -61,12 +58,13 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
       socketTimeoutMillis = 300000
     }
   }
-  private val maxTries = 30
+  private val maxTries = 60
   private val anchorReferenceServerClient =
     AnchorReferenceServerClient(Url(config.env["reference.server.url"]!!))
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
   private val jwtService: JwtService =
     JwtService(
+      config.env["secret.sep6.more_info_url.jwt_secret"],
       config.env["secret.sep10.jwt_secret"]!!,
       config.env["secret.sep24.interactive_url.jwt_secret"]!!,
       config.env["secret.sep24.more_info_url.jwt_secret"]!!,
@@ -272,7 +270,12 @@ open class Sep24End2EndTests : AbstractIntegrationTests(TestConfig()) {
     var retries = 30
     var callbacks: List<Sep24GetTransactionResponse>? = null
     while (retries > 0) {
-      callbacks = walletServerClient.getCallbacks(txnId, Sep24GetTransactionResponse::class.java)
+      callbacks =
+        walletServerClient.getTransactionCallbacks(
+          "sep24",
+          txnId,
+          Sep24GetTransactionResponse::class.java
+        )
       if (callbacks.size == count) {
         return callbacks
       }

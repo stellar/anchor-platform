@@ -17,13 +17,16 @@ dependencies {
   implementation(libs.kotlin.logging)
   implementation(libs.slf4j.simple)
   implementation(libs.toml4j)
+  implementation(libs.stellar.wallet.sdk)
+  implementation(libs.jjwt)
+  implementation(libs.bcastle)
   implementation(project(mapOf("path" to ":api-schema")))
 }
 
 tasks {
   compileKotlin {
     dependsOn("spotlessKotlinApply")
-    kotlinOptions.jvmTarget = "11"
+    kotlinOptions.jvmTarget = "17"
   }
 
   test { useJUnitPlatform() }

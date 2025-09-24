@@ -2,75 +2,80 @@
 # Library versions
 abdera = "1.1.3"
 apache-commons-lang3 = "3.12.0"
+apache-commons-compress = "1.26.1"
 assertj = "3.24.2"
 aws-iam-auth = "1.1.4"
 aws-rds = "1.12.248"
 aws-sqs = "1.12.200"
+bcastle = "1.77"
 coroutines = "1.6.4"
 commons-beanutils = "1.9.4"
-commons-cli = "1.5.0"
+commons-cli = "1.7.0"
 commons-codec = "1.15"
 commons-io = "2.11.0"
-commons-validator = "1.7"
+commons-validator = "1.8.0"
 commons-text = "1.10.0"
-docker-compose-rule = "1.9.0"
+docker-compose-rule = "2.3.0"
 dotenv = "2.3.2"
-exposed = "0.41.1"
+exposed = "0.49.0"
 findbugs-jsr305 = "3.0.2"
 flyway-core = "8.5.13"
-google-gson = "2.8.9"
+google-gson = "2.10.1"
 httpclient = "4.5.13"
-h2database = "2.1.214"
+h2database = "2.2.224"
 hibernate-types = "2.18.0"
 hoplite = "2.7.0"
 jackson-dataformat-yaml = "2.14.0"
-java-stellar-sdk = "0.42.0"
+java-stellar-sdk = "0.44.1"
 javax-jaxb-api = "2.3.1"
 javax-transaction-api = "1.3"
-jjwt = "0.9.1"
+jjwt = "0.12.5"
 jsonassert = "1.5.0"
 junit = "5.8.2"
 junit-suite-engine = "1.8.2"
-kafka = "3.3.1"
-kafka-json-schema = "7.0.1"
-kotlin = "1.8.20"
+kafka = "3.6.1"
+kafka-json-schema = "7.0.13"
+kotlin = "1.9.23"
 kotlin-logging = "3.0.2"
 kotlinx-json = "1.5.1"
-ktor = "2.3.3"
-log4j = "2.19.0"
+ktor = "2.3.10"
+log4j = "2.23.1"
 log4j-template-json = "2.19.0"
 lombok = "1.18.22"
-mockk = "1.12.2"
-micrometer-prometheus = "1.9.0"
+mockk = "1.13.10"
+micrometer-prometheus = "1.12.5"
 okhttp3 = "4.9.3"
-postgresql = "42.5.0"
+postgresql = "42.7.3"
 reactor-core = "3.4.14"
 reactor-netty = "1.0.15"
 scala-library = "2.13.9"
 servlet-api = "2.5"
-snakeyaml = "1.32"
-spring-kafka = "2.9.1"
+snakeyaml = "1.33"
+spring-kafka = "2.9.13"
 spring-aws-messaging = "2.2.6.RELEASE"
 aws-java-sdk-s3 = "1.12.342"
-sqlite-jdbc = "3.34.0"
+sqlite-jdbc = "3.43.2.2"
 slf4j = "1.7.35"
-slf4j2 = "2.0.5"
-stellar-wallet-sdk = "1.1.0"
+slf4j2 = "2.0.13"
+stellar-wallet-sdk = "1.7.0"
 toml4j = "0.7.2"
+tomcat-embed-core = "9.0.87"
 
 # Plugin versions
 spotless = "6.9.1"
-spring-boot = "2.7.9"
+spring-boot = "2.7.18"
 spring-dependency-management = "1.1.0"
 jacoco = "0.8.10"
 
 [libraries]
 abdera = { module = "org.apache.abdera:abdera-i18n", version.ref = "abdera" }
 apache-commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "apache-commons-lang3" }
+apache-commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "apache-commons-compress" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 aws-rds = { module = "com.amazonaws:aws-java-sdk-rds", version.ref = "aws-rds" }
 aws-sqs = { module = "com.amazonaws:aws-java-sdk-sqs", version.ref = "aws-sqs" }
 aws-iam-auth = { module = "software.amazon.msk:aws-msk-iam-auth", version.ref = "aws-iam-auth" }
+bcastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bcastle" }
 commons-beanutils = { module = "commons-beanutils:commons-beanutils", version.ref = "commons-beanutils" }
 commons-text = { module = "org.apache.commons:commons-text", version.ref = "commons-text" }
 commons-cli = { module = "commons-cli:commons-cli", version.ref = "commons-cli" }
@@ -142,6 +147,7 @@ slf4j-log4j12 = { module = "org.slf4j:slf4j-log4j12", version.ref = "slf4j2" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j2" }
 stellar-wallet-sdk = { module = "org.stellar:wallet-sdk", version.ref = "stellar-wallet-sdk" }
 toml4j = { module = "com.moandjiezana.toml:toml4j", version.ref = "toml4j" }
+tomcat-embed-core = { module = "org.apache.tomcat.embed:tomcat-embed-core", version.ref = "tomcat-embed-core" }
 spring-kafka = { module = "org.springframework.kafka:spring-kafka", version.ref = "spring-kafka" }
 spring-data-commons = { module = "org.springframework.data:spring-data-commons", version.ref = "spring-boot" }
 spring-aws-messaging = { module = "org.springframework.cloud:spring-cloud-aws-messaging", version.ref = "spring-aws-messaging" }

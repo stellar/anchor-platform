@@ -22,14 +22,18 @@ data class Customer(
   @SerialName("birth_date") val birthDate: String? = null,
   @SerialName("birth_place") val birthPlace: String? = null,
   @SerialName("birth_country_code") val birthCountryCode: String? = null,
+  @SerialName("bank_name") val bankName: String? = null,
   @SerialName("bank_account_number") val bankAccountNumber: String? = null,
   @SerialName("bank_account_type") val bankAccountType: String? = null,
   @SerialName("bank_number") val bankNumber: String? = null,
   @SerialName("bank_phone_number") val bankPhoneNumber: String? = null,
   @SerialName("bank_branch_number") val bankBranchNumber: String? = null,
+  @SerialName("external_transfer_memo") val externalTransferMemo: String? = null,
   @SerialName("clabe_number") val clabeNumber: String? = null,
   @SerialName("cbu_number") val cbuNumber: String? = null,
   @SerialName("cbu_alias") val cbuAlias: String? = null,
+  @SerialName("mobileMoneyNumber") val mobileMoneyNumber: String? = null,
+  @SerialName("mobileMoneyProvider") val mobileMoneyProvider: String? = null,
   @SerialName("crypto_address") val cryptoAddress: String? = null,
   @SerialName("crypto_memo") val cryptoMemo: String? = null,
   @SerialName("tax_id") val taxId: String? = null,
@@ -53,10 +57,3 @@ data class Customer(
   @SerialName("proof_of_liveness") val proofOfLiveness: ByteArray? = null,
   @SerialName("referral_id") val referralId: String? = null,
 )
-
-enum class Status {
-  NEEDS_INFO,
-  ACCEPTED,
-  PROCESSING,
-  ERROR,
-}

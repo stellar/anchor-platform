@@ -17,12 +17,13 @@ import org.stellar.anchor.util.Log;
 public class ApiKeyFilter implements Filter {
   private static final String OPTIONS = "OPTIONS";
   private static final String APPLICATION_JSON_VALUE = "application/json";
-  private static final String HEADER_NAME = "X-Api-Key";
   private static final Gson gson = GsonUtils.builder().setPrettyPrinting().create();
   private final String apiKey;
+  private final String authorizationHeader;
 
-  public ApiKeyFilter(@NotNull String apiKey) {
+  public ApiKeyFilter(@NotNull String apiKey, String authorizationHeader) {
     this.apiKey = apiKey;
+    this.authorizationHeader = authorizationHeader;
   }
 
   @Override
@@ -53,7 +54,7 @@ public class ApiKeyFilter implements Filter {
       return;
     }
 
-    String gotApiKey = request.getHeader(HEADER_NAME);
+    String gotApiKey = request.getHeader(authorizationHeader);
     if (!apiKey.equals(gotApiKey)) {
       sendForbiddenError(response);
       return;
