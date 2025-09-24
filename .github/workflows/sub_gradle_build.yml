@@ -36,7 +36,7 @@ jobs:
 
       - name: Upload java-stellar-anchor-sdk.tar to GitHub Artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: java-stellar-anchor-sdk-tar
           path: |

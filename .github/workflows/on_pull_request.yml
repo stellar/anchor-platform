@@ -2,6 +2,7 @@ name: On Pull Request Workflow
 
 on:
   pull_request:
+    types: [closed] # Remove
 
 jobs:
   gradle_build:
