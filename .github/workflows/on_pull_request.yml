@@ -11,20 +11,21 @@ jobs:
     needs: [ gradle_build ]
     uses: ./.github/workflows/sub_jacoco_report.yml
 
-  essential_tests:
-    needs: [ gradle_build ]
-    uses: ./.github/workflows/sub_essential_tests.yml
-
-  extended_tests:
-    needs: [ gradle_build ]
-    uses: ./.github/workflows/sub_extended_tests.yml
+#  The end-2-end tests are longer valid because the accounts required in the testnet had been changed.
+#  essential_tests:
+#    needs: [ gradle_build ]
+#    uses: ./.github/workflows/sub_essential_tests.yml
+#
+#  extended_tests:
+#    needs: [ gradle_build ]
+#    uses: ./.github/workflows/sub_extended_tests.yml
 
   codeql_analysis:
     uses: ./.github/workflows/sub_codeql_analysis.yml
 
   complete:
     if: always()
-    needs: [ gradle_build, essential_tests, extended_tests, jacoco_report, codeql_analysis ]
+    needs: [ gradle_build, jacoco_report, codeql_analysis ]
     runs-on: ubuntu-22.04
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

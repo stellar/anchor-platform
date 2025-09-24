@@ -11,7 +11,7 @@ jobs:
     steps:
       #############################################
       # Setup JDK 17
-      # Download, and Extract java-stellar-anchor-sdk.tar
+      # Download, and Extract anchor-platform.tar
       # Setup hostnames (/etc/hosts)
       #############################################
       - name: Set up JDK 17
@@ -20,17 +20,17 @@ jobs:
           java-version: '17'
           distribution: 'adopt'
 
-      - name: Download java-stellar-anchor-sdk.tar
-        uses: actions/download-artifact@v3
+      - name: Download anchor-platform.tar
+        uses: actions/download-artifact@v4
         with:
-          name: java-stellar-anchor-sdk-tar
+          name: anchor-platform-tar
           path: /home/runner/
 
-      - name: Extract java-stellar-anchor-sdk.tar
+      - name: Extract anchor-platform.tar
         run: |
           cd /home/runner
-          tar -xf /home/runner/java-stellar-anchor-sdk.tar
-          cd /home/runner/java-stellar-anchor-sdk
+          tar -xf /home/runner/anchor-platform.tar
+          cd /home/runner/anchor-platform
 
       - name: Set up hostnames (/etc/hosts)
         run: |
@@ -53,7 +53,7 @@ jobs:
       - name: Run Kafka, Postgres, and Sep24 UI with docker compose
         env:
           TEST_PROFILE_NAME: default
-        run: docker compose -f /home/runner/java-stellar-anchor-sdk/service-runner/src/main/resources/docker-compose-test.yaml up -d --build
+        run: docker compose -f /home/runner/anchor-platform/service-runner/src/main/resources/docker-compose-test.yaml up -d --build
 
       - name: Run sep server, platform server, observer, and reference servers for integration tests
         env:
@@ -65,13 +65,13 @@ jobs:
           RUN_KOTLIN_REFERENCE_SERVER: true
           RUN_EVENT_PROCESSING_SERVER: true
           RUN_WALLET_SERVER: true
-          KT_REFERENCE_SERVER_CONFIG: /home/runner/java-stellar-anchor-sdk/service-runner/src/main/resources/config/reference-config.yaml
-          SEP1_TOML_VALUE: /home/runner/java-stellar-anchor-sdk/service-runner/src/main/resources/config/stellar.host.docker.internal.toml
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/janchor-platform/service-runner/src/main/resources/config/reference-config.yaml
+          SEP1_TOML_VALUE: /home/runner/anchor-platform/service-runner/src/main/resources/config/stellar.host.docker.internal.toml
           SEP10_WEB_AUTH_DOMAIN: host.docker.internal:8080
           SEP10_HOME_DOMAINS: host.docker.internal:8080,*.stellar.org
-          TOML_PATH: /home/runner/java-stellar-anchor-sdk/wallet-reference-server/src/main/resources/toml
+          TOML_PATH: /home/runner/anchor-platform/wallet-reference-server/src/main/resources/toml
         run: |
-          cp /home/runner/java-stellar-anchor-sdk/service-runner/build/libs/anchor-platform-runner-*.jar /home/runner/anchor-platform-runner.jar
+          cp /home/runner/anchor-platform/service-runner/build/libs/anchor-platform-runner-*.jar /home/runner/anchor-platform-runner.jar
           java -jar /home/runner/anchor-platform-runner.jar -t &
           echo "PID=$!" >> $GITHUB_ENV
 
@@ -99,21 +99,21 @@ jobs:
           RUN_DOCKER: false
           ANCHOR_DOMAIN: http://host.docker.internal:8080
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew runEssentialTests
 
       - name: Run Stellar validation tool
         run: |
-          docker run --network host -v /home/runner/java-stellar-anchor-sdk/platform/src/test/resources://config stellar/anchor-tests:latest --home-domain http://host.docker.internal:8080 --seps 1 6 10 12 24 31 38 --sep-config //config/stellar-anchor-tests-sep-config.json --verbose
+          docker run --network host -v /home/runner/anchor-platform/platform/src/test/resources://config stellar/anchor-tests:latest --home-domain http://host.docker.internal:8080 --seps 1 6 10 12 24 31 38 --sep-config //config/stellar-anchor-tests-sep-config.json --verbose
 
       - name: Upload Essential Tests report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: essential-tests-report
           path: |
-            /home/runner/java-stellar-anchor-sdk/api-schema/build/reports/
-            /home/runner/java-stellar-anchor-sdk/core/build/reports/
-            /home/runner/java-stellar-anchor-sdk/platform/build/reports/
-            /home/runner/java-stellar-anchor-sdk/essential-tests/build/reports/
+            /home/runner/anchor-platform/api-schema/build/reports/
+            /home/runner/anchor-platform/core/build/reports/
+            /home/runner/anchor-platform/platform/build/reports/
+            /home/runner/anchor-platform/essential-tests/build/reports/
         

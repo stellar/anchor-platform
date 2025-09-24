@@ -6,23 +6,7 @@ on:
     types: [ created, edited ]
 
 jobs:
-  gradle_build:
-    uses: ./.github/workflows/sub_gradle_build.yml
-
-#  essential_tests:
-#    needs: [ gradle_build ]
-#    uses: ./.github/workflows/sub_essential_tests.yml
-#
-#  extended_tests:
-#    needs: [ gradle_build ]
-#    uses: ./.github/workflows/sub_extended_tests.yml
-#
-  codeql_analysis:
-    uses: ./.github/workflows/sub_codeql_analysis.yml
-
   build_and_push_docker_image:
-    #    needs: [ gradle_build, essential_tests, extended_tests, codeql_analysis ]
-    needs: [ gradle_build, codeql_analysis ]
     name: Push to DockerHub (tag=stellar/anchor-platform:${{ github.event.release.tag_name }})
     runs-on: ubuntu-latest
     steps:
@@ -38,7 +22,7 @@ jobs:
         if: ${{ github.event.release.tag_name != env.EXPECTED_RELEASE_TAG }}
         run: |
           echo "The release tag is invalid: [${{ github.event.release.tag_name }}]"
-          echo "The expected release tag is: [${{ env.EXPECTED_RELEASE_TAG }}]"         
+          echo "The expected release tag is: [${{ env.EXPECTED_RELEASE_TAG }}]"
           echo "The release tag must match project version."
           exit 1
 

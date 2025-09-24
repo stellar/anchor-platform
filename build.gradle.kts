@@ -1,4 +1,3 @@
-import java.net.Socket
 import org.apache.tools.ant.taskdefs.condition.Os
 
 // The alias call in plugins scope produces IntelliJ false error which is suppressed here.
@@ -30,14 +29,6 @@ fun skipNonCriticalTasks(tasks: TaskContainer) {
   tasks.matching { it.name == "bootDistZip" }.configureEach { enabled = false }
 }
 
-fun isPortActive(host: String = "localhost", port: Int): Boolean {
-  return try {
-    Socket(host, port).use { _ -> true }
-  } catch (e: Exception) {
-    false
-  }
-}
-
 // The build task executed at GitHub Actions. This task is used to build the project and run the
 // unit tests. The task is also used to generate the Jacoco test report.
 tasks.register("runBuild") {
@@ -59,12 +50,6 @@ tasks.register("runBuild") {
 tasks.register("runEssentialTests") {
   group = "github"
   description = "Run the essential tests."
-  if (!isPortActive(port = 8080)) {
-    println("************************************************************")
-    println(
-        "ERROR: The AnchorPlatform server is not running. Please start the server before running the tests.")
-    throw GradleException("AnchorPlatform server is not running.")
-  }
   dependsOn(":essential-tests:test")
   subprojects {
     if (name == "essential-tests") {
@@ -222,7 +207,7 @@ subprojects {
 
 allprojects {
   group = "org.stellar.anchor-sdk"
-  version = "2.11.2"
+  version = "2.11.3"
 
   tasks.jar {
     manifest {
