@@ -11,7 +11,7 @@ jobs:
     steps:
       #############################################
       # Setup JDK 17
-      # Download, and Extract java-stellar-anchor-sdk.tar
+      # Download, and Extract anchor-platform.tar
       # Setup hostnames (/etc/hosts)
       #############################################
       - name: Set up JDK 17
@@ -20,17 +20,17 @@ jobs:
           java-version: '17'
           distribution: 'adopt'
 
-      - name: Download java-stellar-anchor-sdk.tar
-        uses: actions/download-artifact@v3
+      - name: Download anchor-platform.tar
+        uses: actions/download-artifact@v4
         with:
-          name: java-stellar-anchor-sdk-tar
+          name: anchor-platform-tar
           path: /home/runner/
 
-      - name: Extract java-stellar-anchor-sdk.tar
+      - name: Extract anchor-platform.tar
         run: |
           cd /home/runner
-          tar -xf /home/runner/java-stellar-anchor-sdk.tar
-          cd /home/runner/java-stellar-anchor-sdk
+          tar -xf /home/runner/anchor-platform.tar
+          cd /home/runner/anchor-platform
 
       - name: Set up hostnames (/etc/hosts)
         run: |
@@ -47,15 +47,15 @@ jobs:
       #############################################
 
       - name: Run Kafka, Postgres, and Sep24 UI with docker compose
-        run: docker compose -f /home/runner/java-stellar-anchor-sdk/service-runner/src/main/resources/docker-compose-test.yaml up -d --build
+        run: docker compose -f /home/runner/anchor-platform/service-runner/src/main/resources/docker-compose-test.yaml up -d --build
 
       # `custody` Tests
       - name: Start `custody` configuration
         env:
           TEST_PROFILE_NAME: custody
-          KT_REFERENCE_SERVER_CONFIG: /home/runner/java-stellar-anchor-sdk/service-runner/src/main/resources/config/reference-config.yaml
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew startServersWithTestProfile &
           echo "PID=$!" >> $GITHUB_ENV
 
@@ -69,7 +69,7 @@ jobs:
         env:
           TEST_PROFILE_NAME: custody
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew :service-runner:clean :extended-tests:clean :extended-tests:test --tests org.stellar.anchor.platform.suite.CustodyTestSuite         
           kill -9 $PID
 
@@ -77,9 +77,9 @@ jobs:
       - name: Start `rpc` configuration
         env:
           TEST_PROFILE_NAME: rpc
-          KT_REFERENCE_SERVER_CONFIG: /home/runner/java-stellar-anchor-sdk/service-runner/src/main/resources/config/reference-config.yaml
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew startServersWithTestProfile &
           echo "PID=$!" >> $GITHUB_ENV
 
@@ -93,7 +93,7 @@ jobs:
         env:
           TEST_PROFILE_NAME: rpc
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.RpcTestSuite         
           kill -9 $PID      
 
@@ -101,9 +101,9 @@ jobs:
       - name: Start `auth-apikey-custody` configuration
         env:
           TEST_PROFILE_NAME: auth-apikey-custody
-          KT_REFERENCE_SERVER_CONFIG: /home/runner/java-stellar-anchor-sdk/service-runner/src/main/resources/config/reference-config.yaml
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew startServersWithTestProfile &
           echo "PID=$!" >> $GITHUB_ENV
 
@@ -117,7 +117,7 @@ jobs:
         env:
           TEST_PROFILE_NAME: auth-apikey-custody
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.AuthApikeyCustodyTestSuite         
           kill -9 $PID           
 
@@ -125,9 +125,9 @@ jobs:
       - name: Start `auth-jwt-custody` configuration
         env:
           TEST_PROFILE_NAME: auth-jwt-custody
-          KT_REFERENCE_SERVER_CONFIG: /home/runner/java-stellar-anchor-sdk/service-runner/src/main/resources/config/reference-config.yaml
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew startServersWithTestProfile &
           echo "PID=$!" >> $GITHUB_ENV
 
@@ -141,7 +141,7 @@ jobs:
         env:
           TEST_PROFILE_NAME: auth-jwt-custody
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.AuthJwtCustodyTestSuite         
           kill -9 $PID    
 
@@ -149,9 +149,9 @@ jobs:
       - name: Start `auth-apikey-platform` configuration
         env:
           TEST_PROFILE_NAME: auth-apikey-platform
-          KT_REFERENCE_SERVER_CONFIG: /home/runner/java-stellar-anchor-sdk/service-runner/src/main/resources/config/reference-config.yaml
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew startServersWithTestProfile &
           echo "PID=$!" >> $GITHUB_ENV
 
@@ -166,7 +166,7 @@ jobs:
         env:
           TEST_PROFILE_NAME: auth-apikey-platform
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.AuthApikeyPlatformTestSuite         
           kill -9 $PID
 
@@ -174,9 +174,9 @@ jobs:
       - name: Start `auth-jwt-platform` configuration
         env:
           TEST_PROFILE_NAME: auth-jwt-platform
-          KT_REFERENCE_SERVER_CONFIG: /home/runner/java-stellar-anchor-sdk/service-runner/src/main/resources/config/reference-config.yaml
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew startServersWithTestProfile &
           echo "PID=$!" >> $GITHUB_ENV
 
@@ -191,7 +191,7 @@ jobs:
         env:
           TEST_PROFILE_NAME: auth-jwt-platform
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.AuthJwtPlatformTestSuite         
           kill -9 $PID   
 
@@ -201,5 +201,5 @@ jobs:
         with:
           name: extended-tests-report
           path: |
-            /home/runner/java-stellar-anchor-sdk/extended-tests/build/reports/
+            /home/runner/anchor-platform/extended-tests/build/reports/
         

@@ -17,7 +17,7 @@ jobs:
     steps:
       #############################################
       # Setup JDK 17
-      # Download, and Extract java-stellar-anchor-sdk.tar
+      # Download, and Extract anchor-platform.tar
       # Setup hostnames (/etc/hosts)
       #############################################
       - name: Set up JDK 17
@@ -26,17 +26,17 @@ jobs:
           java-version: '17'
           distribution: 'adopt'
 
-      - name: Download java-stellar-anchor-sdk.tar
-        uses: actions/download-artifact@v3
+      - name: Download anchor-platform.tar
+        uses: actions/download-artifact@v4
         with:
-          name: java-stellar-anchor-sdk-tar
+          name: anchor-platform-tar
           path: /home/runner/
 
-      - name: Extract java-stellar-anchor-sdk.tar
+      - name: Extract anchor-platform.tar
         run: |
           cd /home/runner
-          tar -xf /home/runner/java-stellar-anchor-sdk.tar
-          cd /home/runner/java-stellar-anchor-sdk
+          tar -xf /home/runner/anchor-platform.tar
+          cd /home/runner/anchor-platform
 
       - name: Set up hostnames (/etc/hosts)
         run: |
@@ -54,7 +54,7 @@ jobs:
       - name: Gradle Build with unit tests only
         if : ${{ inputs.forceRebuild }}
         run: |
-          cd /home/runner/java-stellar-anchor-sdk
+          cd /home/runner/anchor-platform
           ./gradlew clean build jacocoTestReport -x essential-tests:test -x extended-tests:test
 
       - name: Add coverage to the Pull Request
@@ -62,7 +62,7 @@ jobs:
         uses: madrapps/jacoco-report@v1.6.1
         with:
           # The path to the jacocoTestReport.xml files which were generated in the previous workflow
-          paths: /home/runner/java-stellar-sdk/**/build/reports/jacoco/test/jacocoTestReport.xml
+          paths: /home/runner/anchor-platform/**/build/reports/jacoco/test/jacocoTestReport.xml
           token: ${{ secrets.GITHUB_TOKEN }}
           min-coverage-overall: 40
           min-coverage-changed-files: 60

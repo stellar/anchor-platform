@@ -31,13 +31,15 @@ jobs:
 
       - name: Archive Project Folder
         run: |
-          cd /home/runner/work/java-stellar-anchor-sdk
-          tar -cf /home/runner/java-stellar-anchor-sdk.tar ./java-stellar-anchor-sdk
+          ls -al /home/runner/work
+          cd /home/runner/work/anchor-platform
+          ls -al /home/runner/work/anchor-platform
+          tar -cf /home/runner/anchor-platform.tar ./anchor-platform
 
-      - name: Upload java-stellar-anchor-sdk.tar to GitHub Artifacts
+      - name: Upload anchor-platform.tar to GitHub Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: java-stellar-anchor-sdk-tar
+          name: anchor-platform-tar
           path: |
-            /home/runner/java-stellar-anchor-sdk.tar
+            /home/runner/anchor-platform.tar
