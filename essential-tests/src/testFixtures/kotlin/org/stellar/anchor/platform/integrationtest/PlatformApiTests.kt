@@ -299,6 +299,7 @@ private const val EXPECTED_RPC_RESPONSE =
               "message": "test message",
               "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "client_name": "referenceCustodial",
+              "request_client_ip_address": "127.0.0.1",
               "customers": {
                 "sender": {
                   "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
@@ -341,6 +342,7 @@ private const val EXPECTED_RPC_BATCH_RESPONSE =
               "message": "test message",
               "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "client_name": "referenceCustodial",
+              "request_client_ip_address": "127.0.0.1",
               "customers": {
                 "sender": {
                   "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
@@ -378,6 +380,7 @@ private const val EXPECTED_RPC_BATCH_RESPONSE =
               "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
               "external_transaction_id": "1",
               "client_name": "referenceCustodial",
+              "request_client_ip_address": "127.0.0.1",              
               "customers": {
                 "sender": {
                   "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
