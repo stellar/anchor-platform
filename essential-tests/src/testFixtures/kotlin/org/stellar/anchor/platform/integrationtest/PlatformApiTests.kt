@@ -35,7 +35,7 @@ import org.stellar.walletsdk.asset.IssuedAssetId
 class RpcPlatformApiTests : PlatformApiTests() {
   @Test
   @Order(10)
-  fun `test get transaction by api and rpc`() {
+  fun `test sep24 get transaction by api and rpc`() {
     val depositRequest = gson.fromJson(RPC_DEPOSIT_REQUEST, HashMap::class.java)
 
     @Suppress("UNCHECKED_CAST")
@@ -203,6 +203,9 @@ abstract class PlatformApiTests : PlatformAPITestBase(TestConfig()) {
     val rpcActionRequestsType = object : TypeToken<List<RpcRequest>>() {}.type
     val rpcActionRequests: List<RpcRequest> =
       gson.fromJson(inject(actionRequests, TX_ID_KEY to txId), rpcActionRequestsType)
+
+    val txnResponse = platformApiClient.getTransactionByRpc(txId)
+    assertEquals("127.0.0.1", txnResponse.requestClientIpAddress)
 
     val rpcActionResponses = platformApiClient.sendRpcRequest(rpcActionRequests)
 
@@ -407,6 +410,7 @@ private const val EXPECTED_GET_TRANSACTION_BY_RPC_RESPONSE =
             "destination_account":
 "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
             "client_name": "referenceCustodial",
+            "request_client_ip_address": "127.0.0.1",
             "customers": {
               "sender": {
                 "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"

@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.controller.sep;
 
+import static org.stellar.anchor.platform.controller.sep.SepRequestHelper.getClientIpAddress;
 import static org.stellar.anchor.util.Log.debugF;
 import static org.stellar.anchor.util.Log.errorEx;
 
@@ -47,7 +48,8 @@ public class Sep31Controller {
   public Sep31PostTransactionResponse postTransaction(
       HttpServletRequest servletRequest, @RequestBody Sep31PostTransactionRequest request)
       throws AnchorException {
-    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(servletRequest);
+    WebAuthJwt webAuthJwt = SepRequestHelper.getToken(servletRequest);
+    request.setRequestClientIpAddress(getClientIpAddress(servletRequest));
     debugF("POST /transactions request={}", request);
     return sep31Service.postTransaction(webAuthJwt, request);
   }

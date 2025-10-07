@@ -145,7 +145,8 @@ public class Sep6Service {
             .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token));
+            .clientName(clientFinder.getClientName(token))
+            .requestClientIpAddress(request.getRequestClientIpAddress());
 
     if (accountType(token.getAccount()) == Contract) {
       if (request.getMemoType() != null && !request.getMemoType().equalsIgnoreCase("id")) {
@@ -260,7 +261,8 @@ public class Sep6Service {
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
-            .quoteId(request.getQuoteId());
+            .quoteId(request.getQuoteId())
+            .requestClientIpAddress(request.getRequestClientIpAddress());
 
     if (memo != null) {
       debug("Set the transaction memo.", memo);
@@ -340,7 +342,8 @@ public class Sep6Service {
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
             .refundMemo(request.getRefundMemo())
-            .refundMemoType(request.getRefundMemoType());
+            .refundMemoType(request.getRefundMemoType())
+            .requestClientIpAddress(request.getRequestClientIpAddress());
 
     Sep6Transaction txn = builder.build();
     txnStore.save(txn);
@@ -437,7 +440,8 @@ public class Sep6Service {
             .clientName(clientFinder.getClientName(token))
             .refundMemo(request.getRefundMemo())
             .refundMemoType(request.getRefundMemoType())
-            .quoteId(request.getQuoteId());
+            .quoteId(request.getQuoteId())
+            .requestClientIpAddress(request.getRequestClientIpAddress());
 
     Sep6Transaction txn = builder.build();
     txnStore.save(txn);
