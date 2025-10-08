@@ -360,7 +360,7 @@ class NotifyAmountsUpdatedHandlerTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal", "deposit", "deposit-exchange"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun `test SEP-6 supported kinds`(testKind: String) {
     val request =
       NotifyAmountsUpdatedRequest.builder()
