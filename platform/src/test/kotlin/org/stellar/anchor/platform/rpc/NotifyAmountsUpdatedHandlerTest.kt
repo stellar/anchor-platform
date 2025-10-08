@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.event.AnchorEvent
@@ -20,7 +21,6 @@ import org.stellar.anchor.api.exception.rpc.InvalidParamsException
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException
 import org.stellar.anchor.api.platform.GetTransactionResponse
 import org.stellar.anchor.api.platform.PlatformTransactionData
-import org.stellar.anchor.api.platform.PlatformTransactionData.Kind.DEPOSIT
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHDRAWAL
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep.*
 import org.stellar.anchor.api.rpc.method.AmountRequest
@@ -92,7 +92,7 @@ class NotifyAmountsUpdatedHandlerTest {
         requestValidator,
         assetService,
         eventService,
-        metricsService
+        metricsService,
       )
   }
 
@@ -113,7 +113,7 @@ class NotifyAmountsUpdatedHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[notify_amounts_updated] is not supported. Status[pending_anchor], kind[null], protocol[38], funds received[true]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -192,7 +192,7 @@ class NotifyAmountsUpdatedHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[notify_amounts_updated] is not supported. Status[incomplete], kind[withdrawal], protocol[24], funds received[true]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -201,12 +201,39 @@ class NotifyAmountsUpdatedHandlerTest {
     verify(exactly = 0) { sepTransactionCounter.increment() }
   }
 
-  @Test
-  fun test_handle_sep24_unsupportedKind() {
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun `test SEP-24 supported kinds`(testKind: String) {
+    val request =
+      NotifyAmountsUpdatedRequest.builder()
+        .transactionId(TX_ID)
+        .amountOut(AmountRequest("0.9"))
+        .feeDetails(FeeDetails("0.1", STELLAR_USDC))
+        .build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = PENDING_ANCHOR.toString()
+    txn24.kind = testKind
+    txn24.transferReceivedAt = Instant.now()
+    txn24.amountOutAsset = STELLAR_USDC
+
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+
+    handler.handle(request)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 1) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit-exchange", "withdrawal-exchange"])
+  fun test_handle_sep24_unsupportedKind(testKind: String) {
     val request = NotifyAmountsUpdatedRequest.builder().transactionId(TX_ID).build()
     val txn24 = JdbcSep24Transaction()
     txn24.status = PENDING_ANCHOR.toString()
-    txn24.kind = DEPOSIT.kind
+    txn24.kind = testKind
     txn24.transferReceivedAt = Instant.now()
 
     every { txn24Store.findByTransactionId(TX_ID) } returns txn24
@@ -214,8 +241,8 @@ class NotifyAmountsUpdatedHandlerTest {
 
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
-      "RPC method[notify_amounts_updated] is not supported. Status[pending_anchor], kind[deposit], protocol[24], funds received[true]",
-      ex.message
+      "RPC method[notify_amounts_updated] is not supported. Status[pending_anchor], kind[$testKind], protocol[24], funds received[true]",
+      ex.message,
     )
 
     verify(exactly = 0) { txn24Store.save(any()) }
@@ -236,7 +263,7 @@ class NotifyAmountsUpdatedHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[notify_amounts_updated] is not supported. Status[pending_anchor], kind[withdrawal], protocol[24], funds received[false]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn24Store.save(any()) }
@@ -294,7 +321,7 @@ class NotifyAmountsUpdatedHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep24Txn),
       gson.toJson(sep24TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -311,7 +338,7 @@ class NotifyAmountsUpdatedHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -325,33 +352,35 @@ class NotifyAmountsUpdatedHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep24TxnCapture.captured.updatedAt >= startDate)
     assertTrue(sep24TxnCapture.captured.updatedAt <= endDate)
   }
 
-  @CsvSource(value = ["deposit", "deposit-exchange"])
   @ParameterizedTest
-  fun test_handle_sep6_unsupportedKind(kind: String) {
-    val request = NotifyAmountsUpdatedRequest.builder().transactionId(TX_ID).build()
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit", "deposit-exchange"])
+  fun `test SEP-6 supported kinds`(testKind: String) {
+    val request =
+      NotifyAmountsUpdatedRequest.builder()
+        .transactionId(TX_ID)
+        .amountOut(AmountRequest("0.9"))
+        .feeDetails(FeeDetails("0.1", STELLAR_USDC))
+        .build()
     val txn6 = JdbcSep6Transaction()
     txn6.status = PENDING_ANCHOR.toString()
-    txn6.kind = kind
+    txn6.kind = testKind
     txn6.transferReceivedAt = Instant.now()
+    txn6.amountOutAsset = STELLAR_USDC
 
     every { txn6Store.findByTransactionId(TX_ID) } returns txn6
-    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
     every { txn31Store.findByTransactionId(any()) } returns null
 
-    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
-    assertEquals(
-      "RPC method[notify_amounts_updated] is not supported. Status[pending_anchor], kind[$kind], protocol[6], funds received[true]",
-      ex.message
-    )
+    handler.handle(request)
 
-    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 1) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
     verify(exactly = 0) { txn31Store.save(any()) }
     verify(exactly = 0) { sepTransactionCounter.increment() }
@@ -371,7 +400,7 @@ class NotifyAmountsUpdatedHandlerTest {
     val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
     assertEquals(
       "RPC method[notify_amounts_updated] is not supported. Status[pending_anchor], kind[withdrawal], protocol[6], funds received[false]",
-      ex.message
+      ex.message,
     )
 
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -432,7 +461,7 @@ class NotifyAmountsUpdatedHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
       gson.toJson(sep6TxnCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedResponse = GetTransactionResponse()
@@ -450,7 +479,7 @@ class NotifyAmountsUpdatedHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedResponse),
       gson.toJson(response),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     val expectedEvent =
@@ -464,7 +493,7 @@ class NotifyAmountsUpdatedHandlerTest {
     JSONAssert.assertEquals(
       gson.toJson(expectedEvent),
       gson.toJson(anchorEventCapture.captured),
-      JSONCompareMode.STRICT
+      JSONCompareMode.STRICT,
     )
 
     assertTrue(sep6TxnCapture.captured.updatedAt >= startDate)
