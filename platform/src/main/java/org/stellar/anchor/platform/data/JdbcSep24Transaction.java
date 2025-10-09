@@ -8,7 +8,6 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import org.springframework.beans.BeanUtils;
-import org.stellar.anchor.SepTransaction;
 import org.stellar.anchor.sep24.Sep24Refunds;
 import org.stellar.anchor.sep24.Sep24Transaction;
 
@@ -18,8 +17,7 @@ import org.stellar.anchor.sep24.Sep24Transaction;
 @Access(AccessType.FIELD)
 @Table(name = "sep24_transaction")
 @NoArgsConstructor
-public class JdbcSep24Transaction extends JdbcSepTransaction
-    implements Sep24Transaction, SepTransaction {
+public class JdbcSep24Transaction extends JdbcSepTransaction implements Sep24Transaction {
   public String getProtocol() {
     return "24";
   }

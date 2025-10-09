@@ -74,4 +74,14 @@ public interface SepTransaction {
   String getStellarTransactionId();
 
   void setStellarTransactionId(String stellarTransactionId);
+
+  /**
+   * Request client's IP address that started the SEP transaction.
+   *
+   * @return The <code>request_client_ip_address</code> field of the SEP-6, SEP-24 or SEP-31
+   *     transaction history.
+   */
+  String getRequestClientIpAddress();
+
+  void setRequestClientIpAddress(String requestClientIpAddress);
 }

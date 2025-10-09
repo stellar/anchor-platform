@@ -218,7 +218,8 @@ public class Sep24Service {
             .fromAccount(sourceAccount)
             .toAccount(asset.getDistributionAccount())
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token));
+            .clientName(clientFinder.getClientName(token))
+            .requestClientIpAddress(withdrawRequest.get("clientIpAddress"));
 
     if (memo != null) {
       debug("transaction memo detected.", memo);
@@ -416,7 +417,8 @@ public class Sep24Service {
             .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
-            .claimableBalanceSupported(claimableSupported);
+            .claimableBalanceSupported(claimableSupported)
+            .requestClientIpAddress(depositRequest.get("clientIpAddress"));
 
     if (accountType(token.getAccount()) == Contract) {
       if (depositRequest.get("memo_type") != null

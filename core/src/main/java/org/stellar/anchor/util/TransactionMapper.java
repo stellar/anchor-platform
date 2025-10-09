@@ -116,6 +116,7 @@ public class TransactionMapper {
         .memoType(txn.getStellarMemoType())
         .clientDomain(txn.getClientDomain())
         .clientName(txn.getClientName())
+        .requestClientIpAddress(txn.getRequestClientIpAddress())
         // TODO: SEP-31 supports refund memo but we don't use it
         .refundMemo(txn.getStellarMemo())
         .refundMemoType(txn.getStellarMemoType())
@@ -171,6 +172,7 @@ public class TransactionMapper {
         .memoType(txn.getMemoType())
         .clientDomain(txn.getClientDomain())
         .clientName(txn.getClientName())
+        .requestClientIpAddress(txn.getRequestClientIpAddress())
         .refundMemo(txn.getRefundMemo())
         .refundMemoType(txn.getRefundMemoType())
         .customers(Customers.builder().sender(customer).receiver(customer).build())
@@ -234,6 +236,7 @@ public class TransactionMapper {
         .memoType(txn.getMemoType())
         .clientDomain(txn.getClientDomain())
         .clientName(txn.getClientName())
+        .requestClientIpAddress(txn.getRequestClientIpAddress())
         .refundMemo(txn.getRefundMemo())
         .refundMemoType(txn.getRefundMemoType())
         .customers(Customers.builder().sender(customer).receiver(customer).build())

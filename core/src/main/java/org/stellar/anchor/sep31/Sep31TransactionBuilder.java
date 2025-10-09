@@ -176,6 +176,11 @@ public class Sep31TransactionBuilder {
     return this;
   }
 
+  public Sep31TransactionBuilder requestClientIpAddress(String requestClientIpAddress) {
+    txn.setRequestClientIpAddress(requestClientIpAddress);
+    return this;
+  }
+
   public Sep31Transaction build() {
     return txn;
   }
