@@ -194,6 +194,11 @@ public class Sep6TransactionBuilder {
     return this;
   }
 
+  public Sep6TransactionBuilder requestClientIpAddress(String requestClientIpAddress) {
+    txn.setRequestClientIpAddress(requestClientIpAddress);
+    return this;
+  }
+
   public Sep6Transaction build() {
     return txn;
   }

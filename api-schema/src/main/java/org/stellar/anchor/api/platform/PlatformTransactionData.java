@@ -107,6 +107,9 @@ public class PlatformTransactionData {
   @SerializedName("required_info_updates")
   List<String> requiredInfoUpdates;
 
+  @SerializedName("request_client_ip_address")
+  String requestClientIpAddress;
+
   Map<String, InstructionField> instructions;
 
   public enum Sep {

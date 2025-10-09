@@ -201,6 +201,7 @@ public class Sep31Service {
             .amountInAsset(assetInfo.getId())
             .amountOut(null)
             .amountOutAsset(null)
+            .requestClientIpAddress(request.getRequestClientIpAddress())
             .build();
 
     Context.get().setTransaction(txn);

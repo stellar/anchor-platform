@@ -48,6 +48,7 @@ public class PojoSep24Transaction implements Sep24Transaction {
   String quoteId;
   String sourceAsset;
   String destinationAsset;
+  String requestClientIpAddress;
   List<FeeDescription> feeDetailsList;
 
   public void setFeeDetails(FeeDetails feeDetails) {

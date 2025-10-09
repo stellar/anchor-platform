@@ -79,7 +79,7 @@ public class Sep38Controller {
         gson.fromJson(gson.toJson(params), Sep38GetPriceRequest.class);
     WebAuthJwt webAuthJwt;
     try {
-      webAuthJwt = WebAuthJwtHelper.getToken(request);
+      webAuthJwt = SepRequestHelper.getToken(request);
     } catch (SepValidationException svex) {
       webAuthJwt = null;
     }
@@ -96,7 +96,7 @@ public class Sep38Controller {
       method = {RequestMethod.POST})
   public Sep38QuoteResponse postQuote(
       HttpServletRequest request, @RequestBody Sep38PostQuoteRequest postQuoteRequest) {
-    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt webAuthJwt = SepRequestHelper.getToken(request);
     debugF("POSTS /quote request={}", postQuoteRequest);
     return sep38Service.postQuote(webAuthJwt, postQuoteRequest);
   }
@@ -110,7 +110,7 @@ public class Sep38Controller {
       method = {RequestMethod.GET})
   public Sep38QuoteResponse getQuote(
       HttpServletRequest request, @PathVariable(name = "quote_id") String quoteId) {
-    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt webAuthJwt = SepRequestHelper.getToken(request);
     debugF("GET /quote id={}", quoteId);
     return sep38Service.getQuote(webAuthJwt, quoteId);
   }

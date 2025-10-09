@@ -55,7 +55,7 @@ public class Sep12Controller {
         memoType,
         transactionId,
         lang);
-    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt webAuthJwt = SepRequestHelper.getToken(request);
     Sep12GetCustomerRequest getCustomerRequest =
         Sep12GetCustomerRequest.builder()
             .type(type)
@@ -81,7 +81,7 @@ public class Sep12Controller {
   public Sep12PutCustomerResponse putCustomer(
       HttpServletRequest request, @RequestBody Sep12PutCustomerRequest putCustomerRequest) {
     debug("PUT /customer details:", putCustomerRequest);
-    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt webAuthJwt = SepRequestHelper.getToken(request);
     return sep12Service.putCustomer(webAuthJwt, putCustomerRequest);
   }
 
@@ -118,7 +118,7 @@ public class Sep12Controller {
       }
     }
 
-    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt webAuthJwt = SepRequestHelper.getToken(request);
     return sep12Service.putCustomer(webAuthJwt, putCustomerRequest);
   }
 
@@ -134,7 +134,7 @@ public class Sep12Controller {
       HttpServletRequest request,
       @PathVariable String account,
       @RequestBody(required = false) Sep12DeleteCustomerRequest body) {
-    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt webAuthJwt = SepRequestHelper.getToken(request);
     String memo = body != null ? body.getMemo() : null;
     String memoType = body != null ? body.getMemoType() : null;
     debugF(
@@ -158,7 +158,7 @@ public class Sep12Controller {
       @PathVariable String account,
       @RequestParam(required = false) String memo,
       @RequestParam(required = false, name = "memo_type") String memoType) {
-    WebAuthJwt webAuthJwt = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt webAuthJwt = SepRequestHelper.getToken(request);
     debugF("DELETE /customer requestURI={} account={}", request.getRequestURI(), account);
     sep12Service.deleteCustomer(webAuthJwt, account, memo, memoType);
   }
