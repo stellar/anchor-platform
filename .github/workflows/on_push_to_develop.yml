@@ -8,7 +8,7 @@ name: Push/Merge to `develop` Branch
 on:
   push:
     # when commits are pushed or pull requests merged onto `develop` branch
-    branches: [ develop ]
+    branches: [ develop, chore/fix-docker-push ]
 
 jobs:
   gradle_build:
@@ -56,12 +56,20 @@ jobs:
         id: get_sha
         run: echo "SHA=$(git rev-parse --short ${{ github.sha }} )" >> $GITHUB_OUTPUT
 
-      - name: Build and push to DockerHub with tags `edge` and `edge-{date}-{sha}`
-        uses: docker/build-push-action@7f9d37fa544684fb73bfe4835ed7214c255ce02b
+      - name: Build and push Docker images
+        uses: docker/build-push-action@v6
         with:
+          context: .
+          file: ./Dockerfile
           push: true
-          tags: stellar/anchor-platform:edge,stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}
-          file: Dockerfile
+          # Optional but often useful to quiet SBOM/provenance warnings on multi-arch
+          provenance: false
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            stellar/anchor-platform:edge,stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}
+          # Optional: add build cache for faster rebuilds
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   complete:
     if: always()

@@ -1,7 +1,9 @@
 package org.stellar.anchor.auth
 
+import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.MalformedJwtException
 import io.mockk.mockk
+import java.util.Date.from
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -15,6 +17,8 @@ import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.setupMock
+import org.stellar.anchor.util.JwtUtil.jwtsBuilder
+import org.stellar.anchor.util.KeyUtil
 
 internal class JwtServiceTest {
   companion object {
@@ -125,5 +129,14 @@ internal class JwtServiceTest {
     assertThrows<MalformedJwtException> {
       jwtService.decode("This is a bad cipher", Sep10Jwt::class.java)
     }
+  }
+
+  @Test
+  fun `test bad jwt keys`() {
+    val now = java.time.Instant.now()
+    val later = java.time.Instant.now().plusSeconds(300)
+    val builder = jwtsBuilder().issuedAt(from(now)).expiration(from(later))
+
+    builder.signWith(KeyUtil.toSecretKeySpecOrNull("123"), Jwts.SIG.HS256).compact()
   }
 }
