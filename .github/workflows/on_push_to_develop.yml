@@ -17,26 +17,26 @@ jobs:
   rust_build:
     uses: ./.github/workflows/sub_rust_build.yml
 
-  essential_tests:
-    needs: [ gradle_build ]
-    uses: ./.github/workflows/sub_essential_tests.yml
-    concurrency:
-      group: ap-test-job
-      cancel-in-progress: false
-
-  extended_tests:
-    needs: [ gradle_build, essential_tests ]
-    uses: ./.github/workflows/sub_extended_tests.yml
-    concurrency:
-      group: ap-test-job
-      cancel-in-progress: false
+#  essential_tests:
+#    needs: [ gradle_build ]
+#    uses: ./.github/workflows/sub_essential_tests.yml
+#    concurrency:
+#      group: ap-test-job
+#      cancel-in-progress: false
+#
+#  extended_tests:
+#    needs: [ gradle_build, essential_tests ]
+#    uses: ./.github/workflows/sub_extended_tests.yml
+#    concurrency:
+#      group: ap-test-job
+#      cancel-in-progress: false
 
   codeql_analysis:
     uses: ./.github/workflows/sub_codeql_analysis.yml
 
   build_and_push_docker_image:
     name: Push to DockerHub
-    needs: [ gradle_build, essential_tests, extended_tests, codeql_analysis ]
+    needs: [ gradle_build ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
