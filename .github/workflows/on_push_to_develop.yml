@@ -8,44 +8,31 @@ name: Push/Merge to `develop` Branch
 on:
   push:
     # when commits are pushed or pull requests merged onto `develop` branch
-    branches: [ develop, chore/fix-docker-push ]
+    branches: [ develop ]
 
 jobs:
   gradle_build:
     uses: ./.github/workflows/sub_gradle_build.yml
-
-  rust_build:
-    uses: ./.github/workflows/sub_rust_build.yml
-
-#  essential_tests:
-#    needs: [ gradle_build ]
-#    uses: ./.github/workflows/sub_essential_tests.yml
-#    concurrency:
-#      group: ap-test-job
-#      cancel-in-progress: false
-#
-#  extended_tests:
-#    needs: [ gradle_build, essential_tests ]
-#    uses: ./.github/workflows/sub_extended_tests.yml
-#    concurrency:
-#      group: ap-test-job
-#      cancel-in-progress: false
-
-  codeql_analysis:
-    uses: ./.github/workflows/sub_codeql_analysis.yml
 
   build_and_push_docker_image:
     name: Push to DockerHub
     needs: [ gradle_build ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Login to DockerHub
-        uses: docker/login-action@bb984efc561711aaa26e433c32c3521176eae55b
+      # Enable multi-arch emulation
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # Use a Buildx builder with the docker-container driver (required for --platform)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          install: true
+          driver: docker-container
+          driver-opts: |
+            image=moby/buildkit:latest
 
       - name: Get current date
         id: get_date
@@ -55,6 +42,24 @@ jobs:
         shell: bash
         id: get_sha
         run: echo "SHA=$(git rev-parse --short ${{ github.sha }} )" >> $GITHUB_OUTPUT
+
+      - name: Download anchor-platform.tar
+        uses: actions/download-artifact@v4
+        with:
+          name: anchor-platform-tar
+          path: ./temp
+
+      - name: Extract anchor-platform.tar
+        run: |
+          pushd ./temp
+          tar -xf ./anchor-platform.tar
+          popd
+
+      - name: Login to DockerHub
+        uses: docker/login-action@bb984efc561711aaa26e433c32c3521176eae55b
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push Docker images
         uses: docker/build-push-action@v6
