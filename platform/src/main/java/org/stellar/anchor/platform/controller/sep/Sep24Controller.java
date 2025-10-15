@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.controller.sep;
 
+import static org.stellar.anchor.platform.utils.RequestLoggerFilter.ATTRIBUTE_CLIENT_IP_ADDRESS;
 import static org.stellar.anchor.util.Log.*;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -49,7 +50,8 @@ public class Sep24Controller {
       HttpServletRequest request, @RequestBody HashMap<String, String> requestData)
       throws AnchorException, MalformedURLException, URISyntaxException {
     debug("/deposit", requestData);
-    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt token = SepRequestHelper.getToken(request);
+    requestData.put(ATTRIBUTE_CLIENT_IP_ADDRESS, SepRequestHelper.getClientIpAddress(request));
     InteractiveTransactionResponse itr = sep24Service.deposit(token, requestData);
     info("interactive redirection:", itr);
     return itr;
@@ -81,7 +83,8 @@ public class Sep24Controller {
       HttpServletRequest request, @RequestBody HashMap<String, String> requestData)
       throws AnchorException, MalformedURLException, URISyntaxException {
     debug("/withdraw", requestData);
-    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt token = SepRequestHelper.getToken(request);
+    requestData.put(ATTRIBUTE_CLIENT_IP_ADDRESS, SepRequestHelper.getClientIpAddress(request));
     InteractiveTransactionResponse itr = sep24Service.withdraw(token, requestData);
     info("interactive redirection:", itr);
     return itr;
@@ -113,7 +116,7 @@ public class Sep24Controller {
       HttpServletRequest request, @RequestBody GetTransactionsRequest tr)
       throws SepException, MalformedURLException, URISyntaxException {
     debug("/transactions", tr);
-    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt token = SepRequestHelper.getToken(request);
     return sep24Service.findTransactions(token, tr);
   }
 
@@ -154,7 +157,7 @@ public class Sep24Controller {
       HttpServletRequest request, @RequestBody(required = false) GetTransactionRequest tr)
       throws SepException, IOException, URISyntaxException {
     debug("/transaction", tr);
-    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt token = SepRequestHelper.getToken(request);
 
     return sep24Service.findTransaction(token, tr);
   }

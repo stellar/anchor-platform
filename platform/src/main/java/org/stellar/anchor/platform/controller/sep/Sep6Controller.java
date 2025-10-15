@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.controller.sep;
 
+import static org.stellar.anchor.platform.controller.sep.SepRequestHelper.getClientIpAddress;
 import static org.stellar.anchor.util.Log.debugF;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -58,7 +59,7 @@ public class Sep6Controller {
           Boolean claimableBalancesSupported)
       throws AnchorException {
     debugF("GET /deposit");
-    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt token = SepRequestHelper.getToken(request);
     StartDepositRequest startDepositRequest =
         StartDepositRequest.builder()
             .assetCode(assetCode)
@@ -74,6 +75,7 @@ public class Sep6Controller {
             .amount(amount)
             .countryCode(countryCode)
             .claimableBalancesSupported(claimableBalancesSupported)
+            .requestClientIpAddress(getClientIpAddress(request))
             .build();
     return sep6Service.deposit(token, startDepositRequest);
   }
@@ -100,7 +102,7 @@ public class Sep6Controller {
           Boolean claimableBalancesSupported)
       throws AnchorException {
     debugF("GET /deposit-exchange");
-    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt token = SepRequestHelper.getToken(request);
     StartDepositExchangeRequest startDepositExchangeRequest =
         StartDepositExchangeRequest.builder()
             .destinationAsset(destinationAsset)
@@ -115,6 +117,7 @@ public class Sep6Controller {
             .lang(lang)
             .countryCode(countryCode)
             .claimableBalancesSupported(claimableBalancesSupported)
+            .requestClientIpAddress(getClientIpAddress(request))
             .build();
     return sep6Service.depositExchange(token, startDepositExchangeRequest);
   }
@@ -135,7 +138,7 @@ public class Sep6Controller {
       @RequestParam(value = "refundMemoType", required = false) String refundMemoType)
       throws AnchorException {
     debugF("GET /withdraw");
-    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt token = SepRequestHelper.getToken(request);
     StartWithdrawRequest startWithdrawRequest =
         StartWithdrawRequest.builder()
             .assetCode(assetCode)
@@ -145,6 +148,7 @@ public class Sep6Controller {
             .countryCode(countryCode)
             .refundMemo(refundMemo)
             .refundMemoType(refundMemoType)
+            .requestClientIpAddress(getClientIpAddress(request))
             .build();
     return sep6Service.withdraw(token, startWithdrawRequest);
   }
@@ -167,7 +171,7 @@ public class Sep6Controller {
       @RequestParam(value = "refund_memo_type", required = false) String refundMemoType)
       throws AnchorException {
     debugF("GET /withdraw-exchange");
-    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt token = SepRequestHelper.getToken(request);
     StartWithdrawExchangeRequest startWithdrawExchangeRequest =
         StartWithdrawExchangeRequest.builder()
             .sourceAsset(sourceAsset)
@@ -179,6 +183,7 @@ public class Sep6Controller {
             .countryCode(countryCode)
             .refundMemo(refundMemo)
             .refundMemoType(refundMemoType)
+            .requestClientIpAddress(getClientIpAddress(request))
             .build();
     return sep6Service.withdrawExchange(token, startWithdrawExchangeRequest);
   }
@@ -206,7 +211,7 @@ public class Sep6Controller {
         pagingId,
         noOlderThan,
         lang);
-    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt token = SepRequestHelper.getToken(request);
     GetTransactionsRequest getTransactionsRequest =
         GetTransactionsRequest.builder()
             .assetCode(assetCode)
@@ -239,7 +244,7 @@ public class Sep6Controller {
         stellarTransactionId,
         externalTransactionId,
         lang);
-    WebAuthJwt token = WebAuthJwtHelper.getToken(request);
+    WebAuthJwt token = SepRequestHelper.getToken(request);
     GetTransactionRequest getTransactionRequest =
         GetTransactionRequest.builder()
             .id(id)

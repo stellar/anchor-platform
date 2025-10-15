@@ -145,6 +145,11 @@ public class Sep24TransactionBuilder {
     txn.setQuoteId(quoteId);
   }
 
+  public Sep24TransactionBuilder requestClientIpAddress(String requestClientIpAddress) {
+    txn.setRequestClientIpAddress(requestClientIpAddress);
+    return this;
+  }
+
   public Sep24Transaction build() {
     return txn;
   }

@@ -1,8 +1,7 @@
 package org.stellar.anchor.platform.rpc;
 
 import static java.util.Collections.emptySet;
-import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHDRAWAL;
-import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHDRAWAL_EXCHANGE;
+import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*;
 import static org.stellar.anchor.api.rpc.method.RpcMethod.NOTIFY_AMOUNTS_UPDATED;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.*;
 
@@ -86,7 +85,8 @@ public class NotifyAmountsUpdatedHandler
     switch (Sep.from(txn.getProtocol())) {
       case SEP_6:
         JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
-        if (ImmutableSet.of(WITHDRAWAL, WITHDRAWAL_EXCHANGE).contains(Kind.from(txn6.getKind()))) {
+        if (ImmutableSet.of(WITHDRAWAL, WITHDRAWAL_EXCHANGE, DEPOSIT, DEPOSIT_EXCHANGE)
+            .contains(Kind.from(txn6.getKind()))) {
           if (areFundsReceived(txn6)) {
             return Set.of(PENDING_ANCHOR);
           }
@@ -94,7 +94,7 @@ public class NotifyAmountsUpdatedHandler
         return emptySet();
       case SEP_24:
         JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
-        if (WITHDRAWAL == Kind.from(txn24.getKind())) {
+        if (ImmutableSet.of(WITHDRAWAL, DEPOSIT).contains(Kind.from(txn24.getKind()))) {
           if (areFundsReceived(txn24)) {
             return Set.of(PENDING_ANCHOR);
           }
@@ -109,7 +109,6 @@ public class NotifyAmountsUpdatedHandler
   protected void updateTransactionWithRpcRequest(
       JdbcSepTransaction txn, NotifyAmountsUpdatedRequest request) throws InvalidParamsException {
     txn.setAmountOut(request.getAmountOut().getAmount());
-
     txn.setAmountFee(request.getFeeDetails().getTotal());
     txn.setFeeDetailsList(request.getFeeDetails().getDetails());
   }

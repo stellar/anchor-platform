@@ -91,6 +91,10 @@ public abstract class JdbcSepTransaction {
   @JdbcTypeCode(SqlTypes.JSON)
   List<StellarTransaction> stellarTransactions;
 
+  @SerializedName("request_client_ip_address")
+  @Column(name = "request_client_ip_address")
+  String requestClientIpAddress;
+
   public abstract String getProtocol();
 
   public void setFeeDetails(FeeDetails feeDetails) {
