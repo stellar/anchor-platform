@@ -16,9 +16,6 @@ ARG TARGETARCH
 COPY --from=build /code/service-runner/build/libs/anchor-platform-runner*.jar /app/anchor-platform-runner.jar
 COPY --from=build /code/scripts/docker-start.sh /app/start.sh
 
-#COPY ./temp/anchor-platform/service-runner/build/libs/anchor-platform-runner*.jar /app/anchor-platform-runner.jar
-#COPY ./temp/anchor-platform/scripts/docker-start.sh /app/start.sh
-
 # Install curl and ca-certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates tar unzip \
