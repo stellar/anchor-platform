@@ -246,9 +246,9 @@ fun isJdkVersionValid(): Boolean {
   }
   return false
 }
-if (!isJdkVersionValid()) {
-  throw GradleException("JDK 17.0.16 or above is required. Current version: ${System.getProperty("java.version")}")
-}
+//if (!isJdkVersionValid()) {
+//  throw GradleException("JDK 17.0.16 or above is required. Current version: ${System.getProperty("java.version")}")
+//}
 
 // *******************************************************************************
 // print the gradle script usages

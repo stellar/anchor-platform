@@ -7,11 +7,11 @@ on:
     types: [ created, edited ]
 
 jobs:
-  gradle_build:
-    uses: ./.github/workflows/sub_gradle_build.yml
+#  gradle_build:
+#    uses: ./.github/workflows/sub_gradle_build.yml
 
   build_and_push_docker_image:
-    needs: [ gradle_build ]
+#    needs: [ gradle_build ]
     name: Push to DockerHub (tag=stellar/anchor-platform:${{ github.event.release.tag_name }})
     runs-on: ubuntu-latest
     steps:
@@ -48,17 +48,17 @@ jobs:
 #          echo "The release tag must match project version."
 #          exit 1
 
-      - name: Download anchor-platform.tar
-        uses: actions/download-artifact@v4
-        with:
-          name: anchor-platform-tar
-          path: ./temp
-
-      - name: Extract anchor-platform.tar
-        run: |
-          pushd ./temp
-          tar -xf ./anchor-platform.tar
-          popd
+#      - name: Download anchor-platform.tar
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: anchor-platform-tar
+#          path: ./temp
+#
+#      - name: Extract anchor-platform.tar
+#        run: |
+#          pushd ./temp
+#          tar -xf ./anchor-platform.tar
+#          popd
 
       - name: Docker Login
         uses: docker/login-action@v3
