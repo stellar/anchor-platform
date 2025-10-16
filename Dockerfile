@@ -1,3 +1,13 @@
+# Build anchor-platform-runner.jar
+ARG BASE_IMAGE=gradle:8.2.1-jdk17
+
+FROM ${BASE_IMAGE} AS build
+WORKDIR /code
+COPY --chown=gradle:gradle . .
+
+RUN gradle clean bootJar --stacktrace -x test
+
+# Build final image
 FROM ubuntu:24.04
 ARG JDK_VER=17.0.16_8
 ARG TEMURIN_RELEASE=jdk-17.0.16+8

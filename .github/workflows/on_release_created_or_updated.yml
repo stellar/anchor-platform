@@ -2,6 +2,7 @@ name: Release Published
 
 on:
   workflow_dispatch:
+  pull_request:
   release:
     types: [ created, edited ]
 
@@ -39,13 +40,13 @@ jobs:
         shell: bash
         run: echo "EXPECTED_RELEASE_TAG=$(./gradlew -q printVersionName)" >> "$GITHUB_ENV"
 
-      - name: Fail if the release version and the project version do not match
-        if: ${{ github.event.release.tag_name != env.EXPECTED_RELEASE_TAG }}
-        run: |
-          echo "The release tag is invalid: [${{ github.event.release.tag_name }}]"
-          echo "The expected release tag is: [${{ env.EXPECTED_RELEASE_TAG }}]"
-          echo "The release tag must match project version."
-          exit 1
+#      - name: Fail if the release version and the project version do not match
+#        if: ${{ github.event.release.tag_name != env.EXPECTED_RELEASE_TAG }}
+#        run: |
+#          echo "The release tag is invalid: [${{ github.event.release.tag_name }}]"
+#          echo "The expected release tag is: [${{ env.EXPECTED_RELEASE_TAG }}]"
+#          echo "The release tag must match project version."
+#          exit 1
 
       - name: Download anchor-platform.tar
         uses: actions/download-artifact@v4
@@ -70,7 +71,8 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          push: true
+          push: false
+#          push: true
           # Optional but often useful to quiet SBOM/provenance warnings on multi-arch
           provenance: false
           platforms: linux/amd64,linux/arm64
