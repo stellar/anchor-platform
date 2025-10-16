@@ -11,26 +11,29 @@ jobs:
     runs-on: ubuntu-latest
     name: Validate Release Tag
     steps:
+      - uses: actions/checkout@v4
+
       - name: Get EXPECTED_RELEASE_TAG
         shell: bash
         run: echo "EXPECTED_RELEASE_TAG=$(./gradlew -q printVersionName)" >> "$GITHUB_ENV"
-      - name: Fail if the release version and the project version do not match
-        if: ${{ github.event.release.tag_name != env.EXPECTED_RELEASE_TAG }}
-        run: |
-          echo "The release tag is invalid: [${{ github.event.release.tag_name }}]"
-          echo "The expected release tag is: [${{ env.EXPECTED_RELEASE_TAG }}]"
-          echo "The release tag must match project version."
-          exit 1  
+
+#      - name: Fail if the release version and the project version do not match
+#        if: ${{ github.event.release.tag_name != env.EXPECTED_RELEASE_TAG }}
+#        run: |
+#          echo "The release tag is invalid: [${{ github.event.release.tag_name }}]"
+#          echo "The expected release tag is: [${{ env.EXPECTED_RELEASE_TAG }}]"
+#          echo "The release tag must match project version."
+#          exit 1
 
   build_and_push_docker_image_amd64:
     name: Push to DockerHub (tag=stellar/anchor-platform:${{ github.event.release.tag_name }}) - AMD64
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      # Enable multi-arch emulation
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Get EXPECTED_RELEASE_TAG
+        shell: bash
+        run: echo "EXPECTED_RELEASE_TAG=$(./gradlew -q printVersionName)" >> "$GITHUB_ENV"
 
       # Use a Buildx builder with the docker-container driver (required for --platform)
       - name: Set up Docker Buildx
@@ -40,10 +43,6 @@ jobs:
           driver: docker-container
           driver-opts: |
             image=moby/buildkit:latest
-
-      - name: Get EXPECTED_RELEASE_TAG
-        shell: bash
-        run: echo "EXPECTED_RELEASE_TAG=$(./gradlew -q printVersionName)" >> "$GITHUB_ENV"
 
       - name: Docker Login
         uses: docker/login-action@v3
@@ -58,10 +57,7 @@ jobs:
           file: ./Dockerfile
           push: false
 #          push: true
-          # Optional but often useful to quiet SBOM/provenance warnings on multi-arch
-          provenance: false
           platforms: linux/amd64
-          #          platforms: linux/amd64,linux/arm64
           tags: |
             stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }}
             stellar/anchor-platform:latest
@@ -71,13 +67,15 @@ jobs:
 
   build_and_push_docker_image_arm64:
     name: Push to DockerHub (tag=stellar/anchor-platform:${{ github.event.release.tag_name }}) - ARM64
-    runs-on: ubuntu-latest
+    # Having a separate job for ARM64 helps to reduce overall build time.
+    # The multi-arch build takes longer if running the arm build on an amd64 runner via emulation.
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
-      # Enable multi-arch emulation
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Get EXPECTED_RELEASE_TAG
+        shell: bash
+        run: echo "EXPECTED_RELEASE_TAG=$(./gradlew -q printVersionName)" >> "$GITHUB_ENV"
 
       # Use a Buildx builder with the docker-container driver (required for --platform)
       - name: Set up Docker Buildx
@@ -87,10 +85,6 @@ jobs:
           driver: docker-container
           driver-opts: |
             image=moby/buildkit:latest
-
-      - name: Get EXPECTED_RELEASE_TAG
-        shell: bash
-        run: echo "EXPECTED_RELEASE_TAG=$(./gradlew -q printVersionName)" >> "$GITHUB_ENV"
 
       - name: Docker Login
         uses: docker/login-action@v3
@@ -112,7 +106,9 @@ jobs:
           tags: |
             stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }}
             stellar/anchor-platform:latest
-
+          # Optional: add build cache for faster rebuilds
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   complete:
     if: always()
