@@ -241,13 +241,13 @@ fun isJdkVersionValid(): Boolean {
       val patchInt = patch.toInt()
       val minorInt = minor.toInt()
       // Accept 17.0.16 and above
-      return minorInt > 0 || patchInt >= 16
+      return minorInt > 0 || patchInt >= 8
     }
   }
   return false
 }
 if (!isJdkVersionValid()) {
-  throw GradleException("JDK 17.0.16 or above is required. Current version: ${System.getProperty("java.version")}")
+  throw GradleException("JDK 17.0.8 or above is required. Current version: ${System.getProperty("java.version")}")
 }
 
 // *******************************************************************************
@@ -275,7 +275,5 @@ tasks.register("printUsage") {
             .trimIndent())
   }
 }
-
-
 
 defaultTasks("printUsage")
