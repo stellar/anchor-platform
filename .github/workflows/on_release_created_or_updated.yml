@@ -13,7 +13,8 @@ jobs:
   build_and_push_docker_image:
 #    needs: [ gradle_build ]
     name: Push to DockerHub (tag=stellar/anchor-platform:${{ github.event.release.tag_name }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-16-cores
+#    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
