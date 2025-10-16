@@ -76,7 +76,8 @@ jobs:
 #          push: true
           # Optional but often useful to quiet SBOM/provenance warnings on multi-arch
           provenance: false
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
+          #          platforms: linux/amd64,linux/arm64
           tags: |
             stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }}
             stellar/anchor-platform:latest
