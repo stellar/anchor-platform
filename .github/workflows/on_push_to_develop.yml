@@ -48,6 +48,8 @@ jobs:
           file: ./Dockerfile
           push: true
           platforms: linux/amd64
+          build-args: |
+            TARGETARCH=amd64
           tags: |
             stellar/anchor-platform:edge,stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}
           # add build cache for faster rebuilds
@@ -91,6 +93,8 @@ jobs:
           file: ./Dockerfile
           push: true
           platforms: linux/arm64
+          build-args: |
+            TARGETARCH=arm64
           tags: |
             stellar/anchor-platform:edge,stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}
           # add build cache for faster rebuilds

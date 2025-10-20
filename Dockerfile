@@ -13,15 +13,12 @@ ARG JDK_VER=17.0.16_8
 ARG TEMURIN_RELEASE=jdk-17.0.16+8
 ARG TARGETARCH=amd64
 
-COPY --from=build /code/service-runner/build/libs/anchor-platform-runner*.jar /app/anchor-platform-runner.jar
-COPY --from=build /code/scripts/docker-start.sh /app/start.sh
+RUN bash -c 'echo "Building for arch: $TARGETARCH"'
 
 # Install curl and ca-certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates tar unzip \
  && rm -rf /var/lib/apt/lists/*
-
-RUN bash -c 'echo "Building for arch: $TARGETARCH"'
 
 # ---- Install Temurin JDK 17.0.16+8 ----
 RUN case "$TARGETARCH" in \
@@ -42,5 +39,8 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # Sanity check
 RUN java --version
+
+COPY --from=build /code/service-runner/build/libs/anchor-platform-runner*.jar /app/anchor-platform-runner.jar
+COPY --from=build /code/scripts/docker-start.sh /app/start.sh
 
 ENTRYPOINT ["/bin/bash", "/app/start.sh"]
