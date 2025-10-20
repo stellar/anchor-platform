@@ -58,7 +58,7 @@ jobs:
           tags: |
             stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }}
             stellar/anchor-platform:latest
-          # Optional: add build cache for faster rebuilds
+          # add build cache for faster rebuilds
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
