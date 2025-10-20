@@ -6,7 +6,6 @@
 name: Push/Merge to `develop` Branch
 
 on:
-  pull_request:
   push:
     # when commits are pushed or pull requests merged onto `develop` branch
     branches: [ develop ]
