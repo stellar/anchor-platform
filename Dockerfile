@@ -11,7 +11,7 @@ RUN gradle --no-daemon clean bootJar -Pkotlin.compiler.execution.strategy=in-pro
 FROM ubuntu:24.04
 ARG JDK_VER=17.0.16_8
 ARG TEMURIN_RELEASE=jdk-17.0.16+8
-ARG TARGETARCH
+ARG TARGETARCH=amd64
 
 COPY --from=build /code/service-runner/build/libs/anchor-platform-runner*.jar /app/anchor-platform-runner.jar
 COPY --from=build /code/scripts/docker-start.sh /app/start.sh
