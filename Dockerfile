@@ -21,10 +21,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates tar unzip \
  && rm -rf /var/lib/apt/lists/*
 
-RUN bash -c 'echo "############################"'
-
-RUN bash -c 'echo "Building for arch: $TARGETARCH"'
-
 # ---- Install Temurin JDK 17.0.16+8 ----
 RUN case "$TARGETARCH" in \
       amd64|x86_64) DOWNLOAD_URL="https://github.com/adoptium/temurin17-binaries/releases/download/${TEMURIN_RELEASE}/OpenJDK17U-jdk_x64_linux_hotspot_${JDK_VER}.tar.gz" ;; \
