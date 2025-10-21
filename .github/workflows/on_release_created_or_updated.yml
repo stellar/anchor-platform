@@ -55,10 +55,12 @@ jobs:
           file: ./Dockerfile
           push: true
           platforms: linux/amd64
+          build-args: |
+            TARGETARCH=amd64
           tags: |
             stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }}
             stellar/anchor-platform:latest
-          # Optional: add build cache for faster rebuilds
+          # add build cache for faster rebuilds
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -95,6 +97,8 @@ jobs:
           file: ./Dockerfile
           push: true
           platforms: linux/arm64
+          build-args: |
+            TARGETARCH=arm64
           tags: |
             stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }}
             stellar/anchor-platform:latest
