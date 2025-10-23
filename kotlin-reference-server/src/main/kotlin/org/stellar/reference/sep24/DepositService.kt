@@ -149,7 +149,6 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
     // SAC transfers submitted to RPC are asynchronous, we will need to retry
     // until the RPC returns a success response
     if (cfg.appSettings.rpcEnabled) {
-      println("Finalizing Stellar transaction ${transaction.id} with status ${transaction.status}")
       if (transaction.status == "pending_anchor") {
         flow<Unit> {
             sep24.rpcAction(
