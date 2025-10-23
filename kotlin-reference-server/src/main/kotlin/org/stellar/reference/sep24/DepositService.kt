@@ -168,6 +168,10 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
             }
           }
           .collect {}
+      } else {
+        log.warn {
+          "Transaction ${transaction.id} is in unexpected status ${transaction.status}, skipping notify_onchain_funds_sent"
+        }
       }
     }
   }
