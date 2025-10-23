@@ -23,7 +23,7 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
     amount: BigDecimal,
     account: String,
     asset: String,
-    memo: String?
+    memo: String?,
   ) {
     try {
       var transaction = sep24.getTransaction(transactionId)
@@ -57,7 +57,7 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
               account,
               Asset.create(asset.replace("stellar:", "")),
               transaction.amountOut!!.amount!!,
-              memo
+              memo,
             )
 
           // 6. Finalize Stellar anchor transaction
@@ -149,29 +149,32 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
 
   private suspend fun finalizeStellarTransaction(
     transactionId: String,
-    stellarTransactionId: String
+    stellarTransactionId: String,
   ) {
     // SAC transfers submitted to RPC are asynchronous, we will need to retry
     // until the RPC returns a success response
     if (cfg.appSettings.rpcEnabled) {
-      flow<Unit> {
-          sep24.rpcAction(
-            "notify_onchain_funds_sent",
-            NotifyOnchainFundsSentRequest(
-              transactionId = transactionId,
-              stellarTransactionId = stellarTransactionId,
-            ),
-          )
-        }
-        .retryWhen { _, attempt ->
-          if (attempt < 5) {
-            delay(5_000)
-            return@retryWhen true
-          } else {
-            return@retryWhen false
+      val sep24Txn = sep24.getTransaction(stellarTransactionId)
+      if (sep24Txn.status == "pending_anchor") {
+        flow<Unit> {
+            sep24.rpcAction(
+              "notify_onchain_funds_sent",
+              NotifyOnchainFundsSentRequest(
+                transactionId = transactionId,
+                stellarTransactionId = stellarTransactionId,
+              ),
+            )
           }
-        }
-        .collect {}
+          .retryWhen { _, attempt ->
+            if (attempt < 5) {
+              delay(5_000)
+              return@retryWhen true
+            } else {
+              return@retryWhen false
+            }
+          }
+          .collect {}
+      }
     }
   }
 
