@@ -61,7 +61,7 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
             )
 
           // 6. Finalize Stellar anchor transaction
-          finalizeStellarTransaction(transactionId, txHash)
+          finalizeStellarTransaction(transaction, txHash)
         }
       }
 
@@ -123,11 +123,6 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
         "pending_anchor",
         "funds received, transaction is being processed",
       )
-      sep24.patchTransaction(
-        transactionId,
-        "pending_stellar",
-        "funds received, transaction is being processed",
-      )
     }
   }
 
@@ -148,19 +143,19 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
   }
 
   private suspend fun finalizeStellarTransaction(
-    transactionId: String,
+    transaction: Transaction,
     stellarTransactionId: String,
   ) {
     // SAC transfers submitted to RPC are asynchronous, we will need to retry
     // until the RPC returns a success response
     if (cfg.appSettings.rpcEnabled) {
-      val sep24Txn = sep24.getTransaction(stellarTransactionId)
-      if (sep24Txn.status == "pending_anchor") {
+      println("Finalizing Stellar transaction ${transaction.id} with status ${transaction.status}")
+      if (transaction.status == "pending_anchor") {
         flow<Unit> {
             sep24.rpcAction(
               "notify_onchain_funds_sent",
               NotifyOnchainFundsSentRequest(
-                transactionId = transactionId,
+                transactionId = transaction.id,
                 stellarTransactionId = stellarTransactionId,
               ),
             )
