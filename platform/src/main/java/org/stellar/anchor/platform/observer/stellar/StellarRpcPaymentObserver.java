@@ -119,7 +119,6 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     try {
       GetEventsResponse response = sorobanServer.getEvents(buildEventRequest(cursor));
       metricLatestBlockRead.set(response.getLatestLedger());
-
       if (response.getEvents() != null && !response.getEvents().isEmpty()) {
         processEvents(response.getEvents());
       }
