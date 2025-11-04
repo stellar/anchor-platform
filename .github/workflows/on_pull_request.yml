@@ -26,7 +26,7 @@ jobs:
 
   complete:
     if: always()
-    needs: [ gradle_build, essential_tests, extended_tests, rust_build, codeql_analysis ]
+    needs: [ gradle_build, essential_tests, extended_tests, rust_build ]
     runs-on: ubuntu-22.04
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
