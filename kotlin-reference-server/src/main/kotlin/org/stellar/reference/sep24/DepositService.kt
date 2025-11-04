@@ -79,7 +79,7 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
     }
   }
 
-  suspend fun waitForValidTransaction(
+  private suspend fun waitForValidTransaction(
     paymentClient: PaymentClient,
     txHash: String,
     maxAttempts: Int = 10,
