@@ -4,13 +4,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.retryWhen
+import kotlinx.coroutines.withTimeout
 import org.stellar.reference.client.PaymentClient
 import org.stellar.reference.data.*
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.transactionWithRetry
 import org.stellar.sdk.Asset
+import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
 
 private val log = KotlinLogging.logger {}
 
@@ -23,7 +23,7 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
     amount: BigDecimal,
     account: String,
     asset: String,
-    memo: String?
+    memo: String?,
   ) {
     try {
       var transaction = sep24.getTransaction(transactionId)
@@ -51,18 +51,19 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
         // 7. Finalize custody Stellar anchor transaction
         finalizeCustodyStellarTransaction(transactionId)
       } else {
+        lateinit var txHash: String
         transactionWithRetry {
-          val txHash =
+          txHash =
             paymentClient.send(
               account,
               Asset.create(asset.replace("stellar:", "")),
               transaction.amountOut!!.amount!!,
-              memo
+              memo,
             )
-
-          // 6. Finalize Stellar anchor transaction
-          finalizeStellarTransaction(transactionId, txHash)
         }
+        waitForValidTransaction(paymentClient, txHash)
+        // 6. Finalize Stellar anchor transaction
+        finalizeStellarTransaction(transaction, txHash)
       }
 
       log.info { "Transaction completed: $transactionId" }
@@ -75,6 +76,37 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
       } catch (e: Exception) {
         log.error(e) { "CRITICAL: failed to set transaction status to error" }
       }
+    }
+  }
+
+  private suspend fun waitForValidTransaction(
+    paymentClient: PaymentClient,
+    txHash: String,
+    maxAttempts: Int = 10,
+    timeoutMs: Long? = null,
+  ): GetTransactionResponse {
+    suspend fun poll(): GetTransactionResponse {
+      var attempt = 0
+      while (attempt < maxAttempts) {
+        val txn = paymentClient.getTransaction(txHash)
+        if (txn?.status == GetTransactionResponse.GetTransactionStatus.SUCCESS) {
+          return txn
+        }
+        if (txn?.status == GetTransactionResponse.GetTransactionStatus.FAILED) {
+          throw IllegalStateException("Transaction $txHash failed")
+        }
+        attempt++
+        delay(1000L)
+      }
+      throw IllegalStateException(
+        "Transaction $txHash did not reach a valid status after $maxAttempts attempts"
+      )
+    }
+
+    return if (timeoutMs != null) {
+      withTimeout(timeoutMs) { poll() }
+    } else {
+      poll()
     }
   }
 
@@ -123,11 +155,6 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
         "pending_anchor",
         "funds received, transaction is being processed",
       )
-      sep24.patchTransaction(
-        transactionId,
-        "pending_stellar",
-        "funds received, transaction is being processed",
-      )
     }
   }
 
@@ -148,30 +175,25 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
   }
 
   private suspend fun finalizeStellarTransaction(
-    transactionId: String,
-    stellarTransactionId: String
+    transaction: Transaction,
+    stellarTransactionId: String,
   ) {
     // SAC transfers submitted to RPC are asynchronous, we will need to retry
     // until the RPC returns a success response
     if (cfg.appSettings.rpcEnabled) {
-      flow<Unit> {
-          sep24.rpcAction(
-            "notify_onchain_funds_sent",
-            NotifyOnchainFundsSentRequest(
-              transactionId = transactionId,
-              stellarTransactionId = stellarTransactionId,
-            ),
-          )
+      if (transaction.status == "pending_anchor") {
+        sep24.rpcAction(
+          "notify_onchain_funds_sent",
+          NotifyOnchainFundsSentRequest(
+            transactionId = transaction.id,
+            stellarTransactionId = stellarTransactionId,
+          ),
+        )
+      } else {
+        log.warn {
+          "Transaction ${transaction.id} is in unexpected status ${transaction.status}, skipping notify_onchain_funds_sent"
         }
-        .retryWhen { _, attempt ->
-          if (attempt < 5) {
-            delay(5_000)
-            return@retryWhen true
-          } else {
-            return@retryWhen false
-          }
-        }
-        .collect {}
+      }
     }
   }
 
