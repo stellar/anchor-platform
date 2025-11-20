@@ -1,0 +1,45 @@
+ACCOUNTS = ["GCSGSR6KQQ5BP2FXVPWRL6SWPUSFWLVONLIBJZUKTVQB5FYJFVL6XOXE"]
+VERSION = "0.1.0"
+SIGNING_KEY = "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
+
+WEB_AUTH_ENDPOINT = "http://localhost:8080/auth" # todo: should this be prefixed?
+WEB_AUTH_FOR_CONTRACTS_ENDPOINT = "http://localhost:8080/sep45/auth"
+WEB_AUTH_CONTRACT_ID = "CD3LA6RKF5D2FN2R2L57MWXLBRSEWWENE74YBEFZSSGNJRJGICFGQXMX"
+KYC_SERVER = "http://localhost:8080/sep12"
+TRANSFER_SERVER = "http://localhost:8080/sep6"
+TRANSFER_SERVER_SEP0024 = "http://localhost:8080/sep24"
+DIRECT_PAYMENT_SERVER = "http://localhost:8080/sep31"
+ANCHOR_QUOTE_SERVER = "http://localhost:8080/sep38"
+
+[[CURRENCIES]]
+code = "USDC"
+issuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+status = "test"
+is_asset_anchored = false
+desc = "Anchor Issued USDC Token"
+anchor_asset_type = "crypto"
+
+[[CURRENCIES]]
+code = "USDC"
+issuer = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+status = "test"
+is_asset_anchored = false
+desc = "Circle USDC Token"
+anchor_asset_type = "crypto"
+
+[[CURRENCIES]]
+code = "native"
+status = "test"
+is_asset_anchored = false
+anchor_asset_type = "crypto"
+desc = "XLM, the native token of the Stellar network."
+
+[DOCUMENTATION]
+ORG_NAME = "Stellar Development Foundation"
+ORG_URL = "https://stellar.org"
+ORG_DESCRIPTION = "The Stellar Development Foundation (SDF) is a non-profit organization whose mission is to create equitable access to the global financial system."
+ORG_KEYBASE = "stellar.public"
+ORG_TWITTER = "StellarOrg"
+ORG_GITHUB = "stellar"
+

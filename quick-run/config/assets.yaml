@@ -1,0 +1,233 @@
+items:
+  # Stellar assets
+  - id: stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
+    distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+    significant_decimals: 7
+    sep6:
+      enabled: true
+      deposit:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - SEPA
+          - SWIFT
+      withdraw:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - bank_account
+          - cash
+    sep24:
+      enabled: true
+      deposit:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - SEPA
+          - SWIFT
+      withdraw:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - bank_account
+          - cash
+    sep31:
+      enabled: true
+      receive:
+        min_amount: 0
+        max_amount: 1000000
+        methods:
+          - SEPA
+          - SWIFT
+      quotes_supported: true
+      quotes_required: false
+    sep38:
+      enabled: true
+      exchangeable_assets:
+        - iso4217:USD
+        - iso4217:CAD
+  - id: stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+    distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+    significant_decimals: 4
+    sep24:
+      enabled: true
+      deposit:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - SEPA
+          - SWIFT
+      withdraw:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - bank_account
+          - cash
+    sep31:
+      enabled: true
+      receive:
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - SEPA
+          - SWIFT
+      quotes_supported: true
+      quotes_required: false
+    sep38:
+      enabled: true
+      exchangeable_assets:
+        - iso4217:USD
+        - iso4217:CAD
+  - id: stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
+    distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+    significant_decimals: 4
+    sep6:
+      enabled: false
+      deposit:
+        enabled: false
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - SEPA
+          - SWIFT
+      withdraw:
+        enabled: false
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - bank_account
+          - cash
+    sep24:
+      enabled: false
+      deposit:
+        enabled: false
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - SEPA
+          - SWIFT
+      withdraw:
+        enabled: false
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - bank_account
+          - cash
+    sep31:
+      enabled: true
+      receive:
+        fee_fixed: 0
+        fee_percent: 0
+        min_amount: 0
+        max_amount: 1000000
+        methods:
+          - SEPA
+          - SWIFT
+      quotes_supported: true
+      quotes_required: false
+
+    sep38:
+      enabled: true
+      exchangeable_assets:
+        - iso4217:USD
+
+  # Native asset
+  - id: stellar:native
+    distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+    significant_decimals: 7
+    sep6:
+      enabled: true
+      deposit:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - SEPA
+          - SWIFT
+      withdraw:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - bank_account
+          - cash
+    sep24:
+      enabled: true
+      deposit:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - SEPA
+          - SWIFT
+      withdraw:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods:
+          - bank_account
+          - cash
+    sep31:
+      enabled: false
+    sep38:
+      enabled: true
+      exchangeable_assets:
+        - iso4217:USD
+        - iso4217:CAD
+
+  # Fiat
+  - id: iso4217:USD
+    significant_decimals: 4
+    sep31:
+      enabled: false
+      receive:
+        min_amount: 0
+        max_amount: 1000000
+        methods:
+          - SEPA
+          - SWIFT
+    sep38:
+      enabled: true
+      exchangeable_assets:
+        - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
+        - stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+        - stellar:native
+      country_codes:
+        - US
+      sell_delivery_methods:
+        - name: WIRE
+          description: Send USD directly to the Anchor's bank account.
+      buy_delivery_methods:
+        - name: WIRE
+          description: Have USD sent directly to your bank account.
+  - id: iso4217:CAD
+    significant_decimals: 4
+    sep31:
+      enabled: false
+      receive:
+        min_amount: 0
+        max_amount: 1000000
+        methods:
+          - SEPA
+          - SWIFT
+    sep38:
+      enabled: true
+      exchangeable_assets:
+        - stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP
+        - stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+        - stellar:native
+      country_codes:
+        - CA
+      sell_delivery_methods:
+        - name: WIRE
+          description: Send CAD directly to the Anchor's bank account.
+      buy_delivery_methods:
+        - name: WIRE
+          description: Have CAD sent directly to your bank account.
+

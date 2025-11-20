@@ -53,6 +53,32 @@ contribute to this project.
 
 Anchor Platform can be run locally using Docker Compose. 
 
+### Quick Start
+
+Run the Anchor Platform using Docker Compose:
+
+```shell
+cd quick-run
+docker-compose up -d
+```
+
+This will start all services:
+- **Platform** (ports 8080, 8085) - SEP server, platform API, event processor, and observer
+- **Reference Server** (port 8091) - Reference anchor backend implementation
+- **SEP-24 UI** (port 3000) - Interactive flow reference UI
+- **Kafka** (port 29092) - Event processing message broker
+- **PostgreSQL** (ports 5432, 5433) - Databases for platform and reference server
+
+Verify the platform is running:
+```shell
+curl http://localhost:8080/.well-known/stellar.toml
+```
+
+To stop all services:
+```shell
+docker-compose down
+```
+
 ### For version 2.x.x stable release
 ```shell
 # In the root directory of the project
