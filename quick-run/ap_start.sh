@@ -151,25 +151,13 @@ echo -e "${YELLOW}Step 3: Creating config files from templates...${NC}"
 export STELLAR_WALLET_SECRET_KEY
 
 # Create working config files from templates using sed
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    # Update reference-config.yaml - paymentSigningSeed and distributionWallet
-    sed "s|\${STELLAR_WALLET_SECRET_KEY}|$STELLAR_WALLET_SECRET_KEY|g" config/reference-config.yaml.template | \
-    sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" > config/reference-config.yaml
-    # Update stellar.localhost.toml - SIGNING_KEY
-    sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/stellar.localhost.toml.template > config/stellar.localhost.toml
-    # Update assets.yaml - distribution_account
-    sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" config/assets.yaml.template > config/assets.yaml
-else
-    # Linux
-    # Update reference-config.yaml - paymentSigningSeed and distributionWallet
-    sed "s|\${STELLAR_WALLET_SECRET_KEY}|$STELLAR_WALLET_SECRET_KEY|g" config/reference-config.yaml.template | \
-    sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" > config/reference-config.yaml
-    # Update stellar.localhost.toml - SIGNING_KEY
-    sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/stellar.localhost.toml.template > config/stellar.localhost.toml
-    # Update assets.yaml - distribution_account
-    sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" config/assets.yaml.template > config/assets.yaml
-fi
+# Update reference-config.yaml - paymentSigningSeed and distributionWallet
+sed "s|\${STELLAR_WALLET_SECRET_KEY}|$STELLAR_WALLET_SECRET_KEY|g" config/reference-config.yaml.template | \
+sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" > config/reference-config.yaml
+# Update stellar.localhost.toml - SIGNING_KEY
+sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/stellar.localhost.toml.template > config/stellar.localhost.toml
+# Update assets.yaml - distribution_account
+sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" config/assets.yaml.template > config/assets.yaml
 echo "  ✓ Created config/reference-config.yaml from template"
 echo "  ✓ Created config/stellar.localhost.toml from template"
 echo "  ✓ Created config/assets.yaml from template"
