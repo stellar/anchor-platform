@@ -1,7 +1,7 @@
 items:
   # Native asset
   - id: stellar:native
-    distribution_account: GDP7Y3ARJDNYH3P3V4UOAKRWAKCLRUFH2VP6J57VRQZQNFHESKWGJGOR
+    distribution_account: ${DISTRIBUTION_ACCOUNT}
     significant_decimals: 7
     sep6:
       enabled: true

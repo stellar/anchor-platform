@@ -94,6 +94,57 @@ else
     echo -e "${YELLOW}Step 2: Skipping friendbot funding (keypair already exists)${NC}"
 fi
 
+echo -e "${YELLOW}Step 2b: Creating distribution account...${NC}"
+
+# Generate distribution account keypair
+DIST_KEYPAIR_NAME="anchor-platform-distribution"
+DIST_KEYPAIR_EXISTS=false
+
+# Check if distribution keypair already exists
+if stellar keys secret "$DIST_KEYPAIR_NAME" &>/dev/null; then
+    DIST_KEYPAIR_EXISTS=true
+    echo "  ✓ Found existing distribution keypair: $DIST_KEYPAIR_NAME"
+else
+    echo "  ℹ Distribution keypair not found, generating new one..."
+fi
+
+# Generate distribution keypair only if it doesn't exist
+if [ "$DIST_KEYPAIR_EXISTS" = false ]; then
+    DIST_KEYPAIR_OUTPUT=$(stellar keys generate "$DIST_KEYPAIR_NAME" --network testnet 2>&1 || stellar keys generate "$DIST_KEYPAIR_NAME" 2>&1 || true)
+    
+    if ! echo "$DIST_KEYPAIR_OUTPUT" | grep -q "Key saved"; then
+        echo -e "${RED}Error: Failed to generate distribution keypair${NC}"
+        echo "Stellar CLI output: $DIST_KEYPAIR_OUTPUT"
+        exit 1
+    fi
+    echo "  ✓ Generated new distribution keypair: $DIST_KEYPAIR_NAME"
+fi
+
+# Get the distribution account public key
+DISTRIBUTION_ACCOUNT=$(stellar keys public-key "$DIST_KEYPAIR_NAME" 2>&1 | head -1)
+
+if [ -z "$DISTRIBUTION_ACCOUNT" ]; then
+    echo -e "${RED}Error: Failed to retrieve distribution account${NC}"
+    exit 1
+fi
+
+echo "  Distribution Account: $DISTRIBUTION_ACCOUNT"
+
+# Fund distribution account if we just generated it
+if [ "$DIST_KEYPAIR_EXISTS" = false ]; then
+    echo "  Funding distribution account with friendbot..."
+    DIST_FUND_RESULT=$(curl -s "https://friendbot.stellar.org/?addr=$DISTRIBUTION_ACCOUNT")
+    
+    if echo "$DIST_FUND_RESULT" | grep -q "error"; then
+        echo -e "${YELLOW}Warning: Distribution account funding may have failed. Continuing anyway...${NC}"
+    else
+        echo -e "${GREEN}Distribution account funded successfully${NC}"
+    fi
+    
+    # Wait a moment for the transaction to be processed
+    sleep 2
+fi
+
 echo -e "${YELLOW}Step 3: Creating config files from templates...${NC}"
 
 # Export for docker-compose
@@ -107,6 +158,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" > config/reference-config.yaml
     # Update stellar.localhost.toml - SIGNING_KEY
     sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/stellar.localhost.toml.template > config/stellar.localhost.toml
+    # Update assets.yaml - distribution_account
+    sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" config/assets.yaml.template > config/assets.yaml
 else
     # Linux
     # Update reference-config.yaml - paymentSigningSeed and distributionWallet
@@ -114,9 +167,12 @@ else
     sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" > config/reference-config.yaml
     # Update stellar.localhost.toml - SIGNING_KEY
     sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/stellar.localhost.toml.template > config/stellar.localhost.toml
+    # Update assets.yaml - distribution_account
+    sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" config/assets.yaml.template > config/assets.yaml
 fi
 echo "  ✓ Created config/reference-config.yaml from template"
 echo "  ✓ Created config/stellar.localhost.toml from template"
+echo "  ✓ Created config/assets.yaml from template"
 
 echo -e "${YELLOW}Step 4: Starting docker-compose...${NC}"
 
