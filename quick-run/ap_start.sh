@@ -94,32 +94,29 @@ else
     echo -e "${YELLOW}Step 2: Skipping friendbot funding (keypair already exists)${NC}"
 fi
 
-echo -e "${YELLOW}Step 3: Updating config files...${NC}"
+echo -e "${YELLOW}Step 3: Creating config files from templates...${NC}"
 
 # Export for docker-compose
 export STELLAR_WALLET_SECRET_KEY
 
-# Update reference-config.yaml - paymentSigningSeed and distributionWallet
+# Create working config files from templates using sed
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
-    sed -i '' "s|\${STELLAR_WALLET_SECRET_KEY}|$STELLAR_WALLET_SECRET_KEY|g" config/reference-config.yaml
-    sed -i '' "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/reference-config.yaml
+    # Update reference-config.yaml - paymentSigningSeed and distributionWallet
+    sed "s|\${STELLAR_WALLET_SECRET_KEY}|$STELLAR_WALLET_SECRET_KEY|g" config/reference-config.yaml.template | \
+    sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" > config/reference-config.yaml
+    # Update stellar.localhost.toml - SIGNING_KEY
+    sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/stellar.localhost.toml.template > config/stellar.localhost.toml
 else
     # Linux
-    sed -i "s|\${STELLAR_WALLET_SECRET_KEY}|$STELLAR_WALLET_SECRET_KEY|g" config/reference-config.yaml
-    sed -i "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/reference-config.yaml
+    # Update reference-config.yaml - paymentSigningSeed and distributionWallet
+    sed "s|\${STELLAR_WALLET_SECRET_KEY}|$STELLAR_WALLET_SECRET_KEY|g" config/reference-config.yaml.template | \
+    sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" > config/reference-config.yaml
+    # Update stellar.localhost.toml - SIGNING_KEY
+    sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/stellar.localhost.toml.template > config/stellar.localhost.toml
 fi
-echo "  ✓ Updated config/reference-config.yaml (paymentSigningSeed and distributionWallet)"
-
-# Update stellar.localhost.toml - SIGNING_KEY
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    sed -i '' "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/stellar.localhost.toml
-else
-    # Linux
-    sed -i "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/stellar.localhost.toml
-fi
-echo "  ✓ Updated config/stellar.localhost.toml (SIGNING_KEY)"
+echo "  ✓ Created config/reference-config.yaml from template"
+echo "  ✓ Created config/stellar.localhost.toml from template"
 
 echo -e "${YELLOW}Step 4: Starting docker-compose...${NC}"
 
