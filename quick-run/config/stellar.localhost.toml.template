@@ -3,7 +3,7 @@ VERSION = "0.1.0"
 SIGNING_KEY = "${STELLAR_WALLET_ACCOUNT}"
 NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
 
-WEB_AUTH_ENDPOINT = "http://localhost:8080/auth" # todo: should this be prefixed?
+WEB_AUTH_ENDPOINT = "http://localhost:8080/auth"
 WEB_AUTH_FOR_CONTRACTS_ENDPOINT = "http://localhost:8080/sep45/auth"
 WEB_AUTH_CONTRACT_ID = "CD3LA6RKF5D2FN2R2L57MWXLBRSEWWENE74YBEFZSSGNJRJGICFGQXMX"
 KYC_SERVER = "http://localhost:8080/sep12"

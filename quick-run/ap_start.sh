@@ -29,7 +29,7 @@ cd "$SCRIPT_DIR"
 
 echo -e "${YELLOW}Step 1: Checking for existing keypair...${NC}"
 
-# Generate keypair using stellar CLI
+# Check if Stellar CLI is installed
 if ! command -v stellar &> /dev/null; then
     echo -e "${RED}Error: Stellar CLI is not installed.${NC}"
     echo "Please install it from: https://github.com/stellar/stellar-cli"
@@ -49,14 +49,17 @@ fi
 
 # Generate keypair only if it doesn't exist
 if [ "$KEYPAIR_EXISTS" = false ]; then
-    KEYPAIR_OUTPUT=$(stellar keys generate "$KEYPAIR_NAME" --network testnet 2>&1 || stellar keys generate "$KEYPAIR_NAME" 2>&1 || true)
+    echo -e "${YELLOW}Step 2: Generating and funding account...${NC}"
+    KEYPAIR_OUTPUT=$(stellar keys generate "$KEYPAIR_NAME" --fund --network testnet 2>&1 || stellar keys generate "$KEYPAIR_NAME" --fund 2>&1 || true)
     
     if ! echo "$KEYPAIR_OUTPUT" | grep -q "Key saved"; then
         echo -e "${RED}Error: Failed to generate keypair${NC}"
         echo "Stellar CLI output: $KEYPAIR_OUTPUT"
         exit 1
     fi
-    echo "  ✓ Generated new keypair: $KEYPAIR_NAME"
+    echo "  ✓ Generated and funded new keypair: $KEYPAIR_NAME"
+else
+    echo -e "${YELLOW}Step 2: Skipping keypair generation (keypair already exists)${NC}"
 fi
 
 # Get the secret key and public key from stellar CLI
@@ -74,26 +77,6 @@ echo -e "${GREEN}Using keypair:${NC}"
 echo "  Wallet Account: $STELLAR_WALLET_ACCOUNT"
 echo "  Wallet Secret Key: $STELLAR_WALLET_SECRET_KEY"
 
-# Only fund with friendbot if we just generated the keypair
-if [ "$KEYPAIR_EXISTS" = false ]; then
-    echo -e "${YELLOW}Step 2: Funding account with friendbot...${NC}"
-    
-    # Fund the account using friendbot
-    FUND_RESULT=$(curl -s "https://friendbot.stellar.org/?addr=$STELLAR_WALLET_ACCOUNT")
-    
-    if echo "$FUND_RESULT" | grep -q "error"; then
-        echo -e "${YELLOW}Warning: Friendbot funding may have failed. Continuing anyway...${NC}"
-        echo "You may need to fund the account manually if transactions fail."
-    else
-        echo -e "${GREEN}Account funded successfully${NC}"
-    fi
-    
-    # Wait a moment for the transaction to be processed
-    sleep 2
-else
-    echo -e "${YELLOW}Step 2: Skipping friendbot funding (keypair already exists)${NC}"
-fi
-
 echo -e "${YELLOW}Step 2b: Creating distribution account...${NC}"
 
 # Generate distribution account keypair
@@ -110,14 +93,15 @@ fi
 
 # Generate distribution keypair only if it doesn't exist
 if [ "$DIST_KEYPAIR_EXISTS" = false ]; then
-    DIST_KEYPAIR_OUTPUT=$(stellar keys generate "$DIST_KEYPAIR_NAME" --network testnet 2>&1 || stellar keys generate "$DIST_KEYPAIR_NAME" 2>&1 || true)
+    echo "  Generating and funding distribution account..."
+    DIST_KEYPAIR_OUTPUT=$(stellar keys generate "$DIST_KEYPAIR_NAME" --fund --network testnet 2>&1 || stellar keys generate "$DIST_KEYPAIR_NAME" --fund 2>&1 || true)
     
     if ! echo "$DIST_KEYPAIR_OUTPUT" | grep -q "Key saved"; then
         echo -e "${RED}Error: Failed to generate distribution keypair${NC}"
         echo "Stellar CLI output: $DIST_KEYPAIR_OUTPUT"
         exit 1
     fi
-    echo "  ✓ Generated new distribution keypair: $DIST_KEYPAIR_NAME"
+    echo "  ✓ Generated and funded new distribution keypair: $DIST_KEYPAIR_NAME"
 fi
 
 # Get the distribution account public key
@@ -129,21 +113,6 @@ if [ -z "$DISTRIBUTION_ACCOUNT" ]; then
 fi
 
 echo "  Distribution Account: $DISTRIBUTION_ACCOUNT"
-
-# Fund distribution account if we just generated it
-if [ "$DIST_KEYPAIR_EXISTS" = false ]; then
-    echo "  Funding distribution account with friendbot..."
-    DIST_FUND_RESULT=$(curl -s "https://friendbot.stellar.org/?addr=$DISTRIBUTION_ACCOUNT")
-    
-    if echo "$DIST_FUND_RESULT" | grep -q "error"; then
-        echo -e "${YELLOW}Warning: Distribution account funding may have failed. Continuing anyway...${NC}"
-    else
-        echo -e "${GREEN}Distribution account funded successfully${NC}"
-    fi
-    
-    # Wait a moment for the transaction to be processed
-    sleep 2
-fi
 
 echo -e "${YELLOW}Step 3: Creating config files from templates...${NC}"
 
