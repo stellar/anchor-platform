@@ -53,8 +53,6 @@ contribute to this project.
 
 Anchor Platform can be run locally using Docker Compose. 
 
-### Quick Start
-
 Run the Anchor Platform using Docker Compose:
 
 ```shell
