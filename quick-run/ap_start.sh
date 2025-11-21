@@ -124,6 +124,7 @@ echo "  ✓ Updated config/stellar.localhost.toml (SIGNING_KEY)"
 echo -e "${YELLOW}Step 4: Starting docker-compose...${NC}"
 
 # Start docker-compose with environment variables
+# Pass the variable inline so docker-compose can read it when parsing the file
 STELLAR_WALLET_SECRET_KEY="$STELLAR_WALLET_SECRET_KEY" $DOCKER_COMPOSE up -d
 
 echo -e "${GREEN}✓ Docker-compose started${NC}"
