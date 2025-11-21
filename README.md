@@ -77,31 +77,6 @@ To stop all services:
 docker-compose down
 ```
 
-### For version 2.x.x stable release
-```shell
-# In the root directory of the project
-docker compose --profile v2-stable up -d
-```
-
-### For latest release
-```shell
-# In the root directory of the project
-docker compose --profile latest up -d
-```
-
-### For locally built image
-To build the Anchor Platform image locally, run the following command in the root directory of the project.
-```shell
-# In the root directory of the project
-docker build -t stellar/anchor-platform:local .
-```
-
-Then, run the following command to start the Anchor Platform.
-```shell
-# In the root directory of the project
-docker compose --profile local up -d
-```
-
 The [Stellar Demo Wallet](https://demo-wallet.stellar.org) can be used to interact with the Anchor Platform. To get
 started, create and fund a new account, then add a new asset with the following parameters.
 
