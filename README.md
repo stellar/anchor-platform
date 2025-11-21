@@ -53,29 +53,28 @@ contribute to this project.
 
 Anchor Platform can be run locally using Docker Compose. 
 
-### For version 2.x.x stable release
+Run the Anchor Platform using Docker Compose:
+
 ```shell
-# In the root directory of the project
-docker compose --profile v2-stable up -d
+cd quick-run
+docker-compose up -d
 ```
 
-### For latest release
+This will start all services:
+- **Platform** (ports 8080, 8085) - SEP server, platform API, event processor, and observer
+- **Reference Server** (port 8091) - Reference anchor backend implementation
+- **SEP-24 UI** (port 3000) - Interactive flow reference UI
+- **Kafka** (port 29092) - Event processing message broker
+- **PostgreSQL** (ports 5432, 5433) - Databases for platform and reference server
+
+Verify the platform is running:
 ```shell
-# In the root directory of the project
-docker compose --profile latest up -d
+curl http://localhost:8080/.well-known/stellar.toml
 ```
 
-### For locally built image
-To build the Anchor Platform image locally, run the following command in the root directory of the project.
+To stop all services:
 ```shell
-# In the root directory of the project
-docker build -t stellar/anchor-platform:local .
-```
-
-Then, run the following command to start the Anchor Platform.
-```shell
-# In the root directory of the project
-docker compose --profile local up -d
+docker-compose down
 ```
 
 The [Stellar Demo Wallet](https://demo-wallet.stellar.org) can be used to interact with the Anchor Platform. To get

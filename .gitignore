@@ -12,3 +12,6 @@ target/
 .vscode
 .env
 .DS_Store
+quick-run/config/reference-config.yaml
+quick-run/config/stellar.localhost.toml
+quick-run/config/assets.yaml
