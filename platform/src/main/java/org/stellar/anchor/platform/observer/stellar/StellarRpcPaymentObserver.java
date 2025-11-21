@@ -9,6 +9,7 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -118,19 +119,29 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
     try {
       GetEventsResponse response = sorobanServer.getEvents(buildEventRequest(cursor));
+      lastActivityTime = Instant.now();
+      silenceTimeoutCount = 0;
       metricLatestBlockRead.set(response.getLatestLedger());
       if (response.getEvents() != null && !response.getEvents().isEmpty()) {
         processEvents(response.getEvents());
       }
       // Save the cursor for the next request
       cursor = response.getCursor();
-      saveCursor(cursor);
-      metricLatestBlockProcessed.set(response.getLatestLedger());
+      try {
+        saveCursor(cursor);
+        metricLatestBlockProcessed.set(response.getLatestLedger());
+      } catch (Exception tex) {
+        warnF("Failed to persist RPC cursor. Will retry next tick. ex={}", tex.getMessage());
+        setStatus(ObserverStatus.DATABASE_ERROR);
+      }
     } catch (IOException ioex) {
       warnF(
           "Error fetching latest ledger: {}. ex={}. Wait for next retry.",
           GsonUtils.getInstance().toJson(ioex),
           ioex.getMessage());
+    } catch (Throwable t) {
+      errorEx("Unhandled error in RPC observer loop", t);
+      setStatus(ObserverStatus.STREAM_ERROR);
     }
   }
 
