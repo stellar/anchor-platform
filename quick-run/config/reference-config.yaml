@@ -11,7 +11,7 @@ app:
   # The URL of the platform server.
   platformApiEndpoint: http://platform:8085
   # The Stellar wallet to which the customer will send the Stellar assets.
-  distributionWallet: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+  distributionWallet: GAXC7UKMEYWPMF56KCRXEQEQ7JZ4CBQ4EVXTYNOIRKUWP3M4YTTZ2WSQ
   distributionWalletMemo:
   distributionWalletMemoType:
   # When true, enables test endpoints
@@ -20,8 +20,8 @@ app:
   custodyEnabled: false
   # Indicates, that RPC requests should be used instead of PATCH /transactions endpoint
   rpcEnabled: true
-  # The signing seed for payment operations (test seed for development)
-  paymentSigningSeed: SAX3AH622R2XT6DXWWSRIDCMMUCCMATBZ5U6XKJWDO7M2EJUBFC3AW5X
+  # The signing seed for payment operations (set dynamically by ap_start.sh)
+  paymentSigningSeed: SAFYAGAC4QMISVL3OISFKYIHD23CB6WIDMGHGKYUSLAKZGJG62MSFNV4
 
 # These are secrets shared between Anchor and Platform that are used to safely communicate from `Platform->Anchor`
 # and `Anchor->Platform`, especially when they are in different clusters.
