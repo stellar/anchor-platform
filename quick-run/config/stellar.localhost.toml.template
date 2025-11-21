@@ -13,14 +13,6 @@ DIRECT_PAYMENT_SERVER = "http://localhost:8080/sep31"
 ANCHOR_QUOTE_SERVER = "http://localhost:8080/sep38"
 
 [[CURRENCIES]]
-code = "USDC"
-issuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-status = "test"
-is_asset_anchored = false
-desc = "Anchor Issued USDC Token"
-anchor_asset_type = "crypto"
-
-[[CURRENCIES]]
 code = "native"
 status = "test"
 is_asset_anchored = false
