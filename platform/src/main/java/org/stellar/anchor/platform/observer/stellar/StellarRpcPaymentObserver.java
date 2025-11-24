@@ -37,6 +37,7 @@ import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.SorobanServer;
+import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType;
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest;
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest.EventFilter;
@@ -114,7 +115,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
   ScheduledFuture<?> task;
 
-  private void fetchEvents() {
+  void fetchEvents() {
     String cursor = (this.cursor != null) ? this.cursor : loadStellarRpcCursor();
 
     try {
@@ -137,8 +138,10 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     } catch (IOException ioex) {
       warnF(
           "Error fetching latest ledger: {}. ex={}. Wait for next retry.",
-          GsonUtils.getInstance().toJson(ioex),
+          ioex.toString(),
           ioex.getMessage());
+    } catch (NetworkException nex) {
+      warnF("Network error in RPC observer loop: {}. ex={}", nex.toString(), nex.getMessage());
     } catch (Throwable t) {
       errorEx("Unhandled error in RPC observer loop", t);
       setStatus(ObserverStatus.STREAM_ERROR);
