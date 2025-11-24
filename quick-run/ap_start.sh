@@ -36,7 +36,7 @@ if ! command -v stellar &> /dev/null; then
     exit 1
 fi
 
-KEYPAIR_NAME="anchor-platform"
+KEYPAIR_NAME="anchor-platform-wallet"
 KEYPAIR_EXISTS=false
 
 # Check if keypair already exists
