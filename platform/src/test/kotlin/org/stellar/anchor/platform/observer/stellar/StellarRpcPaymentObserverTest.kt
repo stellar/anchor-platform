@@ -1,11 +1,15 @@
 package org.stellar.anchor.platform.observer.stellar
 
 import io.mockk.every
+import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.spyk
+import java.io.IOException
 import java.math.BigInteger
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.asset.StellarAssetInfo
@@ -17,9 +21,14 @@ import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
+import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.ObserverStatus
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.SorobanServer
+import org.stellar.sdk.exception.NetworkException
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType
+import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest
+import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.OperationType
 
@@ -31,7 +40,8 @@ class StellarRpcPaymentObserverTest {
   private lateinit var sacToAssetMapper: MockSacToAssetMapper
   private lateinit var observer: StellarRpcPaymentObserver
   private lateinit var assetService: AssetService
-  private val stellarRpc = StellarRpc("https://soroban-testnet.stellar.org")
+  private lateinit var stellarRpc: StellarRpc
+  private lateinit var sorobanServer: SorobanServer
 
   @BeforeEach
   fun setUp() {
@@ -45,6 +55,12 @@ class StellarRpcPaymentObserverTest {
         initialEventBackoffTime = 500
         maxEventBackoffTime = 5000
       }
+    stellarRpc = mockk(relaxed = true)
+    sorobanServer = mockk(relaxed = true)
+    every { stellarRpc.sorobanServer } returns sorobanServer
+    every { stellarRpc.getSorobanServer() } returns sorobanServer
+    every { sorobanServer.getLatestLedger() } returns mockk { every { sequence } returns 10 }
+
     paymentListeners = emptyList()
     paymentObservingAccountsManager = mockk(relaxed = true)
     paymentStreamerCursorStore = mockk(relaxed = true)
@@ -63,6 +79,7 @@ class StellarRpcPaymentObserverTest {
         ),
         recordPrivateCalls = true,
       )
+    observer.setStatus(ObserverStatus.RUNNING)
   }
 
   @Test
@@ -263,6 +280,101 @@ class StellarRpcPaymentObserverTest {
       Scv.toAddress(account2).toXdrBase64(),
       filterList[3].topics.toList()[0].toList()[2],
     )
+  }
+
+  @Test
+  fun `fetchEvents resets silence counter and updates metrics on success`() {
+    val response = mockk<GetEventsResponse>()
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { response.events } returns emptyList()
+    every { response.latestLedger } returns 123L
+    every { response.cursor } returns "CUR123"
+    every { sorobanServer.getEvents(any()) } returns response
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+
+    observer.silenceTimeoutCount = 2
+
+    observer.fetchEvents()
+
+    assertEquals("CUR123", observer.cursor)
+    assertEquals(123L, observer.metricLatestBlockRead.get())
+    assertEquals(123L, observer.metricLatestBlockProcessed.get())
+    assertEquals(0, observer.silenceTimeoutCount)
+    assertNotNull(observer.lastActivityTime)
+  }
+
+  @Test
+  fun `fetchEvents marks database error when cursor persistence fails`() {
+    val response = mockk<GetEventsResponse>()
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { response.events } returns emptyList()
+    every { response.latestLedger } returns 456L
+    every { response.cursor } returns "CUR456"
+    every { sorobanServer.getEvents(any()) } returns response
+    every { paymentStreamerCursorStore.saveStellarRpcCursor(any()) } throws
+      RuntimeException("db down")
+
+    observer.metricLatestBlockProcessed.set(7)
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    observer.fetchEvents()
+
+    assertEquals(ObserverStatus.DATABASE_ERROR, observer.getStatus())
+    assertEquals(7, observer.metricLatestBlockProcessed.get())
+  }
+
+  @Test
+  fun `fetchEvents keeps running on transient IO errors`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws IOException("transient rpc error")
+
+    observer.cursor = "CUR0"
+    observer.metricLatestBlockRead.set(9)
+    observer.metricLatestBlockProcessed.set(8)
+    observer.silenceTimeoutCount = 2
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    assertDoesNotThrow { observer.fetchEvents() }
+
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("CUR0", observer.cursor)
+    assertEquals(9, observer.metricLatestBlockRead.get())
+    assertEquals(8, observer.metricLatestBlockProcessed.get())
+    assertEquals(2, observer.silenceTimeoutCount)
+  }
+
+  @Test
+  fun `fetchEvents keeps running on network errors`() {
+    val netEx = mockk<NetworkException>()
+    every { netEx.message } returns "net down"
+    every { netEx.toString() } returns "net down"
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws netEx
+
+    observer.cursor = "CURN"
+    observer.metricLatestBlockRead.set(11)
+    observer.metricLatestBlockProcessed.set(10)
+    observer.silenceTimeoutCount = 1
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    assertDoesNotThrow { observer.fetchEvents() }
+
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("CURN", observer.cursor)
+    assertEquals(11, observer.metricLatestBlockRead.get())
+    assertEquals(10, observer.metricLatestBlockProcessed.get())
+    assertEquals(1, observer.silenceTimeoutCount)
+  }
+
+  @Test
+  fun `fetchEvents handles unexpected errors without stalling`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws RuntimeException("rpc boom")
+
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    assertDoesNotThrow { observer.fetchEvents() }
+    assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
   }
 }
 
