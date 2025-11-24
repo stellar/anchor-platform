@@ -9,7 +9,7 @@ services:
     env_file:
       - ./dev.env
     environment:
-      SECRET_SEP10_SIGNING_SEED: ${HOST_SEP10SECRET_KEY}
+      SECRET_SEP10_SIGNING_SEED: ${HOST_SEP10_SECRET_KEY}
     ports:
       - "8080:8080" # SEP server (Stellar Protocol endpoints)
       - "8085:8085" # Platform API server
