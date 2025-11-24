@@ -27,7 +27,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-echo -e "${YELLOW}Step 1: Checking for existing host wallet keypair...${NC}"
+echo -e "${YELLOW}Step 1: Checking for existing host SEP-10 account keypair...${NC}"
 
 # Check if Stellar CLI is installed
 if ! command -v stellar &> /dev/null; then
@@ -42,24 +42,24 @@ KEYPAIR_EXISTS=false
 # Check if keypair already exists
 if stellar keys secret "$KEYPAIR_NAME" &>/dev/null; then
     KEYPAIR_EXISTS=true
-    echo "  ✓ Found existing host wallet keypair: $KEYPAIR_NAME"
+    echo "  ✓ Found existing host SEP-10 account keypair: $KEYPAIR_NAME"
 else
-    echo "  ℹ Host wallet keypair not found, generating new one..."
+    echo "  ℹ Host SEP-10 account keypair not found, generating new one..."
 fi
 
 # Generate keypair only if it doesn't exist
 if [ "$KEYPAIR_EXISTS" = false ]; then
-    echo -e "${YELLOW}Step 2: Generating and funding host wallet account...${NC}"
+    echo -e "${YELLOW}Step 2: Generating and funding host SEP-10 account...${NC}"
     KEYPAIR_OUTPUT=$(stellar keys generate "$KEYPAIR_NAME" --fund --network testnet 2>&1 || stellar keys generate "$KEYPAIR_NAME" --fund 2>&1 || true)
     
     if ! echo "$KEYPAIR_OUTPUT" | grep -q "Key saved"; then
-        echo -e "${RED}Error: Failed to generate host wallet keypair${NC}"
+        echo -e "${RED}Error: Failed to generate host SEP-10 account keypair${NC}"
         echo "Stellar CLI output: $KEYPAIR_OUTPUT"
         exit 1
     fi
-    echo "  ✓ Generated and funded new host wallet keypair: $KEYPAIR_NAME"
+    echo "  ✓ Generated and funded new host SEP-10 account keypair: $KEYPAIR_NAME"
 else
-    echo -e "${YELLOW}Step 2: Skipping host wallet generation (keypair already exists)${NC}"
+    echo -e "${YELLOW}Step 2: Skipping host SEP-10 account generation (keypair already exists)${NC}"
 fi
 
 # Get the secret key and public key from stellar CLI
@@ -67,41 +67,41 @@ HOST_SEP10_SECRET_KEY=$(stellar keys secret "$KEYPAIR_NAME" 2>&1 | head -1)
 HOST_SEP10_ACCOUNT=$(stellar keys public-key "$KEYPAIR_NAME" 2>&1 | head -1)
 
 if [ -z "$HOST_SEP10_SECRET_KEY" ] || [ -z "$HOST_SEP10_ACCOUNT" ]; then
-    echo -e "${RED}Error: Failed to retrieve host wallet keypair${NC}"
+    echo -e "${RED}Error: Failed to retrieve host SEP-10 account keypair${NC}"
     echo "Secret key: ${HOST_SEP10_SECRET_KEY:-not found}"
     echo "Public key: ${HOST_SEP10_ACCOUNT:-not found}"
     exit 1
 fi
 
-echo -e "${GREEN}Host Wallet:${NC}"
+echo -e "${GREEN}Host SEP-10 Account:${NC}"
 echo "  Account: $HOST_SEP10_ACCOUNT"
 echo "  Secret Key: $HOST_SEP10_SECRET_KEY"
 
-echo -e "${YELLOW}Step 2b: Checking for distribution account keypair...${NC}"
+echo -e "${YELLOW}Step 3: Checking for distribution account keypair...${NC}"
 
 # Generate distribution account keypair
-DIST_KEYPAIR_NAME="ap-distribution-wallet"
+DIST_KEYPAIR_NAME="ap-distribution-account"
 DIST_KEYPAIR_EXISTS=false
 
 # Check if distribution keypair already exists
 if stellar keys secret "$DIST_KEYPAIR_NAME" &>/dev/null; then
     DIST_KEYPAIR_EXISTS=true
-    echo "  ✓ Found existing distribution wallet keypair: $DIST_KEYPAIR_NAME"
+    echo "  ✓ Found existing distribution account keypair: $DIST_KEYPAIR_NAME"
 else
-    echo "  ℹ Distribution wallet keypair not found, generating new one..."
+    echo "  ℹ Distribution account keypair not found, generating new one..."
 fi
 
 # Generate distribution keypair only if it doesn't exist
 if [ "$DIST_KEYPAIR_EXISTS" = false ]; then
-    echo "  Generating and funding distribution wallet account..."
+    echo "  Generating and funding distribution account..."
     DIST_KEYPAIR_OUTPUT=$(stellar keys generate "$DIST_KEYPAIR_NAME" --fund --network testnet 2>&1 || stellar keys generate "$DIST_KEYPAIR_NAME" --fund 2>&1 || true)
     
     if ! echo "$DIST_KEYPAIR_OUTPUT" | grep -q "Key saved"; then
-        echo -e "${RED}Error: Failed to generate distribution wallet keypair${NC}"
+        echo -e "${RED}Error: Failed to generate distribution account keypair${NC}"
         echo "Stellar CLI output: $DIST_KEYPAIR_OUTPUT"
         exit 1
     fi
-    echo "  ✓ Generated and funded new distribution wallet keypair: $DIST_KEYPAIR_NAME"
+    echo "  ✓ Generated and funded new distribution account keypair: $DIST_KEYPAIR_NAME"
 fi
 
 # Get the distribution account public key and secret key
@@ -109,14 +109,14 @@ DISTRIBUTION_ACCOUNT=$(stellar keys public-key "$DIST_KEYPAIR_NAME" 2>&1 | head 
 DISTRIBUTION_ACCOUNT_SECRET_KEY=$(stellar keys secret "$DIST_KEYPAIR_NAME" 2>&1 | head -1)
 
 if [ -z "$DISTRIBUTION_ACCOUNT" ] || [ -z "$DISTRIBUTION_ACCOUNT_SECRET_KEY" ]; then
-    echo -e "${RED}Error: Failed to retrieve distribution wallet${NC}"
+    echo -e "${RED}Error: Failed to retrieve distribution account keypair${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}Distribution Wallet:${NC}"
+echo -e "${GREEN}Distribution Account:${NC}"
 echo "  Account: $DISTRIBUTION_ACCOUNT"
 
-echo -e "${YELLOW}Step 3: Creating config files from templates...${NC}"
+echo -e "${YELLOW}Step 4: Creating config files from templates...${NC}"
 
 # Export for docker-compose
 export HOST_SEP10_SECRET_KEY
@@ -134,7 +134,7 @@ echo "  ✓ Created config/reference-config.yaml from template"
 echo "  ✓ Created config/stellar.localhost.toml from template"
 echo "  ✓ Created config/assets.yaml from template"
 
-echo -e "${YELLOW}Step 4: Starting docker-compose...${NC}"
+echo -e "${YELLOW}Step 5: Starting docker-compose...${NC}"
 
 # Start docker-compose with environment variables
 # Pass the variable inline so docker-compose can read it when parsing the file
@@ -148,8 +148,8 @@ echo -e "${GREEN}Anchor Platform is starting up!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Generated Accounts:"
-echo "  Host Wallet Account: $HOST_SEP10_ACCOUNT"
-echo "  Distribution Wallet Account: $DISTRIBUTION_ACCOUNT"
+echo "  Host SEP-10 Account: $HOST_SEP10_ACCOUNT"
+echo "  Distribution Account: $DISTRIBUTION_ACCOUNT"
 echo ""
 echo "Services will be available at:"
 echo "  SEP Server: http://localhost:8080"
