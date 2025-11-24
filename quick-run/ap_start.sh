@@ -36,7 +36,7 @@ if ! command -v stellar &> /dev/null; then
     exit 1
 fi
 
-KEYPAIR_NAME="ap-host-wallet"
+KEYPAIR_NAME="ap-sep10-account"
 KEYPAIR_EXISTS=false
 
 # Check if keypair already exists
@@ -63,21 +63,21 @@ else
 fi
 
 # Get the secret key and public key from stellar CLI
-HOST_SECRET_KEY=$(stellar keys secret "$KEYPAIR_NAME" 2>&1 | head -1)
-HOST_ACCOUNT=$(stellar keys public-key "$KEYPAIR_NAME" 2>&1 | head -1)
+HOST_SEP10_SECRET_KEY=$(stellar keys secret "$KEYPAIR_NAME" 2>&1 | head -1)
+HOST_SEP10_ACCOUNT=$(stellar keys public-key "$KEYPAIR_NAME" 2>&1 | head -1)
 
-if [ -z "$HOST_SECRET_KEY" ] || [ -z "$HOST_ACCOUNT" ]; then
+if [ -z "$HOST_SEP10_SECRET_KEY" ] || [ -z "$HOST_SEP10_ACCOUNT" ]; then
     echo -e "${RED}Error: Failed to retrieve host wallet keypair${NC}"
-    echo "Secret key: ${HOST_SECRET_KEY:-not found}"
-    echo "Public key: ${HOST_ACCOUNT:-not found}"
+    echo "Secret key: ${HOST_SEP10_SECRET_KEY:-not found}"
+    echo "Public key: ${HOST_SEP10_ACCOUNT:-not found}"
     exit 1
 fi
 
 echo -e "${GREEN}Host Wallet:${NC}"
-echo "  Account: $HOST_ACCOUNT"
-echo "  Secret Key: $HOST_SECRET_KEY"
+echo "  Account: $HOST_SEP10_ACCOUNT"
+echo "  Secret Key: $HOST_SEP10_SECRET_KEY"
 
-echo -e "${YELLOW}Step 2b: Checking for distribution wallet keypair...${NC}"
+echo -e "${YELLOW}Step 2b: Checking for distribution account keypair...${NC}"
 
 # Generate distribution account keypair
 DIST_KEYPAIR_NAME="ap-distribution-wallet"
@@ -119,7 +119,7 @@ echo "  Account: $DISTRIBUTION_ACCOUNT"
 echo -e "${YELLOW}Step 3: Creating config files from templates...${NC}"
 
 # Export for docker-compose
-export HOST_SECRET_KEY
+export HOST_SEP10_SECRET_KEY
 
 # Create working config files from templates using sed
 # Update reference-config.yaml - paymentSigningSeed and distributionWallet
@@ -127,7 +127,7 @@ sed "s|\${DISTRIBUTION_ACCOUNT_SECRET_KEY}|$DISTRIBUTION_ACCOUNT_SECRET_KEY|g" c
 sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" > config/reference-config.yaml
 # Update stellar.localhost.toml - SIGNING_KEY and ACCOUNTS
 sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" config/stellar.localhost.toml.template | \
-sed "s|\${HOST_ACCOUNT}|$HOST_ACCOUNT|g" > config/stellar.localhost.toml
+sed "s|\${HOST_SEP10_ACCOUNT}|$HOST_SEP10_ACCOUNT|g" > config/stellar.localhost.toml
 # Update assets.yaml - distribution_account
 sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" config/assets.yaml.template > config/assets.yaml
 echo "  ✓ Created config/reference-config.yaml from template"
@@ -138,7 +138,7 @@ echo -e "${YELLOW}Step 4: Starting docker-compose...${NC}"
 
 # Start docker-compose with environment variables
 # Pass the variable inline so docker-compose can read it when parsing the file
-HOST_SECRET_KEY="$HOST_SECRET_KEY" $DOCKER_COMPOSE up -d
+HOST_SEP10_SECRET_KEY="$HOST_SEP10_SECRET_KEY" $DOCKER_COMPOSE up -d
 
 echo -e "${GREEN}✓ Docker-compose started${NC}"
 
@@ -148,7 +148,7 @@ echo -e "${GREEN}Anchor Platform is starting up!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Generated Accounts:"
-echo "  Host Wallet Account: $HOST_ACCOUNT"
+echo "  Host Wallet Account: $HOST_SEP10_ACCOUNT"
 echo "  Distribution Wallet Account: $DISTRIBUTION_ACCOUNT"
 echo ""
 echo "Services will be available at:"
