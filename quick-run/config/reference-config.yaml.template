@@ -1,0 +1,55 @@
+app:
+  version: 0.0.1
+  # Enables test endpoints.
+  isTest: true
+  # The port on which the server will listen for requests.
+  port: 8091
+  # The URL of the Stellar network to which the Anchor will connect.
+  horizonEndpoint: https://horizon-testnet.stellar.org
+  # The URL of the Stellar RPC server to which the Anchor will connect.
+  rpcEndpoint: https://soroban-testnet.stellar.org
+  # The URL of the platform server.
+  platformApiEndpoint: http://platform:8085
+  # The Stellar wallet to which the customer will send the Stellar assets.
+  distributionWallet: ${DISTRIBUTION_ACCOUNT}
+  distributionWalletMemo:
+  distributionWalletMemoType:
+  # When true, enables test endpoints
+  enableTest: true
+  # Indicates, that custody integration is enabled
+  custodyEnabled: false
+  # Indicates, that RPC requests should be used instead of PATCH /transactions endpoint
+  rpcEnabled: true
+  # The signing seed for payment operations (set dynamically by ap_start.sh)
+  paymentSigningSeed: ${DISTRIBUTION_ACCOUNT_SECRET_KEY}
+
+# These are secrets shared between Anchor and Platform that are used to safely communicate from `Platform->Anchor`
+# and `Anchor->Platform`, especially when they are in different clusters.
+#
+# When the receiving part decodes the incoming request token, it needs to verify if the token is still valid (and not expired).
+auth:
+  # authType: used to determine how the authentication will happen between Anchor and Platform. Can be one of the following:
+  #     NONE: no authentication is used
+  #     API_KEY: the authentication is done using an API key added to the `X-Api-Key` header.
+  #     JWT: the authentication is done using a JWT token added to the `Authorization` header. this token is generated from the secret key.
+  type: NONE
+  # CallbackAPI requests (`Platform->Anchor`) will contain an authentication header whose token was built using this
+  # secret. The Anchor Backend will also store this same secret and use it to decode the incoming token to verify it
+  # came from the Platform.
+  platformToAnchorSecret: 
+  # PlatformAPI requests (`Anchor->Platform`) will contain an authentication header whose token was built using this
+  # secret. The Platform Server will use this secret to decode the incoming token to verify it came from the Anchor.
+  anchorToPlatformSecret: 
+  # Expiration time, in milliseconds, that will be used to build and validate the JWT tokens
+  expirationMilliseconds: 30000
+
+sep24:
+  # Encryption key for interactive JWT
+  interactiveJwtKey: "secret_sep24_interactive_url_jwt_secret"
+
+data:
+  url: reference-db:5433
+  database: postgres
+  user: postgres
+  password: password
+
