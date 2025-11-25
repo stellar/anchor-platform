@@ -9,7 +9,7 @@ services:
     env_file:
       - ./dev.env
     environment:
-      SECRET_SEP10_SIGNING_SEED: ${STELLAR_WALLET_SECRET_KEY}
+      SECRET_SEP10_SIGNING_SEED: ${HOST_SEP10_SECRET_KEY}
     ports:
       - "8080:8080" # SEP server (Stellar Protocol endpoints)
       - "8085:8085" # Platform API server
@@ -30,7 +30,7 @@ services:
       - ./dev.env
     environment:
       KT_REFERENCE_SERVER_CONFIG: /config/reference-config.yaml
-      SECRET_SEP10_SIGNING_SEED: ${STELLAR_WALLET_SECRET_KEY}
+      SECRET_SEP10_SIGNING_SEED: ${HOST_SEP10_SECRET_KEY}
     ports:
       - "8091:8091" # Reference server API
     depends_on:

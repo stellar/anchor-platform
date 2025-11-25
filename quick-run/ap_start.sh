@@ -27,7 +27,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-echo -e "${YELLOW}Step 1: Checking for existing keypair...${NC}"
+echo -e "${YELLOW}Step 1: Checking for existing host SEP-10 account keypair...${NC}"
 
 # Check if Stellar CLI is installed
 if ! command -v stellar &> /dev/null; then
@@ -36,59 +36,59 @@ if ! command -v stellar &> /dev/null; then
     exit 1
 fi
 
-KEYPAIR_NAME="anchor-platform"
+KEYPAIR_NAME="ap-sep10-account"
 KEYPAIR_EXISTS=false
 
 # Check if keypair already exists
 if stellar keys secret "$KEYPAIR_NAME" &>/dev/null; then
     KEYPAIR_EXISTS=true
-    echo "  ✓ Found existing keypair: $KEYPAIR_NAME"
+    echo "  ✓ Found existing host SEP-10 account keypair: $KEYPAIR_NAME"
 else
-    echo "  ℹ Keypair not found, generating new one..."
+    echo "  ℹ Host SEP-10 account keypair not found, generating new one..."
 fi
 
 # Generate keypair only if it doesn't exist
 if [ "$KEYPAIR_EXISTS" = false ]; then
-    echo -e "${YELLOW}Step 2: Generating and funding account...${NC}"
+    echo -e "${YELLOW}Step 2: Generating and funding host SEP-10 account...${NC}"
     KEYPAIR_OUTPUT=$(stellar keys generate "$KEYPAIR_NAME" --fund --network testnet 2>&1 || stellar keys generate "$KEYPAIR_NAME" --fund 2>&1 || true)
     
     if ! echo "$KEYPAIR_OUTPUT" | grep -q "Key saved"; then
-        echo -e "${RED}Error: Failed to generate keypair${NC}"
+        echo -e "${RED}Error: Failed to generate host SEP-10 account keypair${NC}"
         echo "Stellar CLI output: $KEYPAIR_OUTPUT"
         exit 1
     fi
-    echo "  ✓ Generated and funded new keypair: $KEYPAIR_NAME"
+    echo "  ✓ Generated and funded new host SEP-10 account keypair: $KEYPAIR_NAME"
 else
-    echo -e "${YELLOW}Step 2: Skipping keypair generation (keypair already exists)${NC}"
+    echo -e "${YELLOW}Step 2: Skipping host SEP-10 account generation (keypair already exists)${NC}"
 fi
 
 # Get the secret key and public key from stellar CLI
-STELLAR_WALLET_SECRET_KEY=$(stellar keys secret "$KEYPAIR_NAME" 2>&1 | head -1)
-STELLAR_WALLET_ACCOUNT=$(stellar keys public-key "$KEYPAIR_NAME" 2>&1 | head -1)
+HOST_SEP10_SECRET_KEY=$(stellar keys secret "$KEYPAIR_NAME" 2>&1 | head -1)
+HOST_SEP10_ACCOUNT=$(stellar keys public-key "$KEYPAIR_NAME" 2>&1 | head -1)
 
-if [ -z "$STELLAR_WALLET_SECRET_KEY" ] || [ -z "$STELLAR_WALLET_ACCOUNT" ]; then
-    echo -e "${RED}Error: Failed to retrieve keypair${NC}"
-    echo "Secret key: ${STELLAR_WALLET_SECRET_KEY:-not found}"
-    echo "Public key: ${STELLAR_WALLET_ACCOUNT:-not found}"
+if [ -z "$HOST_SEP10_SECRET_KEY" ] || [ -z "$HOST_SEP10_ACCOUNT" ]; then
+    echo -e "${RED}Error: Failed to retrieve host SEP-10 account keypair${NC}"
+    echo "Secret key: ${HOST_SEP10_SECRET_KEY:-not found}"
+    echo "Public key: ${HOST_SEP10_ACCOUNT:-not found}"
     exit 1
 fi
 
-echo -e "${GREEN}Using keypair:${NC}"
-echo "  Wallet Account: $STELLAR_WALLET_ACCOUNT"
-echo "  Wallet Secret Key: $STELLAR_WALLET_SECRET_KEY"
+echo -e "${GREEN}Host SEP-10 Account:${NC}"
+echo "  Account: $HOST_SEP10_ACCOUNT"
+echo "  Secret Key: $HOST_SEP10_SECRET_KEY"
 
-echo -e "${YELLOW}Step 2b: Creating distribution account...${NC}"
+echo -e "${YELLOW}Step 3: Checking for distribution account keypair...${NC}"
 
 # Generate distribution account keypair
-DIST_KEYPAIR_NAME="anchor-platform-distribution"
+DIST_KEYPAIR_NAME="ap-distribution-account"
 DIST_KEYPAIR_EXISTS=false
 
 # Check if distribution keypair already exists
 if stellar keys secret "$DIST_KEYPAIR_NAME" &>/dev/null; then
     DIST_KEYPAIR_EXISTS=true
-    echo "  ✓ Found existing distribution keypair: $DIST_KEYPAIR_NAME"
+    echo "  ✓ Found existing distribution account keypair: $DIST_KEYPAIR_NAME"
 else
-    echo "  ℹ Distribution keypair not found, generating new one..."
+    echo "  ℹ Distribution account keypair not found, generating new one..."
 fi
 
 # Generate distribution keypair only if it doesn't exist
@@ -97,45 +97,48 @@ if [ "$DIST_KEYPAIR_EXISTS" = false ]; then
     DIST_KEYPAIR_OUTPUT=$(stellar keys generate "$DIST_KEYPAIR_NAME" --fund --network testnet 2>&1 || stellar keys generate "$DIST_KEYPAIR_NAME" --fund 2>&1 || true)
     
     if ! echo "$DIST_KEYPAIR_OUTPUT" | grep -q "Key saved"; then
-        echo -e "${RED}Error: Failed to generate distribution keypair${NC}"
+        echo -e "${RED}Error: Failed to generate distribution account keypair${NC}"
         echo "Stellar CLI output: $DIST_KEYPAIR_OUTPUT"
         exit 1
     fi
-    echo "  ✓ Generated and funded new distribution keypair: $DIST_KEYPAIR_NAME"
+    echo "  ✓ Generated and funded new distribution account keypair: $DIST_KEYPAIR_NAME"
 fi
 
-# Get the distribution account public key
+# Get the distribution account public key and secret key
 DISTRIBUTION_ACCOUNT=$(stellar keys public-key "$DIST_KEYPAIR_NAME" 2>&1 | head -1)
+DISTRIBUTION_ACCOUNT_SECRET_KEY=$(stellar keys secret "$DIST_KEYPAIR_NAME" 2>&1 | head -1)
 
-if [ -z "$DISTRIBUTION_ACCOUNT" ]; then
-    echo -e "${RED}Error: Failed to retrieve distribution account${NC}"
+if [ -z "$DISTRIBUTION_ACCOUNT" ] || [ -z "$DISTRIBUTION_ACCOUNT_SECRET_KEY" ]; then
+    echo -e "${RED}Error: Failed to retrieve distribution account keypair${NC}"
     exit 1
 fi
 
-echo "  Distribution Account: $DISTRIBUTION_ACCOUNT"
+echo -e "${GREEN}Distribution Account:${NC}"
+echo "  Account: $DISTRIBUTION_ACCOUNT"
 
-echo -e "${YELLOW}Step 3: Creating config files from templates...${NC}"
+echo -e "${YELLOW}Step 4: Creating config files from templates...${NC}"
 
 # Export for docker-compose
-export STELLAR_WALLET_SECRET_KEY
+export HOST_SEP10_SECRET_KEY
 
 # Create working config files from templates using sed
 # Update reference-config.yaml - paymentSigningSeed and distributionWallet
-sed "s|\${STELLAR_WALLET_SECRET_KEY}|$STELLAR_WALLET_SECRET_KEY|g" config/reference-config.yaml.template | \
-sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" > config/reference-config.yaml
-# Update stellar.localhost.toml - SIGNING_KEY
-sed "s|\${STELLAR_WALLET_ACCOUNT}|$STELLAR_WALLET_ACCOUNT|g" config/stellar.localhost.toml.template > config/stellar.localhost.toml
+sed "s|\${DISTRIBUTION_ACCOUNT_SECRET_KEY}|$DISTRIBUTION_ACCOUNT_SECRET_KEY|g" config/reference-config.yaml.template | \
+sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" > config/reference-config.yaml
+# Update stellar.localhost.toml - SIGNING_KEY and ACCOUNTS
+sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" config/stellar.localhost.toml.template | \
+sed "s|\${HOST_SEP10_ACCOUNT}|$HOST_SEP10_ACCOUNT|g" > config/stellar.localhost.toml
 # Update assets.yaml - distribution_account
 sed "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" config/assets.yaml.template > config/assets.yaml
 echo "  ✓ Created config/reference-config.yaml from template"
 echo "  ✓ Created config/stellar.localhost.toml from template"
 echo "  ✓ Created config/assets.yaml from template"
 
-echo -e "${YELLOW}Step 4: Starting docker-compose...${NC}"
+echo -e "${YELLOW}Step 5: Starting docker-compose...${NC}"
 
 # Start docker-compose with environment variables
 # Pass the variable inline so docker-compose can read it when parsing the file
-STELLAR_WALLET_SECRET_KEY="$STELLAR_WALLET_SECRET_KEY" $DOCKER_COMPOSE up -d
+HOST_SEP10_SECRET_KEY="$HOST_SEP10_SECRET_KEY" $DOCKER_COMPOSE up -d
 
 echo -e "${GREEN}✓ Docker-compose started${NC}"
 
@@ -144,9 +147,9 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Anchor Platform is starting up!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo "Generated Keypair:"
-echo "  Wallet Account: $STELLAR_WALLET_ACCOUNT"
-echo "  Wallet Secret Key: $STELLAR_WALLET_SECRET_KEY"
+echo "Generated Accounts:"
+echo "  Host SEP-10 Account: $HOST_SEP10_ACCOUNT"
+echo "  Distribution Account: $DISTRIBUTION_ACCOUNT"
 echo ""
 echo "Services will be available at:"
 echo "  SEP Server: http://localhost:8080"
