@@ -154,6 +154,10 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     return this.getName().compareTo(other.getName());
   }
 
+  ObserverStatus getStatus() {
+    return this.status;
+  }
+
   void setStatus(ObserverStatus status) {
     if (this.status != status) {
       if (this.status.isSettable(status)) {

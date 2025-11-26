@@ -1,0 +1,93 @@
+services:
+  # Main Anchor Platform service - runs SEP server, platform API, event processor, and stellar observer
+  platform:
+    platform: linux/amd64
+    image: stellar/anchor-platform:latest
+    command: --sep-server --platform-server --event-processor --stellar-observer
+    volumes:
+      - ./config:/config
+    env_file:
+      - ./dev.env
+    environment:
+      SECRET_SEP10_SIGNING_SEED: ${HOST_SEP10_SECRET_KEY}
+    ports:
+      - "8080:8080" # SEP server (Stellar Protocol endpoints)
+      - "8085:8085" # Platform API server
+    depends_on:
+      - db
+      - kafka
+      - reference-server
+      - sep24-reference-ui
+
+  # Reference implementation of an anchor backend server
+  reference-server:
+    platform: linux/amd64
+    image: stellar/anchor-platform:latest
+    command: "--kotlin-reference-server"
+    volumes:
+      - ./config:/config
+    env_file:
+      - ./dev.env
+    environment:
+      KT_REFERENCE_SERVER_CONFIG: /config/reference-config.yaml
+      SECRET_SEP10_SIGNING_SEED: ${HOST_SEP10_SECRET_KEY}
+    ports:
+      - "8091:8091" # Reference server API
+    depends_on:
+      - reference-db
+
+  # SEP-24 interactive flow reference UI
+  sep24-reference-ui:
+    platform: linux/amd64
+    image: stellar/sep24-reference-ui
+    ports:
+      - "3000:3000" # Web UI for SEP-24 transactions
+
+  # Kafka message broker for event processing (plaintext only, no SASL/SSL)
+  kafka:
+    platform: linux
+    image: confluentinc/cp-kafka:7.4.3
+    ports:
+      - "29092:29092" # PLAINTEXT broker port
+      - "29096:29096" # Controller port for KRaft mode
+    environment:
+      # KRaft (Kafka Raft) quorum configuration
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29096'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      CLUSTER_ID: 'ciWo7IWazngRchmPES6q5A=='
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+
+      # General broker settings
+      KAFKA_BROKER_ID: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+      # Listeners - Plaintext only (no SASL/SSL)
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29096"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+
+  # Main PostgreSQL database for platform data
+  db:
+    image: postgres:15.2-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+
+  # Separate PostgreSQL database for reference server
+  reference-db:
+    image: postgres:15.2-alpine
+    ports:
+      - "5433:5433"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    command: -p 5433
+
