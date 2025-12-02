@@ -24,7 +24,7 @@ public class ClientDomainHelper {
   public static String fetchSigningKeyFromClientDomain(String clientDomain, boolean allowHttpRetry)
       throws SepException {
     String clientSigningKey = "";
-    String url = "http://" + clientDomain + "/.well-known/stellar.toml";
+    String url = "https://" + clientDomain + "/.well-known/stellar.toml";
     try {
       Sep1Helper.TomlContent toml = tryRead(url, allowHttpRetry);
       clientSigningKey = toml.getString("SIGNING_KEY");
