@@ -45,7 +45,9 @@ public class ClientDomainHelper {
       infoF("Unable to read from {}", url);
       if (allowHttpRetry) {
         throw new SepException(
-            String.format("Unable to read from both %s and %s", url, url.replace("https", "http")),
+            String.format(
+                "Unable to read from both %s and %s",
+                url, url.replaceFirst("^https://", "http://")),
             e);
       }
       throw new SepException(String.format("Unable to read from %s", url), e);
@@ -63,7 +65,7 @@ public class ClientDomainHelper {
     } catch (Exception e) {
       if (allowHttp) {
         try {
-          var httpUrl = url.replace("https", "http");
+          var httpUrl = url.replaceFirst("^https://", "http://");
           debugF("Fetching {}", httpUrl);
           return Sep1Helper.readToml(httpUrl);
         } catch (Exception ignored) {
