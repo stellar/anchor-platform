@@ -283,7 +283,9 @@ public class Sep10Service implements ISep10Service {
   String fetchSigningKeyFromClientDomain(String clientDomain) throws SepException {
     return ClientDomainHelper.fetchSigningKeyFromClientDomain(
         clientDomain,
-        stellarNetworkConfig.getStellarNetworkPassphrase().equals(TESTNET.getNetworkPassphrase()));
+        !stellarNetworkConfig
+            .getStellarNetworkPassphrase()
+            .equals(Network.PUBLIC.getNetworkPassphrase()));
   }
 
   void validateAuthorization(
