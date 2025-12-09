@@ -16,7 +16,7 @@ import org.stellar.reference.di.AUTH_CONFIG_ENDPOINT
 
 /**
  * Defines the routes related to the customer callback API. See
- * [Customer Callbacks](https://developers.stellar.org/api/anchor-platform/callbacks/customer/).
+ * [Customer Callbacks](https://developers.stellar.org/docs/platforms/anchor-platform/api-reference/callbacks/get-customer).
  *
  * @param customerService the [CustomerService] to use to process the requests.
  */
