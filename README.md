@@ -23,7 +23,7 @@ anchor, allowing businesses to focus on the core business logic necessary to pro
 
 ## Getting Started
 
-To get started, visit the [Anchor Platform documentation](https://developers.stellar.org/docs/category/anchor-platform).
+To get started, visit the [Anchor Platform documentation](https://developers.stellar.org/docs/platforms/anchor-platform).
 Release notes can be found on the
 project's [releases page](https://github.com/stellar/anchor-platform/releases).
 
@@ -51,7 +51,7 @@ contribute to this project.
 
 ## Quickstart
 
-Anchor Platform can be run locally using Docker Compose. 
+Anchor Platform can be run locally using Docker Compose.
 
 Run the Anchor Platform using Docker Compose:
 
