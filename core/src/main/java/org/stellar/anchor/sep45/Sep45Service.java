@@ -123,8 +123,13 @@ public class Sep45Service {
         KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed()).getAccountId());
     argsMap.put(KEY_WEB_AUTH_DOMAIN, sep45Config.getWebAuthDomain());
     if (!isEmpty(request.getClientDomain())) {
+      boolean allowHttpRetry =
+          !stellarNetworkConfig
+              .getStellarNetworkPassphrase()
+              .equals(Network.PUBLIC.getNetworkPassphrase());
       String clientDomainSigner =
-          ClientDomainHelper.fetchSigningKeyFromClientDomain(request.getClientDomain(), false);
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(
+              request.getClientDomain(), allowHttpRetry);
       argsMap.put(KEY_CLIENT_DOMAIN, request.getClientDomain());
       argsMap.put(KEY_CLIENT_DOMAIN_ACCOUNT, clientDomainSigner);
     }
@@ -369,8 +374,13 @@ public class Sep45Service {
     }
 
     if (argsMap.containsKey(KEY_CLIENT_DOMAIN)) {
+      boolean allowHttpRetry =
+          !stellarNetworkConfig
+              .getStellarNetworkPassphrase()
+              .equals(Network.PUBLIC.getNetworkPassphrase());
       String clientDomainSigner =
-          ClientDomainHelper.fetchSigningKeyFromClientDomain(argsMap.get(KEY_CLIENT_DOMAIN), false);
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(
+              argsMap.get(KEY_CLIENT_DOMAIN), allowHttpRetry);
       if (!clientDomainSigner.equals(argsMap.get(KEY_CLIENT_DOMAIN_ACCOUNT))) {
         throw new BadRequestException("Invalid client domain address");
       }
