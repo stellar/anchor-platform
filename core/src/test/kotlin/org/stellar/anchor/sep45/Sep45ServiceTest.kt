@@ -117,6 +117,20 @@ class Sep45ServiceTest {
   }
 
   @Test
+  fun `test getChallenge throws BadRequestException when account missing`() {
+    val challengeRequest =
+      ChallengeRequest.builder()
+        .account(null)
+        .homeDomain("http://localhost:8080")
+        .clientDomain(null)
+        .build()
+
+    val ex =
+      assertThrows(BadRequestException::class.java) { sep45Service.getChallenge(challengeRequest) }
+    assertEquals("account is required", ex.message)
+  }
+
+  @Test
   fun `test getChallenge throws BadRequestException when home domain missing`() {
     val challengeRequest =
       ChallengeRequest.builder()
