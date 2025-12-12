@@ -6,7 +6,7 @@ testing.
 ## Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install)
-- [Stellar CLI](https://developers.stellar.org/docs/build/guides/cli)
+- [Stellar CLI](https://developers.stellar.org/docs/tools/cli/cookbook)
 
 This assumes that you have the Stellar CLI installed and configured with a
 testnet account `${MY_ACCOUNT}`.

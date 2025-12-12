@@ -4,6 +4,7 @@ import io.mockk.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.InternalServerErrorException
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest
 import org.stellar.anchor.api.sep.sep45.ValidationRequest
@@ -23,6 +24,7 @@ import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse
 import org.stellar.sdk.responses.sorobanrpc.GetNetworkResponse
 import org.stellar.sdk.responses.sorobanrpc.SimulateTransactionResponse
+import org.stellar.sdk.xdr.SorobanAuthorizationEntries
 
 class Sep45ServiceTest {
   private lateinit var stellarNetworkConfig: StellarNetworkConfig
@@ -115,6 +117,48 @@ class Sep45ServiceTest {
   }
 
   @Test
+  fun `test getChallenge throws BadRequestException when account missing`() {
+    val challengeRequest =
+      ChallengeRequest.builder()
+        .account(null)
+        .homeDomain("http://localhost:8080")
+        .clientDomain(null)
+        .build()
+
+    val ex =
+      assertThrows(BadRequestException::class.java) { sep45Service.getChallenge(challengeRequest) }
+    assertEquals("account is required", ex.message)
+  }
+
+  @Test
+  fun `test getChallenge throws BadRequestException when home domain missing`() {
+    val challengeRequest =
+      ChallengeRequest.builder()
+        .account(TEST_CONTRACT_ID)
+        .homeDomain(null)
+        .clientDomain(null)
+        .build()
+
+    val ex =
+      assertThrows(BadRequestException::class.java) { sep45Service.getChallenge(challengeRequest) }
+    assertEquals("home_domain is required", ex.message)
+  }
+
+  @Test
+  fun `test getChallenge throws BadRequestException on invalid account`() {
+    val challengeRequest =
+      ChallengeRequest.builder()
+        .account("CCXXX")
+        .homeDomain("http://localhost:8080")
+        .clientDomain(null)
+        .build()
+
+    val ex =
+      assertThrows(BadRequestException::class.java) { sep45Service.getChallenge(challengeRequest) }
+    assertEquals("account must be a contract address", ex.message)
+  }
+
+  @Test
   fun `test validate function with valid auth entries`() {
     val authEntriesXdr =
       "AAAAAgAAAAEAAAABMXx6BpvcLPv+Ys0+pKSVYuT5yS/rba13ZMWowRmb+pxF2uWzaxsY/AAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAg0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlUAAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAo074x7qA8Iqyn/P1Ewffdh7zMeBtIHvcMhTaUyIBzPEyTx67xLr9pO2AToTSh/VHFki+g3lfEz8eZsh0w0b0BQAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAAAAAAAQAAAAAAAAAAjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0rVNLbc72XYAAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAgjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0AAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAw4WS+M2bdw9HoLBOiFT9DjqU02Z8gm13Mk0/sBS2AIdC7AbxmoWtS/o1A6feb/hNixTaSBArU0SZKx/l3p5TBAAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAA"
@@ -138,6 +182,26 @@ class Sep45ServiceTest {
 
     assertNotNull(response)
     assertEquals(jwtToken, response.token)
+  }
+
+  @Test
+  fun `test validate throws BadRequestException when auth entries missing`() {
+    val validationRequest = ValidationRequest.builder().authorizationEntries(null).build()
+
+    val ex =
+      assertThrows(BadRequestException::class.java) { sep45Service.validate(validationRequest) }
+    assertEquals("authorization_entries is required", ex.message)
+  }
+
+  @Test
+  fun `test validate throws BadRequestException when auth entries list empty`() {
+    val emptyAuth = SorobanAuthorizationEntries(arrayOf())
+    val validationRequest =
+      ValidationRequest.builder().authorizationEntries(emptyAuth.toXdrBase64()).build()
+
+    val ex =
+      assertThrows(BadRequestException::class.java) { sep45Service.validate(validationRequest) }
+    assertEquals("authorization_entries must contain at least one entry", ex.message)
   }
 
   val jsonSimulateTransactionResponse =

@@ -48,6 +48,16 @@ public class Sep45Service {
   private final JwtService jwtService;
 
   public ChallengeResponse getChallenge(ChallengeRequest request) throws AnchorException {
+    if (request == null || isEmpty(request.getAccount())) {
+      throw new BadRequestException("account is required");
+    }
+    if (!StrKey.isValidContract(request.getAccount())) {
+      throw new BadRequestException("account must be a contract address");
+    }
+    if (isEmpty(request.getHomeDomain())) {
+      throw new BadRequestException("home_domain is required");
+    }
+
     KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
     // Transaction simulation does not require a real account, but it does need to be different from
     // the SEP-10 account to generate the correct auth entries
@@ -166,11 +176,19 @@ public class Sep45Service {
     KeyPair simulatingKeypair = KeyPair.random();
     Network network = new Network(stellarNetworkConfig.getStellarNetworkPassphrase());
 
+    if (request == null || isEmpty(request.getAuthorizationEntries())) {
+      throw new BadRequestException("authorization_entries is required");
+    }
+
     SorobanAuthorizationEntries authEntries;
     try {
       authEntries = SorobanAuthorizationEntries.fromXdrBase64(request.getAuthorizationEntries());
     } catch (IOException e) {
       throw new BadRequestException("Failed to decode auth entries");
+    }
+    SorobanAuthorizationEntry[] entries = authEntries.getSorobanAuthorizationEntries();
+    if (entries == null || entries.length == 0) {
+      throw new BadRequestException("authorization_entries must contain at least one entry");
     }
 
     // Verify that all entries have the same arguments and that the arguments are valid
