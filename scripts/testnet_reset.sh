@@ -52,6 +52,7 @@ fund_test_accounts() {
     "TEST_CLIENT_WALLET_SECRET:GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
     "TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET:GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
     "TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET:GATEYCIMJZ2F6Y437QSYH4XFQ6HLD5YP4MBJZFFPZVEQDJOY4QTCB7BB"
+    "OTHER_SEP10_SIGNING_SECRET:GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
     "TEST_WITHDRAW_FUND_CLIENT_SECRET_1:GDC2U5GRKUSPGV5XENLBWKQZH2C4PG7ZEVMQOUA2QZKIRXE5FYYEMEF7"
     "TEST_WITHDRAW_FUND_CLIENT_SECRET_2:GASI56WX7UKIDFPZRCQEI4OQE3V3QBGXEOB4ZY6ZMU5MZXPHQHIDA7JU"
     "TEST_DEPOSIT_FUND_CLIENT_SECRET_1:GD4C2QRT7YL4WJFJPYQCYRXEDBB7ERHC3XZGWR6KXKRHPEFXXNXIVNFY"
@@ -60,6 +61,7 @@ fund_test_accounts() {
     "SRT_ISSUER_SECRET:GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B"
     "TESTANCHOR_DISTRIBUTION_SECRET:GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP"
     "TESTANCHOR_RECEIVE_SECRET:GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF"
+    "SECRET__KEY:GAJ3JPQH3ISAZBMRUPKQ6ZQLRXIROCKJKBIYMGPFUEETQEDGFAW4IQ5H"
   )
 
   for account_info in "${accounts[@]}"; do
@@ -85,6 +87,8 @@ setup_trustlines() {
     "TEST_DEPOSIT_FUND_CLIENT_SECRET_2"
     "TESTANCHOR_DISTRIBUTION_SECRET"
     "TESTANCHOR_RECEIVE_SECRET"
+    "OTHER_SEP10_SIGNING_SECRET"
+    "SECRET__KEY"
   )
 
   for account_var in "${accounts[@]}"; do
@@ -116,8 +120,20 @@ setup_trustlines() {
           --network testnet \
           --line "USDC:$circle_usdc_issuer"; then
           log_success "Circle USDC trustline created for $account_var"
+        elif [[ "$account_var" == "OTHER_SEP10_SIGNING_SECRET" ]]; then
+          log_warning "Failed to create Circle USDC trustline for test payment destination ($account_var)"
         else
           log_warning "Failed to create Circle USDC trustline for $account_var"
+        fi
+      elif [[ "$account_var" == "OTHER_SEP10_SIGNING_SECRET" ]]; then
+        # The test payment destination only needs Circle USDC
+        if stellar tx new change-trust \
+          --source-account "$account_secret" \
+          --network testnet \
+          --line "USDC:$circle_usdc_issuer"; then
+          log_success "Circle USDC trustline created for test payment destination"
+        else
+          log_warning "Failed to create Circle USDC trustline for test payment destination ($account_var)"
         fi
       fi
     fi
@@ -142,6 +158,7 @@ issue_and_fund_usdc() {
     "TEST_DEPOSIT_FUND_CLIENT_SECRET_2:GC56VTOVOJDRQAJRYLZW6DLQGVTQSYDTZU7ISNIZ2VJIE3FYWI2HMD5G"
     "TESTANCHOR_DISTRIBUTION_SECRET:GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP"
     "TESTANCHOR_RECEIVE_SECRET:GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF"
+    "OTHER_SEP10_SIGNING_SECRET:GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
   )
 
   for recipient_info in "${recipient_accounts[@]}"; do
