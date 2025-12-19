@@ -51,6 +51,8 @@ spec:
               value: {{ .Values.config.app.horizonEndpoint }}
             - name: APP.RPC_ENDPOINT
               value: {{ .Values.config.app.rpcEndpoint }}
+            - name: APP.RPC_ENABLED
+              value: {{ .Values.config.app.rpcEnabled }}
             - name: DATA.URL
               value: {{ .Values.config.data.url }}
             - name: DATA.USER
