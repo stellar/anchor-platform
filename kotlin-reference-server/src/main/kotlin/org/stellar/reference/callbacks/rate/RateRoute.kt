@@ -11,7 +11,7 @@ import org.stellar.reference.di.AUTH_CONFIG_ENDPOINT
 
 /**
  * Defines the routes related to the rate callback API. See
- * [Rate Callbacks](https://developers.stellar.org/api/anchor-platform/callbacks/rate/).
+ * [Rate Callbacks](https://developers.stellar.org/docs/platforms/anchor-platform/api-reference/callbacks/get-rates).
  *
  * @param rateService the [RateService] to use to process the requests.
  */

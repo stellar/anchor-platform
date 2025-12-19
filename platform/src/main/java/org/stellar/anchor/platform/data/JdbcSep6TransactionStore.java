@@ -107,11 +107,10 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
 
   @Override
   public Sep6Transaction save(Sep6Transaction transaction) throws SepException {
-    if (!(transaction instanceof JdbcSep6Transaction)) {
+    if (!(transaction instanceof JdbcSep6Transaction txn)) {
       throw new SepException(
           transaction.getClass() + " is not a sub-type of " + JdbcSep6Transaction.class);
     }
-    JdbcSep6Transaction txn = (JdbcSep6Transaction) transaction;
     txn.setUpdatedAt(Instant.now());
 
     return transactionRepo.save(txn);
@@ -127,12 +126,5 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
       String withdrawAnchorAccount, String memo, String status) {
     return transactionRepo.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         withdrawAnchorAccount, memo, status);
-  }
-
-  @Override
-  public JdbcSep6Transaction findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
-      String withdrawAnchorAccount, String fromAccount, String status) {
-    return transactionRepo.findOneByWithdrawAnchorAccountAndFromAccountAndStatus(
-        withdrawAnchorAccount, fromAccount, status);
   }
 }

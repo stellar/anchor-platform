@@ -21,6 +21,7 @@ import org.stellar.anchor.util.Log;
  * @see <a href="https://stackoverflow.com/a/42023374/875657">StackOverflow Answer</a>
  */
 public class RequestLoggerFilter extends OncePerRequestFilter {
+  public static final String ATTRIBUTE_CLIENT_IP_ADDRESS = "clientIpAddress";
   private final AppLoggingConfig appLoggingConfig;
 
   public RequestLoggerFilter(AppLoggingConfig appLoggingConfig) {
@@ -31,6 +32,8 @@ public class RequestLoggerFilter extends OncePerRequestFilter {
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws IOException, ServletException {
     long startTime = System.currentTimeMillis();
+    String clientIpAddress = getClientIpAddress(request);
+    request.setAttribute(ATTRIBUTE_CLIENT_IP_ADDRESS, clientIpAddress);
 
     // ========= Log request and response payload ("body") ========
     // We CANNOT simply read the request payload here, because then the InputStream would be
@@ -54,7 +57,7 @@ public class RequestLoggerFilter extends OncePerRequestFilter {
                     .queryParams(request.getQueryString())
                     .authType(request.getAuthType())
                     .principalName(principalName)
-                    .clientId(getClientIpAddress(request))
+                    .clientId(clientIpAddress)
                     .build())
             .response(
                 RequestResponseMessage.Response.builder()

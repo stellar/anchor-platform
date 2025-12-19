@@ -31,6 +31,9 @@ public abstract class JdbcSepTransaction {
   @Column(name = "updated_at")
   Instant updatedAt;
 
+  @SerializedName("amount_expected")
+  String amountExpected;
+
   @SerializedName("amount_in")
   @Column(name = "amount_in")
   String amountIn;
@@ -87,6 +90,10 @@ public abstract class JdbcSepTransaction {
   @Column(columnDefinition = "json")
   @JdbcTypeCode(SqlTypes.JSON)
   List<StellarTransaction> stellarTransactions;
+
+  @SerializedName("request_client_ip_address")
+  @Column(name = "request_client_ip_address")
+  String requestClientIpAddress;
 
   public abstract String getProtocol();
 

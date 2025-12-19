@@ -213,7 +213,7 @@ subprojects {
 
 allprojects {
   group = "org.stellar.anchor-sdk"
-  version = "3.1.2"
+  version = "4.1.6"
 
   tasks.jar {
     manifest {
@@ -222,6 +222,32 @@ allprojects {
               "Implementation-Title" to project.name, "Implementation-Version" to project.version))
     }
   }
+}
+
+
+// *******************************************************************************
+// Ensure JDK version is 17.0.16 or above to support Sectigo root CA certificate
+// Check the Sectigo certification additions at https://www.oracle.com/java/technologies/javase/17-0-16-relnotes.html
+fun isJdkVersionValid(): Boolean {
+  if (System.getProperty("ignoreJdkCheck") == "true") {
+    return true
+  }
+  val version = System.getProperty("java.version")
+  val regex = Regex("^(\\d+)\\.(\\d+)\\.(\\d+)")
+  val match = regex.find(version)
+  if (match != null) {
+    val (major, minor, patch) = match.destructured
+    if (major.toInt() == 17) {
+      val patchInt = patch.toInt()
+      val minorInt = minor.toInt()
+      // Accept 17.0.16 and above
+      return minorInt > 0 || patchInt >= 8
+    }
+  }
+  return false
+}
+if (!isJdkVersionValid()) {
+  throw GradleException("JDK 17.0.8 or above is required. Current version: ${System.getProperty("java.version")}")
 }
 
 // *******************************************************************************

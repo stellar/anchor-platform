@@ -18,12 +18,11 @@ import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Nonce;
 import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep45Jwt;
-import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
-import org.stellar.anchor.network.StellarRpc;
+import org.stellar.anchor.config.StellarNetworkConfig;
+import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.util.ClientDomainHelper;
-import org.stellar.anchor.xdr.SorobanAuthorizationEntryList;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Transaction;
 import org.stellar.sdk.operations.InvokeHostFunctionOperation;
@@ -41,7 +40,7 @@ public class Sep45Service {
   private static final String KEY_WEB_AUTH_DOMAIN = "web_auth_domain";
   private static final String KEY_WEB_AUTH_DOMAIN_ACCOUNT = "web_auth_domain_account";
   private static final String KEY_NONCE = "nonce";
-  private final AppConfig appConfig;
+  private final StellarNetworkConfig stellarNetworkConfig;
   private final SecretConfig secretConfig;
   private final Sep45Config sep45Config;
   private final StellarRpc stellarRpc;
@@ -49,11 +48,21 @@ public class Sep45Service {
   private final JwtService jwtService;
 
   public ChallengeResponse getChallenge(ChallengeRequest request) throws AnchorException {
+    if (request == null || isEmpty(request.getAccount())) {
+      throw new BadRequestException("account is required");
+    }
+    if (!StrKey.isValidContract(request.getAccount())) {
+      throw new BadRequestException("account must be a contract address");
+    }
+    if (isEmpty(request.getHomeDomain())) {
+      throw new BadRequestException("home_domain is required");
+    }
+
     KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
     // Transaction simulation does not require a real account, but it does need to be different from
     // the SEP-10 account to generate the correct auth entries
     KeyPair simulatingKeypair = KeyPair.random();
-    Network network = new Network(appConfig.getStellarNetworkPassphrase());
+    Network network = new Network(stellarNetworkConfig.getStellarNetworkPassphrase());
 
     SCVal[] args = createArgsFromRequest(request);
 
@@ -96,12 +105,12 @@ public class Sep45Service {
 
     try {
       String authEntriesXdr =
-          new SorobanAuthorizationEntryList(authEntries.toArray(SorobanAuthorizationEntry[]::new))
+          new SorobanAuthorizationEntries(authEntries.toArray(SorobanAuthorizationEntry[]::new))
               .toXdrBase64();
 
       return ChallengeResponse.builder()
           .authorizationEntries(authEntriesXdr)
-          .networkPassphrase(stellarRpc.getRpc().getNetwork().getPassphrase())
+          .networkPassphrase(stellarRpc.getSorobanServer().getNetwork().getPassphrase())
           .build();
     } catch (IOException e) {
       throw new InternalServerErrorException("Failed to encode auth entries");
@@ -124,8 +133,13 @@ public class Sep45Service {
         KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed()).getAccountId());
     argsMap.put(KEY_WEB_AUTH_DOMAIN, sep45Config.getWebAuthDomain());
     if (!isEmpty(request.getClientDomain())) {
+      boolean allowHttpRetry =
+          !stellarNetworkConfig
+              .getStellarNetworkPassphrase()
+              .equals(Network.PUBLIC.getNetworkPassphrase());
       String clientDomainSigner =
-          ClientDomainHelper.fetchSigningKeyFromClientDomain(request.getClientDomain(), false);
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(
+              request.getClientDomain(), allowHttpRetry);
       argsMap.put(KEY_CLIENT_DOMAIN, request.getClientDomain());
       argsMap.put(KEY_CLIENT_DOMAIN_ACCOUNT, clientDomainSigner);
     }
@@ -160,18 +174,26 @@ public class Sep45Service {
   public ValidationResponse validate(ValidationRequest request) throws AnchorException {
     KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
     KeyPair simulatingKeypair = KeyPair.random();
-    Network network = new Network(appConfig.getStellarNetworkPassphrase());
+    Network network = new Network(stellarNetworkConfig.getStellarNetworkPassphrase());
 
-    SorobanAuthorizationEntryList authEntries;
+    if (request == null || isEmpty(request.getAuthorizationEntries())) {
+      throw new BadRequestException("authorization_entries is required");
+    }
+
+    SorobanAuthorizationEntries authEntries;
     try {
-      authEntries = SorobanAuthorizationEntryList.fromXdrBase64(request.getAuthorizationEntries());
+      authEntries = SorobanAuthorizationEntries.fromXdrBase64(request.getAuthorizationEntries());
     } catch (IOException e) {
       throw new BadRequestException("Failed to decode auth entries");
+    }
+    SorobanAuthorizationEntry[] entries = authEntries.getSorobanAuthorizationEntries();
+    if (entries == null || entries.length == 0) {
+      throw new BadRequestException("authorization_entries must contain at least one entry");
     }
 
     // Verify that all entries have the same arguments and that the arguments are valid
     SCVal[] firstEntryArgs = {};
-    for (SorobanAuthorizationEntry entry : authEntries.getAuthorizationEntryList()) {
+    for (SorobanAuthorizationEntry entry : authEntries.getSorobanAuthorizationEntries()) {
       if (firstEntryArgs.length == 0) {
         firstEntryArgs = entry.getRootInvocation().getFunction().getContractFn().getArgs();
         verifyArguments(firstEntryArgs[0].getMap().getSCMap());
@@ -202,7 +224,7 @@ public class Sep45Service {
                 WEB_AUTH_VERIFY_FN,
                 Arrays.asList(firstEntryArgs))
             .sourceAccount(simulatingKeypair.getAccountId())
-            .auth(Arrays.asList(authEntries.getAuthorizationEntryList()))
+            .auth(Arrays.asList(authEntries.getSorobanAuthorizationEntries()))
             .build();
 
     Transaction transaction =
@@ -229,7 +251,10 @@ public class Sep45Service {
       hashHex =
           Util.bytesToHex(
               Util.hash(
-                  authEntries.getAuthorizationEntryList()[0].getRootInvocation().toXdrByteArray()));
+                  authEntries
+                      .getSorobanAuthorizationEntries()[0]
+                      .getRootInvocation()
+                      .toXdrByteArray()));
     } catch (IOException e) {
       throw new InternalServerErrorException("Unable to decode invocation");
     }
@@ -268,7 +293,8 @@ public class Sep45Service {
                 HashIDPreimage.HashIDPreimageSorobanAuthorization.builder()
                     .networkID(
                         new Hash(
-                            new Network(appConfig.getStellarNetworkPassphrase()).getNetworkId()))
+                            new Network(stellarNetworkConfig.getStellarNetworkPassphrase())
+                                .getNetworkId()))
                     .nonce(entry.getCredentials().getAddress().getNonce())
                     .invocation(entry.getRootInvocation())
                     .signatureExpirationLedger(
@@ -347,10 +373,11 @@ public class Sep45Service {
     if (sep45Config.getHomeDomains().stream()
         .noneMatch(
             homeDomain -> {
-              URI expected = URI.create("http://" + homeDomain);
-              URI given = URI.create(argsMap.get(KEY_HOME_DOMAIN));
-
-              return expected.getAuthority().equals(given.getAuthority());
+              URI expected = URI.create("http://" + homeDomain.replaceFirst("^https?://", ""));
+              URI given =
+                  URI.create(
+                      "http://" + argsMap.get(KEY_HOME_DOMAIN).replaceFirst("^https?://", ""));
+              return expected.getAuthority().equalsIgnoreCase(given.getAuthority());
             })) {
       throw new BadRequestException("Invalid home domain");
     }
@@ -365,8 +392,13 @@ public class Sep45Service {
     }
 
     if (argsMap.containsKey(KEY_CLIENT_DOMAIN)) {
+      boolean allowHttpRetry =
+          !stellarNetworkConfig
+              .getStellarNetworkPassphrase()
+              .equals(Network.PUBLIC.getNetworkPassphrase());
       String clientDomainSigner =
-          ClientDomainHelper.fetchSigningKeyFromClientDomain(argsMap.get(KEY_CLIENT_DOMAIN), false);
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(
+              argsMap.get(KEY_CLIENT_DOMAIN), allowHttpRetry);
       if (!clientDomainSigner.equals(argsMap.get(KEY_CLIENT_DOMAIN_ACCOUNT))) {
         throw new BadRequestException("Invalid client domain address");
       }

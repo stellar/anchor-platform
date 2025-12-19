@@ -17,6 +17,8 @@ import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MemoHelper.makeMemo;
 import static org.stellar.anchor.util.MemoHelper.memoType;
 import static org.stellar.anchor.util.MetricConstants.*;
+import static org.stellar.anchor.util.SepHelper.*;
+import static org.stellar.anchor.util.SepHelper.AccountType.*;
 import static org.stellar.anchor.util.SepHelper.generateSepTransactionId;
 import static org.stellar.anchor.util.SepHelper.memoTypeString;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
@@ -47,9 +49,10 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.client.CustodialClient;
-import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.CustodyConfig;
+import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep24Config;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
 import org.stellar.anchor.util.*;
@@ -62,7 +65,8 @@ public class Sep24Service {
   public static final List<String> INTERACTIVE_URL_JWT_REQUIRED_FIELDS_FROM_REQUEST =
       List.of("amount", "client_domain", "lang", "customer_id");
   public static String ERR_TOKEN_ACCOUNT_MISMATCH = "'account' does not match the one in the token";
-  final AppConfig appConfig;
+  final LanguageConfig languageConfig;
+  final StellarNetworkConfig stellarNetworkConfig;
   final Sep24Config sep24Config;
   final ClientService clientService;
   final AssetService assetService;
@@ -90,7 +94,8 @@ public class Sep24Service {
           MetricConstants.TV_SEP24_DEPOSIT);
 
   public Sep24Service(
-      AppConfig appConfig,
+      LanguageConfig languageConfig,
+      StellarNetworkConfig stellarNetworkConfig,
       Sep24Config sep24Config,
       ClientService clientsService,
       AssetService assetService,
@@ -103,9 +108,10 @@ public class Sep24Service {
       MoreInfoUrlConstructor moreInfoUrlConstructor,
       CustodyConfig custodyConfig,
       ExchangeAmountsCalculator exchangeAmountsCalculator) {
-    debug("appConfig:", appConfig);
+    debug("appConfig:", stellarNetworkConfig);
     debug("sep24Config:", sep24Config);
-    this.appConfig = appConfig;
+    this.languageConfig = languageConfig;
+    this.stellarNetworkConfig = stellarNetworkConfig;
     this.sep24Config = sep24Config;
     this.clientService = clientsService;
     this.assetService = assetService;
@@ -144,7 +150,7 @@ public class Sep24Service {
     String sourceAccount = withdrawRequest.get("account");
     String strAmount = withdrawRequest.get("amount");
 
-    String lang = validateLanguage(appConfig, withdrawRequest.get("lang"));
+    String lang = validateLanguage(languageConfig, withdrawRequest.get("lang"));
     debugF("language: {}", lang);
 
     if (assetCode == null) {
@@ -212,7 +218,8 @@ public class Sep24Service {
             .fromAccount(sourceAccount)
             .toAccount(asset.getDistributionAccount())
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token));
+            .clientName(clientFinder.getClientName(token))
+            .requestClientIpAddress(withdrawRequest.get("clientIpAddress"));
 
     if (memo != null) {
       debug("transaction memo detected.", memo);
@@ -225,6 +232,7 @@ public class Sep24Service {
                 memoTypeString(memoType(memo)), custodyConfig.getType()));
       }
 
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
     }
@@ -247,8 +255,7 @@ public class Sep24Service {
     String quoteId = withdrawRequest.get("quote_id");
     AssetInfo buyAsset = assetService.getAssetById(withdrawRequest.get("destination_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(
-          quoteId, asset, buyAsset, strAmount, builder, WITHDRAWAL.toString(), txnId);
+      validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
     } else {
       builder.amountExpected(strAmount);
       if (buyAsset != null) {
@@ -314,7 +321,7 @@ public class Sep24Service {
       debugF("claimable balance supported: {}", claimableSupported);
     }
 
-    String lang = validateLanguage(appConfig, depositRequest.get("lang"));
+    String lang = validateLanguage(languageConfig, depositRequest.get("lang"));
     debugF("language: {}", lang);
 
     if (assetCode == null) {
@@ -347,9 +354,20 @@ public class Sep24Service {
       }
     }
 
+    if (assetService.getAsset(assetCode, assetIssuer) == null) {
+      infoF("The asset_code of the deposit request must be set.");
+      throw new SepValidationException("The asset_code of the deposit request must be set");
+    }
+
+    if (!(assetService.getAsset(assetCode, assetIssuer) instanceof StellarAssetInfo asset)) {
+      infoF("The asset_code ({}) of the deposit request must be a stellar asset.", assetCode);
+      throw new SepValidationException(
+          String.format(
+              "The asset_code (%s) of the deposit request must be a stellar asset.", assetCode));
+    }
+
     // Verify that the asset code exists in our database, with deposit enabled.
-    StellarAssetInfo asset = (StellarAssetInfo) assetService.getAsset(assetCode, assetIssuer);
-    if (asset == null || !AssetHelper.isDepositEnabled(asset.getSep24())) {
+    if (!AssetHelper.isDepositEnabled(asset.getSep24())) {
       infoF("invalid operation for asset {}", assetCode);
       throw new SepValidationException(String.format("invalid operation for asset %s", assetCode));
     }
@@ -381,7 +399,6 @@ public class Sep24Service {
     if (token.getClientDomain() != null)
       depositRequest.put("client_domain", token.getClientDomain());
 
-    Memo memo = makeMemo(depositRequest.get("memo"), depositRequest.get("memo_type"));
     String txnId = generateSepTransactionId();
     Sep24TransactionBuilder builder =
         new Sep24TransactionBuilder(txnStore)
@@ -400,11 +417,22 @@ public class Sep24Service {
             .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
-            .claimableBalanceSupported(claimableSupported);
+            .claimableBalanceSupported(claimableSupported)
+            .requestClientIpAddress(depositRequest.get("clientIpAddress"));
 
+    if (accountType(token.getAccount()) == Contract) {
+      if (depositRequest.get("memo_type") != null
+          && !depositRequest.get("memo_type").equalsIgnoreCase("id")) {
+        infoF(
+            "If the request account:{} is a C-account, the memo_type must be set to 'id'",
+            token.getAccount());
+        throw new SepValidationException(
+            "Contract account requires 'memo_type' to be set to 'id' in the request");
+      }
+    }
+
+    Memo memo = makeMemo(depositRequest.get("memo"), depositRequest.get("memo_type"));
     if (memo != null) {
-      debug("transaction memo detected.", memo);
-
       if (!CustodyUtils.isMemoTypeSupported(
           custodyConfig.getType(), memoTypeString(memoType(memo)))) {
         throw new SepValidationException(
@@ -413,6 +441,7 @@ public class Sep24Service {
                 memoTypeString(memoType(memo)), custodyConfig.getType()));
       }
 
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
     }
@@ -420,8 +449,7 @@ public class Sep24Service {
     String quoteId = depositRequest.get("quote_id");
     AssetInfo sellAsset = assetService.getAssetById(depositRequest.get("source_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(
-          quoteId, sellAsset, asset, strAmount, builder, DEPOSIT.toString(), txnId);
+      validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
     } else {
       builder.amountExpected(strAmount);
       if (sellAsset != null) {
@@ -491,7 +519,7 @@ public class Sep24Service {
     List<TransactionResponse> list = new ArrayList<>();
     debugF("found {} transactions", txns.size());
     for (Sep24Transaction txn : txns) {
-      String lang = validateLanguage(appConfig, txReq.getLang());
+      String lang = validateLanguage(languageConfig, txReq.getLang());
       TransactionResponse transactionResponse =
           fromTxn(assetService, moreInfoUrlConstructor, txn, lang);
       list.add(transactionResponse);
@@ -549,7 +577,7 @@ public class Sep24Service {
     }
     // increment counter
     sep24TransactionQueriedCounter.increment();
-    String lang = validateLanguage(appConfig, txReq.getLang());
+    String lang = validateLanguage(languageConfig, txReq.getLang());
     return Sep24GetTransactionResponse.of(fromTxn(assetService, moreInfoUrlConstructor, txn, lang));
   }
 
@@ -589,7 +617,6 @@ public class Sep24Service {
       AssetInfo buyAsset,
       String strAmount,
       Sep24TransactionBuilder builder,
-      String kind,
       String txnId)
       throws AnchorException {
     Sep38Quote quote =

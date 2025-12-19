@@ -1,6 +1,8 @@
 package org.stellar.anchor.platform.configurator
 
-import io.mockk.*
+import io.mockk.MockKAnnotations
+import io.mockk.every
+import io.mockk.spyk
 import kotlin.test.assertNull
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -16,7 +18,7 @@ import org.stellar.anchor.platform.configurator.ConfigMap.ConfigSource.FILE
 
 @ExtendWith(LockAndMockTest::class)
 class ConfigManagerTest {
-  val configManager =
+  private val configManager =
     spyk(
       object : ConfigManager() {
         override fun initialize(context: ConfigurableApplicationContext) {}
@@ -50,10 +52,7 @@ class ConfigManagerTest {
     val testingConfigFile = ClassPathResource("config/test_anchor_config_missing_version.yaml")
     every { configManager.getConfigFileAsResource(any()) } returns testingConfigFile
 
-    val ex =
-      org.junit.jupiter.api.assertThrows<IllegalStateException> {
-        configManager.processConfigurations(null)
-      }
+    val ex = assertThrows<IllegalStateException> { configManager.processConfigurations(null) }
     assertEquals(
       ex.message,
       "java.io.FileNotFoundException: class path resource [config/anchor-config-schema-v0.yaml] cannot be opened because it does not exist"

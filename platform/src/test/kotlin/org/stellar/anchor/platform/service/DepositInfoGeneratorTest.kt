@@ -4,6 +4,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.custody.GenerateDepositAddressResponse
@@ -18,8 +19,8 @@ class DepositInfoGeneratorTest {
   companion object {
     private const val TX_ID = "123e4567-e89b-12d3-a456-426614174000"
     private const val ADDRESS = "testAccount"
-    private const val MEMO = "MTIzZTQ1NjctZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc="
-    private const val MEMO_TYPE = "hash"
+    private const val MEMO = "12345="
+    private const val MEMO_TYPE = "id"
     private const val ASSET_ID = "USDC"
   }
 
@@ -32,9 +33,8 @@ class DepositInfoGeneratorTest {
 
     val actualInfo = generator.generate(txn)
 
-    val expectedInfo = SepDepositInfo(ADDRESS, MEMO, MEMO_TYPE)
-
-    assertEquals(expectedInfo, actualInfo)
+    assertEquals(actualInfo.stellarAddress, ADDRESS)
+    assertTrue(actualInfo.memo.toLongOrNull() != null)
   }
 
   @Test
@@ -50,7 +50,7 @@ class DepositInfoGeneratorTest {
 
     val actualInfo = generator.generate(txn)
 
-    val expectedInfo = SepDepositInfo(ADDRESS, MEMO, MEMO_TYPE)
+    val expectedInfo = SepDepositInfo(ADDRESS, MEMO)
 
     assertEquals(expectedInfo, actualInfo)
   }
@@ -79,9 +79,8 @@ class DepositInfoGeneratorTest {
 
     val actualInfo = generator.generate(txn)
 
-    val expectedInfo = SepDepositInfo(ADDRESS, MEMO, MEMO_TYPE)
-
-    assertEquals(expectedInfo, actualInfo)
+    assertEquals(actualInfo.stellarAddress, ADDRESS)
+    assertTrue(actualInfo.memo.toLongOrNull() != null)
   }
 
   @Test
@@ -96,7 +95,7 @@ class DepositInfoGeneratorTest {
 
     val actualInfo = generator.generate(txn)
 
-    val expectedInfo = SepDepositInfo(ADDRESS, MEMO, MEMO_TYPE)
+    val expectedInfo = SepDepositInfo(ADDRESS, MEMO)
 
     assertEquals(expectedInfo, actualInfo)
   }

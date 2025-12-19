@@ -33,9 +33,7 @@ class Sep31EventProcessor(
         config.appSettings.distributionWalletMemo.isBlank() ||
           config.appSettings.distributionWalletMemoType.isBlank()
       ) {
-        val paddedMemo = event.payload.transaction!!.id.take(32).padStart(32, '0')
-        val encodedMemo = Base64.getEncoder().encodeToString(paddedMemo.toByteArray())
-        Pair(encodedMemo, "hash")
+        Pair((10000..20000).random().toString(), "id")
       } else {
         Pair(
           config.appSettings.distributionWalletMemo,
@@ -58,12 +56,15 @@ class Sep31EventProcessor(
   override suspend fun onTransactionStatusChanged(event: SendEventRequest) {
     val transaction = event.payload.transaction!!
     when (val status = transaction.status) {
+      PENDING_SENDER -> {
+        log.info { "Transaction ${transaction.id} is in pending_sender status" }
+      }
       PENDING_RECEIVER -> {
         if (verifyKyc(transaction).isNotEmpty()) {
           requestKyc(event)
           return
         }
-        sendExternal(transaction.id)
+        if (transaction.transferReceivedAt != null) sendExternal(transaction.id)
       }
       PENDING_EXTERNAL ->
         sepHelper.rpcAction(
@@ -98,13 +99,16 @@ class Sep31EventProcessor(
 
   private fun notifyCustomerUpdated(transaction: GetTransactionResponse) {
     runBlocking {
-      sepHelper.rpcAction(
-        RpcMethod.NOTIFY_CUSTOMER_INFO_UPDATED.toString(),
-        NotifyCustomerInfoUpdatedRequest(
-          transactionId = transaction.id,
-          message = "Customer info updated",
-        ),
-      )
+      if (verifyKyc(transaction).isEmpty()) {
+        // KYC is complete
+        sepHelper.rpcAction(
+          RpcMethod.NOTIFY_CUSTOMER_INFO_UPDATED.toString(),
+          NotifyCustomerInfoUpdatedRequest(
+            transactionId = transaction.id,
+            message = "Customer info updated",
+          ),
+        )
+      }
     }
   }
 
@@ -140,7 +144,7 @@ class Sep31EventProcessor(
     }
   }
 
-  private suspend fun sendExternal(transactionId: String) {
+  private fun sendExternal(transactionId: String) {
     runBlocking {
       sepHelper.rpcAction(
         "notify_offchain_funds_sent",

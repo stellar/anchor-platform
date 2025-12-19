@@ -24,7 +24,6 @@ class AnchorEventProcessor(
         }
         AnchorEvent.Type.CUSTOMER_UPDATED.type -> {
           log.info { "Received customer updated event" }
-          // Only SEP-6 listens to this event
           sep6EventProcessor.onCustomerUpdated(event)
           sep31EventProcessor.onCustomerUpdated(event)
         }

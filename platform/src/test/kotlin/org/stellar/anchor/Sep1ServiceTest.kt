@@ -81,12 +81,15 @@ class Sep1ServiceTest {
     mockServer.start()
     val mockAnchorUrl = mockServer.url("").toString()
     val metadata =
-      "{\n" +
-        "  \"ami-id\": \"ami-12345678\",\n" +
-        "  \"instance-id\": \"i-1234567890abcdef\",\n" +
-        "  \"instance-type\": \"t2.micro\"\n" +
-        "  // ... other metadata ...\n" +
-        "}"
+      """
+  {
+    "ami-id": "ami-12345678",
+    "instance-id": "i-1234567890abcdef",
+    "instance-type": "t2.micro"
+    // ... other metadata ...
+  }
+"""
+        .trimIndent()
 
     // Enqueue a response with a 302 status and a Location header to simulate a redirect.
     mockServer.enqueue(

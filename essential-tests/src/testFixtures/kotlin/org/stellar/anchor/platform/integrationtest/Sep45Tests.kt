@@ -3,6 +3,8 @@ package org.stellar.anchor.platform.integrationtest
 import java.net.URI
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest
@@ -16,12 +18,13 @@ import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
-import org.stellar.anchor.xdr.SorobanAuthorizationEntryList
+import org.stellar.anchor.util.StringHelper.isNotEmpty
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.Util
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.SCAddressType
+import org.stellar.sdk.xdr.SorobanAuthorizationEntries
 
 class Sep45Tests : IntegrationTestBase(TestConfig()) {
   private var sep45Client: Sep45Client =
@@ -45,6 +48,14 @@ class Sep45Tests : IntegrationTestBase(TestConfig()) {
 
   private var webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
   private var homeDomain = "http://${URI.create(webAuthDomain).authority}"
+
+  @BeforeEach
+  fun checkStellarRpc() {
+    assumeTrue(
+      isNotEmpty(config.get("stellar_network.rpc_url")),
+      "stellar_network.rpc_url must be set for this test for SEP-45 tests",
+    )
+  }
 
   @Test
   fun testChallengeSigningAndVerification() {
@@ -106,8 +117,8 @@ class Sep45Tests : IntegrationTestBase(TestConfig()) {
     Log.info("Validation request: ${GsonUtils.getInstance().toJson(validationRequest)}")
 
     val tamperedEntries =
-      SorobanAuthorizationEntryList.fromXdrBase64(validationRequest.authorizationEntries)
-        .authorizationEntryList
+      SorobanAuthorizationEntries.fromXdrBase64(validationRequest.authorizationEntries)
+        .sorobanAuthorizationEntries
         .map {
           val address = it.credentials.address.address
           if (
@@ -145,7 +156,7 @@ class Sep45Tests : IntegrationTestBase(TestConfig()) {
       sep45Client.validate(
         ValidationRequest.builder()
           .authorizationEntries(
-            SorobanAuthorizationEntryList(tamperedEntries.toTypedArray()).toXdrBase64()
+            SorobanAuthorizationEntries(tamperedEntries.toTypedArray()).toXdrBase64()
           )
           .build()
       )

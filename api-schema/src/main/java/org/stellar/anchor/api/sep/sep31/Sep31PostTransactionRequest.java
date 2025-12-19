@@ -41,6 +41,9 @@ public class Sep31PostTransactionRequest {
   @SerializedName("funding_method")
   String fundingMethod;
 
+  /** The request client IP address. */
+  String requestClientIpAddress;
+
   @Data
   @AllArgsConstructor
   public static class Sep31TxnFields {

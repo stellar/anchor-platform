@@ -10,7 +10,6 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import org.springframework.beans.BeanUtils;
-import org.stellar.anchor.SepTransaction;
 import org.stellar.anchor.api.asset.Sep31Info;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.sep31.Sep31Refunds;
@@ -22,8 +21,7 @@ import org.stellar.anchor.sep31.Sep31Transaction;
 @Access(AccessType.FIELD)
 @Table(name = "sep31_transaction")
 @NoArgsConstructor
-public class JdbcSep31Transaction extends JdbcSepTransaction
-    implements Sep31Transaction, SepTransaction {
+public class JdbcSep31Transaction extends JdbcSepTransaction implements Sep31Transaction {
   public String getProtocol() {
     return "31";
   }
@@ -130,6 +128,4 @@ public class JdbcSep31Transaction extends JdbcSepTransaction
       BeanUtils.copyProperties(sep31Refunds, this.refunds);
     }
   }
-
-  String amountExpected;
 }

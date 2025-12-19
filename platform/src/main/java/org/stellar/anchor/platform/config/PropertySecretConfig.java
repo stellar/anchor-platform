@@ -31,6 +31,7 @@ public class PropertySecretConfig implements SecretConfig, Validator {
   public static final String SECRET_SSL_KEYSTORE_PASSWORD = "secret.ssl.keystore.password";
   public static final String SECRET_SSL_KEY_PASSWORD = "secret.ssl.key.password";
   public static final String SECRET_SSL_TRUSTSTORE_PASSWORD = "secret.ssl.truststore.password";
+  public static final String SECRET_RPC_AUTH_SECRET = "secret.stellar_network.rpc.auth.secret";
 
   public String getSep6MoreInfoUrlJwtSecret() {
     return SecretManager.getInstance().get(SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET);
@@ -86,6 +87,11 @@ public class PropertySecretConfig implements SecretConfig, Validator {
   @Override
   public String getEventsQueueKafkaPassword() {
     return SecretManager.getInstance().get(SECRET_EVENTS_QUEUE_KAFKA_PASSWORD);
+  }
+
+  @Override
+  public String getRpcAuthSecret() {
+    return SecretManager.getInstance().get(SECRET_RPC_AUTH_SECRET);
   }
 
   @Override

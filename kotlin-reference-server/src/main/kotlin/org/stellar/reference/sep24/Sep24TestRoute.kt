@@ -59,7 +59,6 @@ fun Route.testSep24(
             val asset =
               token.data["asset"] ?: throw ClientException("Missing amountExpected.asset field")
             val memo = transaction.memo
-            val memoType = transaction.memoType
 
             if (!asset.startsWith("stellar:")) {
               throw ClientException("Invalid asset format")
@@ -76,8 +75,7 @@ fun Route.testSep24(
                 amountExpected,
                 account,
                 stellarAsset,
-                memo,
-                memoType,
+                memo
               )
             }
           }

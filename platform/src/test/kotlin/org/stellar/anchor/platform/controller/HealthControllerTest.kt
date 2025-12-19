@@ -14,11 +14,11 @@ import org.stellar.anchor.api.platform.HealthCheckStatus
 import org.stellar.anchor.api.platform.HealthCheckStatus.*
 import org.stellar.anchor.healthcheck.HealthCheckable
 import org.stellar.anchor.platform.controller.sep.SepHealthController
-import org.stellar.anchor.platform.observer.stellar.StellarPaymentObserver
+import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver
 import org.stellar.anchor.platform.service.HealthCheckService
 
 class HealthControllerTest {
-  @MockK private lateinit var stellarPaymentObserver: StellarPaymentObserver
+  @MockK private lateinit var stellarPaymentObserver: AbstractPaymentObserver
 
   @BeforeEach
   fun setup() {

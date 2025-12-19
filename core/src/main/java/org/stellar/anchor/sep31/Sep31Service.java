@@ -46,17 +46,18 @@ import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientConfig;
 import org.stellar.anchor.client.ClientService;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep10Config;
 import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.util.Log;
+import org.stellar.anchor.util.SepRequestValidator;
 import org.stellar.anchor.util.TransactionMapper;
 
 public class Sep31Service {
-  private final AppConfig appConfig;
+  private final LanguageConfig languageConfig;
   private final Sep10Config sep10Config;
   private final Sep31Config sep31Config;
   private final Sep31TransactionStore sep31TransactionStore;
@@ -70,7 +71,7 @@ public class Sep31Service {
   private final Counter sep31TransactionPatchedCounter = counter(SEP31_TRANSACTION_PATCHED);
 
   public Sep31Service(
-      AppConfig appConfig,
+      LanguageConfig languageConfig,
       Sep10Config sep10Config,
       Sep31Config sep31Config,
       Sep31TransactionStore sep31TransactionStore,
@@ -79,9 +80,8 @@ public class Sep31Service {
       AssetService assetService,
       RateIntegration rateIntegration,
       EventService eventService) {
-    debug("appConfig:", appConfig);
     debug("sep31Config:", sep31Config);
-    this.appConfig = appConfig;
+    this.languageConfig = languageConfig;
     this.sep10Config = sep10Config;
     this.sep31Config = sep31Config;
     this.sep31TransactionStore = sep31TransactionStore;
@@ -117,17 +117,17 @@ public class Sep31Service {
     Context.get().setAsset(assetInfo);
 
     // Pre-validation
-    validateAmount(request.getAmount());
-    validateAmountLimit(
+    SepRequestValidator.validateAmount(request.getAmount());
+    SepRequestValidator.validateAmountLimit(
         "sell_",
         request.getAmount(),
         assetInfo.getSep31().getReceive().getMinAmount(),
         assetInfo.getSep31().getReceive().getMaxAmount());
-    validateFundingMethod(
+    SepRequestValidator.validateFundingMethod(
         assetInfo.getId(),
         request.getFundingMethod(),
         assetInfo.getSep31().getReceive().getMethods());
-    validateLanguage(appConfig, request.getLang());
+    validateLanguage(languageConfig, request.getLang());
 
     /*
      * TODO:
@@ -201,6 +201,7 @@ public class Sep31Service {
             .amountInAsset(assetInfo.getId())
             .amountOut(null)
             .amountOutAsset(null)
+            .requestClientIpAddress(request.getRequestClientIpAddress())
             .build();
 
     Context.get().setTransaction(txn);

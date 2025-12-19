@@ -44,4 +44,7 @@ public class StartWithdrawRequest {
   /** The type of the refund_memo. */
   @SerializedName("refund_memo_type")
   String refundMemoType;
+
+  /** The request client IP address. */
+  String requestClientIpAddress;
 }

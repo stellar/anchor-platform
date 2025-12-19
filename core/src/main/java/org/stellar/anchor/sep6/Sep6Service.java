@@ -3,7 +3,12 @@ package org.stellar.anchor.sep6;
 import static io.micrometer.core.instrument.Metrics.counter;
 import static org.stellar.anchor.util.AssetHelper.isDepositEnabled;
 import static org.stellar.anchor.util.AssetHelper.isWithdrawEnabled;
+import static org.stellar.anchor.util.Log.debug;
+import static org.stellar.anchor.util.Log.infoF;
 import static org.stellar.anchor.util.MemoHelper.*;
+import static org.stellar.anchor.util.SepHelper.*;
+import static org.stellar.anchor.util.SepHelper.AccountType.Contract;
+import static org.stellar.anchor.util.SepHelper.accountType;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 
 import com.google.common.collect.ImmutableMap;
@@ -22,7 +27,7 @@ import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
-import org.stellar.anchor.config.AppConfig;
+import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep6Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.*;
@@ -30,7 +35,7 @@ import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts;
 import org.stellar.sdk.Memo;
 
 public class Sep6Service {
-  private final AppConfig appConfig;
+  private final LanguageConfig languageConfig;
   private final Sep6Config sep6Config;
   private final AssetService assetService;
   private final SepRequestValidator requestValidator;
@@ -66,7 +71,7 @@ public class Sep6Service {
           MetricConstants.TV_SEP6_DEPOSIT_EXCHANGE);
 
   public Sep6Service(
-      AppConfig appConfig,
+      LanguageConfig languageConfig,
       Sep6Config sep6Config,
       AssetService assetService,
       SepRequestValidator requestValidator,
@@ -75,7 +80,7 @@ public class Sep6Service {
       ExchangeAmountsCalculator exchangeAmountsCalculator,
       EventService eventService,
       MoreInfoUrlConstructor moreInfoUrlConstructor) {
-    this.appConfig = appConfig;
+    this.languageConfig = languageConfig;
     this.sep6Config = sep6Config;
     this.assetService = assetService;
     this.requestValidator = requestValidator;
@@ -120,9 +125,7 @@ public class Sep6Service {
     }
     requestValidator.validateAccount(request.getAccount());
 
-    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-    String id = SepHelper.generateSepTransactionId();
-
+    String id = generateSepTransactionId();
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
             .id(id)
@@ -142,11 +145,25 @@ public class Sep6Service {
             .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token));
+            .clientName(clientFinder.getClientName(token))
+            .requestClientIpAddress(request.getRequestClientIpAddress());
+
+    if (accountType(token.getAccount()) == Contract) {
+      if (request.getMemoType() != null && !request.getMemoType().equalsIgnoreCase("id")) {
+        infoF(
+            "If the request account:{} is a C-account, the memo_type must be set to 'id'",
+            token.getAccount());
+        throw new SepValidationException(
+            "C-account requires 'memo_type' to be set to 'id' in the request");
+      }
+    }
+
+    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
 
     if (memo != null) {
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
-      builder.memoType(SepHelper.memoTypeString(memoType(memo)));
+      builder.memoType(memoTypeString(memoType(memo)));
     }
 
     Sep6Transaction txn = builder.build();
@@ -217,7 +234,7 @@ public class Sep6Service {
     }
 
     Memo memo = makeMemo(request.getMemo(), request.getMemoType());
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
@@ -244,11 +261,13 @@ public class Sep6Service {
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
-            .quoteId(request.getQuoteId());
+            .quoteId(request.getQuoteId())
+            .requestClientIpAddress(request.getRequestClientIpAddress());
 
     if (memo != null) {
+      debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
-      builder.memoType(SepHelper.memoTypeString(memoType(memo)));
+      builder.memoType(memoTypeString(memoType(memo)));
     }
 
     Sep6Transaction txn = builder.build();
@@ -298,7 +317,7 @@ public class Sep6Service {
     String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
     requestValidator.validateAccount(sourceAccount);
 
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
         new Sep6TransactionBuilder(txnStore)
@@ -323,7 +342,8 @@ public class Sep6Service {
             .clientDomain(token.getClientDomain())
             .clientName(clientFinder.getClientName(token))
             .refundMemo(request.getRefundMemo())
-            .refundMemoType(request.getRefundMemoType());
+            .refundMemoType(request.getRefundMemoType())
+            .requestClientIpAddress(request.getRequestClientIpAddress());
 
     Sep6Transaction txn = builder.build();
     txnStore.save(txn);
@@ -372,7 +392,7 @@ public class Sep6Service {
     String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
     requestValidator.validateAccount(sourceAccount);
 
-    String id = SepHelper.generateSepTransactionId();
+    String id = generateSepTransactionId();
 
     Amounts amounts;
     if (request.getQuoteId() != null) {
@@ -420,7 +440,8 @@ public class Sep6Service {
             .clientName(clientFinder.getClientName(token))
             .refundMemo(request.getRefundMemo())
             .refundMemoType(request.getRefundMemoType())
-            .quoteId(request.getQuoteId());
+            .quoteId(request.getQuoteId())
+            .requestClientIpAddress(request.getRequestClientIpAddress());
 
     Sep6Transaction txn = builder.build();
     txnStore.save(txn);
@@ -459,7 +480,7 @@ public class Sep6Service {
         txnStore.findTransactions(token.getAccount(), token.getAccountMemo(), request);
     List<Sep6TransactionResponse> responses = new ArrayList<>();
     for (Sep6Transaction txn : transactions) {
-      String lang = validateLanguage(appConfig, request.getLang());
+      String lang = validateLanguage(languageConfig, request.getLang());
       Sep6TransactionResponse tr = Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang);
       responses.add(tr);
     }
@@ -468,7 +489,7 @@ public class Sep6Service {
     return new GetTransactionsResponse(responses);
   }
 
-  public GetTransactionResponse findTransaction(WebAuthJwt token, GetTransactionRequest request)
+  public Sep6GetTransactionResponse findTransaction(WebAuthJwt token, GetTransactionRequest request)
       throws AnchorException {
     // Pre-validation
     if (token == null) {
@@ -503,8 +524,8 @@ public class Sep6Service {
     }
 
     sep6TransactionQueriedCounter.increment();
-    String lang = validateLanguage(appConfig, request.getLang());
-    return new GetTransactionResponse(
+    String lang = validateLanguage(languageConfig, request.getLang());
+    return new Sep6GetTransactionResponse(
         Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang));
   }
 

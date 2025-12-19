@@ -6,6 +6,7 @@ import static org.stellar.anchor.util.MetricConstants.SEP10_CHALLENGE_CREATED;
 import static org.stellar.anchor.util.MetricConstants.SEP10_CHALLENGE_VALIDATED;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.Network.TESTNET;
+import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
@@ -28,26 +29,24 @@ import org.stellar.anchor.api.sep.sep10.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.client.ClientFinder;
-import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep10Config;
-import org.stellar.anchor.network.Horizon;
+import org.stellar.anchor.config.StellarNetworkConfig;
+import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.util.ClientDomainHelper;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.*;
 import org.stellar.sdk.Sep10Challenge.ChallengeTransaction;
 import org.stellar.sdk.exception.InvalidSep10ChallengeException;
-import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.operations.ManageDataOperation;
 import org.stellar.sdk.operations.Operation;
-import org.stellar.sdk.responses.AccountResponse;
 
 /** The Sep-10 protocol service. */
 public class Sep10Service implements ISep10Service {
-  final AppConfig appConfig;
+  final StellarNetworkConfig stellarNetworkConfig;
   final SecretConfig secretConfig;
   final Sep10Config sep10Config;
-  final Horizon horizon;
+  final LedgerClient ledgerClient;
   final JwtService jwtService;
   final ClientFinder clientFinder;
   final String serverAccountId;
@@ -55,18 +54,18 @@ public class Sep10Service implements ISep10Service {
   final Counter sep10ChallengeValidatedCounter = Metrics.counter(SEP10_CHALLENGE_VALIDATED);
 
   public Sep10Service(
-      AppConfig appConfig,
+      StellarNetworkConfig stellarNetworkConfig,
       SecretConfig secretConfig,
       Sep10Config sep10Config,
-      Horizon horizon,
+      LedgerClient ledgerClient,
       JwtService jwtService,
       ClientFinder clientFinder) {
-    debug("appConfig:", appConfig);
+    debug("appConfig:", stellarNetworkConfig);
     debug("sep10Config:", sep10Config);
-    this.appConfig = appConfig;
+    this.stellarNetworkConfig = stellarNetworkConfig;
     this.secretConfig = secretConfig;
     this.sep10Config = sep10Config;
-    this.horizon = horizon;
+    this.ledgerClient = ledgerClient;
     this.jwtService = jwtService;
     this.clientFinder = clientFinder;
     this.serverAccountId =
@@ -128,8 +127,8 @@ public class Sep10Service implements ISep10Service {
 
     // fetch the client domain from the transaction
     String clientDomain = fetchClientDomain(challenge);
-    // fetch the account response from the horizon
-    AccountResponse account = fetchAccount(request, challenge, clientDomain);
+    // fetch the account response from the ledger
+    LedgerClient.Account account = fetchAccount(request, challenge, clientDomain);
 
     if (account == null) {
       // The account does not exist from Horizon, using the client's master key to verify.
@@ -170,7 +169,8 @@ public class Sep10Service implements ISep10Service {
       // Convert the challenge to response
       trace("SEP-10 challenge txn:", txn);
       ChallengeResponse challengeResponse =
-          ChallengeResponse.of(txn.toEnvelopeXdrBase64(), appConfig.getStellarNetworkPassphrase());
+          ChallengeResponse.of(
+              txn.toEnvelopeXdrBase64(), stellarNetworkConfig.getStellarNetworkPassphrase());
       trace("challengeResponse:", challengeResponse);
       return challengeResponse;
     } catch (InvalidSep10ChallengeException ex) {
@@ -187,7 +187,7 @@ public class Sep10Service implements ISep10Service {
     return Sep10ChallengeWrapper.instance()
         .newChallenge(
             signer,
-            new Network(appConfig.getStellarNetworkPassphrase()),
+            new Network(stellarNetworkConfig.getStellarNetworkPassphrase()),
             request.getAccount(),
             request.getHomeDomain(),
             sep10Config.getWebAuthDomain(),
@@ -283,7 +283,9 @@ public class Sep10Service implements ISep10Service {
   String fetchSigningKeyFromClientDomain(String clientDomain) throws SepException {
     return ClientDomainHelper.fetchSigningKeyFromClientDomain(
         clientDomain,
-        appConfig.getStellarNetworkPassphrase().equals(TESTNET.getNetworkPassphrase()));
+        !stellarNetworkConfig
+            .getStellarNetworkPassphrase()
+            .equals(Network.PUBLIC.getNetworkPassphrase()));
   }
 
   void validateAuthorization(
@@ -331,7 +333,9 @@ public class Sep10Service implements ISep10Service {
     }
 
     if (claimNotEqual(payload.get("web_auth_endpoint"), authUrl())) {
-      if (appConfig.getStellarNetworkPassphrase().equals(TESTNET.getNetworkPassphrase())) {
+      if (stellarNetworkConfig
+          .getStellarNetworkPassphrase()
+          .equals(TESTNET.getNetworkPassphrase())) {
         // Allow http for testnet
         if (claimNotEqual(payload.get("web_auth_endpoint"), authUrl().replace("https", "http"))) {
           throw new SepValidationException("Invalid web_auth_endpoint in the signed header");
@@ -390,13 +394,13 @@ public class Sep10Service implements ISep10Service {
   }
 
   void validateChallengeRequest(
-      ValidationRequest request, AccountResponse account, String clientDomain)
+      ValidationRequest request, LedgerClient.Account account, String clientDomain)
       throws SepValidationException {
     // fetch the signers from the transaction
     Set<Sep10Challenge.Signer> signers = fetchSigners(account);
     // the signatures must be greater than the medium threshold of the account.
-    int threshold = account.getThresholds().getMedThreshold();
-    Network network = new Network(appConfig.getStellarNetworkPassphrase());
+    int threshold = account.getThresholds().getMedium();
+    Network network = new Network(stellarNetworkConfig.getStellarNetworkPassphrase());
     String homeDomain = extractHomeDomainFromChallengeXdr(request.getTransaction(), network);
 
     infoF(
@@ -416,26 +420,26 @@ public class Sep10Service implements ISep10Service {
             signers);
   }
 
-  Set<Sep10Challenge.Signer> fetchSigners(AccountResponse account) {
+  Set<Sep10Challenge.Signer> fetchSigners(LedgerClient.Account account) {
     // Find the signers of the client account.
     return account.getSigners().stream()
-        .filter(as -> as.getType().equals("ed25519_public_key"))
-        .map(as -> new Sep10Challenge.Signer(as.getKey(), as.getWeight()))
+        .filter(as -> as.getType().equals(SIGNER_KEY_TYPE_ED25519.name()))
+        .map(as -> new Sep10Challenge.Signer(as.getKey(), as.getWeight().intValue()))
         .collect(Collectors.toSet());
   }
 
-  AccountResponse fetchAccount(
+  LedgerClient.Account fetchAccount(
       ValidationRequest request, ChallengeTransaction challenge, String clientDomain)
       throws SepValidationException {
     // Check the client's account
-    AccountResponse account;
+    LedgerClient.Account account;
     try {
       infoF("Checking if {} exists in the Stellar network", challenge.getClientAccountId());
-      account = horizon.getServer().accounts().account(challenge.getClientAccountId());
+      account = ledgerClient.getAccount(challenge.getClientAccountId());
       traceF("challenge account: {}", account);
       sep10ChallengeValidatedCounter.increment();
       return account;
-    } catch (NetworkException ex) {
+    } catch (LedgerException ex) {
       infoF("Account {} does not exist in the Stellar Network");
       // account not found
       // The client account does not exist, using the client's master key to verify.
@@ -468,7 +472,7 @@ public class Sep10Service implements ISep10Service {
         throw new InvalidSep10ChallengeException(errorMessage);
       }
 
-      Network network = new Network(appConfig.getStellarNetworkPassphrase());
+      Network network = new Network(stellarNetworkConfig.getStellarNetworkPassphrase());
       String homeDomain = extractHomeDomainFromChallengeXdr(request.getTransaction(), network);
 
       debug("Calling Sep10Challenge.verifyChallengeTransactionSigners");
@@ -512,7 +516,7 @@ public class Sep10Service implements ISep10Service {
     }
 
     String transaction = request.getTransaction();
-    Network network = new Network(appConfig.getStellarNetworkPassphrase());
+    Network network = new Network(stellarNetworkConfig.getStellarNetworkPassphrase());
     String homeDomain = extractHomeDomainFromChallengeXdr(transaction, network);
 
     debug("Parse challenge string.");
@@ -521,7 +525,7 @@ public class Sep10Service implements ISep10Service {
             .readChallengeTransaction(
                 transaction,
                 serverAccountId,
-                new Network(appConfig.getStellarNetworkPassphrase()),
+                new Network(stellarNetworkConfig.getStellarNetworkPassphrase()),
                 homeDomain,
                 sep10Config.getWebAuthDomain());
 

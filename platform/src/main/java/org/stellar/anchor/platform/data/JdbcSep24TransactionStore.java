@@ -52,18 +52,11 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
     return txnRepo.findOneByExternalTransactionId(externalTransactionId);
   }
 
-  public JdbcSep24Transaction findOneByToAccountAndMemoAndStatus(
+  public JdbcSep24Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
       String toAccount, String memo, String status) {
     Optional<JdbcSep24Transaction> optTxn =
-        Optional.ofNullable(txnRepo.findOneByToAccountAndMemoAndStatus(toAccount, memo, status));
-    return optTxn.orElse(null);
-  }
-
-  public JdbcSep24Transaction findOneByToAccountAndFromAccountAndStatus(
-      String toAccount, String fromAccount, String status) {
-    Optional<JdbcSep24Transaction> optTxn =
         Optional.ofNullable(
-            txnRepo.findOneByToAccountAndFromAccountAndStatus(toAccount, fromAccount, status));
+            txnRepo.findOneByWithdrawAnchorAccountAndMemoAndStatus(toAccount, memo, status));
     return optTxn.orElse(null);
   }
 
@@ -119,11 +112,10 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
 
   @Override
   public Sep24Transaction save(Sep24Transaction sep24Transaction) throws SepException {
-    if (!(sep24Transaction instanceof JdbcSep24Transaction)) {
+    if (!(sep24Transaction instanceof JdbcSep24Transaction txn)) {
       throw new SepException(
           sep24Transaction.getClass() + "  is not a sub-type of " + JdbcSep24Transaction.class);
     }
-    JdbcSep24Transaction txn = (JdbcSep24Transaction) sep24Transaction;
     txn.setId(txn.getTransactionId());
     return txnRepo.save(txn);
   }

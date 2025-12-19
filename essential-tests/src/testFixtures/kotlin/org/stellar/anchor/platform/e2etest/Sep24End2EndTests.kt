@@ -11,9 +11,9 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
@@ -44,7 +44,6 @@ import org.stellar.anchor.util.Log.info
 import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
-import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.InteractiveFlowResponse
 import org.stellar.walletsdk.anchor.*
 import org.stellar.walletsdk.anchor.TransactionStatus.*
@@ -56,6 +55,7 @@ import org.stellar.walletsdk.horizon.SigningKeyPair
 import org.stellar.walletsdk.horizon.sign
 
 @TestInstance(PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   private val client = HttpClient {
     install(HttpTimeout) {
@@ -79,50 +79,53 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       config.env["secret.platform_api.auth_secret"]!!,
       config.env["secret.custody_server.auth_secret"]!!,
     )
-  private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
 
   @ParameterizedTest
   @MethodSource("depositAssetsAndAmounts")
-  fun `test typical deposit end-to-end flow`(
-    walletSecretKey: String,
-    asset: StellarAssetId,
-    amount: String,
-  ) = runBlocking {
-    val keypair = SigningKeyPair.fromSecret(walletSecretKey)
-    walletServerClient.clearCallbacks()
+  @Order(10)
+  fun `test classic asset deposit`(walletSecretKey: String, asset: StellarAssetId, amount: String) =
+    runBlocking {
+      val keypair = SigningKeyPair.fromSecret(walletSecretKey)
+      walletServerClient.clearCallbacks()
 
-    val token = anchor.auth().authenticate(keypair)
-    val response = makeDeposit(asset, amount, token)
+      val token = anchor.auth().authenticate(keypair)
+      val response = makeDeposit(asset, amount, token)
 
-    // Assert the interactive URL JWT is valid
-    val params = UriComponentsBuilder.fromUriString(response.url).build().queryParams
-    val cipher = params["token"]!![0]
-    val interactiveJwt = jwtService.decode(cipher, Sep24InteractiveUrlJwt::class.java)
-    assertEquals(keypair.address, interactiveJwt.sub)
-    assertEquals(amount, (interactiveJwt.claims["data"] as Map<*, *>)["amount"], amount)
+      // Assert the interactive URL JWT is valid
+      val params = UriComponentsBuilder.fromUriString(response.url).build().queryParams
+      val cipher = params["token"]!![0]
+      val interactiveJwt = jwtService.decode(cipher, Sep24InteractiveUrlJwt::class.java)
+      assertEquals(keypair.address, interactiveJwt.sub)
+      assertEquals(amount, (interactiveJwt.claims["data"] as Map<*, *>)["amount"], amount)
 
-    // Wait for the status to change to COMPLETED
-    waitForTxnStatus(response.id, COMPLETED, token)
+      // Wait for the status to change to COMPLETED
+      waitForTxnStatus(response.id, COMPLETED, token)
 
-    // Check if the transaction can be listed by stellar transaction id
-    val fetchedTxn = anchor.interactive().getTransaction(response.id, token) as DepositTransaction
-    val transactionByStellarId =
-      anchor
-        .interactive()
-        .getTransactionBy(token, stellarTransactionId = fetchedTxn.stellarTransactionId)
-    assertEquals(fetchedTxn.id, transactionByStellarId.id)
+      // Check if the transaction can be listed by stellar transaction id
+      val fetchedTxn = anchor.interactive().getTransaction(response.id, token) as DepositTransaction
+      val transactionByStellarId =
+        anchor
+          .interactive()
+          .getTransactionBy(token, stellarTransactionId = fetchedTxn.stellarTransactionId)
+      assertEquals(fetchedTxn.id, transactionByStellarId.id)
 
-    // Check the events sent to the reference server are recorded correctly
-    val actualEvents = waitForBusinessServerEvents(response.id, getExpectedDepositStatus().size)
-    assertEvents(actualEvents, getExpectedDepositStatus())
+      // Check the events sent to the reference server are recorded correctly
+      val actualEvents = waitForBusinessServerEvents(response.id, getExpectedDepositStatus().size)
+      assertEvents(actualEvents, getExpectedDepositStatus())
 
-    // Check the callbacks sent to the wallet reference server are recorded correctly
-    val actualCallbacks = waitForWalletServerCallbacks(response.id, getExpectedDepositStatus().size)
-    assertCallbacks(actualCallbacks, getExpectedDepositStatus())
-  }
+      // Check the callbacks sent to the wallet reference server are recorded correctly
+      val actualCallbacks =
+        waitForWalletServerCallbacks(response.id, getExpectedDepositStatus().size)
+      assertCallbacks(actualCallbacks, getExpectedDepositStatus())
+    }
 
   @Test
-  fun `test deposit to contract address end-to-end flow`() = runBlocking {
+  @Order(11)
+  fun `test contract account deposit`() = runBlocking {
+    assumeTrue(
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
+    )
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val request =
@@ -153,7 +156,6 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       TRANSACTION_CREATED to SepTransactionStatus.INCOMPLETE,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_USR_TRANSFER_START,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_ANCHOR,
-      TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_STELLAR,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.COMPLETED,
     )
   }
@@ -163,7 +165,6 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       TRANSACTION_CREATED to SepTransactionStatus.INCOMPLETE,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_USR_TRANSFER_START,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_ANCHOR,
-      TRANSACTION_STATUS_CHANGED to SepTransactionStatus.PENDING_EXTERNAL,
       TRANSACTION_STATUS_CHANGED to SepTransactionStatus.COMPLETED,
     )
   }
@@ -197,10 +198,10 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       assertEquals(expectedStatuses.size, actualEvents.size)
 
       GsonUtils.getInstance().toJson(expectedStatuses).let { json ->
-        println("expectedStatuses: $json")
+        info("expectedStatuses: $json")
       }
 
-      GsonUtils.getInstance().toJson(actualEvents).let { json -> println("actualEvents: $json") }
+      GsonUtils.getInstance().toJson(actualEvents).let { json -> info("actualEvents: $json") }
 
       expectedStatuses.forEachIndexed { index, expectedStatus ->
         actualEvents[index].let { actualEvent ->
@@ -233,19 +234,13 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @ParameterizedTest
   @MethodSource("withdrawAssetsAndAmounts")
-  fun `test typical withdraw end-to-end flow`(
+  @Order(20)
+  fun `test classic asset withdraw`(
     walletSecretKey: String,
     asset: StellarAssetId,
     amount: String,
-  ) {
-    `test typical withdraw end-to-end flow`(walletSecretKey, asset, mapOf("amount" to amount))
-  }
-
-  private fun `test typical withdraw end-to-end flow`(
-    walletSecretKey: String,
-    asset: StellarAssetId,
-    extraFields: Map<String, String>,
   ) = runBlocking {
+    val extraFields: Map<String, String> = mapOf("amount" to amount)
     val keypair = SigningKeyPair.fromSecret(walletSecretKey)
     walletServerClient.clearCallbacks()
 
@@ -299,15 +294,24 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test withdraw from contract address end-to-end flow`() = runBlocking {
+  @Order(21)
+  fun `test contract account withdraw`() = runBlocking {
+    assumeTrue(
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
+    )
+
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
+    val memo = (100000..200000).random().toString()
     val request =
       mapOf(
         "asset_code" to "USDC",
         "asset_issuer" to "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
         "account" to CLIENT_SMART_WALLET_ACCOUNT,
         "amount" to "1",
+        "memo" to memo,
+        "memo_type" to "id",
       )
     val response = wallet.sep24.withdraw(request)
 
@@ -326,11 +330,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
     // Submit transfer transaction
     val withdrawTxn = wallet.sep24.getTransaction(response.id, "USDC")
     transactionWithRetry {
-      wallet.send(
-        withdrawTxn.transaction.to,
-        Asset.create(USDC.id),
-        "1",
-      )
+      wallet.send(withdrawTxn.transaction.to, Asset.create(USDC.id), "1", memo)
     }
 
     // Wait for the status to change to COMPLETED
@@ -384,8 +384,8 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
   ) {
     var status: TransactionStatus? = null
 
-    for (i in 0..maxTries) {
-      // Get transaction info
+    var tries = 0
+    while (tries <= maxTries) {
       val transaction = anchor.interactive().getTransaction(id, token)
       if (status != transaction.status) {
         status = transaction.status
@@ -393,12 +393,11 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
           "Transaction(id=${transaction.id}) status changed to $status. Message: ${transaction.message}"
         )
       }
-
       if (transaction.status == expectedStatus) return
-
       if (transaction.status == exitStatus) break
 
       delay(1.seconds)
+      tries++
     }
 
     fail("Transaction wasn't $expectedStatus in $maxTries tries, last status: $status")
@@ -411,17 +410,16 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
     sep24Client: Sep24Client,
   ) {
     var status: String? = null
-    for (i in 0..maxTries) {
-      val transaction = sep24Client.getTransaction(id, assetCode)
-      if (!status.equals(transaction.transaction.status)) {
-        status = transaction.transaction.status
-        info(
-          "Transaction(${transaction.transaction.id}) status changed to ${status}. Message: ${transaction.transaction.message}"
-        )
+    repeat(maxTries + 1) {
+      val tx = sep24Client.getTransaction(id, assetCode).transaction
+
+      if (status != tx.status) {
+        status = tx.status
+        info("Transaction(${tx.id}) status changed to $status. Message: ${tx.message}")
       }
-      if (transaction.transaction.status == expectedStatus.status) {
-        return
-      }
+
+      if (tx.status == expectedStatus.status) return
+
       delay(1.seconds)
     }
     DefaultAsserter.fail("Transaction status $status did not match expected status $expectedStatus")
@@ -429,7 +427,8 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
 
   @ParameterizedTest
   @MethodSource("historyAssetsAndAmounts")
-  fun `test created transactions show up in the get history call`(
+  @Order(30)
+  fun `test created sep-24 transactions show up in the get history call`(
     walletSecretKey: String,
     asset: StellarAssetId,
     amount: String,

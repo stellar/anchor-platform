@@ -3,10 +3,8 @@ package org.stellar.anchor.config;
 public interface SecretConfig {
   String getSep6MoreInfoUrlJwtSecret();
 
-  @Deprecated // TODO: ANCHOR-667
   String getSep10JwtSecretKey();
 
-  @Deprecated // TODO: ANCHOR-667
   String getSep45JwtSecretKey();
 
   String getSep10SigningSeed();
@@ -26,4 +24,6 @@ public interface SecretConfig {
   String getEventsQueueKafkaUsername();
 
   String getEventsQueueKafkaPassword();
+
+  String getRpcAuthSecret();
 }

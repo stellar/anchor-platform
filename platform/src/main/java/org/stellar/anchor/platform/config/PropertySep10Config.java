@@ -15,9 +15,9 @@ import org.springframework.validation.Validator;
 import org.stellar.anchor.client.ClientConfig;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.client.NonCustodialClient;
-import org.stellar.anchor.config.AppConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep10Config;
+import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.util.KeyUtil;
 import org.stellar.anchor.util.NetUtil;
 import org.stellar.sdk.*;
@@ -34,14 +34,16 @@ public class PropertySep10Config implements Sep10Config, Validator {
   private Integer authTimeout = 900;
   private Integer jwtTimeout = 86400;
   private List<String> knownCustodialAccountList;
-  private AppConfig appConfig;
+  private StellarNetworkConfig stellarNetworkConfig;
   private final ClientService clientService;
   private SecretConfig secretConfig;
   private boolean requireAuthHeader = false;
 
   public PropertySep10Config(
-      AppConfig appConfig, ClientService clientService, SecretConfig secretConfig) {
-    this.appConfig = appConfig;
+      StellarNetworkConfig stellarNetworkConfig,
+      ClientService clientService,
+      SecretConfig secretConfig) {
+    this.stellarNetworkConfig = stellarNetworkConfig;
     this.clientService = clientService;
     this.secretConfig = secretConfig;
     this.knownCustodialAccountList =
@@ -79,7 +81,8 @@ public class PropertySep10Config implements Sep10Config, Validator {
   void validateConfig(Errors errors) {
     if (isEmpty(secretConfig.getSep10SigningSeed())) {
       errors.reject(
-          "sep10-signing-seed-empty", "Please set environment variable SECRET_SEP10_SIGNING_SEED");
+          "sep10-signing-seed-empty",
+          "Please set the secret.sep10.signing_seed or the SECRET_SEP10_SIGNING_SEED environment variable");
     }
 
     if (isNotEmpty(secretConfig.getSep10SigningSeed())) {

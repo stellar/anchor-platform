@@ -1,6 +1,6 @@
 [![License](https://badgen.net/badge/license/Apache%202/blue?icon=github&label=License)](https://github.com/stellar/anchor-platform/blob/develop/LICENSE)
 [![GitHub Version](https://badgen.net/github/release/stellar/anchor-platform?icon=github&label=Latest%20release)](https://github.com/stellar/anchor-platform/releases)
-[![Docker](https://badgen.net/badge/Latest%20Release/v3.2.0-beta.1/blue?icon=docker)](https://hub.docker.com/r/stellar/anchor-platform/tags?page=1&name=3.2.0-beta.1)
+[![Docker](https://badgen.net/badge/Latest%20Release/4.0.0/blue?icon=docker)](https://hub.docker.com/r/stellar/anchor-platform/tags?page=1&name=4.0.0)
 ![Develop Branch](https://github.com/stellar/anchor-platform/actions/workflows/on_push_to_develop.yml/badge.svg?branch=develop)
 
 <div style="text-align: center">
@@ -23,7 +23,7 @@ anchor, allowing businesses to focus on the core business logic necessary to pro
 
 ## Getting Started
 
-To get started, visit the [Anchor Platform documentation](https://developers.stellar.org/docs/category/anchor-platform).
+To get started, visit the [Anchor Platform documentation](https://developers.stellar.org/docs/platforms/anchor-platform).
 Release notes can be found on the
 project's [releases page](https://github.com/stellar/anchor-platform/releases).
 
@@ -51,7 +51,7 @@ contribute to this project.
 
 ## Quickstart
 
-Anchor Platform can be run locally using Docker Compose. 
+Anchor Platform can be run locally using Docker Compose.
 
 ### For version 2.x.x stable release
 ```shell

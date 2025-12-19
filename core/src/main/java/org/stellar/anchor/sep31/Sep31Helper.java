@@ -1,6 +1,6 @@
 package org.stellar.anchor.sep31;
 
-import static org.stellar.anchor.util.SepHelper.validateTransactionStatus;
+import static org.stellar.anchor.util.SepRequestValidator.validateTransactionStatus;
 
 import org.stellar.anchor.api.exception.BadRequestException;
 

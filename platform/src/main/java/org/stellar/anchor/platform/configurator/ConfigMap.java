@@ -25,7 +25,7 @@ public class ConfigMap {
 
   public void put(String key, String value, ConfigSource source) {
     if (value == null) {
-      throw new IllegalArgumentException("value cannot be null" + key);
+      throw new IllegalArgumentException("value cannot be null: " + key);
     }
     data.put(key, new ConfigEntry(value.trim(), source));
   }

@@ -12,7 +12,7 @@ public class JdbcStellarPaymentStreamerCursorStore implements StellarPaymentStre
   }
 
   @Override
-  public void save(String cursor) {
+  public void saveHorizonCursor(String cursor) {
     PaymentStreamerCursor paymentStreamerCursor =
         this.repo.findById(PaymentStreamerCursor.SINGLETON_ID).orElse(null);
     if (paymentStreamerCursor == null) {
@@ -20,14 +20,34 @@ public class JdbcStellarPaymentStreamerCursorStore implements StellarPaymentStre
     }
 
     paymentStreamerCursor.setId(PaymentStreamerCursor.SINGLETON_ID);
-    paymentStreamerCursor.setCursor(cursor);
+    paymentStreamerCursor.setHorizonCursor(cursor);
 
     this.repo.save(paymentStreamerCursor);
   }
 
   @Override
-  public String load() {
+  public String loadHorizonCursor() {
     Optional<PaymentStreamerCursor> pageToken = repo.findById(PaymentStreamerCursor.SINGLETON_ID);
-    return pageToken.map(PaymentStreamerCursor::getCursor).orElse(null);
+    return pageToken.map(PaymentStreamerCursor::getHorizonCursor).orElse(null);
+  }
+
+  @Override
+  public void saveStellarRpcCursor(String cursor) {
+    PaymentStreamerCursor paymentStreamerCursor =
+        this.repo.findById(PaymentStreamerCursor.SINGLETON_ID).orElse(null);
+    if (paymentStreamerCursor == null) {
+      paymentStreamerCursor = new PaymentStreamerCursor();
+    }
+
+    paymentStreamerCursor.setId(PaymentStreamerCursor.SINGLETON_ID);
+    paymentStreamerCursor.setStellarRpcCursor(cursor);
+
+    this.repo.save(paymentStreamerCursor);
+  }
+
+  @Override
+  public String loadStellarRpcCursor() {
+    Optional<PaymentStreamerCursor> pageToken = repo.findById(PaymentStreamerCursor.SINGLETON_ID);
+    return pageToken.map(PaymentStreamerCursor::getStellarRpcCursor).orElse(null);
   }
 }

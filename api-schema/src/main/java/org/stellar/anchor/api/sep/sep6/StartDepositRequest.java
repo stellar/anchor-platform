@@ -69,4 +69,7 @@ public class StartDepositRequest {
    */
   @SerializedName("claimable_balances_supported")
   Boolean claimableBalancesSupported;
+
+  /** The request client IP address. */
+  String requestClientIpAddress;
 }

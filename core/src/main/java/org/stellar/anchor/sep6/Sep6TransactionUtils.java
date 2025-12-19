@@ -52,7 +52,7 @@ public class Sep6TransactionUtils {
             .feeDetails(txn.getFeeDetails())
             .quoteId(txn.getQuoteId())
             .startedAt(txn.getStartedAt().toString())
-            .updatedAt(txn.getUpdatedAt().toString())
+            .updatedAt((txn.getUpdatedAt() != null) ? txn.getUpdatedAt().toString() : null)
             .completedAt(txn.getCompletedAt() != null ? txn.getCompletedAt().toString() : null)
             .userActionRequiredBy(
                 txn.getUserActionRequiredBy() != null

@@ -51,10 +51,6 @@ class Sep38ServiceTest {
       return true
     }
 
-    override fun isSep10Enforced(): Boolean {
-      return false
-    }
-
     override fun isAuthEnforced(): Boolean {
       return false
     }

@@ -37,11 +37,29 @@ stellar_network:
   # Use TESTNET or PUBLIC
   network: TESTNET
 
-  # The horizon server endpoint.
-  horizon_url: https://horizon-testnet.stellar.org
+  # The type of the Stellar network connection and can be one of the following and default to `horizon` for backwards compatibility:
+  #   `horizon`: Use the Horizon API to connect to the Stellar network.
+  #   `rpc`: Use the Soroban RPC API to connect to the Stellar network.
+  type: horizon
 
   # The rpc server endpoint.
-  rpc_url: https://soroban-testnet.stellar.org
+  # example:
+  #   rpc_url: https://soroban-testnet.stellar.org
+  rpc_url:
+  rpc_auth:
+    # The rpc_auth is used to authenticate with the Soroban RPC server.
+    # The `type` can be one of the following:
+    #   `none`: No authentication is used.
+    #   `header`: The authentication is done using a Bearer token added to the HTTP request header.
+    #                   The RFC 6750 defines the Bearer token authentication scheme.
+    # If the type is `header`, the secret `secret.stellar_network.rpc.auth.secret` must be set.
+    type: none
+    header:
+      # The HTTP header name of the Bearer token.
+      name: Authorization
+
+  # The horizon server endpoint.
+  horizon_url: https://horizon-testnet.stellar.org
 
 ##############################
 # Callback API Configuration
@@ -219,9 +237,9 @@ sep6:
   enabled: false
   # Configures the more_info_url of the transaction response when calling GET /transaction and GET /transactions endpoints.
   # For details, please refer to https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0006.md#transaction-history
-  #   base_uri: is the base_uri used to construct the more_info_url
+  #   base_url: is the base_url used to construct the more_info_url
   #   jwt_expiration: the timeout in seconds of the JWT returned with the embedded interactive url of the SEP-6 process.
-  #       The jwt secret must be set by the environment variable: secret.sep6.more_info_url.jwt_secret
+  #       The jwt secret must be set by the environment variable: SECRET_SEP6_MORE_INFO_URL_JWT_SECRET
   #   txn_fields: is an optional list of transaction fields that will be appended to the jwt of the more_info url. If empty, no fields from transaction will be appended.
   #   In addition to the txn_fields, the following fields are also added to the query parameters.
   #       `transaction_id`: the transaction ID
@@ -316,10 +334,10 @@ sep24:
   # Whether to enable SEP-24.
   enabled: false
   # Configures the interactive URL where the platform server will redirect to start the SEP-24 interactive flow.
-  #   base_uri: is the base_uri used to construct the interactive url
+  #   base_url: is the base_url used to construct the interactive url
   #   txn_fields: is an optional list of transaction fields that will be appended to the jwt of the interactive url. If empty, no fields from transaction will be appended.
   #   jwt_expiration: the timeout in seconds of the JWT returned with the embedded interactive url of the SEP-24 process.
-  #          The jwt secret must be set by the environment variable: secret.sep24.interactive_url.jwt_secret
+  #          The jwt secret must be set by the environment variable: SECRET_SEP24_INTERACTIVE_URL_JWT_SECRET
   #
   #   In addition to the txn_fields, the following fields are also added to the query parameters.
   #       `transaction_id`: the transaction ID
@@ -337,10 +355,10 @@ sep24:
     txn_fields:
   # Configures the more_info_url of the transaction response when calling GET /transaction and GET /transactions endpoints.
   # For details, please refer to https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0024.md#shared-fields-for-both-deposits-and-withdrawals
-  #   base_uri: is the base_uri used to construct the more_info_url
+  #   base_url: is the base_url used to construct the more_info_url
   #   txn_fields: is an optional list of transaction fields that will be appended to the jwt of the more_info url. If empty, no fields from transaction will be appended.
   #   jwt_expiration: the timeout in seconds of the JWT returned with the embedded interactive url of the SEP-24 process.
-  #          The jwt secret must be set by the environment variable: secret.sep24.more_info_url.jwt_secret
+  #          The jwt secret must be set by the environment variable: SECRET_SEP24_MORE_INFO_URL_JWT_SECRET
   #   In addition to the txn_fields, the following fields are also added to the query parameters.
   #       `transaction_id`: the transaction ID
   #       `token`: the JWT token

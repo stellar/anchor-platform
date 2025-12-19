@@ -1,34 +1,43 @@
 package org.stellar.anchor.platform.e2etest
 
 import io.ktor.http.*
+import java.math.BigInteger
+import java.util.stream.Stream
 import kotlin.test.DefaultAsserter.fail
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.*
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep12.Sep12Status
-import org.stellar.anchor.api.sep.sep6.GetTransactionResponse
+import org.stellar.anchor.api.sep.sep6.Sep6GetTransactionResponse
 import org.stellar.anchor.api.shared.InstructionField
 import org.stellar.anchor.client.Sep6Client
-import org.stellar.anchor.platform.*
+import org.stellar.anchor.platform.IntegrationTestBase
+import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
+import org.stellar.anchor.platform.WalletClient
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.MuxedAccount
 import org.stellar.walletsdk.anchor.customer
 import org.stellar.walletsdk.asset.IssuedAssetId
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
-  private val maxTries = 30
+  private val maxTries = 300
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
   private val gson = GsonUtils.getInstance()
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
@@ -54,12 +63,34 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         "bank_number" to "123",
         "bank_branch_number" to "121122676",
       )
+
+    var uniqueMemoRange = 0
+
+    private fun uniqueMemo(): String {
+      this.uniqueMemoRange++
+      return (this.uniqueMemoRange * 100000..this.uniqueMemoRange * 100000 + 99999)
+        .random()
+        .toString()
+    }
+
+    @JvmStatic
+    fun destinations(): Stream<Arguments> {
+      val address = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
+      return Stream.of(
+        // Muxed account
+        Arguments.of(MuxedAccount(address, BigInteger(uniqueMemo())).address),
+        // Classic account
+        Arguments.of(address)
+      )
+    }
   }
 
-  @Test
-  fun `test typical deposit end-to-end flow`() = runBlocking {
-    val memo = (10000..20000).random().toULong()
-    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
+  @ParameterizedTest
+  @MethodSource("destinations")
+  @Order(10)
+  fun `test classic asset deposit`(destination: String) = runBlocking {
+    val memo = uniqueMemo()
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
     val customerRequest =
@@ -69,7 +100,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           Sep12PutCustomerRequest::class.java,
         )
         .also {
-          it.memo = memo.toString()
+          it.memo = memo
           it.memoType = "id"
         }
     val customer = wallet.sep12.putCustomer(customerRequest)!!
@@ -78,7 +109,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
       wallet.sep6.deposit(
         mapOf(
           "asset_code" to USDC.code,
-          "account" to clientWalletAccount,
+          "account" to destination,
           "amount" to "1",
           "type" to "SWIFT",
         )
@@ -102,7 +133,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           Sep12PutCustomerRequest::class.java,
         )
         .also {
-          it.memo = memo.toString()
+          it.memo = memo
           it.memoType = "id"
         }
     )
@@ -126,7 +157,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
       ),
       completedDepositTxn.transaction.instructions,
     )
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
       )
@@ -138,7 +169,6 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         PENDING_CUSTOMER_INFO_UPDATE, // request KYC
         PENDING_USR_TRANSFER_START, // provide deposit instructions
         PENDING_ANCHOR, // deposit into user wallet
-        PENDING_STELLAR,
         COMPLETED,
       )
     assertWalletReceivedStatuses(deposit.id, expectedStatuses)
@@ -153,7 +183,13 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical deposit to contract account end-to-end`() = runBlocking {
+  @Order(11)
+  fun `test contract account deposit`() = runBlocking {
+    assumeTrue(
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
+    )
+
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -168,11 +204,19 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         mapOf(
           "asset_code" to USDC.code,
           "account" to CLIENT_SMART_WALLET_ACCOUNT,
-          "amount" to "1",
+          "amount" to "10",
           "type" to "SWIFT",
         )
       )
     Log.info("Deposit initiated: ${deposit.id}")
+    // Race condition:At this point, if the deposit is still in INCOMPLETE status, this may cause
+    // the PUT customer call before the
+    //
+    // state transit to PENDING_CUSTOMER_INFO_UPDATE. If the deposit has passed the
+    // PENDING_CUSTOMER_INFO_UPDATE and in PENDING_ANCHOR or COMPLETED status, waiting on
+    // PENDING_CUSTOMER_INFO_UPDATE will fail.
+
+    waitStatuses(deposit.id, listOf(COMPLETED, PENDING_CUSTOMER_INFO_UPDATE), wallet.sep6)
 
     val additionalRequiredFields =
       wallet.sep12
@@ -192,7 +236,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     waitStatus(deposit.id, COMPLETED, wallet.sep6)
 
     val completedDepositTxn = wallet.sep6.getTransaction(mapOf("id" to deposit.id))
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
       )
@@ -200,9 +244,11 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical deposit-exchange without quote end-to-end flow`() = runBlocking {
-    val memo = (20000..30000).random().toULong()
-    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
+  @Order(12)
+  fun `test classic asset deposit-exchange without quote`() = runBlocking {
+    val memo = uniqueMemo()
+
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
     val customer =
@@ -213,7 +259,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
             Sep12PutCustomerRequest::class.java,
           )
           .also {
-            it.memo = memo.toString()
+            it.memo = memo
             it.memoType = "id"
           }
       )
@@ -247,7 +293,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           Sep12PutCustomerRequest::class.java,
         )
         .also {
-          it.memo = memo.toString()
+          it.memo = memo
           it.memoType = "id"
         }
     )
@@ -271,7 +317,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
       ),
       completedDepositTxn.transaction.instructions,
     )
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
       )
@@ -283,7 +329,6 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         PENDING_CUSTOMER_INFO_UPDATE, // request KYC
         PENDING_USR_TRANSFER_START, // provide deposit instructions
         PENDING_ANCHOR, // deposit into user wallet
-        PENDING_STELLAR,
         COMPLETED,
       )
     assertWalletReceivedStatuses(deposit.id, expectedStatuses)
@@ -298,7 +343,13 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical deposit-exchange to contract account end-to-end`() = runBlocking {
+  @Order(13)
+  fun `test contract account deposit-exchange`() = runBlocking {
+    assumeTrue(
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
+    )
+
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -320,6 +371,11 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         exchange = true,
       )
     Log.info("Deposit initiated: ${deposit.id}")
+    waitStatuses(
+      deposit.id,
+      listOf(COMPLETED, PENDING_ANCHOR, PENDING_CUSTOMER_INFO_UPDATE),
+      wallet.sep6
+    )
 
     val additionalRequiredFields =
       wallet.sep12
@@ -339,17 +395,20 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     waitStatus(deposit.id, COMPLETED, wallet.sep6)
 
     val completedDepositTxn = wallet.sep6.getTransaction(mapOf("id" to deposit.id))
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedDepositTxn.transaction.stellarTransactionId)
       )
     assertEquals(completedDepositTxn.transaction.id, transactionByStellarId.transaction.id)
   }
 
-  @Test
-  fun `test typical withdraw end-to-end flow`() = runBlocking {
-    val memo = (40000..50000).random().toULong()
-    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
+  @ParameterizedTest
+  @MethodSource("destinations")
+  @Order(20)
+  fun `test classic asset withdraw`(dest: String) = runBlocking {
+    val memo = uniqueMemo()
+    val destination = dest ?: clientWalletAccount
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
     val customer =
@@ -360,14 +419,19 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
             Sep12PutCustomerRequest::class.java,
           )
           .also {
-            it.memo = memo.toString()
+            it.memo = memo
             it.memoType = "id"
           }
       )
 
     val withdraw =
       wallet.sep6.withdraw(
-        mapOf("asset_code" to USDC.code, "amount" to "1", "type" to "bank_account")
+        mapOf(
+          "account" to destination,
+          "asset_code" to USDC.code,
+          "amount" to "1",
+          "type" to "bank_account"
+        )
       )
     Log.info("Withdrawal initiated: ${withdraw.id}")
     waitStatus(withdraw.id, PENDING_CUSTOMER_INFO_UPDATE, wallet.sep6)
@@ -387,7 +451,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           Sep12PutCustomerRequest::class.java,
         )
         .also {
-          it.memo = memo.toString()
+          it.memo = memo
           it.memoType = "id"
         }
     )
@@ -432,7 +496,12 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical withdraw to contract account end-to-end`() = runBlocking {
+  @Order(21)
+  fun `test contract account withdraw`() = runBlocking {
+    assumeTrue(
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
+    )
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -447,6 +516,11 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         mapOf("asset_code" to USDC.code, "amount" to "1", "type" to "bank_account")
       )
     Log.info("Withdrawal initiated: ${withdraw.id}")
+    waitStatuses(
+      withdraw.id,
+      listOf(PENDING_USR_TRANSFER_START, PENDING_CUSTOMER_INFO_UPDATE),
+      wallet.sep6
+    )
 
     val additionalRequiredFields =
       wallet.sep12
@@ -482,7 +556,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     waitStatus(withdraw.id, COMPLETED, wallet.sep6)
 
     val completedWithdrawTxn = wallet.sep6.getTransaction(mapOf("id" to withdraw.id))
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedWithdrawTxn.transaction.stellarTransactionId)
       )
@@ -490,9 +564,10 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test typical withdraw-exchange without quote end-to-end flow`() = runBlocking {
-    val memo = (50000..60000).random().toULong()
-    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo.toString(), toml)
+  @Order(22)
+  fun `test classic asset withdraw-exchange without quote`() = runBlocking {
+    val memo = uniqueMemo()
+    val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, memo, toml)
 
     // Create a customer before starting the transaction
     val customer =
@@ -503,7 +578,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
             Sep12PutCustomerRequest::class.java,
           )
           .also {
-            it.memo = memo.toString()
+            it.memo = memo
             it.memoType = "id"
           }
       )
@@ -519,7 +594,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         exchange = true,
       )
     Log.info("Withdrawal initiated: ${withdraw.id}")
-    waitStatus(withdraw.id, PENDING_CUSTOMER_INFO_UPDATE, wallet.sep6)
+    waitStatuses(withdraw.id, listOf(COMPLETED, PENDING_CUSTOMER_INFO_UPDATE), wallet.sep6)
 
     // Supply missing financial account info to continue with the transaction
     val additionalRequiredFields =
@@ -536,7 +611,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
           Sep12PutCustomerRequest::class.java,
         )
         .also {
-          it.memo = memo.toString()
+          it.memo = memo
           it.memoType = "id"
         }
     )
@@ -581,7 +656,12 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
-  fun `test withdraw-exchange to contract account end-to-end`() = runBlocking {
+  @Order(23)
+  fun `test contract account withdraw-exchange`() = runBlocking {
+    assumeTrue(
+      config.get("stellar_network.type").equals("rpc"),
+      "stellar_network.type must be set to rpc to test the contract accounts",
+    )
     val wallet = WalletClient(CLIENT_SMART_WALLET_ACCOUNT, CLIENT_WALLET_SECRET, null, toml)
 
     val customerRequest =
@@ -602,6 +682,11 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         exchange = true,
       )
     Log.info("Withdrawal initiated: ${withdraw.id}")
+    waitStatuses(
+      withdraw.id,
+      listOf(PENDING_USR_TRANSFER_START, PENDING_CUSTOMER_INFO_UPDATE),
+      wallet.sep6
+    )
 
     val additionalRequiredFields =
       wallet.sep12
@@ -636,7 +721,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     waitStatus(withdraw.id, COMPLETED, wallet.sep6)
 
     val completedWithdrawTxn = wallet.sep6.getTransaction(mapOf("id" to withdraw.id))
-    val transactionByStellarId: GetTransactionResponse =
+    val transactionByStellarId: Sep6GetTransactionResponse =
       wallet.sep6.getTransaction(
         mapOf("stellar_transaction_id" to completedWithdrawTxn.transaction.stellarTransactionId)
       )
@@ -652,7 +737,7 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
         "sep6",
         txnId,
         expected.size,
-        GetTransactionResponse::class.java,
+        Sep6GetTransactionResponse::class.java,
       )
     val statuses = callbacks.map { it.transaction.status }
     assertEquals(expected.map { it.status }, statuses)
@@ -672,20 +757,30 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
     expectedStatus: SepTransactionStatus,
     sep6Client: Sep6Client,
   ) {
+    waitStatuses(id, listOf(expectedStatus), sep6Client)
+  }
+
+  private suspend fun waitStatuses(
+    id: String,
+    expectedStatuses: List<SepTransactionStatus>,
+    sep6Client: Sep6Client,
+  ) {
     var status: String? = null
-    for (i in 0..maxTries) {
+    repeat(maxTries + 1) { attempt ->
       val transaction = sep6Client.getTransaction(mapOf("id" to id))
-      if (!status.equals(transaction.transaction.status)) {
+      if (status != transaction.transaction.status) {
         status = transaction.transaction.status
         Log.info(
-          "Transaction(${transaction.transaction.id}) status changed to ${status}. Message: ${transaction.transaction.message}"
+          "Transaction(${transaction.transaction.id}) status changed to $status. Message: ${transaction.transaction.message}"
         )
       }
-      if (transaction.transaction.status == expectedStatus.status) {
-        return
-      }
+      // return true if transaction status matches any of the expected statuses
+      if (expectedStatuses.any { it.status == transaction.transaction.status }) return
+
       delay(1.seconds)
     }
-    fail("Transaction status $status did not match expected status $expectedStatus")
+    fail(
+      "Transaction status [$status] did not match any of the expected statuses [$expectedStatuses]"
+    )
   }
 }
