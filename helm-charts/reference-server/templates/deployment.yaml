@@ -52,7 +52,7 @@ spec:
             - name: APP.RPC_ENDPOINT
               value: {{ .Values.config.app.rpcEndpoint }}
             - name: APP.RPC_ENABLED
-              value: {{ .Values.config.app.rpcEnabled }}
+              value: {{ .Values.config.app.rpcEnabled | quote }}
             - name: DATA.URL
               value: {{ .Values.config.data.url }}
             - name: DATA.USER
