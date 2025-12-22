@@ -14,7 +14,6 @@ data:
       distributionWalletMemoType:
       enableTest: true
       custodyEnabled: false
-      rpcEnabled: false
 
     auth:
       type: NONE

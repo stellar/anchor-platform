@@ -65,7 +65,7 @@ class PaymentObserverTests {
 
       // the wasmId is the wasm hash of the contract under soroban/contracts/account.
       // https://stellar.expert/explorer/testnet/contract/CAYXY6QGTPOCZ676MLGT5JFESVROJ6OJF7VW3LLXMTC2RQIZTP5JYNEL
-      val wasmId = "ae95eb9d4bab6a01022af3bda941cf7603809adb173f82d46f70bd22b005c068"
+      val wasmId = "05c37b331d977a07bb77c002b970c40baa3875d3bfb5039a82aab368a2896fd3"
       walletContractId =
         createContractWithWasmIdAndGetContractId(
           stellarRpc,
