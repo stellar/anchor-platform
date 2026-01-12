@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 RUN mkdir /config_files
 ENV STELLAR_ANCHOR_CONFIG=file:/config/anchor-config.yaml
 ENV REFERENCE_SERVER_CONFIG_ENV=file:/config/reference-config.yaml
