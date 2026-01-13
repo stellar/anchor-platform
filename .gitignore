@@ -9,7 +9,6 @@ target/
 */bin/*
 */generated/*
 *.tgz
-.vscode
 .env
 .DS_Store
 quick-run/config/reference-config.yaml
