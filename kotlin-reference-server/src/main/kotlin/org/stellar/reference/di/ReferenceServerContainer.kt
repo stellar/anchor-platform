@@ -57,7 +57,7 @@ object ReferenceServerContainer {
       ServiceContainer.withdrawalService,
       config.sep24.interactiveJwtKey
     )
-    event(ServiceContainer.eventService)
+    event(ServiceContainer.eventService, config.appSettings.isTest)
     customer(ServiceContainer.customerService)
     rate(ServiceContainer.rateService)
     sep24Interactive()
