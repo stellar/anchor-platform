@@ -70,7 +70,7 @@ public class Sep12Service {
     populateRequestFromTransactionId(request);
 
     validateGetOrPutRequest(request, token);
-    if (request.getId() == null && request.getAccount() == null && token.getAccount() != null) {
+    if (request.getAccount() == null && token.getAccount() != null) {
       request.setAccount(token.getAccount());
     }
 

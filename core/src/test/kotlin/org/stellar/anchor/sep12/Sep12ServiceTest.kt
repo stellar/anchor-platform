@@ -517,6 +517,43 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `Test get customer request with id injects account`() {
+    val callbackApiGetRequestSlot = slot<GetCustomerRequest>()
+    val mockCallbackApiGetCustomerResponse = GetCustomerResponse()
+    mockCallbackApiGetCustomerResponse.id = "customer-id"
+    every { customerIntegration.getCustomer(capture(callbackApiGetRequestSlot)) } returns
+      mockCallbackApiGetCustomerResponse
+
+    val mockGetRequest = Sep12GetCustomerRequest.builder().id("customer-id").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.getCustomer(jwtToken, mockGetRequest) }
+
+    val wantCallbackApiGetRequest =
+      GetCustomerRequest.builder().id("customer-id").account(TEST_ACCOUNT).build()
+    assertEquals(wantCallbackApiGetRequest, callbackApiGetRequestSlot.captured)
+    assertEquals(TEST_ACCOUNT, mockGetRequest.account)
+  }
+
+  @Test
+  fun `Test put customer request with id injects account`() {
+    val callbackApiPutRequestSlot = slot<PutCustomerRequest>()
+    val mockCallbackApiPutCustomerResponse = PutCustomerResponse.builder().id("customer-id").build()
+    every { customerIntegration.putCustomer(capture(callbackApiPutRequestSlot)) } returns
+      mockCallbackApiPutCustomerResponse
+
+    val mockPutRequest = Sep12PutCustomerRequest.builder().id("customer-id").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, mockPutRequest) }
+
+    val wantCallbackApiPutRequest =
+      PutCustomerRequest.builder().id("customer-id").account(TEST_ACCOUNT).build()
+    assertEquals(wantCallbackApiPutRequest, callbackApiPutRequestSlot.captured)
+    assertEquals(TEST_ACCOUNT, mockPutRequest.account)
+  }
+
+  @Test
   fun `test delete customer validation`() {
     every { customerIntegration.deleteCustomer(any()) } just Runs
 

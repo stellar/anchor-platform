@@ -13,6 +13,8 @@ config:
     rpcEndpoint: https://soroban-testnet.stellar.org
     platformApiEndpoint: http://anchor-platform-svc-platform:8085
     rpcEnabled: false
+  auth:
+    type: NONE
   data:
     url: postgresql-ref:5432
 
