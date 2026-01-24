@@ -88,6 +88,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.fullName }}-secrets
                   key: SEP6_MORE_INFO_URL_JWT_SECRET
+            - name: SECRET_CALLBACK_API_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: CALLBACK_API_AUTH_SECRET
             - name: SECRET_PLATFORM_API_AUTH_SECRET
               valueFrom:
                 secretKeyRef:
