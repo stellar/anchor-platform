@@ -15,7 +15,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import org.stellar.anchor.util.GsonUtils
-import org.stellar.reference.client.JwtTokenProvider
+import org.stellar.reference.client.AuthHeaderUtil
 import org.stellar.reference.data.*
 
 class SepHelper(cfg: Config) {
@@ -34,7 +34,7 @@ class SepHelper(cfg: Config) {
       client.patch("$baseUrl/transactions") {
         contentType(ContentType.Application.Json)
         setBody(PatchTransactionsRequest(listOf(PatchTransactionRecord(patchRecord))))
-        addAuthHeaderIfNeeded(this)
+        AuthHeaderUtil.addAuthHeaderIfNeeded(this, authSettings)
       }
 
     if (resp.status != HttpStatusCode.OK) {
@@ -51,7 +51,7 @@ class SepHelper(cfg: Config) {
       client.post(baseUrl) {
         contentType(ContentType.Application.Json)
         setBody(listOf(RpcRequest(UUID.randomUUID().toString(), "2.0", method, params)))
-        addAuthHeaderIfNeeded(this)
+        AuthHeaderUtil.addAuthHeaderIfNeeded(this, authSettings)
       }
 
     val respBody = resp.bodyAsText()
@@ -75,7 +75,11 @@ class SepHelper(cfg: Config) {
   }
 
   internal suspend fun getTransaction(transactionId: String): Transaction {
-    return client.get("$baseUrl/transactions/$transactionId") { addAuthHeaderIfNeeded(this) }.body()
+    return client
+      .get("$baseUrl/transactions/$transactionId") {
+        AuthHeaderUtil.addAuthHeaderIfNeeded(this, authSettings)
+      }
+      .body()
   }
 
   internal suspend fun sendCustodyStellarTransaction(transactionId: String) {
@@ -83,7 +87,7 @@ class SepHelper(cfg: Config) {
       client.post("$baseUrl/transactions/$transactionId/payments") {
         contentType(ContentType.Application.Json)
         setBody("{}")
-        addAuthHeaderIfNeeded(this)
+        AuthHeaderUtil.addAuthHeaderIfNeeded(this, authSettings)
       }
 
     if (resp.status != HttpStatusCode.OK) {
@@ -135,17 +139,5 @@ class SepHelper(cfg: Config) {
                 })"
       )
     }
-  }
-
-  private fun addAuthHeaderIfNeeded(builder: HttpRequestBuilder) {
-    if (authSettings.type != AuthSettings.Type.JWT) {
-      return
-    }
-    val token =
-      JwtTokenProvider.createJwt(
-        authSettings.anchorToPlatformSecret,
-        authSettings.expirationMilliseconds,
-      )
-    builder.headers.append(HttpHeaders.Authorization, "Bearer $token")
   }
 }

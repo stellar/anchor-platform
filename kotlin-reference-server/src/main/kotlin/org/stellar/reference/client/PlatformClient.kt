@@ -23,7 +23,7 @@ class PlatformClient(
     val response =
       httpClient.request("$endpoint/transactions/$id") {
         method = HttpMethod.Get
-        addAuthHeaderIfNeeded(this)
+        AuthHeaderUtil.addAuthHeaderIfNeeded(this, authSettings)
       }
     if (response.status != HttpStatusCode.OK) {
       throw Exception("Error getting transaction: ${response.status}")
@@ -38,7 +38,7 @@ class PlatformClient(
         method = HttpMethod.Patch
         setBody(GsonUtils.getInstance().toJson(request))
         contentType(ContentType.Application.Json)
-        addAuthHeaderIfNeeded(this)
+        AuthHeaderUtil.addAuthHeaderIfNeeded(this, authSettings)
       }
     if (response.status != HttpStatusCode.OK) {
       throw Exception("Error patching transaction: ${response.status}")
@@ -51,7 +51,7 @@ class PlatformClient(
     val response =
       httpClient.request("$endpoint/transactions") {
         method = HttpMethod.Get
-        addAuthHeaderIfNeeded(this)
+        AuthHeaderUtil.addAuthHeaderIfNeeded(this, authSettings)
         url {
           parameters.append("sep", request.sep.name.toLowerCasePreservingASCIIRules())
           if (request.orderBy != null) {
@@ -76,17 +76,5 @@ class PlatformClient(
     }
     return GsonUtils.getInstance()
       .fromJson(response.body<String>(), GetTransactionsResponse::class.java)
-  }
-
-  private fun addAuthHeaderIfNeeded(builder: HttpRequestBuilder) {
-    if (authSettings.type != AuthSettings.Type.JWT) {
-      return
-    }
-    val token =
-      JwtTokenProvider.createJwt(
-        authSettings.anchorToPlatformSecret,
-        authSettings.expirationMilliseconds,
-      )
-    builder.headers.append(HttpHeaders.Authorization, "Bearer $token")
   }
 }
