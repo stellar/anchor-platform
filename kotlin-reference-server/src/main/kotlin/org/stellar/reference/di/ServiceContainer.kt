@@ -52,5 +52,6 @@ object ServiceContainer {
         }
       },
       config.appSettings.platformApiEndpoint,
+      config.authSettings,
     )
 }
