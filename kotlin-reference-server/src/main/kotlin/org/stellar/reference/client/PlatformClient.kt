@@ -12,10 +12,19 @@ import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.api.platform.PatchTransactionsResponse
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.reference.data.AuthSettings
 
-class PlatformClient(private val httpClient: HttpClient, private val endpoint: String) {
+class PlatformClient(
+  private val httpClient: HttpClient,
+  private val endpoint: String,
+  private val authSettings: AuthSettings,
+) {
   suspend fun getTransaction(id: String): GetTransactionResponse {
-    val response = httpClient.request("$endpoint/transactions/$id") { method = HttpMethod.Get }
+    val response =
+      httpClient.request("$endpoint/transactions/$id") {
+        method = HttpMethod.Get
+        addAuthHeaderIfNeeded(this)
+      }
     if (response.status != HttpStatusCode.OK) {
       throw Exception("Error getting transaction: ${response.status}")
     }
@@ -29,6 +38,7 @@ class PlatformClient(private val httpClient: HttpClient, private val endpoint: S
         method = HttpMethod.Patch
         setBody(GsonUtils.getInstance().toJson(request))
         contentType(ContentType.Application.Json)
+        addAuthHeaderIfNeeded(this)
       }
     if (response.status != HttpStatusCode.OK) {
       throw Exception("Error patching transaction: ${response.status}")
@@ -41,6 +51,7 @@ class PlatformClient(private val httpClient: HttpClient, private val endpoint: S
     val response =
       httpClient.request("$endpoint/transactions") {
         method = HttpMethod.Get
+        addAuthHeaderIfNeeded(this)
         url {
           parameters.append("sep", request.sep.name.toLowerCasePreservingASCIIRules())
           if (request.orderBy != null) {
@@ -65,5 +76,17 @@ class PlatformClient(private val httpClient: HttpClient, private val endpoint: S
     }
     return GsonUtils.getInstance()
       .fromJson(response.body<String>(), GetTransactionsResponse::class.java)
+  }
+
+  private fun addAuthHeaderIfNeeded(builder: HttpRequestBuilder) {
+    if (authSettings.type != AuthSettings.Type.JWT) {
+      return
+    }
+    val token =
+      JwtTokenProvider.createJwt(
+        authSettings.anchorToPlatformSecret,
+        authSettings.expirationMilliseconds,
+      )
+    builder.headers.append(HttpHeaders.Authorization, "Bearer $token")
   }
 }
