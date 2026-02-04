@@ -162,6 +162,9 @@ class Sep6EventProcessor(
             message = "Funds received from user",
           ),
         )
+      PENDING_CUSTOMER_INFO_UPDATE -> {
+        requestCustomerFunds(transaction)
+      }
       COMPLETED -> {
         log.info { "Transaction ${transaction.id} completed" }
       }
@@ -226,6 +229,9 @@ class Sep6EventProcessor(
             ),
           )
         }
+      PENDING_CUSTOMER_INFO_UPDATE -> {
+        requestCustomerFunds(transaction)
+      }
       COMPLETED -> {
         log.info { "Transaction ${transaction.id} completed" }
       }
