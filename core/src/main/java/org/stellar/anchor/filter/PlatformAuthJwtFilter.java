@@ -13,6 +13,12 @@ public class PlatformAuthJwtFilter extends AbstractJwtFilter {
   }
 
   @Override
+  protected boolean shouldSkip(HttpServletRequest request) {
+    String path = request.getRequestURI();
+    return "/health".equals(path);
+  }
+
+  @Override
   public void check(String jwtCipher, HttpServletRequest request, ServletResponse servletResponse)
       throws Exception {
     @NonNull PlatformAuthJwt token = jwtService.decode(jwtCipher, PlatformAuthJwt.class);
