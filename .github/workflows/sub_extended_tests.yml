@@ -157,7 +157,7 @@ jobs:
         uses: mydea/action-wait-for-api@v1
         with:
           url: "http://localhost:8085/health"
-          expected-status: "403"
+          expected-status: "200"
           interval: "1"
           timeout: "600"
 
@@ -183,7 +183,7 @@ jobs:
         uses: mydea/action-wait-for-api@v1
         with:
           url: "http://localhost:8085/health"
-          expected-status: "403"
+          expected-status: "200"
           interval: "1"
           timeout: "600"
 
