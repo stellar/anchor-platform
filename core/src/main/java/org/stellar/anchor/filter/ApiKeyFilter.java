@@ -47,6 +47,11 @@ public class ApiKeyFilter implements Filter {
         request.getRequestURL().toString(),
         request.getQueryString());
 
+    if (shouldSkip(request)) {
+      filterChain.doFilter(servletRequest, servletResponse);
+      return;
+    }
+
     if (request.getMethod().equals(OPTIONS)) {
       filterChain.doFilter(servletRequest, servletResponse);
       return;
@@ -61,6 +66,10 @@ public class ApiKeyFilter implements Filter {
     infoF("apiKey auth passed for url={}", request.getRequestURL());
 
     filterChain.doFilter(servletRequest, servletResponse);
+  }
+
+  protected boolean shouldSkip(HttpServletRequest request) {
+    return "/health".equals(FilterUtils.getRequestPath(request));
   }
 
   private static void sendForbiddenError(HttpServletResponse response) throws IOException {

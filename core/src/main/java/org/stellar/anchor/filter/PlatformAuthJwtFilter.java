@@ -14,8 +14,7 @@ public class PlatformAuthJwtFilter extends AbstractJwtFilter {
 
   @Override
   protected boolean shouldSkip(HttpServletRequest request) {
-    String path = request.getRequestURI();
-    return "/health".equals(path);
+    return "/health".equals(FilterUtils.getRequestPath(request));
   }
 
   @Override
