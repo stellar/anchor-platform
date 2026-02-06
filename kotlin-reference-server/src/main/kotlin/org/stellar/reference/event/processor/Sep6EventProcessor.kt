@@ -100,7 +100,9 @@ class Sep6EventProcessor(
     when (val status = transaction.status) {
       PENDING_ANCHOR -> {
         val customer = transaction.customers.sender
-        if (verifyKyc(customer.account, customer.memo, transaction.kind).isNotEmpty()) {
+        if (
+          verifyKyc(transaction.id, customer.account, customer.memo, transaction.kind).isNotEmpty()
+        ) {
           requestKyc(event)
           return
         }
@@ -160,6 +162,9 @@ class Sep6EventProcessor(
             message = "Funds received from user",
           ),
         )
+      PENDING_CUSTOMER_INFO_UPDATE -> {
+        requestCustomerFunds(transaction)
+      }
       COMPLETED -> {
         log.info { "Transaction ${transaction.id} completed" }
       }
@@ -174,7 +179,9 @@ class Sep6EventProcessor(
     when (val status = transaction.status) {
       PENDING_ANCHOR -> {
         val customer = transaction.customers.sender
-        if (verifyKyc(customer.account, customer.memo, Kind.WITHDRAWAL).isNotEmpty()) {
+        if (
+          verifyKyc(transaction.id, customer.account, customer.memo, Kind.WITHDRAWAL).isNotEmpty()
+        ) {
           requestKyc(event)
           return
         }
@@ -222,6 +229,9 @@ class Sep6EventProcessor(
             ),
           )
         }
+      PENDING_CUSTOMER_INFO_UPDATE -> {
+        requestCustomerFunds(transaction)
+      }
       COMPLETED -> {
         log.info { "Transaction ${transaction.id} completed" }
       }
@@ -250,7 +260,9 @@ class Sep6EventProcessor(
     when (transaction.kind) {
       Kind.DEPOSIT -> {
         val sourceAsset = "iso4217:USD"
-        if (verifyKyc(customer.account, customer.memo, transaction.kind).isEmpty()) {
+        if (
+          verifyKyc(transaction.id, customer.account, customer.memo, transaction.kind).isEmpty()
+        ) {
           runBlocking {
             // In deposit flow, If amount is specified, anchor can request that amount;
             // amount is either provided at transaction initialization or updated during KYC.
@@ -288,7 +300,9 @@ class Sep6EventProcessor(
             sourceAsset]
             ?: throw RuntimeException("Unsupported asset: $sourceAsset")
 
-        if (verifyKyc(customer.account, customer.memo, transaction.kind).isEmpty()) {
+        if (
+          verifyKyc(transaction.id, customer.account, customer.memo, transaction.kind).isEmpty()
+        ) {
           runBlocking {
             // In deposit-exchange flow, amount, sourceAsset and destinationAsset are always
             // specified.
@@ -328,7 +342,9 @@ class Sep6EventProcessor(
       }
       Kind.WITHDRAWAL -> {
         val destinationAsset = "iso4217:USD"
-        if (verifyKyc(customer.account, customer.memo, transaction.kind).isEmpty()) {
+        if (
+          verifyKyc(transaction.id, customer.account, customer.memo, transaction.kind).isEmpty()
+        ) {
           runBlocking {
             sepHelper.rpcAction(
               RpcMethod.REQUEST_ONCHAIN_FUNDS.toString(),
@@ -353,7 +369,9 @@ class Sep6EventProcessor(
       }
       Kind.WITHDRAWAL_EXCHANGE -> {
         val destinationAsset = transaction.amountOut.asset
-        if (verifyKyc(customer.account, customer.memo, transaction.kind).isEmpty()) {
+        if (
+          verifyKyc(transaction.id, customer.account, customer.memo, transaction.kind).isEmpty()
+        ) {
           runBlocking {
             // The amount was specified at transaction initialization
             sepHelper.rpcAction(
@@ -393,6 +411,7 @@ class Sep6EventProcessor(
   }
 
   private fun verifyKyc(
+    transactionId: String,
     webAuthAccount: String,
     webAuthAccountMemo: String?,
     kind: Kind,
@@ -400,6 +419,7 @@ class Sep6EventProcessor(
     val customer = runBlocking {
       customerService.getCustomer(
         GetCustomerRequest.builder()
+          .transactionId(transactionId)
           .account(webAuthAccount)
           .memo(webAuthAccountMemo)
           .memoType(if (webAuthAccountMemo != null) "id" else null)
@@ -418,7 +438,8 @@ class Sep6EventProcessor(
   private fun requestKyc(event: SendEventRequest) {
     val kind = event.payload.transaction!!.kind
     val customer = event.payload.transaction.customers.sender
-    val missingFields = verifyKyc(customer.account, customer.memo, kind)
+    val missingFields =
+      verifyKyc(event.payload.transaction.id, customer.account, customer.memo, kind)
     runBlocking {
       if (missingFields.isNotEmpty()) {
         customerService.requestAdditionalFieldsForTransaction(
@@ -441,6 +462,7 @@ class Sep6EventProcessor(
             customerService
               .upsertCustomer(
                 PutCustomerRequest.builder()
+                  .transactionId(event.payload.transaction.id)
                   .account(customer.account)
                   .memo(customer.memo)
                   .memoType(memoType)

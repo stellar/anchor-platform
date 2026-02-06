@@ -16,7 +16,7 @@ data:
       custodyEnabled: false
 
     auth:
-      type: NONE
+      type: {{ .Values.config.auth.type | default "NONE" }}
 
     data:
       database: postgres
