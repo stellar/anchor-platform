@@ -65,7 +65,8 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
       String accountId, String accountMemo, GetTransactionsRequest tr)
       throws SepValidationException {
 
-    if (accountMemo != null) accountId = accountId + ":" + accountMemo;
+    if (accountMemo != null)
+      accountId = accountId + ":" + accountMemo; // TODO: This will probably break
 
     List<Sep24Transaction> txns =
         txnRepo.findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
