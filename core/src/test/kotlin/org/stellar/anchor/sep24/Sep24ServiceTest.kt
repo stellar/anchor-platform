@@ -656,6 +656,40 @@ internal class Sep24ServiceTest {
     verify(exactly = 1) { txnStore.findByExternalTransactionId(TEST_TRANSACTION_ID_0) }
   }
 
+  @Test
+  fun `test find transaction with different account memo`() {
+    val testTxn = createTestTransaction("deposit")
+    testTxn.webAuthAccountMemo = "other-memo"
+    every { txnStore.findByTransactionId(any()) } returns testTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    assertThrows<SepNotFoundException> {
+      sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
+    }
+  }
+
+  @Test
+  fun `test find transaction with matching account memo`() {
+    val testTxn = createTestTransaction("deposit")
+    testTxn.webAuthAccountMemo = TEST_MEMO
+    every { txnStore.findByTransactionId(any()) } returns testTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    val response = sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
+
+    assertEquals(testTxn.transactionId, response.transaction.id)
+  }
+
+  @Test
+  fun `test find transaction with null web auth account`() {
+    val testTxn = createTestTransaction("deposit")
+    testTxn.webAuthAccount = null
+    every { txnStore.findByTransactionId(any()) } returns testTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    assertThrows<SepNotFoundException> { sep24Service.findTransaction(createTestWebAuthJwt(), gtr) }
+  }
+
   @ParameterizedTest
   @ValueSource(strings = ["deposit", "withdrawal"])
   fun `test find transaction validation error`(kind: String) {
