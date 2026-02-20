@@ -560,15 +560,13 @@ public class Sep24Service {
     }
 
     // We should not return the transaction that belongs to other accounts.
-    if (txn == null || !txn.getWebAuthAccount().equals(token.getAccount())) {
+    if (txn == null || !Objects.equals(txn.getWebAuthAccount(), token.getAccount())) {
       infoF("no transactions found with account:{}", token.getAccount());
       throw new SepNotFoundException("transaction not found");
     }
 
-    // If the token has a memo, make sure the transaction belongs to the account
-    // with the same memo.
-    if (token.getAccountMemo() != null
-        && txn.getWebAuthAccount().equals(token.getAccount() + ":" + token.getAccountMemo())) {
+    // Make sure the transaction belongs to the account with the same memo.
+    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
       infoF(
           "no transactions found with account:{} memo:{}",
           token.getAccount(),
