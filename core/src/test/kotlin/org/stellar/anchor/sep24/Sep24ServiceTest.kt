@@ -6,6 +6,7 @@ import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import java.net.URI
 import java.nio.charset.Charset
+import java.time.Clock
 import java.time.Instant
 import org.apache.hc.core5.net.URLEncodedUtils
 import org.junit.jupiter.api.Assertions.*
@@ -155,7 +156,7 @@ internal class Sep24ServiceTest {
         .allowAnyDestination(false)
         .build()
     every { clientFinder.getClientName(any()) } returns TEST_CLIENT_NAME
-    calculator = ExchangeAmountsCalculator(sep38QuoteStore)
+    calculator = ExchangeAmountsCalculator(sep38QuoteStore, Clock.systemUTC())
 
     sep24Service =
       Sep24Service(

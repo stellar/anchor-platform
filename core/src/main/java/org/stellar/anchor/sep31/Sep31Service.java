@@ -19,6 +19,7 @@ import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 import io.micrometer.core.instrument.Counter;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
 import lombok.Data;
@@ -65,6 +66,7 @@ public class Sep31Service {
   private final ClientService clientService;
   private final AssetService assetService;
   private final RateIntegration rateIntegration;
+  private final Clock clock;
   private final Sep31InfoResponse infoResponse;
   private final EventService.Session eventSession;
   private final Counter sep31TransactionCreatedCounter = counter(SEP31_TRANSACTION_CREATED);
@@ -79,7 +81,8 @@ public class Sep31Service {
       ClientService clientService,
       AssetService assetService,
       RateIntegration rateIntegration,
-      EventService eventService) {
+      EventService eventService,
+      Clock clock) {
     debug("sep31Config:", sep31Config);
     this.languageConfig = languageConfig;
     this.sep10Config = sep10Config;
@@ -89,6 +92,7 @@ public class Sep31Service {
     this.clientService = clientService;
     this.assetService = assetService;
     this.rateIntegration = rateIntegration;
+    this.clock = clock;
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.infoResponse = sep31InfoResponseFromAssetInfoList(assetService.getAssets());
     Log.info("Sep31Service initialized.");
@@ -442,6 +446,12 @@ public class Sep31Service {
       infoF("Quote ({}) was not found", request.getQuoteId());
       throw new BadRequestException(
           String.format("quote(id=%s) was not found.", request.getQuoteId()));
+    }
+
+    if (quote.getExpiresAt() != null && !quote.getExpiresAt().isAfter(clock.instant())) {
+      throw new BadRequestException(
+          String.format(
+              "quote(id=%s) has expired at %s", request.getQuoteId(), quote.getExpiresAt()));
     }
 
     // Check quote amounts: `post_transaction.amount == quote.sell_amount`
