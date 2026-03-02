@@ -5,6 +5,7 @@ package org.stellar.anchor.sep31
 import com.google.gson.Gson
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
+import java.time.Clock
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -290,6 +291,7 @@ class Sep31ServiceTest {
         assetService,
         rateIntegration,
         eventService,
+        Clock.systemUTC(),
       )
 
     request = gson.fromJson(requestJson, Sep31PostTransactionRequest::class.java)
@@ -544,6 +546,20 @@ class Sep31ServiceTest {
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("quote(id=not-found-quote-id) was not found.", ex.message)
 
+    // expired quote_id
+    val expiredQuoteId = "expired-quote-id"
+    val expiredQuote = PojoSep38Quote()
+    expiredQuote.sellAmount = "100"
+    expiredQuote.sellAsset = stellarUSDC
+    expiredQuote.expiresAt = Instant.parse("2000-01-01T00:00:00Z")
+    expiredQuote.fee = FeeDetails("2", stellarUSDC)
+    postTxRequest.amount = "100"
+    postTxRequest.quoteId = expiredQuoteId
+    every { quoteStore.findByQuoteId(expiredQuoteId) } returns expiredQuote
+    ex = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertTrue(ex.message!!.startsWith("quote(id=expired-quote-id) has expired at"))
+
     // quote and tx amounts don't match
     val quoteId = "de762cda-a193-4961-861e-57b31fed6eb3"
     val quote = PojoSep38Quote()
@@ -598,7 +614,7 @@ class Sep31ServiceTest {
     quote.buyAmount = "12500"
     quote.totalPrice = "0.008"
     quote.price = "0.0072"
-    quote.expiresAt = Instant.now()
+    quote.expiresAt = tomorrow
     quote.fee = FeeDetails("10", stellarUSDC)
     every { quoteStore.findByQuoteId("my_quote_id") } returns quote
 
@@ -759,6 +775,7 @@ class Sep31ServiceTest {
         assetServiceQuotesNotSupported,
         rateIntegration,
         eventService,
+        Clock.systemUTC(),
       )
 
     val senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"

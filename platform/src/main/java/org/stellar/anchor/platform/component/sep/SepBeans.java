@@ -132,9 +132,13 @@ public class SepBeans {
   }
 
   @Bean
+  Clock systemClock() {
+    return Clock.systemUTC();
+  }
+
+  @Bean
   @OnAnySepsEnabled(seps = {"sep45"})
-  NonceManager nonceService(NonceStore nonceStore) {
-    Clock clock = Clock.systemUTC();
+  NonceManager nonceService(NonceStore nonceStore, Clock clock) {
     return new NonceManager(nonceStore, clock);
   }
 
@@ -148,10 +152,11 @@ public class SepBeans {
       ClientFinder clientFinder,
       Sep6TransactionStore txnStore,
       EventService eventService,
+      Clock clock,
       Sep38QuoteStore sep38QuoteStore,
       @Qualifier("sep6MoreInfoUrlConstructor") MoreInfoUrlConstructor sep6MoreInfoUrlConstructor) {
     ExchangeAmountsCalculator exchangeAmountsCalculator =
-        new ExchangeAmountsCalculator(sep38QuoteStore);
+        new ExchangeAmountsCalculator(sep38QuoteStore, clock);
     return new Sep6Service(
         languageConfig,
         sep6Config,
@@ -199,12 +204,13 @@ public class SepBeans {
       ClientFinder clientFinder,
       Sep24TransactionStore sep24TransactionStore,
       EventService eventService,
+      Clock clock,
       InteractiveUrlConstructor interactiveUrlConstructor,
       @Qualifier("sep24MoreInfoUrlConstructor") MoreInfoUrlConstructor sep24MoreInfoUrlConstructor,
       CustodyConfig custodyConfig,
       Sep38QuoteStore sep38QuoteStore) {
     ExchangeAmountsCalculator exchangeAmountsCalculator =
-        new ExchangeAmountsCalculator(sep38QuoteStore);
+        new ExchangeAmountsCalculator(sep38QuoteStore, clock);
     return new Sep24Service(
         languageConfig,
         stellarNetworkConfig,
@@ -244,6 +250,7 @@ public class SepBeans {
       ClientService clientService,
       AssetService assetService,
       RateIntegration rateIntegration,
+      Clock clock,
       EventService eventService) {
     return new Sep31Service(
         languageConfig,
@@ -254,7 +261,8 @@ public class SepBeans {
         clientService,
         assetService,
         rateIntegration,
-        eventService);
+        eventService,
+        clock);
   }
 
   @Bean

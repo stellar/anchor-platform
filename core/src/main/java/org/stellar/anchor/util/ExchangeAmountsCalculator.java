@@ -2,6 +2,7 @@ package org.stellar.anchor.util;
 
 import static org.stellar.anchor.util.SepHelper.amountEquals;
 
+import java.time.Clock;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NonNull;
@@ -18,6 +19,7 @@ import org.stellar.anchor.sep38.Sep38QuoteStore;
 @RequiredArgsConstructor
 public class ExchangeAmountsCalculator {
   @NonNull private final Sep38QuoteStore sep38QuoteStore;
+  @NonNull private final Clock clock;
 
   /**
    * Calculates the amounts from a saved quote.
@@ -57,6 +59,11 @@ public class ExchangeAmountsCalculator {
     Sep38Quote quote = sep38QuoteStore.findByQuoteId(quoteId);
     if (quote == null) {
       throw new BadRequestException("Quote not found");
+    }
+
+    if (quote.getExpiresAt() != null && !quote.getExpiresAt().isAfter(clock.instant())) {
+      throw new BadRequestException(
+          String.format("quote(id=%s) has expired at %s", quoteId, quote.getExpiresAt()));
     }
 
     if (sellAsset != null && !sellAsset.getId().equals(quote.getSellAsset())) {
