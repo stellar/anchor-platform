@@ -56,6 +56,7 @@ public class Sep6CustodyPaymentHandler extends CustodyPaymentHandler {
           metricsService
               .counter(AnchorMetrics.PAYMENT_RECEIVED, "asset", payment.getAssetName())
               .increment(Double.parseDouble(payment.getAmount()));
+          break;
         case REFUND:
           platformApiClient.notifyRefundSent(
               txn.getSepTxId(),
