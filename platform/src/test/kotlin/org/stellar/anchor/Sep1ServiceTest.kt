@@ -72,9 +72,6 @@ class Sep1ServiceTest {
     assertEquals(sep1.toml, stellarToml)
   }
 
-  // this test is not expected to raise an exception. given the re-direct to a malicious
-  // endpoint still returns a 200 the exception will be raised/obfuscated
-  // when the toml is parsed.
   @Test
   fun `getStellarTomlthrows exception when redirect is encountered`() {
     val mockServer = MockWebServer()
@@ -103,7 +100,8 @@ class Sep1ServiceTest {
 
     val config = PropertySep1Config(true, TomlConfig(URL, mockAnchorUrl))
     val sep1 = Sep1Service(config)
-    assertEquals(sep1.getToml(), metadata)
+    val exception = assertThrows(SepException::class.java) { sep1.toml }
+    assertEquals("Unable to read SEP-1 value", exception.message)
     mockServer.shutdown()
   }
 
