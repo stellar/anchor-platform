@@ -108,51 +108,44 @@ class Sep6EventProcessor(
         }
 
         lateinit var stellarTxnId: String
-        if (config.appSettings.custodyEnabled) {
-          sepHelper.rpcAction(
-            RpcMethod.DO_STELLAR_PAYMENT.toString(),
-            DoStellarPaymentRequest(transactionId = transaction.id),
-          )
-        } else {
-          transactionWithRetry {
-            stellarTxnId =
-              paymentClient.send(
-                transaction.destinationAccount,
-                Asset.create(transaction.amountExpected.asset.toAssetId()),
-                // If no amount was specified at transaction initialization, assume the user
-                // transferred 1 USD to the Anchor's bank account
-                if (transaction.amountExpected.amount.equals("0")) {
-                  "1"
-                } else {
-                  transaction.amountOut.amount
-                },
-              )
-          }
-          onchainPayments[transaction.id] = stellarTxnId
-
-          log.info { "Waiting for transaction $stellarTxnId to be available..." }
-          run loop@{
-            repeat(5) { attempt ->
-              try {
-                val resp = paymentClient.getTransaction(stellarTxnId)
-                if (resp != null && resp.status == SUCCESS) return@loop
-              } catch (e: Exception) {
-                log.warn(e) { "Attempt ${attempt + 1}: Failed to fetch transaction $stellarTxnId" }
-              }
-              delay(2_000)
-            }
-          }
-
-          // After the transaction is available, call notify_onchain_funds_sent
-          sepHelper.rpcAction(
-            RpcMethod.NOTIFY_ONCHAIN_FUNDS_SENT.toString(),
-            NotifyOnchainFundsSentRequest(
-              transactionId = transaction.id,
-              message = "Funds sent to user",
-              stellarTransactionId = onchainPayments[transaction.id]!!,
-            ),
-          )
+        transactionWithRetry {
+          stellarTxnId =
+            paymentClient.send(
+              transaction.destinationAccount,
+              Asset.create(transaction.amountExpected.asset.toAssetId()),
+              // If no amount was specified at transaction initialization, assume the user
+              // transferred 1 USD to the Anchor's bank account
+              if (transaction.amountExpected.amount.equals("0")) {
+                "1"
+              } else {
+                transaction.amountOut.amount
+              },
+            )
         }
+        onchainPayments[transaction.id] = stellarTxnId
+
+        log.info { "Waiting for transaction $stellarTxnId to be available..." }
+        run loop@{
+          repeat(5) { attempt ->
+            try {
+              val resp = paymentClient.getTransaction(stellarTxnId)
+              if (resp != null && resp.status == SUCCESS) return@loop
+            } catch (e: Exception) {
+              log.warn(e) { "Attempt ${attempt + 1}: Failed to fetch transaction $stellarTxnId" }
+            }
+            delay(2_000)
+          }
+        }
+
+        // After the transaction is available, call notify_onchain_funds_sent
+        sepHelper.rpcAction(
+          RpcMethod.NOTIFY_ONCHAIN_FUNDS_SENT.toString(),
+          NotifyOnchainFundsSentRequest(
+            transactionId = transaction.id,
+            message = "Funds sent to user",
+            stellarTransactionId = onchainPayments[transaction.id]!!,
+          ),
+        )
       }
       PENDING_USR_TRANSFER_START ->
         sepHelper.rpcAction(

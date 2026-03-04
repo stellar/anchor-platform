@@ -1,6 +1,5 @@
 package org.stellar.anchor.platform.config;
 
-import static org.stellar.anchor.config.Sep6Config.DepositInfoGeneratorType.CUSTODY;
 import static org.stellar.anchor.config.Sep6Config.DepositInfoGeneratorType.SELF;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.anchor.util.StringHelper.snakeToCamelCase;
@@ -15,7 +14,6 @@ import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep6Config;
 import org.stellar.anchor.platform.data.JdbcSep6Transaction;
@@ -33,14 +31,11 @@ public class PropertySep6Config implements Sep6Config, Validator {
   Features features;
   DepositInfoGeneratorType depositInfoGeneratorType;
   Long initialUserDeadlineSeconds;
-  CustodyConfig custodyConfig;
   AssetService assetService;
   MoreInfoUrlConfig moreInfoUrl;
   SecretConfig secretConfig;
 
-  public PropertySep6Config(
-      CustodyConfig custodyConfig, AssetService assetService, SecretConfig secretConfig) {
-    this.custodyConfig = custodyConfig;
+  public PropertySep6Config(AssetService assetService, SecretConfig secretConfig) {
     this.assetService = assetService;
     this.secretConfig = secretConfig;
   }
@@ -120,21 +115,6 @@ public class PropertySep6Config implements Sep6Config, Validator {
   }
 
   void validateDepositInfoGeneratorType(Errors errors) {
-    if (custodyConfig.isCustodyIntegrationEnabled() && CUSTODY != depositInfoGeneratorType) {
-      errors.rejectValue(
-          "depositInfoGeneratorType",
-          "sep6-deposit-info-generator-type",
-          String.format(
-              "[%s] deposit info generator type is not supported when custody integration is enabled",
-              depositInfoGeneratorType.toString().toLowerCase()));
-    } else if (!custodyConfig.isCustodyIntegrationEnabled()
-        && CUSTODY == depositInfoGeneratorType) {
-      errors.rejectValue(
-          "depositInfoGeneratorType",
-          "sep6-deposit-info-generator-type",
-          "[custody] deposit info generator type is not supported when custody integration is disabled");
-    }
-
     if (SELF == depositInfoGeneratorType) {
       for (StellarAssetInfo asset : assetService.getStellarAssets()) {
         if (!asset.getCode().equals("native") && isEmpty(asset.getDistributionAccount())) {

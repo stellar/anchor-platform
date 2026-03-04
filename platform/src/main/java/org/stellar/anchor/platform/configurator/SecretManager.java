@@ -10,7 +10,6 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.PropertiesPropertySource;
-import org.stellar.anchor.platform.config.PropertyCustodySecretConfig;
 import org.stellar.anchor.platform.config.PropertySecretConfig;
 
 public class SecretManager
@@ -25,13 +24,10 @@ public class SecretManager
           PropertySecretConfig.SECRET_SEP_45_JWT_SECRET,
           PropertySecretConfig.SECRET_CALLBACK_API_AUTH_SECRET,
           PropertySecretConfig.SECRET_PLATFORM_API_AUTH_SECRET,
-          PropertyCustodySecretConfig.SECRET_CUSTODY_SERVER_AUTH_SECRET,
           PropertySecretConfig.SECRET_DATA_USERNAME,
           PropertySecretConfig.SECRET_DATA_PASSWORD,
           PropertySecretConfig.SECRET_EVENTS_QUEUE_KAFKA_USERNAME,
           PropertySecretConfig.SECRET_EVENTS_QUEUE_KAFKA_PASSWORD,
-          PropertyCustodySecretConfig.SECRET_FIREBLOCKS_SECRET_KEY,
-          PropertyCustodySecretConfig.SECRET_FIREBLOCKS_API_KEY,
           PropertySecretConfig.SECRET_SSL_KEYSTORE_PASSWORD,
           PropertySecretConfig.SECRET_SSL_KEY_PASSWORD,
           PropertySecretConfig.SECRET_SSL_TRUSTSTORE_PASSWORD);

@@ -82,25 +82,6 @@ class SepHelper(cfg: Config) {
       .body()
   }
 
-  internal suspend fun sendCustodyStellarTransaction(transactionId: String) {
-    val resp =
-      client.post("$baseUrl/transactions/$transactionId/payments") {
-        contentType(ContentType.Application.Json)
-        setBody("{}")
-        AuthHeaderUtil.addAuthHeaderIfNeeded(this, authSettings)
-      }
-
-    if (resp.status != HttpStatusCode.OK) {
-      val respBody = resp.bodyAsText()
-
-      log.error {
-        "Unexpected status code when sending custody Stellar transaction. Response body: $respBody"
-      }
-
-      throw Exception(respBody)
-    }
-  }
-
   // Pulling status change from anchor. Alternatively, listen to AnchorEvent for transaction status
   // change
   internal suspend fun waitStellarTransaction(txId: String, status: String) {

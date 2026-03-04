@@ -60,7 +60,6 @@ jobs:
           sudo echo "127.0.0.1 reference-db" | sudo tee -a /etc/hosts
           sudo echo "127.0.0.1 wallet-server" | sudo tee -a /etc/hosts
           sudo echo "127.0.0.1 platform" | sudo tee -a /etc/hosts
-          sudo echo "127.0.0.1 custody-server" | sudo tee -a /etc/hosts
           sudo echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts 
 
       #############################################
@@ -92,56 +91,6 @@ jobs:
           cd /home/runner/anchor-platform
           ./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.RpcTestSuite         
           kill -9 $PID      
-
-      # `auth-apikey-custody` Tests
-      - name: Start `auth-apikey-custody` configuration
-        env:
-          TEST_PROFILE_NAME: auth-apikey-custody
-          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
-        run: |
-          cd /home/runner/anchor-platform
-          ./gradlew startServersWithTestProfile &
-          echo "PID=$!" >> $GITHUB_ENV
-
-      - name: Wait for the custody server to start and get ready
-        uses: mydea/action-wait-for-api@v1
-        with:
-          url: "http://localhost:8086/health"
-          interval: "1"
-          timeout: "600"
-
-      - name: Run `auth-apikey-custody` configuration tests
-        env:
-          TEST_PROFILE_NAME: auth-apikey-custody
-        run: |
-          cd /home/runner/anchor-platform
-          ./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.AuthApikeyCustodyTestSuite         
-          kill -9 $PID           
-
-      # `auth-jwt-custody` Tests
-      - name: Start `auth-jwt-custody` configuration
-        env:
-          TEST_PROFILE_NAME: auth-jwt-custody
-          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
-        run: |
-          cd /home/runner/anchor-platform
-          ./gradlew startServersWithTestProfile &
-          echo "PID=$!" >> $GITHUB_ENV
-
-      - name: Wait for the custody server to start and get ready
-        uses: mydea/action-wait-for-api@v1
-        with:
-          url: "http://localhost:8086/health"
-          interval: "1"
-          timeout: "600"
-
-      - name: Run `auth-jwt-custody` configuration tests
-        env:
-          TEST_PROFILE_NAME: auth-jwt-custody
-        run: |
-          cd /home/runner/anchor-platform
-          ./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.AuthJwtCustodyTestSuite         
-          kill -9 $PID    
 
       # `auth-apikey-platform` Tests
       - name: Start `auth-apikey-platform` configuration
