@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
@@ -264,93 +265,97 @@ public class TransactionService {
 
     String lastStatus = txn.getStatus();
     updateSepTransaction(patch.getTransaction(), txn);
-    switch (txn.getProtocol()) {
-      case "6":
-        JdbcSep6Transaction sep6Transaction = (JdbcSep6Transaction) txn;
-        Log.infoF(
-            "Updating SEP-6 transaction: {}", GsonUtils.getInstance().toJson(sep6Transaction));
+    try {
+      switch (txn.getProtocol()) {
+        case "6":
+          JdbcSep6Transaction sep6Transaction = (JdbcSep6Transaction) txn;
+          Log.infoF(
+              "Updating SEP-6 transaction: {}", GsonUtils.getInstance().toJson(sep6Transaction));
 
-        boolean shouldCreateDepositTxn =
-            ImmutableSet.of(Kind.DEPOSIT, Kind.DEPOSIT_EXCHANGE)
-                    .contains(Kind.from(sep6Transaction.getKind()))
-                // TODO: check if this is correct
-                && txn.getStatus().equals(PENDING_ANCHOR.toString());
-        boolean shouldCreateWithdrawTxn =
-            ImmutableSet.of(Kind.WITHDRAWAL, Kind.WITHDRAWAL_EXCHANGE)
-                    .contains(Kind.from(sep6Transaction.getKind()))
-                && txn.getStatus().equals(PENDING_USR_TRANSFER_START.toString());
+          boolean shouldCreateDepositTxn =
+              ImmutableSet.of(Kind.DEPOSIT, Kind.DEPOSIT_EXCHANGE)
+                      .contains(Kind.from(sep6Transaction.getKind()))
+                  // TODO: check if this is correct
+                  && txn.getStatus().equals(PENDING_ANCHOR.toString());
+          boolean shouldCreateWithdrawTxn =
+              ImmutableSet.of(Kind.WITHDRAWAL, Kind.WITHDRAWAL_EXCHANGE)
+                      .contains(Kind.from(sep6Transaction.getKind()))
+                  && txn.getStatus().equals(PENDING_USR_TRANSFER_START.toString());
 
-        if (sep6Transaction.getMemo() == null && shouldCreateWithdrawTxn) {
-          SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(sep6Transaction);
-          sep6Transaction.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
-          sep6Transaction.setMemo(sep6DepositInfo.getMemo());
-          sep6Transaction.setMemoType("id");
-        }
+          if (sep6Transaction.getMemo() == null && shouldCreateWithdrawTxn) {
+            SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(sep6Transaction);
+            sep6Transaction.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
+            sep6Transaction.setMemo(sep6DepositInfo.getMemo());
+            sep6Transaction.setMemoType("id");
+          }
 
-        if (custodyConfig.isCustodyIntegrationEnabled()
-            && !lastStatus.equals(sep6Transaction.getStatus())
-            && (shouldCreateDepositTxn || shouldCreateWithdrawTxn)) {
-          custodyService.createTransaction(sep6Transaction);
-        }
+          if (custodyConfig.isCustodyIntegrationEnabled()
+              && !lastStatus.equals(sep6Transaction.getStatus())
+              && (shouldCreateDepositTxn || shouldCreateWithdrawTxn)) {
+            custodyService.createTransaction(sep6Transaction);
+          }
 
-        if (feeDetails != null) {
-          sep6Transaction.setFeeDetails(feeDetails);
-        }
+          if (feeDetails != null) {
+            sep6Transaction.setFeeDetails(feeDetails);
+          }
 
-        txn6Store.save(sep6Transaction);
-        eventSession.publish(
-            AnchorEvent.builder()
-                .id(UUID.randomUUID().toString())
-                .sep("6")
-                .type(TRANSACTION_STATUS_CHANGED)
-                .transaction(
-                    TransactionMapper.toGetTransactionResponse(sep6Transaction, assetService))
-                .build());
-        patchSep6TransactionCounter.increment();
-        break;
-      case "24":
-        JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) txn;
+          txn6Store.save(sep6Transaction);
+          eventSession.publish(
+              AnchorEvent.builder()
+                  .id(UUID.randomUUID().toString())
+                  .sep("6")
+                  .type(TRANSACTION_STATUS_CHANGED)
+                  .transaction(
+                      TransactionMapper.toGetTransactionResponse(sep6Transaction, assetService))
+                  .build());
+          patchSep6TransactionCounter.increment();
+          break;
+        case "24":
+          JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) txn;
 
-        if (custodyConfig.isCustodyIntegrationEnabled()
-            && !lastStatus.equals(sep24Txn.getStatus())
-            && ((Kind.DEPOSIT.getKind().equals(sep24Txn.getKind())
-                    && PENDING_ANCHOR.toString().equals(sep24Txn.getStatus()))
-                || (Kind.WITHDRAWAL.getKind().equals(sep24Txn.getKind())
-                    && PENDING_USR_TRANSFER_START.toString().equals(sep24Txn.getStatus())))) {
-          custodyService.createTransaction(sep24Txn);
-        }
+          if (custodyConfig.isCustodyIntegrationEnabled()
+              && !lastStatus.equals(sep24Txn.getStatus())
+              && ((Kind.DEPOSIT.getKind().equals(sep24Txn.getKind())
+                      && PENDING_ANCHOR.toString().equals(sep24Txn.getStatus()))
+                  || (Kind.WITHDRAWAL.getKind().equals(sep24Txn.getKind())
+                      && PENDING_USR_TRANSFER_START.toString().equals(sep24Txn.getStatus())))) {
+            custodyService.createTransaction(sep24Txn);
+          }
 
-        if (feeDetails != null) {
-          sep24Txn.setFeeDetails(feeDetails);
-        }
+          if (feeDetails != null) {
+            sep24Txn.setFeeDetails(feeDetails);
+          }
 
-        txn24Store.save(sep24Txn);
-        eventSession.publish(
-            AnchorEvent.builder()
-                .id(UUID.randomUUID().toString())
-                .sep("24")
-                .type(TRANSACTION_STATUS_CHANGED)
-                .transaction(TransactionMapper.toGetTransactionResponse(sep24Txn, assetService))
-                .build());
-        patchSep24TransactionCounter.increment();
-        break;
-      case "31":
-        JdbcSep31Transaction sep31Txn = (JdbcSep31Transaction) txn;
+          txn24Store.save(sep24Txn);
+          eventSession.publish(
+              AnchorEvent.builder()
+                  .id(UUID.randomUUID().toString())
+                  .sep("24")
+                  .type(TRANSACTION_STATUS_CHANGED)
+                  .transaction(TransactionMapper.toGetTransactionResponse(sep24Txn, assetService))
+                  .build());
+          patchSep24TransactionCounter.increment();
+          break;
+        case "31":
+          JdbcSep31Transaction sep31Txn = (JdbcSep31Transaction) txn;
 
-        if (feeDetails != null) {
-          sep31Txn.setFeeDetails(feeDetails);
-        }
+          if (feeDetails != null) {
+            sep31Txn.setFeeDetails(feeDetails);
+          }
 
-        txn31Store.save(sep31Txn);
-        eventSession.publish(
-            AnchorEvent.builder()
-                .id(UUID.randomUUID().toString())
-                .sep("31")
-                .type(TRANSACTION_STATUS_CHANGED)
-                .transaction(TransactionMapper.toGetTransactionResponse(sep31Txn))
-                .build());
-        patchSep31TransactionCounter.increment();
-        break;
+          txn31Store.save(sep31Txn);
+          eventSession.publish(
+              AnchorEvent.builder()
+                  .id(UUID.randomUUID().toString())
+                  .sep("31")
+                  .type(TRANSACTION_STATUS_CHANGED)
+                  .transaction(TransactionMapper.toGetTransactionResponse(sep31Txn))
+                  .build());
+          patchSep31TransactionCounter.increment();
+          break;
+      }
+    } catch (OptimisticLockingFailureException ex) {
+      throw new BadRequestException("Transaction was modified by another request. Please retry.");
     }
 
     return PlatformTransactionHelper.toGetTransactionResponse(txn, assetService);
