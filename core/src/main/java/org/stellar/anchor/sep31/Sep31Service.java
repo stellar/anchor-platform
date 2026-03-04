@@ -326,6 +326,11 @@ public class Sep31Service {
   @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
   public Sep31GetTransactionResponse patchTransaction(
       WebAuthJwt token, Sep31PatchTransactionRequest request) throws AnchorException {
+    if (token == null) {
+      info("missing SEP-10 token");
+      throw new SepNotAuthorizedException("missing token");
+    }
+
     if (request == null) {
       infoF("request cannot be null");
       throw new BadRequestException("request cannot be null");

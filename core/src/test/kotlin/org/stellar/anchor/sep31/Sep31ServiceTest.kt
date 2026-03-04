@@ -475,6 +475,10 @@ class Sep31ServiceTest {
       assertThrows<SepNotAuthorizedException> { sep31Service.patchTransaction(null, patchRequest) }
     assertEquals("missing token", unauthorizedEx.message)
 
+    val unauthorizedExWithNullRequest =
+      assertThrows<SepNotAuthorizedException> { sep31Service.patchTransaction(null, null) }
+    assertEquals("missing token", unauthorizedExWithNullRequest.message)
+
     val ex1 = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, null) }
     assertEquals("request cannot be null", ex1.message)
 
