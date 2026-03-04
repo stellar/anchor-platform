@@ -35,6 +35,7 @@ import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest.Sep31TxnFiel
 import org.stellar.anchor.api.shared.Amount
 import org.stellar.anchor.api.shared.FeeDetails
 import org.stellar.anchor.api.shared.SepDepositInfo
+import org.stellar.anchor.api.shared.StellarId
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.JwtService
@@ -296,6 +297,7 @@ class Sep31ServiceTest {
 
     request = gson.fromJson(requestJson, Sep31PostTransactionRequest::class.java)
     txn = gson.fromJson(txnJson, PojoSep31Transaction::class.java)
+    txn.creator = StellarId.builder().account(TestHelper.TEST_ACCOUNT).memo(null).build()
     fee = gson.fromJson(feeJson, Amount::class.java)
     asset = gson.fromJson(assetJson, StellarAssetInfo::class.java)
     quote = gson.fromJson(quoteJson, PojoSep38Quote::class.java)
@@ -369,15 +371,35 @@ class Sep31ServiceTest {
 
   @Test
   fun `test GET transaction`() {
-    assertThrows<BadRequestException> { sep31Service.getTransaction(null) }
-    assertThrows<BadRequestException> { sep31Service.getTransaction("") }
+    val token = TestHelper.createWebAuthJwt()
+
+    val unauthorizedEx =
+      assertThrows<SepNotAuthorizedException> { sep31Service.getTransaction(null, "found") }
+    assertEquals("missing token", unauthorizedEx.message)
+
+    assertThrows<BadRequestException> { sep31Service.getTransaction(token, null) }
+    assertThrows<BadRequestException> { sep31Service.getTransaction(token, "") }
 
     every { txnStore.findByTransactionId("not_found") } returns null
-    val ex = assertThrows<NotFoundException> { sep31Service.getTransaction("not_found") }
+    val ex = assertThrows<NotFoundException> { sep31Service.getTransaction(token, "not_found") }
     assertEquals("transaction (id=not_found) not found", ex.message)
 
+    every { txnStore.findByTransactionId("other_account") } returns txn
+    txn.creator = StellarId.builder().account("GOTHERACCOUNT").memo(null).build()
+    val unauthorizedTxnEx =
+      assertThrows<NotFoundException> { sep31Service.getTransaction(token, "other_account") }
+    assertEquals("transaction not found", unauthorizedTxnEx.message)
+
+    txn.creator =
+      StellarId.builder().account(TestHelper.TEST_ACCOUNT).memo("different-memo").build()
+    every { txnStore.findByTransactionId("other_memo") } returns txn
+    val unauthorizedMemoEx =
+      assertThrows<NotFoundException> { sep31Service.getTransaction(token, "other_memo") }
+    assertEquals("transaction not found", unauthorizedMemoEx.message)
+
+    txn.creator = StellarId.builder().account(TestHelper.TEST_ACCOUNT).memo(null).build()
     every { txnStore.findByTransactionId("found") } returns txn
-    val gotTxResponse = sep31Service.getTransaction("found")
+    val gotTxResponse = sep31Service.getTransaction(token, "found")
 
     val wantStartedAt =
       DateTimeFormatter.ISO_INSTANT.parse("2022-04-18T14:00:00.000Z", Instant::from)
@@ -438,42 +460,59 @@ class Sep31ServiceTest {
 
   @Test
   fun `test PATCH transaction ok`() {
+    val token = TestHelper.createWebAuthJwt()
     txn.status = "pending_transaction_info_update"
     every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
-    sep31Service.patchTransaction(patchRequest)
+    sep31Service.patchTransaction(token, patchRequest)
     // TODO: Add more saved transaction field validation
   }
 
   @Test
   fun `test PATCH transaction failure`() {
-    val ex1 = assertThrows<BadRequestException> { sep31Service.patchTransaction(null) }
+    val token = TestHelper.createWebAuthJwt()
+
+    val unauthorizedEx =
+      assertThrows<SepNotAuthorizedException> { sep31Service.patchTransaction(null, patchRequest) }
+    assertEquals("missing token", unauthorizedEx.message)
+
+    val ex1 = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, null) }
     assertEquals("request cannot be null", ex1.message)
 
     val ex2 =
       assertThrows<BadRequestException> {
-        sep31Service.patchTransaction(Sep31PatchTransactionRequest.builder().build())
+        sep31Service.patchTransaction(token, Sep31PatchTransactionRequest.builder().build())
       }
     assertEquals("id cannot be null nor empty", ex2.message)
 
     every { txnStore.findByTransactionId(any()) } returns null
-    val ex3 = assertThrows<NotFoundException> { sep31Service.patchTransaction(patchRequest) }
+    val ex3 = assertThrows<NotFoundException> { sep31Service.patchTransaction(token, patchRequest) }
     assertEquals("transaction (id=${patchRequest.id}) not found", ex3.message)
 
+    txn.creator = StellarId.builder().account("GOTHERACCOUNT").memo(null).build()
+    every { txnStore.findByTransactionId(any()) } returns txn
+    val exUnauthorized =
+      assertThrows<NotFoundException> { sep31Service.patchTransaction(token, patchRequest) }
+    assertEquals("transaction not found", exUnauthorized.message)
+
+    txn.creator = StellarId.builder().account(TestHelper.TEST_ACCOUNT).memo(null).build()
     patchRequest.fields.transaction.clear()
     patchRequest.fields.transaction["unexpected_field"] = "unexpected_field_value"
     txn.status = "pending_transaction_info_update"
     every { txnStore.findByTransactionId(any()) } returns txn
-    val ex4 = assertThrows<BadRequestException> { sep31Service.patchTransaction(patchRequest) }
+    val ex4 =
+      assertThrows<BadRequestException> { sep31Service.patchTransaction(token, patchRequest) }
     assertEquals("[unexpected_field] is not a expected field", ex4.message)
 
     txn.requiredInfoUpdates = null
     every { txnStore.findByTransactionId(any()) } returns txn
-    val ex5 = assertThrows<BadRequestException> { sep31Service.patchTransaction(patchRequest) }
+    val ex5 =
+      assertThrows<BadRequestException> { sep31Service.patchTransaction(token, patchRequest) }
     assertEquals("Transaction (${txn.id}) is not expecting any updates", ex5.message)
 
     txn.status = "completed"
     every { txnStore.findByTransactionId(any()) } returns txn
-    val ex6 = assertThrows<BadRequestException> { sep31Service.patchTransaction(patchRequest) }
+    val ex6 =
+      assertThrows<BadRequestException> { sep31Service.patchTransaction(token, patchRequest) }
     assertEquals("transaction (id=${txn.id}) does not need update", ex6.message)
   }
 

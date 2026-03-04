@@ -32,6 +32,7 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.NotFoundException;
 import org.stellar.anchor.api.exception.Sep31MissingFieldException;
+import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
@@ -317,24 +318,14 @@ public class Sep31Service {
     Context.get().getFee().setAmount(feeStr);
   }
 
-  public Sep31GetTransactionResponse getTransaction(String id) throws AnchorException {
-    if (Objects.toString(id, "").isEmpty()) {
-      info("Empty 'id'");
-      throw new BadRequestException("'id' is empty");
-    }
-
-    Sep31Transaction txn = sep31TransactionStore.findByTransactionId(id);
-    if (txn == null) {
-      infoF("Transaction ({}) not found", id);
-      throw new NotFoundException(String.format("transaction (id=%s) not found", id));
-    }
-
-    return txn.toSep31GetTransactionResponse();
+  public Sep31GetTransactionResponse getTransaction(WebAuthJwt token, String id)
+      throws AnchorException {
+    return findAndValidateTransaction(token, id).toSep31GetTransactionResponse();
   }
 
   @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
-  public Sep31GetTransactionResponse patchTransaction(Sep31PatchTransactionRequest request)
-      throws AnchorException {
+  public Sep31GetTransactionResponse patchTransaction(
+      WebAuthJwt token, Sep31PatchTransactionRequest request) throws AnchorException {
     if (request == null) {
       infoF("request cannot be null");
       throw new BadRequestException("request cannot be null");
@@ -347,11 +338,7 @@ public class Sep31Service {
 
     Context.reset();
 
-    Sep31Transaction txn = sep31TransactionStore.findByTransactionId(request.getId());
-    if (txn == null) {
-      infoF("Transaction ({}) not found", request.getId());
-      throw new NotFoundException(String.format("transaction (id=%s) not found", request.getId()));
-    }
+    Sep31Transaction txn = findAndValidateTransaction(token, request.getId());
     Context.get().setTransaction(txn);
 
     // validate if the transaction is in the pending_transaction_info_update status
@@ -379,6 +366,36 @@ public class Sep31Service {
     // increment counter
     sep31TransactionPatchedCounter.increment();
     return response;
+  }
+
+  private Sep31Transaction findAndValidateTransaction(WebAuthJwt token, String id)
+      throws AnchorException {
+    if (token == null) {
+      info("missing SEP-10 token");
+      throw new SepNotAuthorizedException("missing token");
+    }
+
+    if (Objects.toString(id, "").isEmpty()) {
+      info("Empty 'id'");
+      throw new BadRequestException("'id' is empty");
+    }
+
+    Sep31Transaction txn = sep31TransactionStore.findByTransactionId(id);
+    if (txn == null) {
+      infoF("Transaction ({}) not found", id);
+      throw new NotFoundException(String.format("transaction (id=%s) not found", id));
+    }
+
+    StellarId creator = txn.getCreator();
+    String tokenAccount = Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
+    if (creator == null
+        || !Objects.equals(creator.getAccount(), tokenAccount)
+        || !Objects.equals(creator.getMemo(), token.getAccountMemo())) {
+      infoF("Transaction ({}) does not belong to account {}", id, token.getAccount());
+      throw new NotFoundException("transaction not found");
+    }
+
+    return txn;
   }
 
   /**
