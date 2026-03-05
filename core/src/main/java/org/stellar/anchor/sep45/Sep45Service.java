@@ -180,6 +180,10 @@ public class Sep45Service {
       throw new BadRequestException("authorization_entries is required");
     }
 
+    if (request.getAuthorizationEntries().length() > 100_000) {
+      throw new BadRequestException("authorization_entries exceeds maximum allowed size");
+    }
+
     SorobanAuthorizationEntries authEntries;
     try {
       authEntries = SorobanAuthorizationEntries.fromXdrBase64(request.getAuthorizationEntries());
