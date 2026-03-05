@@ -15,6 +15,7 @@ import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.NetUtil;
 
 public class Sep1Service implements ISep1Service {
+  private static final long MAX_TOML_SIZE = 100 * 1024;
   private final Sep1Config sep1Config;
   private String tomlValue = null;
   Counter sep1TomlAccessedCounter = Metrics.counter(SEP1_TOML_ACCESSED);
@@ -65,10 +66,10 @@ public class Sep1Service implements ISep1Service {
   }
 
   String readTomlFromFile(String path) throws IOException {
-    return FileUtil.read(Path.of(path));
+    return FileUtil.read(Path.of(path), MAX_TOML_SIZE);
   }
 
   String readTomlFromURL(String path) throws IOException {
-    return NetUtil.fetch(path);
+    return NetUtil.fetch(path, MAX_TOML_SIZE);
   }
 }

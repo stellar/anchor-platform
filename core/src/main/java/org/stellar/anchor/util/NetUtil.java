@@ -3,15 +3,23 @@ package org.stellar.anchor.util;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.jsonwebtoken.lang.Strings;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import okhttp3.Call;
+import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class NetUtil {
+  private static final long DEFAULT_MAX_RESPONSE_SIZE = 100 * 1024;
+  private static final char UTF8_BOM = '\uFEFF';
 
   /**
    * Fetches the content from the specified URL using an HTTP GET request.
@@ -25,26 +33,60 @@ public class NetUtil {
    * @throws IOException If the response is unsuccessful, or if the response body is null.
    */
   public static String fetch(String url) throws IOException {
+    return fetch(url, DEFAULT_MAX_RESPONSE_SIZE);
+  }
 
+  public static String fetch(String url, long maxSize) throws IOException {
     Request request = OkHttpUtil.buildGetRequest(url);
-    Response response = getCall(request).execute();
+    try (Response response = getCall(request).execute()) {
+      // Check if response was unsuccessful (ie not status code 2xx) and throw IOException
+      if (!response.isSuccessful()) {
+        throw new IOException(
+            "Unsuccessful response code: " + response.code() + ", message: " + response.message());
+      }
 
-    // Check if response was unsuccessful (ie not status code 2xx) and throw IOException
-    if (!response.isSuccessful()) {
-      throw new IOException(
-          "Unsuccessful response code: " + response.code() + ", message: " + response.message());
+      ResponseBody responseBody = response.body();
+      // Since fetch expects a response body, we will throw IOException if its null
+      if (responseBody == null) {
+        throw new IOException(
+            "Null response body. Response code: "
+                + response.code()
+                + ", message: "
+                + response.message());
+      }
+
+      return readResponseBodyWithLimit(responseBody, maxSize);
+    }
+  }
+
+  static String readResponseBodyWithLimit(ResponseBody responseBody, long maxSize)
+      throws IOException {
+    Charset charset = StandardCharsets.UTF_8;
+    MediaType contentType = responseBody.contentType();
+    if (contentType != null && contentType.charset() != null) {
+      charset = contentType.charset();
     }
 
-    // Since fetch expects a response body, we will throw IOException if its null
-    if (response.body() == null) {
-      throw new IOException(
-          "Null response body. Response code: "
-              + response.code()
-              + ", message: "
-              + response.message());
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    byte[] buffer = new byte[8192];
+    long totalRead = 0;
+
+    try (InputStream inputStream = responseBody.byteStream()) {
+      int read;
+      while ((read = inputStream.read(buffer)) != -1) {
+        totalRead += read;
+        if (totalRead > maxSize) {
+          throw new IOException("Response exceeds max size of " + maxSize + " bytes");
+        }
+        outputStream.write(buffer, 0, read);
+      }
     }
 
-    return response.body().string();
+    String result = new String(outputStream.toByteArray(), charset);
+    if (!result.isEmpty() && result.charAt(0) == UTF8_BOM) {
+      return result.substring(1);
+    }
+    return result;
   }
 
   @SuppressWarnings("BooleanMethodIsAlwaysInverted")
