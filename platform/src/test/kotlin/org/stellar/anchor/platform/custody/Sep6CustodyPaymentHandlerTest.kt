@@ -76,6 +76,15 @@ class Sep6CustodyPaymentHandlerTest {
         "payment received"
       )
     }
+    verify(exactly = 0) {
+      platformApiClient.notifyRefundSent(
+        txn.id,
+        payment.transactionHash,
+        payment.amount,
+        txn.amountFee,
+        txn.asset
+      )
+    }
 
     JSONAssert.assertEquals(
       custodyTransactionDbSep6WithdrawalPayment,

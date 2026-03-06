@@ -19,6 +19,7 @@ import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 import io.micrometer.core.instrument.Counter;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
 import lombok.Data;
@@ -31,6 +32,7 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.NotFoundException;
 import org.stellar.anchor.api.exception.Sep31MissingFieldException;
+import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
@@ -65,6 +67,7 @@ public class Sep31Service {
   private final ClientService clientService;
   private final AssetService assetService;
   private final RateIntegration rateIntegration;
+  private final Clock clock;
   private final Sep31InfoResponse infoResponse;
   private final EventService.Session eventSession;
   private final Counter sep31TransactionCreatedCounter = counter(SEP31_TRANSACTION_CREATED);
@@ -79,7 +82,8 @@ public class Sep31Service {
       ClientService clientService,
       AssetService assetService,
       RateIntegration rateIntegration,
-      EventService eventService) {
+      EventService eventService,
+      Clock clock) {
     debug("sep31Config:", sep31Config);
     this.languageConfig = languageConfig;
     this.sep10Config = sep10Config;
@@ -89,6 +93,7 @@ public class Sep31Service {
     this.clientService = clientService;
     this.assetService = assetService;
     this.rateIntegration = rateIntegration;
+    this.clock = clock;
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.infoResponse = sep31InfoResponseFromAssetInfoList(assetService.getAssets());
     Log.info("Sep31Service initialized.");
@@ -313,24 +318,19 @@ public class Sep31Service {
     Context.get().getFee().setAmount(feeStr);
   }
 
-  public Sep31GetTransactionResponse getTransaction(String id) throws AnchorException {
-    if (Objects.toString(id, "").isEmpty()) {
-      info("Empty 'id'");
-      throw new BadRequestException("'id' is empty");
-    }
-
-    Sep31Transaction txn = sep31TransactionStore.findByTransactionId(id);
-    if (txn == null) {
-      infoF("Transaction ({}) not found", id);
-      throw new NotFoundException(String.format("transaction (id=%s) not found", id));
-    }
-
-    return txn.toSep31GetTransactionResponse();
+  public Sep31GetTransactionResponse getTransaction(WebAuthJwt token, String id)
+      throws AnchorException {
+    return findAndValidateTransaction(token, id).toSep31GetTransactionResponse();
   }
 
   @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
-  public Sep31GetTransactionResponse patchTransaction(Sep31PatchTransactionRequest request)
-      throws AnchorException {
+  public Sep31GetTransactionResponse patchTransaction(
+      WebAuthJwt token, Sep31PatchTransactionRequest request) throws AnchorException {
+    if (token == null) {
+      info("missing SEP-10 token");
+      throw new SepNotAuthorizedException("missing token");
+    }
+
     if (request == null) {
       infoF("request cannot be null");
       throw new BadRequestException("request cannot be null");
@@ -343,11 +343,7 @@ public class Sep31Service {
 
     Context.reset();
 
-    Sep31Transaction txn = sep31TransactionStore.findByTransactionId(request.getId());
-    if (txn == null) {
-      infoF("Transaction ({}) not found", request.getId());
-      throw new NotFoundException(String.format("transaction (id=%s) not found", request.getId()));
-    }
+    Sep31Transaction txn = findAndValidateTransaction(token, request.getId());
     Context.get().setTransaction(txn);
 
     // validate if the transaction is in the pending_transaction_info_update status
@@ -375,6 +371,36 @@ public class Sep31Service {
     // increment counter
     sep31TransactionPatchedCounter.increment();
     return response;
+  }
+
+  private Sep31Transaction findAndValidateTransaction(WebAuthJwt token, String id)
+      throws AnchorException {
+    if (token == null) {
+      info("missing SEP-10 token");
+      throw new SepNotAuthorizedException("missing token");
+    }
+
+    if (Objects.toString(id, "").isEmpty()) {
+      info("Empty 'id'");
+      throw new BadRequestException("'id' is empty");
+    }
+
+    Sep31Transaction txn = sep31TransactionStore.findByTransactionId(id);
+    if (txn == null) {
+      infoF("Transaction ({}) not found", id);
+      throw new NotFoundException(String.format("transaction (id=%s) not found", id));
+    }
+
+    StellarId creator = txn.getCreator();
+    String tokenAccount = Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
+    if (creator == null
+        || !Objects.equals(creator.getAccount(), tokenAccount)
+        || !Objects.equals(creator.getMemo(), token.getAccountMemo())) {
+      infoF("Transaction ({}) does not belong to account {}", id, token.getAccount());
+      throw new NotFoundException("transaction not found");
+    }
+
+    return txn;
   }
 
   /**
@@ -442,6 +468,12 @@ public class Sep31Service {
       infoF("Quote ({}) was not found", request.getQuoteId());
       throw new BadRequestException(
           String.format("quote(id=%s) was not found.", request.getQuoteId()));
+    }
+
+    if (quote.getExpiresAt() != null && !quote.getExpiresAt().isAfter(clock.instant())) {
+      throw new BadRequestException(
+          String.format(
+              "quote(id=%s) has expired at %s", request.getQuoteId(), quote.getExpiresAt()));
     }
 
     // Check quote amounts: `post_transaction.amount == quote.sell_amount`

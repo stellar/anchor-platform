@@ -33,5 +33,9 @@ public interface JdbcSep24TransactionRepo
   List<Sep24Transaction> findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
       String webAuthAccount, String assetCode);
 
+  List<Sep24Transaction>
+      findByWebAuthAccountAndWebAuthAccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
+          String webAuthAccount, String webAuthAccountMemo, String assetCode);
+
   Page<JdbcSep24Transaction> findByStatusIn(List<String> allowedStatuses, Pageable pageable);
 }

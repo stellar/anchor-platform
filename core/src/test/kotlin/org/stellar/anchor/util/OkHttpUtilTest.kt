@@ -14,6 +14,11 @@ internal class OkHttpUtilTest {
   fun `test buildClient() ok`() {
     val client = OkHttpUtil.buildClient()
     assertFalse(client.retryOnConnectionFailure)
+    assertFalse(client.followRedirects)
+    assertFalse(client.followSslRedirects)
+    assertEquals(5_000, client.connectTimeoutMillis)
+    assertEquals(10_000, client.readTimeoutMillis)
+    assertEquals(15_000, client.callTimeoutMillis)
   }
 
   @Test
