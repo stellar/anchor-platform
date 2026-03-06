@@ -260,7 +260,6 @@ sep6:
   ## @supported_values:
   ##     self: the memo and memo type are generated in the local code, and the distribution account is used for the deposit address.
   ##          When using 'self', make sure all the stellar assets has distribution account configured.
-  ##     custody: the memo and memo type are generated through Custody API, for example Fireblocks, as well as the deposit address.
   ##     none: deposit address, memo and memo type should be provided by the business in PATCH/RPC request.
   #
   deposit_info_generator_type: self
@@ -384,7 +383,6 @@ sep24:
   ##     deposit address, memo and memo type.
   ## @supported_values:
   ##     self: the memo and memo type are generated in the local code, and the distribution account is used for the deposit address.
-  ##     custody: the memo and memo type are generated through Custody API, for example Fireblocks, as well as the deposit address.
   ##     none: deposit address, memo and memo type should be provided by the business in PATCH/RPC request.
   #
   deposit_info_generator_type: self
@@ -419,7 +417,6 @@ sep31:
   #     deposit address, memo and memo type.
   # The `deposit_info_generator_type` must be one of the following:
   #     self: the memo and memo type are generated in the local code, and the distribution account is used for the deposit address.
-  #     custody: the memo and memo type are generated through Custody API, for example Fireblocks, as well as the deposit address.
   #     none: deposit address, memo and memo type should be provided by the business in PATCH/RPC request.
   #
   deposit_info_generator_type: none
@@ -476,137 +473,6 @@ sep45:
   # This is the timeout period after the client has authenticated.
   #
   jwt_timeout: 86400
-
-######################
-## Custody Server configuration
-######################
-custody_server:
-  # The context path of the Custody server
-  context_path: /
-  # The listening port of the Custody server
-  port: 8086
-  ## @param: baseUrl
-  ## @type: string
-  ## @supported_prefixes: http:, https:
-  ## The base URL of the Custody server that implements the custody API endpoints
-  #
-  base_url: http://localhost:8086
-  ## Http Client timeouts for communication with the Custody Server in SECONDS
-  http_client:
-    connect_timeout: 10
-    read_timeout: 30
-    write_timeout: 30
-    call_timeout: 60
-  ## Authentication config for Anchor Platform and Custody Server to safely communicate,
-  ## particularly when housed in different clusters.
-  ## The receiving party should verify that an incoming request token is still valid.
-  #
-  auth:
-    ## @param: type
-    ## @supported_values: none, api_key, jwt
-    ##     none: no authentication is used
-    ##     api_key: The authentication is done using an API key added to the HTTP request header.
-    ##     jwt: The authentication is done using a JWT token added to the `Authorization` header. This token is
-    ##          generated from the secret key.
-    ##
-    ## If the type is `api_key` or `jwt`, the secret must be set by the environment variable `secret.platform_api.auth_secret`.
-    ## If the type is api_key, the secret will be used as the api_key.
-    ## If the type is jwt, the secret will be used as the jwt shared secret.
-    ##
-    ## Secrets are shared on both sides (Platform and Anchor) and are used in CallbackAPI
-    ## requests (`Platform->Anchor`) so the Anchor can ensure the party making the request
-    ## is the Platform
-    #
-    type: none
-    jwt:
-      expiration_milliseconds: 30000
-      http_header: Authorization
-    api_key:
-      http_header: X-Api-Key
-
-custody:
-  ## @param: type
-  ## @supported_values: none, fireblocks
-  ##    none: no integration with custody service
-  ##    fireblocks: enables integration with Fireclobks custody service
-  ##
-  ## If the type is `fireblocks`, @required_secrets: SECRET_CUSTODY_FIREBLOCKS_API_KEY, SECRET_CUSTODY_FIREBLOCKS_SECRET_KEY
-  #
-  type: none
-  ## Http Client timeouts for communication with custody service(fireblocks/circle/...) in SECONDS
-  http_client:
-    connect_timeout: 10
-    read_timeout: 30
-    write_timeout: 30
-    call_timeout: 60
-  ## Trustline check configuration. Is used only when custody integration is enabled
-  trustline:
-    ## @param: checkCronExpression
-    ## @type: string
-    ## Cron expression which defines how often trustline check job runs. By default, job runs every minute
-    #
-    check_cron_expression: "0 * * * * *"
-    ## @param: checkDuration
-    ## @type: integer
-    ## Determines how long (in MINUTES) trustline will be checked. By default - 1 hour (60 minutes)
-    #
-    check_duration: 60
-    ## @param: checkTimeoutMessage
-    ## @type: string
-    ## The message, that will be added to SEP transaction after check duration is exceeded
-    #
-    check_timeout_message: Trustline check timed out
-  fireblocks:
-    ## @param: baseUrl
-    ## @type: string
-    ## The base URL of the Fireblocks API
-    #
-    base_url: https://api.fireblocks.io
-    ## @param: vaultAccountId
-    ## @type: string
-    ## Default vault account ID
-    #
-    vault_account_id:
-    ## @param: public_key
-    ## @type: string
-    ## Fireblocks public key, that is used to verify a webhook signature
-    #
-    public_key: |
-
-    reconciliation:
-      ## @param: cronExpression
-      ## @type: string
-      ## Cron expression which defines how often transaction reconciliation job runs. By default, job runs every 15 minutes
-      #
-      cron_expression: "0 0/15 * * * *"
-      ## @param: maxAttempts
-      ## @type: integer
-      ## Determines how many times the transaction reconciliation job will attempt to update status of the transaction before marking it as failed
-      #
-      max_attempts: 10
-
-    retry_config:
-      ## @param: maxAttempts
-      ## @type: integer
-      ## Determines how many times the Fireblocks client will attempt to send request before marking a call as failed.
-      #
-      max_attempts: 3
-      ## @param: delay
-      ## @type: integer
-      ## Interval between Fireblocks client call attempts (in ms)
-      #
-      delay: 1000
-
-    ## @param: assetMappings
-    ## @type:  string
-    ## Defines mappings of fireblocks asset codes to stellar asset codes
-    ## Each mapping should be in a new line
-    ## Mappings should be in a format FIREBLOCKS_ASSET_CODE STELLAR_ASSET_CODE separated with space character
-    ## Example:
-    ##  XLM_USDC_T_CEKS stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
-    ##  XLM_TEST stellar:native
-    #
-    asset_mappings: |
 
 ##########################
 # Metric Configuration
@@ -852,8 +718,6 @@ data:
 rpc:
   ## Custom messages for updating transaction via RPC calls
   custom_messages:
-    ## Custody transaction failed
-    custody_transaction_failed: "The custody transaction has failed"
     ## Incoming payment received
     incoming_payment_received: "Received an incoming payment"
     ## Outgoing payment sent

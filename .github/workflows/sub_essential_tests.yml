@@ -60,7 +60,6 @@ jobs:
           sudo echo "127.0.0.1 reference-db" | sudo tee -a /etc/hosts
           sudo echo "127.0.0.1 wallet-server" | sudo tee -a /etc/hosts
           sudo echo "127.0.0.1 platform" | sudo tee -a /etc/hosts
-          sudo echo "127.0.0.1 custody-server" | sudo tee -a /etc/hosts
           sudo echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts 
 
       #############################################

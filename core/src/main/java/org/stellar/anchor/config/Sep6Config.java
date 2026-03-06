@@ -31,7 +31,6 @@ public interface Sep6Config {
 
   enum DepositInfoGeneratorType {
     SELF,
-    CUSTODY,
     NONE
   }
 }

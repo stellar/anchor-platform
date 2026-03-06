@@ -11,12 +11,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
-import org.stellar.anchor.api.custody.CustodyExceptionResponse;
 import org.stellar.anchor.api.exception.*;
-import org.stellar.anchor.api.exception.custody.CustodyBadRequestException;
-import org.stellar.anchor.api.exception.custody.CustodyNotFoundException;
-import org.stellar.anchor.api.exception.custody.CustodyServiceUnavailableException;
-import org.stellar.anchor.api.exception.custody.CustodyTooManyRequestsException;
 import org.stellar.anchor.api.sep.CustomerInfoNeededResponse;
 import org.stellar.anchor.api.sep.SepExceptionResponse;
 
@@ -65,36 +60,6 @@ public abstract class AbstractControllerExceptionHandler {
     errorF("Not implemented: {}", ex.getMessage());
     captureException(ex);
     return new SepExceptionResponse(ex.getMessage());
-  }
-
-  @ResponseStatus(HttpStatus.BAD_REQUEST)
-  @ExceptionHandler({CustodyBadRequestException.class})
-  public CustodyExceptionResponse handleCustodyBadRequest(AnchorException ex) {
-    debugF("Bad request (custody server): {}", ex.getMessage());
-    return new CustodyExceptionResponse(ex.getMessage());
-  }
-
-  @ResponseStatus(value = HttpStatus.NOT_FOUND)
-  @ExceptionHandler({CustodyNotFoundException.class})
-  public CustodyExceptionResponse handleCustodyNotFound(AnchorException ex) {
-    traceF("Resource not found (custody server): {}", ex.getMessage());
-    return new CustodyExceptionResponse(ex.getMessage());
-  }
-
-  @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
-  @ExceptionHandler({CustodyTooManyRequestsException.class})
-  public CustodyExceptionResponse handleCustodyTooManyRequestsError(AnchorException ex) {
-    errorF("Too many requests (custody server): {}", ex.getMessage());
-    captureException(ex);
-    return new CustodyExceptionResponse(ex.getMessage());
-  }
-
-  @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
-  @ExceptionHandler({CustodyServiceUnavailableException.class})
-  public CustodyExceptionResponse handleCustodyServiceUnavailableError(AnchorException ex) {
-    errorEx(ex);
-    captureException(ex);
-    return new CustodyExceptionResponse(ex.getMessage());
   }
 
   // HTTP code: 502
