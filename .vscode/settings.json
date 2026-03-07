@@ -1,0 +1,11 @@
+{
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.debug.settings.enableRunDebugCodeLens": true,
+  "java.debug.settings.hotCodeReplace": "auto",
+  "java.debug.settings.vmArgs": "",
+  "java.compile.nullAnalysis.mode": "automatic",
+  "java.configuration.runtimes": [],
+  "java.jdt.ls.java.home": "",
+  "java.import.gradle.enabled": true,
+  "java.import.gradle.wrapper.enabled": true
+}
