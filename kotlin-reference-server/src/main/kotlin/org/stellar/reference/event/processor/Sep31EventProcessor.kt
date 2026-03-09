@@ -1,6 +1,6 @@
 package org.stellar.reference.event.processor
 
-import java.util.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.platform.*
@@ -27,6 +27,7 @@ class Sep31EventProcessor(
 
   override suspend fun onTransactionCreated(event: SendEventRequest) {
     log.info { "Transaction ${event.payload.transaction!!.id} is created" }
+    val txId = event.payload.transaction!!.id
 
     val (memo, memoType) =
       if (
@@ -41,10 +42,31 @@ class Sep31EventProcessor(
         )
       }
 
+    // Step 1: wait for the transaction to be committed to the DB.
+    // The TRANSACTION_CREATED event can arrive before the DB write completes.
+    val maxRetries = 10
+    val retryDelayMs = 200L
+    for (attempt in 1..maxRetries) {
+      try {
+        platformClient.getTransaction(txId)
+        break
+      } catch (_: Exception) {
+        if (attempt == maxRetries) {
+          log.error { "[SEP31] Transaction $txId not found after $maxRetries attempts, aborting" }
+          return
+        }
+        log.warn {
+          "[SEP31] Transaction $txId not found yet (attempt $attempt/$maxRetries), retrying"
+        }
+        delay(retryDelayMs)
+      }
+    }
+
+    // Step 2: tx exists — call RPC.
     sepHelper.rpcAction(
       RpcMethod.REQUEST_ONCHAIN_FUNDS.toString(),
       RequestOnchainFundsRequest(
-        transactionId = event.payload.transaction!!.id,
+        transactionId = txId,
         message = "Transaction created",
         destinationAccount = config.appSettings.distributionWallet,
         memoType = memoType,
@@ -64,7 +86,8 @@ class Sep31EventProcessor(
           requestKyc(event)
           return
         }
-        if (transaction.transferReceivedAt != null) sendExternal(transaction.id)
+        if (transaction.transferReceivedAt != null && transaction.amountOut?.amount != null)
+          sendExternal(transaction.id)
       }
       PENDING_EXTERNAL ->
         sepHelper.rpcAction(

@@ -3,7 +3,9 @@ package org.stellar.anchor.platform.service
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
+import io.mockk.mockk
 import io.mockk.verify
+import jakarta.persistence.EntityManager
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
@@ -54,6 +56,10 @@ class RpcServiceTest {
     MockKAnnotations.init(this, relaxUnitFun = true)
     every { rpcMethodHandler.rpcMethod } returns NOTIFY_INTERACTIVE_FLOW_COMPLETED
     rpcService = RpcService(listOf(rpcMethodHandler), rpcConfig)
+    // Inject a mock EntityManager since @PersistenceContext field injection doesn't happen in tests
+    val entityManagerField = RpcService::class.java.getDeclaredField("entityManager")
+    entityManagerField.isAccessible = true
+    entityManagerField.set(rpcService, mockk<EntityManager>(relaxed = true))
   }
 
   @Test
@@ -378,7 +384,7 @@ class RpcServiceTest {
 
     JSONAssert.assertEquals(expectedResponse, gson.toJson(response), JSONCompareMode.STRICT)
 
-    verify(exactly = 1) { rpcMethodHandler.handle(RPC_PARAMS) }
+    verify(exactly = 5) { rpcMethodHandler.handle(RPC_PARAMS) }
   }
 
   @Test
