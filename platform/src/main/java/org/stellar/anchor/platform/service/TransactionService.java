@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
@@ -244,6 +245,9 @@ public class TransactionService {
     return new PatchTransactionsResponse(txnResponses);
   }
 
+  private static final int OPTIMISTIC_LOCK_MAX_RETRIES = 5;
+  private static final long OPTIMISTIC_LOCK_RETRY_DELAY_MS = 200L;
+
   @Deprecated
   private GetTransactionResponse patchTransaction(PatchTransactionRequest patch)
       throws AnchorException {
@@ -255,6 +259,40 @@ public class TransactionService {
     validateAsset("amount_in", patch.getTransaction().getAmountIn());
     validateAsset("amount_out", patch.getTransaction().getAmountOut());
 
+    for (int attempt = 1; attempt <= OPTIMISTIC_LOCK_MAX_RETRIES; attempt++) {
+      try {
+        return doPatchTransaction(patch);
+      } catch (OptimisticLockingFailureException ex) {
+        if (attempt == OPTIMISTIC_LOCK_MAX_RETRIES) {
+          Log.errorEx(
+              String.format(
+                  "Concurrent modification detected while patching transaction(id=%s) after %d attempts",
+                  patch.getTransaction().getId(), OPTIMISTIC_LOCK_MAX_RETRIES),
+              ex);
+          throw new BadRequestException(
+              "Transaction was modified by another request. Please retry.");
+        }
+        Log.warnF(
+            "Optimistic lock conflict patching transaction(id={}), attempt {}/{}",
+            patch.getTransaction().getId(),
+            attempt,
+            OPTIMISTIC_LOCK_MAX_RETRIES);
+        try {
+          Thread.sleep(OPTIMISTIC_LOCK_RETRY_DELAY_MS);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw new InternalServerErrorException(
+              "Interrupted while retrying optimistic lock conflict");
+        }
+      }
+    }
+    // Unreachable, but required by the compiler
+    throw new InternalServerErrorException("Unexpected state in patchTransaction retry loop");
+  }
+
+  @Deprecated
+  private GetTransactionResponse doPatchTransaction(PatchTransactionRequest patch)
+      throws AnchorException {
     FeeDetails feeDetails = patch.getTransaction().getFeeDetails();
 
     JdbcSepTransaction txn = queryTransactionById(patch.getTransaction().getId());

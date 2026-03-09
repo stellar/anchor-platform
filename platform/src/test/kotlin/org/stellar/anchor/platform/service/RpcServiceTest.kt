@@ -3,7 +3,9 @@ package org.stellar.anchor.platform.service
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
+import io.mockk.mockk
 import io.mockk.verify
+import jakarta.persistence.EntityManager
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
+import org.springframework.dao.OptimisticLockingFailureException
 import org.stellar.anchor.LockAndMockStatic
 import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.exception.BadRequestException
@@ -53,6 +56,10 @@ class RpcServiceTest {
     MockKAnnotations.init(this, relaxUnitFun = true)
     every { rpcMethodHandler.rpcMethod } returns NOTIFY_INTERACTIVE_FLOW_COMPLETED
     rpcService = RpcService(listOf(rpcMethodHandler), rpcConfig)
+    // Inject a mock EntityManager since @PersistenceContext field injection doesn't happen in tests
+    val entityManagerField = RpcService::class.java.getDeclaredField("entityManager")
+    entityManagerField.isAccessible = true
+    entityManagerField.set(rpcService, mockk<EntityManager>(relaxed = true))
   }
 
   @Test
@@ -342,6 +349,42 @@ class RpcServiceTest {
     JSONAssert.assertEquals(expectedResponse, gson.toJson(response), JSONCompareMode.STRICT)
 
     verify(exactly = 0) { rpcMethodHandler.handle(any()) }
+  }
+
+  @Test
+  fun `test handle optimistic locking failure`() {
+    val rpcRequest =
+      RpcRequest.builder()
+        .method(VALID_RPC_METHOD_1)
+        .jsonrpc(JSON_RPC_VERSION)
+        .id(RPC_ID)
+        .params(RPC_PARAMS)
+        .build()
+
+    every { rpcMethodHandler.handle(any()) } throws
+      OptimisticLockingFailureException("Row was updated or deleted by another transaction")
+    every { rpcConfig.batchSizeLimit } returns BATCH_SIZE_LIMIT
+
+    val response = rpcService.handle(listOf(rpcRequest))
+
+    val expectedResponse =
+      """
+    [
+      {
+        "jsonrpc": "2.0",
+        "error": {
+          "code": -32603,
+          "message": "Transaction was modified by another request. Please retry."
+        },
+        "id": 1
+      }
+    ]
+    """
+        .trimIndent()
+
+    JSONAssert.assertEquals(expectedResponse, gson.toJson(response), JSONCompareMode.STRICT)
+
+    verify(exactly = 5) { rpcMethodHandler.handle(RPC_PARAMS) }
   }
 
   @Test
