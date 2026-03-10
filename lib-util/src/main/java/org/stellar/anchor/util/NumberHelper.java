@@ -36,9 +36,16 @@ public class NumberHelper {
   public static boolean hasProperSignificantDecimals(String input, int maxDecimals) {
     try {
       BigDecimal decimal = new BigDecimal(input);
-      int scale = max(0, decimal.stripTrailingZeros().scale());
+      BigDecimal stripped = decimal.stripTrailingZeros();
+      // Reject numbers with extreme exponents (e.g., 1.0E+500000000) to prevent OOM
+      // when the number is later expanded via toPlainString or setScale.
+      int integerDigits = stripped.precision() - stripped.scale();
+      if (integerDigits > 20 || stripped.scale() > 20) {
+        return false;
+      }
+      int scale = max(0, stripped.scale());
 
-      return scale >= 0 && scale <= maxDecimals;
+      return scale <= maxDecimals;
     } catch (NumberFormatException e) {
       // If the input is not a valid number, return false
       return false;

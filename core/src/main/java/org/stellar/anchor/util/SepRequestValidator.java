@@ -44,6 +44,11 @@ public class SepRequestValidator {
       throw new BadRequestException(messagePrefix + "amount is invalid", e);
     }
 
+    int integerDigits = sAmount.precision() - sAmount.scale();
+    if (integerDigits > 20 || sAmount.scale() > 20) {
+      throw new BadRequestException(messagePrefix + "amount is invalid");
+    }
+
     if (allowZero) {
       if (sAmount.signum() < 0) {
         throw new BadRequestException(messagePrefix + "amount should be non-negative");
