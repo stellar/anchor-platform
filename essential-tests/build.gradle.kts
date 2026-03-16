@@ -43,3 +43,10 @@ tasks.test {
   exclude("**/org/stellar/anchor/platform/integrationtest/**")
   exclude("**/org/stellar/anchor/platform/e2etest/**")
 }
+
+tasks.register<JavaExec>("generateEphemeralAccounts") {
+  description = "Generate ephemeral Stellar testnet accounts for CI"
+  group = "verification"
+  classpath = sourceSets["testFixtures"].runtimeClasspath
+  mainClass.set("org.stellar.anchor.platform.EphemeralAccountSetup")
+}
