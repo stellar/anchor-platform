@@ -1,6 +1,5 @@
 package org.stellar.reference.event.processor
 
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.platform.*
@@ -42,27 +41,6 @@ class Sep31EventProcessor(
         )
       }
 
-    // Step 1: wait for the transaction to be committed to the DB.
-    // The TRANSACTION_CREATED event can arrive before the DB write completes.
-    val maxRetries = 10
-    val retryDelayMs = 200L
-    for (attempt in 1..maxRetries) {
-      try {
-        platformClient.getTransaction(txId)
-        break
-      } catch (_: Exception) {
-        if (attempt == maxRetries) {
-          log.error { "[SEP31] Transaction $txId not found after $maxRetries attempts, aborting" }
-          return
-        }
-        log.warn {
-          "[SEP31] Transaction $txId not found yet (attempt $attempt/$maxRetries), retrying"
-        }
-        delay(retryDelayMs)
-      }
-    }
-
-    // Step 2: tx exists — call RPC.
     sepHelper.rpcAction(
       RpcMethod.REQUEST_ONCHAIN_FUNDS.toString(),
       RequestOnchainFundsRequest(
