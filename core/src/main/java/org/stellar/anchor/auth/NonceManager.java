@@ -41,29 +41,13 @@ public class NonceManager {
   }
 
   /**
-   * Mark a nonce as used. If the nonce is already used, an exception is thrown.
+   * Atomically verify and consume a nonce. Returns true if the nonce was valid (exists, unused, not
+   * expired) and has been marked as used.
    *
    * @param id the nonce id
+   * @return true if the nonce was successfully verified and consumed
    */
-  public void use(String id) {
-    Nonce nonce = nonceStore.findById(id);
-    if (nonce.getUsed()) {
-      throw new RuntimeException("Nonce already used");
-    }
-
-    nonce.setUsed(true);
-    nonceStore.save(nonce);
-  }
-
-  /**
-   * Verify a nonce. A nonce is considered valid if it exists, is unused, and has not expired.
-   *
-   * @param id the nonce id
-   * @return true if the nonce is valid
-   */
-  public boolean verify(String id) {
-    Nonce nonce = nonceStore.findById(id);
-
-    return nonce != null && !nonce.getUsed() && nonce.getExpiresAt().isAfter(clock.instant());
+  public boolean verifyAndUse(String id) {
+    return nonceStore.markAsUsed(id, clock.instant()) == 1;
   }
 }

@@ -217,10 +217,9 @@ public class Sep45Service {
     // Verify the nonce is valid and consume it
     Map<String, String> argsMap = extractArgs(firstEntryArgs[0].getMap().getSCMap());
     String nonceId = argsMap.get(KEY_NONCE);
-    if (!nonceManager.verify(nonceId)) {
+    if (!nonceManager.verifyAndUse(nonceId)) {
       throw new SepValidationException("Invalid nonce");
     }
-    nonceManager.use(nonceId);
 
     InvokeHostFunctionOperation operation =
         InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
