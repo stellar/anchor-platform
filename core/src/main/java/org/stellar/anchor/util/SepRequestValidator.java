@@ -44,8 +44,7 @@ public class SepRequestValidator {
       throw new BadRequestException(messagePrefix + "amount is invalid", e);
     }
 
-    int integerDigits = sAmount.precision() - sAmount.scale();
-    if (integerDigits > 20 || sAmount.scale() > 20) {
+    if (!NumberHelper.hasReasonableMagnitude(sAmount)) {
       throw new BadRequestException(messagePrefix + "amount is invalid");
     }
 
