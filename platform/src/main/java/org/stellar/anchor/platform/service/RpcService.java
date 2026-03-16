@@ -6,8 +6,6 @@ import static java.util.stream.Collectors.toMap;
 import static org.stellar.anchor.util.Log.debugF;
 import static org.stellar.anchor.util.Log.errorEx;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import java.util.List;
 import java.util.Map;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -28,7 +26,6 @@ public class RpcService {
 
   private final Map<RpcMethod, RpcMethodHandler<?>> rpcMethodHandlerMap;
   private final RpcConfig rpcConfig;
-  @PersistenceContext private EntityManager entityManager;
 
   public RpcService(List<RpcMethodHandler<?>> rpcMethodHandlers, RpcConfig rpcConfig) {
     this.rpcMethodHandlerMap =
@@ -47,7 +44,7 @@ public class RpcService {
               final Object rpcId = rc.getId();
               try {
                 RpcUtil.validateRpcRequest(rc);
-                return RpcUtil.getRpcSuccessResponse(rpcId, processRpcCallWithRetry(rc));
+                return RpcUtil.getRpcSuccessResponse(rpcId, processRpcCall(rc));
               } catch (RpcException ex) {
                 errorEx(
                     String.format(
@@ -57,6 +54,16 @@ public class RpcService {
                 return RpcUtil.getRpcErrorResponse(rc, ex);
               } catch (BadRequestException ex) {
                 return RpcUtil.getRpcErrorResponse(rc, ex);
+              } catch (OptimisticLockingFailureException ex) {
+                errorEx(
+                    String.format(
+                        "Concurrent modification detected while processing RPC request with method[%s] and id[%s]",
+                        rc.getMethod(), rpcId),
+                    ex);
+                return RpcUtil.getRpcErrorResponse(
+                    rc,
+                    new InternalErrorException(
+                        "Transaction was modified by another request. Please re-read the transaction state and retry if appropriate."));
               } catch (NetworkException ex) {
                 var message =
                     ex.getMessage() + " Code: " + ex.getCode() + " , body: " + ex.getBody();
@@ -76,39 +83,6 @@ public class RpcService {
               }
             })
         .collect(toList());
-  }
-
-  private static final int OPTIMISTIC_LOCK_MAX_RETRIES = 5;
-  private static final long OPTIMISTIC_LOCK_RETRY_DELAY_MS = 200L;
-
-  // Retries on OptimisticLockingFailureException, which occurs when two concurrent requests
-  // modify the same transaction. All other exceptions propagate immediately.
-  private Object processRpcCallWithRetry(RpcRequest rpcCall) throws AnchorException {
-    for (int attempt = 1; attempt <= OPTIMISTIC_LOCK_MAX_RETRIES; attempt++) {
-      try {
-        return processRpcCall(rpcCall);
-      } catch (OptimisticLockingFailureException ex) {
-        if (attempt == OPTIMISTIC_LOCK_MAX_RETRIES) {
-          errorEx(
-              String.format(
-                  "Concurrent modification detected while processing RPC request with method[%s] and id[%s] after %d attempts",
-                  rpcCall.getMethod(), rpcCall.getId(), OPTIMISTIC_LOCK_MAX_RETRIES),
-              ex);
-          throw new InternalErrorException(
-              "Transaction was modified by another request. Please retry.");
-        }
-        // Clear Hibernate L1 cache so the retry loads fresh entity state from the DB
-        entityManager.clear();
-        try {
-          Thread.sleep(OPTIMISTIC_LOCK_RETRY_DELAY_MS);
-        } catch (InterruptedException ie) {
-          Thread.currentThread().interrupt();
-          throw new InternalErrorException("Interrupted while retrying optimistic lock conflict");
-        }
-      }
-    }
-    // Unreachable, but required for compilation
-    throw new InternalErrorException("Unexpected state in processRpcCallWithRetry");
   }
 
   private Object processRpcCall(RpcRequest rpcCall) throws AnchorException {

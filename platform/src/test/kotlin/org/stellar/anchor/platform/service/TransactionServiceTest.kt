@@ -1096,7 +1096,10 @@ class TransactionServiceTest {
       OptimisticLockingFailureException("Row was updated or deleted by another transaction")
 
     val ex = assertThrows<BadRequestException> { transactionService.patchTransactions(request) }
-    assertEquals("Transaction was modified by another request. Please retry.", ex.message)
+    assertEquals(
+      "Transaction was modified by another request. Please re-read the transaction state and retry if appropriate.",
+      ex.message
+    )
   }
 
   @Test

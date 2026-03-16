@@ -3,9 +3,7 @@ package org.stellar.anchor.platform.service
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
-import io.mockk.mockk
 import io.mockk.verify
-import jakarta.persistence.EntityManager
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
@@ -56,10 +54,6 @@ class RpcServiceTest {
     MockKAnnotations.init(this, relaxUnitFun = true)
     every { rpcMethodHandler.rpcMethod } returns NOTIFY_INTERACTIVE_FLOW_COMPLETED
     rpcService = RpcService(listOf(rpcMethodHandler), rpcConfig)
-    // Inject a mock EntityManager since @PersistenceContext field injection doesn't happen in tests
-    val entityManagerField = RpcService::class.java.getDeclaredField("entityManager")
-    entityManagerField.isAccessible = true
-    entityManagerField.set(rpcService, mockk<EntityManager>(relaxed = true))
   }
 
   @Test
@@ -374,7 +368,7 @@ class RpcServiceTest {
         "jsonrpc": "2.0",
         "error": {
           "code": -32603,
-          "message": "Transaction was modified by another request. Please retry."
+          "message": "Transaction was modified by another request. Please re-read the transaction state and retry if appropriate."
         },
         "id": 1
       }
@@ -384,7 +378,7 @@ class RpcServiceTest {
 
     JSONAssert.assertEquals(expectedResponse, gson.toJson(response), JSONCompareMode.STRICT)
 
-    verify(exactly = 5) { rpcMethodHandler.handle(RPC_PARAMS) }
+    verify(exactly = 1) { rpcMethodHandler.handle(RPC_PARAMS) }
   }
 
   @Test
