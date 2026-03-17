@@ -73,14 +73,14 @@ stellar tx new payment \
 echo "Adding extra-signer-1 to client-wallet..."
 stellar tx new set-options \
   --source "client-wallet" \
-  --signer-ed25519-public-key "$(stellar keys public-key extra-signer-1 -q)" \
+  --signer "$(stellar keys public-key extra-signer-1 -q)" \
   --signer-weight 1 \
   --network "$NETWORK" -q
 
 echo "Adding extra-signer-2 to client-wallet..."
 stellar tx new set-options \
   --source "client-wallet" \
-  --signer-ed25519-public-key "$(stellar keys public-key extra-signer-2 -q)" \
+  --signer "$(stellar keys public-key extra-signer-2 -q)" \
   --signer-weight 1 \
   --network "$NETWORK" -q
 
