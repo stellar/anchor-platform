@@ -179,7 +179,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_RESPONSES =
                 "receiver": { "id": "%RECEIVER_ID%" }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": "2"
@@ -254,7 +254,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_RESPONSES =
                 "receiver": { "id": "%RECEIVER_ID%" }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": "3"
@@ -376,7 +376,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
                 "receiver": { "id": "%RECEIVER_ID%" }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": "1"
@@ -429,7 +429,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
                 "receiver": { "id": "%RECEIVER_ID%" }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": "2"
@@ -482,7 +482,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
                 "receiver": { "id": "%RECEIVER_ID%" }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": "3"
@@ -535,7 +535,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
                 "receiver": { "id": "%RECEIVER_ID%" }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": "4"
@@ -589,7 +589,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
                 "receiver": { "id": "%RECEIVER_ID%" }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": "5"
@@ -644,7 +644,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
                 "receiver": { "id": "%RECEIVER_ID%" }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": "6"

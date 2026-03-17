@@ -4,29 +4,17 @@ on:
   workflow_dispatch:
   workflow_call:
 
-concurrency:
-  group: ap-test-job
-  cancel-in-progress: false
-
 jobs:
   essential_tests:
     name: Run Essential Tests (Integration Tests, Faster End-2-End Tests, Unit Tests, and Stellar Validation Tools)
     runs-on: ubuntu-latest
     env:
-      # Anchor Platform secrets
+      # Anchor Platform secrets (off-chain only — kept fixed)
       SECRET_SEP10_SIGNING_SEED: ${{ vars.SECRET_SEP10_SIGNING_SEED }}
-      APP__PAYMENT_SIGNING_SEED: ${{ vars.APP__PAYMENT_SIGNING_SEED }}
       SECRET__KEY: ${{ vars.SECRET__KEY }}
 
-      # Test secrets
-      TEST_CLIENT_WALLET_SECRET: ${{ vars.TEST_CLIENT_WALLET_SECRET }}
+      # Smart wallet contract (pre-deployed — kept fixed)
       TEST_CLIENT_SMART_WALLET_ACCOUNT: ${{ vars.TEST_CLIENT_SMART_WALLET_ACCOUNT }}
-      TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET: ${{ vars.TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET }}
-      TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET: ${{ vars.TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET }}
-      TEST_WITHDRAW_FUND_CLIENT_SECRET_1: ${{ vars.TEST_WITHDRAW_FUND_CLIENT_SECRET_1 }}
-      TEST_WITHDRAW_FUND_CLIENT_SECRET_2: ${{ vars.TEST_WITHDRAW_FUND_CLIENT_SECRET_2 }}
-      TEST_DEPOSIT_FUND_CLIENT_SECRET_1: ${{ vars.TEST_DEPOSIT_FUND_CLIENT_SECRET_1 }}
-      TEST_DEPOSIT_FUND_CLIENT_SECRET_2: ${{ vars.TEST_DEPOSIT_FUND_CLIENT_SECRET_2 }}
     steps:
       #############################################
       # Setup JDK 17
@@ -65,6 +53,29 @@ jobs:
 
       #############################################
 
+
+      - name: Install Stellar CLI
+        run: |
+          curl -fsSL https://github.com/stellar/stellar-cli/raw/main/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Generate ephemeral test accounts
+        env:
+          TEST_USDC_ISSUER_SECRET: ${{ vars.TEST_USDC_ISSUER_SECRET }}
+        run: |
+          bash /home/runner/anchor-platform/.github/scripts/generate_ephemeral_accounts.sh
+          cat /tmp/ephemeral-accounts.env >> $GITHUB_ENV
+
+      - name: Patch config files with ephemeral accounts
+        run: |
+          CONFIG_DIR=/home/runner/anchor-platform/service-runner/src/main/resources/config
+          sed -i "s/GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF/$DISTRIBUTION_ACCOUNT_PUBKEY/g" \
+            $CONFIG_DIR/assets.yaml $CONFIG_DIR/reference-config.yaml \
+            $CONFIG_DIR/stellar.host.docker.internal.toml $CONFIG_DIR/stellar.localhost.toml
+          sed -i "s/GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG/$CLIENT_WALLET_PUBKEY/g" \
+            $CONFIG_DIR/clients.yaml
+          sed -i "s/GCSGSR6KQQ5BP2FXVPWRL6SWPUSFWLVONLIBJZUKTVQB5FYJFVL6XOXE/$DISTRIBUTION_ACCOUNT_PUBKEY/g" \
+            $CONFIG_DIR/stellar.host.docker.internal.toml $CONFIG_DIR/stellar.localhost.toml
 
       - name: Pull Stellar Validation Tests Docker Image
         run: docker pull stellar/anchor-tests:latest &

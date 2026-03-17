@@ -297,19 +297,19 @@ private const val EXPECTED_RPC_RESPONSE =
               "started_at": "2024-06-25T20:36:17.651248Z",
               "updated_at": "2024-06-25T20:36:18.683321Z",
               "message": "test message",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "request_client_ip_address": "127.0.0.1",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": 1
@@ -340,19 +340,19 @@ private const val EXPECTED_RPC_BATCH_RESPONSE =
               "started_at": "2024-06-25T20:37:50.883071Z",
               "updated_at": "2024-06-25T20:37:51.908872Z",
               "message": "test message",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "request_client_ip_address": "127.0.0.1",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": 1
@@ -377,20 +377,20 @@ private const val EXPECTED_RPC_BATCH_RESPONSE =
               "started_at": "2024-06-25T20:37:50.883071Z",
               "updated_at": "2024-06-25T20:37:52.922103Z",
               "message": "test message",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "1",
               "client_name": "referenceCustodial",
               "request_client_ip_address": "127.0.0.1",              
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": 2
@@ -411,19 +411,19 @@ private const val EXPECTED_GET_TRANSACTION_BY_RPC_RESPONSE =
             },
             "started_at": "2024-08-07T20:36:18.344467Z",
             "destination_account":
-"GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+"%CLIENT_WALLET_ACCOUNT%",
             "client_name": "referenceCustodial",
             "request_client_ip_address": "127.0.0.1",
             "customers": {
               "sender": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               },
               "receiver": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "creator": {
-              "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+              "account": "%CLIENT_WALLET_ACCOUNT%"
             }
           }
           """

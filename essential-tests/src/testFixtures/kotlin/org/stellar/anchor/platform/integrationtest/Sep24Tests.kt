@@ -112,6 +112,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   fun `test Sep24 deposit`() = runBlocking {
     printRequest("POST /transactions/withdraw/interactive")
     val depositRequest = GsonUtils.fromJsonToMap(depositRequestJson)
+    depositRequest["account"] = walletKeyPair.address
     val response =
       anchor
         .sep24()
@@ -128,7 +129,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertNotNull(savedDepositTxn.moreInfoUrl)
     assertEquals("INCOMPLETE", savedDepositTxn.status.name)
     assertEquals(
-      "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+      walletKeyPair.address,
       savedDepositTxn.to?.address,
     )
     // check the returning Sep24InteractiveUrlJwt

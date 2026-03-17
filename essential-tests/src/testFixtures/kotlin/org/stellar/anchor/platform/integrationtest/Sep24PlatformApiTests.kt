@@ -237,7 +237,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "started_at": "2024-06-25T20:18:34.205694Z",
               "updated_at": "2024-06-25T20:18:35.274007Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -262,7 +262,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "started_at": "2024-06-25T20:18:34.205694Z",
               "updated_at": "2024-06-25T20:18:36.290857Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -306,7 +306,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -444,7 +444,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "started_at": "2024-06-25T20:19:48.818752Z",
               "updated_at": "2024-06-25T20:19:49.849169Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -469,7 +469,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "started_at": "2024-06-25T20:19:48.818752Z",
               "updated_at": "2024-06-25T20:19:50.877987Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial"
             },
             "id": "2"
@@ -494,7 +494,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "started_at": "2024-06-25T20:19:48.818752Z",
               "updated_at": "2024-06-25T20:19:51.894806Z",
               "message": "test message 3",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -520,7 +520,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "started_at": "2024-06-25T20:19:48.818752Z",
               "updated_at": "2024-06-25T20:19:52.914135Z",
               "message": "test message 4",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -546,7 +546,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "started_at": "2024-06-25T20:19:48.818752Z",
               "updated_at": "2024-06-25T20:19:53.940893Z",
               "message": "test message 5",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -590,7 +590,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -704,7 +704,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:21:24.266127Z",
               "updated_at": "2024-06-25T20:21:25.299818Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -729,7 +729,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:21:24.266127Z",
               "updated_at": "2024-06-25T20:21:26.312882Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -755,7 +755,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:21:24.266127Z",
               "updated_at": "2024-06-25T20:21:27.330339Z",
               "message": "test message 3",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -781,7 +781,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:21:24.266127Z",
               "updated_at": "2024-06-25T20:21:28.350485Z",
               "message": "test message 4",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -825,7 +825,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -961,7 +961,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPO
               "started_at": "2024-06-25T20:24:52.680611Z",
               "updated_at": "2024-06-25T20:24:53.700986Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -986,7 +986,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPO
               "started_at": "2024-06-25T20:24:52.680611Z",
               "updated_at": "2024-06-25T20:24:54.714524Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -1024,7 +1024,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPO
                   }
                 ]
               },
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -1062,7 +1062,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPO
                   }
                 ]
               },
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -1118,7 +1118,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPO
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -1204,7 +1204,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "updated_at": "2024-06-25T20:26:20.153836Z",
               "message": "test message 1",
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1254,7 +1254,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1305,7 +1305,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
               "memo_type": "id",
@@ -1403,7 +1403,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
               "updated_at": "2024-06-25T20:27:30.616647Z",
               "message": "test message 1",
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1453,7 +1453,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1503,7 +1503,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
               "memo_type": "id",
@@ -1555,7 +1555,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
               "memo_type": "id",
@@ -1593,7 +1593,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
               "updated_at": "2024-06-25T20:28:42.430584Z",
               "message": "test message 1",
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1643,7 +1643,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1693,7 +1693,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
               "memo_type": "id",
@@ -1745,7 +1745,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
               "memo_type": "id",
@@ -1903,7 +1903,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "updated_at": "2024-06-25T20:29:53.671452Z",
               "message": "test message 1",
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1953,7 +1953,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -2028,7 +2028,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -2594,7 +2594,7 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
         "asset": "iso4217:USD"
       },
       "message": "test message 10",
-      "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+      "destination_account": "%CLIENT_WALLET_ACCOUNT%",
       "client_name": "referenceCustodial"
     },
     "id": "10"
@@ -2632,7 +2632,7 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
         "asset": "iso4217:USD"
       },
       "message": "test message 12",
-      "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+      "destination_account": "%CLIENT_WALLET_ACCOUNT%"
     },
     "id": "12"
   },
@@ -2678,7 +2678,7 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
         "asset": "iso4217:USD"
       },
       "message": "test message 15",
-      "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+      "destination_account": "%CLIENT_WALLET_ACCOUNT%",
       "external_transaction_id": "ext-123456"
     },
     "id": "15"
@@ -2743,13 +2743,13 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
                 "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
               },
               "payment_type": "payment",
-              "source_account": "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
-              "destination_account": "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
+              "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+              "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
             }
           ]
         }
       ],
-      "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+      "destination_account": "%CLIENT_WALLET_ACCOUNT%",
       "external_transaction_id": "ext-123456"
     },
     "id": "19"
