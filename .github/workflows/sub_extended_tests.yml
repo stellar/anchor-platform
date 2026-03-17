@@ -53,12 +53,16 @@ jobs:
 
       #############################################
 
+      - name: Install Stellar CLI
+        run: |
+          curl -fsSL https://github.com/stellar/stellar-cli/releases/latest/download/stellar-cli-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
       - name: Generate ephemeral test accounts
         env:
           TEST_USDC_ISSUER_SECRET: ${{ vars.TEST_USDC_ISSUER_SECRET }}
         run: |
-          cd /home/runner/anchor-platform
-          ./gradlew :essential-tests:generateEphemeralAccounts
+          bash /home/runner/anchor-platform/.github/scripts/generate_ephemeral_accounts.sh
           cat /tmp/ephemeral-accounts.env >> $GITHUB_ENV
 
       - name: Patch config files with ephemeral accounts
