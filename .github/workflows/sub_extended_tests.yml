@@ -55,8 +55,8 @@ jobs:
 
       - name: Install Stellar CLI
         run: |
-          curl -fsSL https://github.com/stellar/stellar-cli/releases/latest/download/stellar-cli-installer.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          curl -fsSL https://github.com/stellar/stellar-cli/raw/main/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Generate ephemeral test accounts
         env:
