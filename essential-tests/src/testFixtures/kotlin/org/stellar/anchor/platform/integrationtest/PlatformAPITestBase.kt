@@ -51,8 +51,11 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
       result = result.replace(search, replace)
     }
 
-    // Inject the client wallet account
+    // Inject the client wallet account and distribution account
     result = result.replace("%CLIENT_WALLET_ACCOUNT%", walletKeyPair.address)
+    val distributionAccount =
+      KeyPair.fromSecretSeed(config.get("app..payment.signing.seed")).accountId
+    result = result.replace("%DISTRIBUTION_ACCOUNT%", distributionAccount)
 
     for ((search, replace) in getTestPaymentValues()) {
       result = result.replace(search, replace)

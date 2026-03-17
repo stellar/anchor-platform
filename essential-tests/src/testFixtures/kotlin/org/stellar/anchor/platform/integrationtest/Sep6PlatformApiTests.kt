@@ -208,7 +208,7 @@ class Sep6PlatformApiTests : PlatformApiTests() {
   }
 
   private fun `test sep6 deposit flow`(actionRequests: String, actionResponse: String) {
-    val depositRequest = gson.fromJson(SEP_6_DEPOSIT_FLOW_REQUEST, HashMap::class.java)
+    val depositRequest = gson.fromJson(inject(SEP_6_DEPOSIT_FLOW_REQUEST), HashMap::class.java)
 
     val customer =
       sep12Client.putCustomer(
@@ -222,7 +222,8 @@ class Sep6PlatformApiTests : PlatformApiTests() {
   }
 
   private fun `test sep6 deposit-exchange flow`(actionRequests: String, actionResponse: String) {
-    val depositRequest = gson.fromJson(SEP_6_DEPOSIT_EXCHANGE_FLOW_REQUEST, HashMap::class.java)
+    val depositRequest =
+      gson.fromJson(inject(SEP_6_DEPOSIT_EXCHANGE_FLOW_REQUEST), HashMap::class.java)
 
     val customer =
       sep12Client.putCustomer(

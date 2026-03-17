@@ -1204,7 +1204,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "updated_at": "2024-06-25T20:26:20.153836Z",
               "message": "test message 1",
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1254,7 +1254,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1305,7 +1305,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "ZjdiMzQ0YmUtZjNlZC00NWYwLThlNWItYWQ0NjAzMzY=",
               "memo_type": "id",
@@ -1403,7 +1403,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
               "updated_at": "2024-06-25T20:27:30.616647Z",
               "message": "test message 1",
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1453,7 +1453,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1503,7 +1503,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
               "memo_type": "id",
@@ -1555,7 +1555,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "NGQwMDk3NTgtODg3My00OGE1LWE4M2UtYTllOGU0OGM=",
               "memo_type": "id",
@@ -1593,7 +1593,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
               "updated_at": "2024-06-25T20:28:42.430584Z",
               "message": "test message 1",
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1643,7 +1643,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1693,7 +1693,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
               "memo_type": "id",
@@ -1745,7 +1745,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "ZWZhNWI5YWUtNWJiNS00ZmQyLThiZjQtOWY5M2NmNmY=",
               "memo_type": "id",
@@ -1903,7 +1903,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "updated_at": "2024-06-25T20:29:53.671452Z",
               "message": "test message 1",
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -1953,7 +1953,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -2028,7 +2028,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
                 }
               ],
               "source_account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
-              "destination_account": "GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF",
+              "destination_account": "%DISTRIBUTION_ACCOUNT%",
               "memo": "NmUyZTcyYjktNzIyMC00OGRiLTkwZDItNDkyOWU1OWU=",
               "memo_type": "id",
               "client_name": "referenceCustodial"
@@ -2743,8 +2743,8 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
                 "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
               },
               "payment_type": "payment",
-              "source_account": "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
-              "destination_account": "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
+              "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+              "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
             }
           ]
         }
