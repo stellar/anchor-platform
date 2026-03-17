@@ -60,6 +60,30 @@ stellar tx new payment \
   --amount 100000000 \
   --network "$NETWORK" -q
 
+echo "Minting 100 USDC to client-wallet..."
+CW_PUBKEY=$(stellar keys public-key client-wallet -q)
+stellar tx new payment \
+  --source "$TEST_USDC_ISSUER_SECRET" \
+  --destination "$CW_PUBKEY" \
+  --asset "$USDC_ASSET" \
+  --amount 1000000000 \
+  --network "$NETWORK" -q
+
+# Add extra signers to client-wallet for multi-sig tests
+echo "Adding extra-signer-1 to client-wallet..."
+stellar tx new set-options \
+  --source "client-wallet" \
+  --signer-ed25519-public-key "$(stellar keys public-key extra-signer-1 -q)" \
+  --signer-weight 1 \
+  --network "$NETWORK" -q
+
+echo "Adding extra-signer-2 to client-wallet..."
+stellar tx new set-options \
+  --source "client-wallet" \
+  --signer-ed25519-public-key "$(stellar keys public-key extra-signer-2 -q)" \
+  --signer-weight 1 \
+  --network "$NETWORK" -q
+
 # Write env file
 CLIENT_WALLET_PUBKEY=$(stellar keys public-key client-wallet -q)
 DISTRIBUTION_ACCOUNT_PUBKEY="$DIST_PUBKEY"

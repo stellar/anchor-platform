@@ -250,12 +250,20 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     // check if the patched transactions are as expected
     var afterPatch = platformApiClient.getTransaction(savedTxn.transaction.id)
     assertEquals(afterPatch.id, savedTxn.transaction.id)
-    JSONAssert.assertEquals(expectedAfterPatch, json(afterPatch), LENIENT)
+    JSONAssert.assertEquals(
+      expectedAfterPatch.replace("%CLIENT_WALLET_ACCOUNT%", walletKeyPair.address),
+      json(afterPatch),
+      LENIENT
+    )
 
     // Test patch idempotency
     afterPatch = platformApiClient.getTransaction(savedTxn.transaction.id)
     assertEquals(afterPatch.id, savedTxn.transaction.id)
-    JSONAssert.assertEquals(expectedAfterPatch, json(afterPatch), LENIENT)
+    JSONAssert.assertEquals(
+      expectedAfterPatch.replace("%CLIENT_WALLET_ACCOUNT%", walletKeyPair.address),
+      json(afterPatch),
+      LENIENT
+    )
   }
 }
 
@@ -432,7 +440,7 @@ private const val expectedAfterPatch =
     }
   },
   "creator": {
-    "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+    "account": "%CLIENT_WALLET_ACCOUNT%"
   }
 }
 """

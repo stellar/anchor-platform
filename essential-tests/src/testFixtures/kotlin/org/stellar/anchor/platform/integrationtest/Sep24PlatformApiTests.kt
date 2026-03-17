@@ -176,7 +176,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_REQUESTS =
       },
       "amount_out": {
         "amount": "95",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "5",
@@ -231,13 +231,13 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:18:34.205694Z",
               "updated_at": "2024-06-25T20:18:35.274007Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -256,13 +256,13 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:18:34.205694Z",
               "updated_at": "2024-06-25T20:18:36.290857Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -282,7 +282,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:18:34.205694Z",
@@ -306,7 +306,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -331,7 +331,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_REQUESTS =
       },
       "amount_out": {
         "amount": "95",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "5",
@@ -355,7 +355,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_REQUESTS =
       },
       "amount_out": {
         "amount": "9",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "1.11",
@@ -438,13 +438,13 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:19:48.818752Z",
               "updated_at": "2024-06-25T20:19:49.849169Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -463,13 +463,13 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:19:48.818752Z",
               "updated_at": "2024-06-25T20:19:50.877987Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial"
             },
             "id": "2"
@@ -488,13 +488,13 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:19:48.818752Z",
               "updated_at": "2024-06-25T20:19:51.894806Z",
               "message": "test message 3",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -514,13 +514,13 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:19:48.818752Z",
               "updated_at": "2024-06-25T20:19:52.914135Z",
               "message": "test message 4",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -540,13 +540,13 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:19:48.818752Z",
               "updated_at": "2024-06-25T20:19:53.940893Z",
               "message": "test message 5",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -566,7 +566,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:19:48.818752Z",
@@ -590,7 +590,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES 
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -704,7 +704,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:21:24.266127Z",
               "updated_at": "2024-06-25T20:21:25.299818Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -729,7 +729,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:21:24.266127Z",
               "updated_at": "2024-06-25T20:21:26.312882Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -755,7 +755,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:21:24.266127Z",
               "updated_at": "2024-06-25T20:21:27.330339Z",
               "message": "test message 3",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -781,7 +781,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:21:24.266127Z",
               "updated_at": "2024-06-25T20:21:28.350485Z",
               "message": "test message 4",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -825,7 +825,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -961,7 +961,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPO
               "started_at": "2024-06-25T20:24:52.680611Z",
               "updated_at": "2024-06-25T20:24:53.700986Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial"
             },
             "id": "1"
@@ -986,7 +986,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPO
               "started_at": "2024-06-25T20:24:52.680611Z",
               "updated_at": "2024-06-25T20:24:54.714524Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -1024,7 +1024,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPO
                   }
                 ]
               },
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -1062,7 +1062,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPO
                   }
                 ]
               },
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -1118,7 +1118,7 @@ private const val SEP_24_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPO
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial"
             },
@@ -1139,7 +1139,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_REQUESTS =
       "message": "test message 1",
       "amount_in": {
         "amount": "100",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "amount_out": {
         "amount": "95",
@@ -1147,7 +1147,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_REQUESTS =
       },
       "fee_details": {
         "total": "5",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "amount_expected": {
         "amount": "100"
@@ -1189,16 +1189,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "status": "pending_user_transfer_start",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:26:19.128384Z",
               "updated_at": "2024-06-25T20:26:20.153836Z",
@@ -1220,16 +1220,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "status": "pending_anchor",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:26:19.128384Z",
               "updated_at": "2024-06-25T20:26:21.203470Z",
@@ -1270,16 +1270,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "status": "completed",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:26:19.128384Z",
               "updated_at": "2024-06-25T20:26:22.218796Z",
@@ -1328,7 +1328,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
       "message": "test message 1",
       "amount_in": {
         "amount": "100",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "amount_out": {
         "amount": "95",
@@ -1336,7 +1336,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
       },
       "fee_details": {
         "total": "5",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "amount_expected": {
         "amount": "100"
@@ -1388,16 +1388,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
               "status": "pending_user_transfer_start",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:27:29.594082Z",
               "updated_at": "2024-06-25T20:27:30.616647Z",
@@ -1419,16 +1419,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
               "status": "pending_anchor",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:27:29.594082Z",
               "updated_at": "2024-06-25T20:27:31.668161Z",
@@ -1469,16 +1469,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
               "status": "pending_external",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:27:29.594082Z",
               "updated_at": "2024-06-25T20:27:32.684285Z",
@@ -1520,16 +1520,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION
               "status": "completed",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:27:29.594082Z",
               "updated_at": "2024-06-25T20:27:33.698792Z",
@@ -1578,16 +1578,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
               "status": "pending_user_transfer_start",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:28:41.409930Z",
               "updated_at": "2024-06-25T20:28:42.430584Z",
@@ -1609,16 +1609,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
               "status": "pending_anchor",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:28:41.409930Z",
               "updated_at": "2024-06-25T20:28:43.477431Z",
@@ -1659,16 +1659,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
               "status": "pending_user_transfer_complete",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:28:41.409930Z",
               "updated_at": "2024-06-25T20:28:44.490809Z",
@@ -1710,16 +1710,16 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RES
               "status": "completed",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:28:41.409930Z",
               "updated_at": "2024-06-25T20:28:45.505773Z",
@@ -1768,7 +1768,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_REQ
       "message": "test message 1",
       "amount_in": {
         "amount": "100",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "amount_out": {
         "amount": "95",
@@ -1776,7 +1776,7 @@ private const val SEP_24_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_REQ
       },
       "fee_details": {
         "total": "5",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "amount_expected": {
         "amount": "100"
@@ -1828,7 +1828,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_REQUESTS =
       "message": "test message 1",
       "amount_in": {
         "amount": "100",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "amount_out": {
         "amount": "95",
@@ -1836,7 +1836,7 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_REQUESTS =
       },
       "fee_details": {
         "total": "5",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "amount_expected": {
         "amount": "100"
@@ -1864,11 +1864,11 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_REQUESTS =
         "id": "123456",
         "amount": {
           "amount": 95,
-          "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+          "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
         },
         "amount_fee": {
           "amount": 5,
-          "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+          "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
         }
       }
     }
@@ -1888,16 +1888,16 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "status": "pending_user_transfer_start",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:29:52.637982Z",
               "updated_at": "2024-06-25T20:29:53.671452Z",
@@ -1919,16 +1919,16 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "status": "pending_anchor",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:29:52.637982Z",
               "updated_at": "2024-06-25T20:29:54.713859Z",
@@ -1969,16 +1969,16 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "status": "refunded",
               "amount_expected": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:29:52.637982Z",
               "updated_at": "2024-06-25T20:29:55.727918Z",
@@ -1987,11 +1987,11 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "refunds": {
                 "amount_refunded": {
                   "amount": "100",
-                  "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                  "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
                 },
                 "amount_fee": {
                   "amount": "5",
-                  "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                  "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
                 },
                 "payments": [
                   {
@@ -1999,11 +1999,11 @@ private const val SEP_24_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
                     "id_type": "stellar",
                     "amount": {
                       "amount": "95",
-                      "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                      "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
                     },
                     "fee": {
                       "amount": "5",
-                      "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                      "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
                     }
                   }
                 ]
@@ -2048,7 +2048,7 @@ private const val SEP_24_WITHDRAW_FLOW_REQUEST =
   """{
     "amount": "10",
     "asset_code": "USDC",
-    "asset_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+    "asset_issuer": "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
     "account": "GAIUIZPHLIHQEMNJGSZKCEUWHAZVGUZDBDMO2JXNAJZZZVNSVHQCEWJ4",
     "lang": "en"
 }"""
@@ -2069,7 +2069,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "95",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "5",
@@ -2092,7 +2092,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "95",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "5",
@@ -2116,7 +2116,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "95",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "5",
@@ -2140,7 +2140,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "95",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "5",
@@ -2164,7 +2164,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "9",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "1.11",
@@ -2184,7 +2184,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       "message": "test message 6",
       "amount_in": {
         "amount": "10.11",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "amount_out": {
         "amount": "9",
@@ -2192,7 +2192,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "fee_details": {
         "total": "1.11",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "amount_expected": {
         "amount": "10.11"
@@ -2212,7 +2212,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "9",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5iso4217:USD"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPiso4217:USD"
       },
       "fee_details": {
         "total": "1.11",
@@ -2236,7 +2236,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "0",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5iso4217:USD"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPiso4217:USD"
       },
       "fee_details": {
         "total": "1.11",
@@ -2260,7 +2260,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "9",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "1.11",
@@ -2284,7 +2284,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "95",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "5",
@@ -2308,7 +2308,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "95",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "5",
@@ -2332,7 +2332,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "9",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "1.11",
@@ -2356,7 +2356,7 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
       },
       "amount_out": {
         "amount": "9",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "1.11",
@@ -2455,11 +2455,11 @@ private const val VALIDATIONS_AND_ERRORS_REQUESTS =
         "id": "123456",
         "amount": {
           "amount": "989.11",
-          "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+          "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
         },
         "amount_fee": {
           "amount": "1",
-          "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+          "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
         }
       }
     }
@@ -2548,7 +2548,7 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
     "error": {
       "id": "%TX_ID%",
       "code": -32602,
-      "message": "'stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5iso4217:USD' is not a supported asset."
+      "message": "'stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPiso4217:USD' is not a supported asset."
     },
     "id": "7"
   },
@@ -2557,7 +2557,7 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
     "error": {
       "id": "%TX_ID%",
       "code": -32602,
-      "message": "'stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5iso4217:USD' is not a supported asset."
+      "message": "'stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPiso4217:USD' is not a supported asset."
     },
     "id": "8"
   },
@@ -2587,14 +2587,14 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
       },
       "amount_out": {
         "amount": "95",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "5",
         "asset": "iso4217:USD"
       },
       "message": "test message 10",
-      "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+      "destination_account": "%CLIENT_WALLET_ACCOUNT%",
       "client_name": "referenceCustodial"
     },
     "id": "10"
@@ -2625,14 +2625,14 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
       },
       "amount_out": {
         "amount": "9",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "1.11",
         "asset": "iso4217:USD"
       },
       "message": "test message 12",
-      "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+      "destination_account": "%CLIENT_WALLET_ACCOUNT%"
     },
     "id": "12"
   },
@@ -2671,14 +2671,14 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
       },
       "amount_out": {
         "amount": "9",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "1.11",
         "asset": "iso4217:USD"
       },
       "message": "test message 15",
-      "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+      "destination_account": "%CLIENT_WALLET_ACCOUNT%",
       "external_transaction_id": "ext-123456"
     },
     "id": "15"
@@ -2727,7 +2727,7 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
       },
       "amount_out": {
         "amount": "9",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": {
         "total": "1.11",
@@ -2749,7 +2749,7 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
           ]
         }
       ],
-      "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+      "destination_account": "%CLIENT_WALLET_ACCOUNT%",
       "external_transaction_id": "ext-123456"
     },
     "id": "19"

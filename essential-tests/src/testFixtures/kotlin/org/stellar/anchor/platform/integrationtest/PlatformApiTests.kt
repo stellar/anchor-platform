@@ -232,7 +232,7 @@ const val CUSTOMER_ID_KEY = "CUSTOMER_ID"
 private const val RPC_DEPOSIT_REQUEST =
   """{
     "asset_code": "USDC",
-    "asset_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+    "asset_issuer": "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
     "lang": "en"
   }"""
 
@@ -246,7 +246,7 @@ private const val REQUEST_OFFCHAIN_FUNDS_PARAMS =
     },
     "amount_out": {
         "amount": "0.9",
-        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     },
     "fee_details": {
         "total": "0.1",
@@ -286,30 +286,30 @@ private const val EXPECTED_RPC_RESPONSE =
               "status": "pending_user_transfer_start",
               "amount_expected": {
                 "amount": "1",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": { "amount": "1", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "0.9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "0.1", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:36:17.651248Z",
               "updated_at": "2024-06-25T20:36:18.683321Z",
               "message": "test message",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "request_client_ip_address": "127.0.0.1",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": 1
@@ -329,30 +329,30 @@ private const val EXPECTED_RPC_BATCH_RESPONSE =
               "status": "pending_user_transfer_start",
               "amount_expected": {
                 "amount": "1",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": { "amount": "1", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "0.9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "0.1", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:37:50.883071Z",
               "updated_at": "2024-06-25T20:37:51.908872Z",
               "message": "test message",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "request_client_ip_address": "127.0.0.1",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": 1
@@ -366,31 +366,31 @@ private const val EXPECTED_RPC_BATCH_RESPONSE =
               "status": "pending_anchor",
               "amount_expected": {
                 "amount": "1",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_in": { "amount": "1", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "0.9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "0.1", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:37:50.883071Z",
               "updated_at": "2024-06-25T20:37:52.922103Z",
               "message": "test message",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "1",
               "client_name": "referenceCustodial",
               "request_client_ip_address": "127.0.0.1",              
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               },
               "creator": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "id": 2
@@ -407,23 +407,23 @@ private const val EXPECTED_GET_TRANSACTION_BY_RPC_RESPONSE =
             "status": "incomplete",
             "amount_expected": {
               "asset":
-"stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+"stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
             },
             "started_at": "2024-08-07T20:36:18.344467Z",
             "destination_account":
-"GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+"%CLIENT_WALLET_ACCOUNT%",
             "client_name": "referenceCustodial",
             "request_client_ip_address": "127.0.0.1",
             "customers": {
               "sender": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               },
               "receiver": {
-                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                "account": "%CLIENT_WALLET_ACCOUNT%"
               }
             },
             "creator": {
-              "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+              "account": "%CLIENT_WALLET_ACCOUNT%"
             }
           }
           """

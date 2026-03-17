@@ -10,8 +10,6 @@ import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
-import org.skyscreamer.jsonassert.JSONAssert
-import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.config.StellarNetworkConfig.ProviderType.HORIZON
 import org.stellar.anchor.ledger.Horizon
@@ -33,7 +31,7 @@ import org.stellar.sdk.xdr.TransactionEnvelope
 @Execution(ExecutionMode.SAME_THREAD)
 class LedgerClientTests : IntegrationTestBase(TestConfig()) {
   private val stellarNetworkConfig = mockk<StellarNetworkConfig>()
-  private val trustlineTestAccount = "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+  private val trustlineTestAccount = walletKeyPair.address
   val gson = GsonUtils.getInstance()!!
   private lateinit var sourceKeypair: KeyPair
   private lateinit var destKeyPair: KeyPair
@@ -47,7 +45,7 @@ class LedgerClientTests : IntegrationTestBase(TestConfig()) {
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
 
     sourceKeypair = KeyPair.random()
-    destKeyPair = KeyPair.fromAccountId("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG")
+    destKeyPair = KeyPair.fromAccountId(walletKeyPair.address)
     prepareAccount(Server(stellarNetworkConfig.horizonUrl), sourceKeypair)
   }
 
@@ -55,7 +53,9 @@ class LedgerClientTests : IntegrationTestBase(TestConfig()) {
   @MethodSource("getLedgerClient")
   fun `test getAccount()`(ledgerClient: LedgerClient) {
     val account = ledgerClient.getAccount(trustlineTestAccount)
-    JSONAssert.assertEquals(expectedAccount, gson.toJson(account), JSONCompareMode.LENIENT)
+    assertEquals(trustlineTestAccount, account.accountId)
+    assertNotNull(account.signers)
+    assertTrue(account.signers.isNotEmpty())
   }
 
   @ParameterizedTest
@@ -147,33 +147,3 @@ class LedgerClientTests : IntegrationTestBase(TestConfig()) {
     }
   }
 }
-
-private val expectedAccount =
-  """
-{
-  "accountId": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
-  "thresholds": {
-    "low": 0,
-    "medium": 0,
-    "high": 0
-  },
-  "signers": [
-    {
-      "key": "GATEYCIMJZ2F6Y437QSYH4XFQ6HLD5YP4MBJZFFPZVEQDJOY4QTCB7BB",
-      "type": "SIGNER_KEY_TYPE_ED25519",
-      "weight": 1
-    },
-    {
-      "key": "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O",
-      "type": "SIGNER_KEY_TYPE_ED25519",
-      "weight": 1
-    },
-    {
-      "key": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
-      "type": "SIGNER_KEY_TYPE_ED25519",
-      "weight": 1
-    }
-  ]
-}  
-"""
-    .trimIndent()

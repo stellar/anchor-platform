@@ -37,7 +37,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     const val TEST_PAYMENT_MEMO = "22bf7341574e4b1082516a2e84a8"
     const val TEST_PAYMENT_DEST_ACCOUNT = "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
     const val TEST_PAYMENT_ASSET_CIRCLE_USDC =
-      "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+      "USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
 
     // custody deposit address
     const val CUSTODY_DEST_ACCOUNT = "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
@@ -50,6 +50,9 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     for ((search, replace) in replacements) {
       result = result.replace(search, replace)
     }
+
+    // Inject the client wallet account
+    result = result.replace("%CLIENT_WALLET_ACCOUNT%", walletKeyPair.address)
 
     for ((search, replace) in getTestPaymentValues()) {
       result = result.replace(search, replace)
@@ -141,7 +144,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
 
     // send test payment of 1 USDC from distribution account to the test receiver account
     val usdcAsset =
-      Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+      Asset.create(null, "USDC", "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP")
         as AssetTypeCreditAlphaNum
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
     info(
@@ -220,7 +223,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
   private fun sendTestPaymentToHorizon(server: Server) {
     // send test payment of 1 USDC from distribution account to the test receiver account
     val usdcAsset =
-      Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+      Asset.create(null, "USDC", "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP")
         as AssetTypeCreditAlphaNum
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
 

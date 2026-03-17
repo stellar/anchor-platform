@@ -253,7 +253,7 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_REQUESTS =
               },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": {
                 "total": "5",
@@ -307,7 +307,7 @@ private val SEP_6_DEPOSIT_WITH_PENDING_EXTERNAL_FLOW_ACTION_REQUESTS =
               },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": {
                 "total": "5",
@@ -376,20 +376,20 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:02:31.003419Z",
               "updated_at": "2024-06-25T20:02:32.055853Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -410,22 +410,22 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:02:31.003419Z",
               "updated_at": "2024-06-25T20:02:33.085143Z",
               "transfer_received_at": "2023-07-04T12:34:56Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -446,7 +446,7 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:02:31.003419Z",
@@ -471,15 +471,15 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -506,20 +506,20 @@ private val SEP_6_DEPOSIT_WITH_PENDING_EXTERNAL_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:02:31.003419Z",
               "updated_at": "2024-06-25T20:02:32.055853Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -551,22 +551,22 @@ private val SEP_6_DEPOSIT_WITH_PENDING_EXTERNAL_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:02:31.003419Z",
               "updated_at": "2024-06-25T20:02:33.085143Z",
               "transfer_received_at": "2023-07-04T12:34:56Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -587,7 +587,7 @@ private val SEP_6_DEPOSIT_WITH_PENDING_EXTERNAL_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:02:31.003419Z",
@@ -612,15 +612,15 @@ private val SEP_6_DEPOSIT_WITH_PENDING_EXTERNAL_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -648,20 +648,20 @@ private const val SEP_6_DEPOSIT_EXCHANGE_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:05:21.747241Z",
               "updated_at": "2024-06-25T20:05:22.776951Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -682,22 +682,22 @@ private const val SEP_6_DEPOSIT_EXCHANGE_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:05:21.747241Z",
               "updated_at": "2024-06-25T20:05:23.796201Z",
               "transfer_received_at": "2023-07-04T12:34:56Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -718,7 +718,7 @@ private const val SEP_6_DEPOSIT_EXCHANGE_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "100", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "95",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "5", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:05:21.747241Z",
@@ -743,15 +743,15 @@ private const val SEP_6_DEPOSIT_EXCHANGE_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -787,7 +787,7 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_REQUESTS =
               },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": {
                 "total": "1.11",
@@ -871,14 +871,14 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES =
               "started_at": "2024-06-25T20:07:15.112397Z",
               "updated_at": "2024-06-25T20:07:16.135912Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -899,20 +899,20 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:07:15.112397Z",
               "updated_at": "2024-06-25T20:07:16.200042Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -933,22 +933,22 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:07:15.112397Z",
               "updated_at": "2024-06-25T20:07:17.224307Z",
               "transfer_received_at": "2023-07-04T12:34:56Z",
               "message": "test message 3",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -969,22 +969,22 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:07:15.112397Z",
               "updated_at": "2024-06-25T20:07:18.259066Z",
               "transfer_received_at": "2023-07-04T12:34:56Z",
               "message": "test message 4",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1005,22 +1005,22 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:07:15.112397Z",
               "updated_at": "2024-06-25T20:07:19.304664Z",
               "transfer_received_at": "2023-07-04T12:34:56Z",
               "message": "test message 5",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1041,7 +1041,7 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES =
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:07:15.112397Z",
@@ -1066,15 +1066,15 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_TRUST_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1099,7 +1099,7 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUESTS
               },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": {
                 "total": "1.11",
@@ -1183,20 +1183,20 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONSE
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:09:35.672365Z",
               "updated_at": "2024-06-25T20:09:36.699649Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1217,22 +1217,22 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONSE
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:09:35.672365Z",
               "updated_at": "2024-06-25T20:09:37.713378Z",
               "transfer_received_at": "2023-07-04T12:34:56Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1253,22 +1253,22 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONSE
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:09:35.672365Z",
               "updated_at": "2024-06-25T20:09:38.732764Z",
               "transfer_received_at": "2023-07-04T12:34:56Z",
               "message": "test message 3",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1289,22 +1289,22 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONSE
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:09:35.672365Z",
               "updated_at": "2024-06-25T20:09:39.766277Z",
               "transfer_received_at": "2023-07-04T12:34:56Z",
               "message": "test message 4",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1325,7 +1325,7 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONSE
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:09:35.672365Z",
@@ -1350,15 +1350,15 @@ private const val SEP_6_DEPOSIT_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONSE
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1383,7 +1383,7 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_REQUES
               },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": {
                 "total": "1.11",
@@ -1489,20 +1489,20 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPON
               "amount_in": { "amount": "10.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:11:02.407205Z",
               "updated_at": "2024-06-25T20:11:03.439769Z",
               "message": "test message 1",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1523,22 +1523,22 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPON
               "amount_in": { "amount": "1000.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:11:02.407205Z",
               "updated_at": "2024-06-25T20:11:04.458865Z",
               "transfer_received_at": "2023-07-04T12:34:56Z",
               "message": "test message 2",
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1559,7 +1559,7 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPON
               "amount_in": { "amount": "1000.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:11:02.407205Z",
@@ -1578,15 +1578,15 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPON
                   }
                 ]
               },
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1607,7 +1607,7 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPON
               "amount_in": { "amount": "1000.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:11:02.407205Z",
@@ -1626,15 +1626,15 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPON
                   }
                 ]
               },
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1655,7 +1655,7 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPON
               "amount_in": { "amount": "1000.11", "asset": "iso4217:USD" },
               "amount_out": {
                 "amount": "9",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "fee_details": { "total": "1.11", "asset": "iso4217:USD" },
               "started_at": "2024-06-25T20:11:02.407205Z",
@@ -1692,15 +1692,15 @@ private const val SEP_6_DEPOSIT_COMPLETE_SHORT_PARTIAL_REFUND_FLOW_ACTION_RESPON
                   ]
                 }
               ],
-              "destination_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "destination_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1786,16 +1786,16 @@ private const val SEP_6_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "started_at": "2024-06-25T20:12:42.295731Z",
               "updated_at": "2024-06-25T20:12:43.318713Z",
               "message": "test message 1",
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "YWEyNDVlMjgtZGIyYS00YmRjLThkODgtYzExYmJhM2Y=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1843,16 +1843,16 @@ private const val SEP_6_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "YWEyNDVlMjgtZGIyYS00YmRjLThkODgtYzExYmJhM2Y=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1901,17 +1901,17 @@ private const val SEP_6_WITHDRAW_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "YWEyNDVlMjgtZGIyYS00YmRjLThkODgtYzExYmJhM2Y=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -1947,16 +1947,16 @@ private const val SEP_6_WITHDRAW_EXCHANGE_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
               "started_at": "2024-06-25T20:14:07.562913Z",
               "updated_at": "2024-06-25T20:14:08.587470Z",
               "message": "test message 1",
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "MjMwYzFlNjgtZTc3MC00ZTI5LTlhNDktNWM3OGJmZGY=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2004,16 +2004,16 @@ private const val SEP_6_WITHDRAW_EXCHANGE_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "MjMwYzFlNjgtZTc3MC00ZTI5LTlhNDktNWM3OGJmZGY=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2062,17 +2062,17 @@ private const val SEP_6_WITHDRAW_EXCHANGE_COMPLETE_SHORT_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "MjMwYzFlNjgtZTc3MC00ZTI5LTlhNDktNWM3OGJmZGY=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2093,7 +2093,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
               "message": "test message 1",
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": {
                 "amount": "95",
@@ -2101,7 +2101,7 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
               },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_expected": {
                 "amount": "100"
@@ -2158,26 +2158,26 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:15:25.028960Z",
               "updated_at": "2024-06-25T20:15:26.050724Z",
               "message": "test message 1",
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "MTIxYmNmNjctN2IxYy00N2IwLTg1NDktZWU0ZGY4ODg=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2197,12 +2197,12 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:15:25.028960Z",
               "updated_at": "2024-06-25T20:15:27.109470Z",
@@ -2225,16 +2225,16 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "MTIxYmNmNjctN2IxYy00N2IwLTg1NDktZWU0ZGY4ODg=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2254,12 +2254,12 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:15:25.028960Z",
               "updated_at": "2024-06-25T20:15:28.131905Z",
@@ -2282,17 +2282,17 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "MTIxYmNmNjctN2IxYy00N2IwLTg1NDktZWU0ZGY4ODg=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2312,12 +2312,12 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
               },
               "amount_in": {
                 "amount": "100",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "amount_out": { "amount": "95", "asset": "iso4217:USD" },
               "fee_details": {
                 "total": "5",
-                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
               },
               "started_at": "2024-06-25T20:15:25.028960Z",
               "updated_at": "2024-06-25T20:15:29.175950Z",
@@ -2341,17 +2341,17 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_EXTERNAL_FLOW_ACTION_
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "MTIxYmNmNjctN2IxYy00N2IwLTg1NDktZWU0ZGY4ODg=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2446,16 +2446,16 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RESP
               "started_at": "2024-06-25T19:55:51.246352Z",
               "updated_at": "2024-06-25T19:55:52.305301Z",
               "message": "test message 1",
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "MjJkMmM1MjEtMmQ4MS00ZmIxLWE0ZGItZjhjMDdiZjg=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2503,16 +2503,16 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RESP
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "MjJkMmM1MjEtMmQ4MS00ZmIxLWE0ZGItZjhjMDdiZjg=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2560,17 +2560,17 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RESP
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "MjJkMmM1MjEtMmQ4MS00ZmIxLWE0ZGItZjhjMDdiZjg=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2619,17 +2619,17 @@ private const val SEP_6_WITHDRAW_COMPLETE_FULL_VIA_PENDING_USER_FLOW_ACTION_RESP
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "external_transaction_id": "ext-123456",
               "memo": "MjJkMmM1MjEtMmQ4MS00ZmIxLWE0ZGItZjhjMDdiZjg=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2726,16 +2726,16 @@ private const val SEP_6_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
               "started_at": "2024-06-25T20:17:11.692327Z",
               "updated_at": "2024-06-25T20:17:12.718879Z",
               "message": "test message 1",
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "ZGU5YmVmZGMtOGFlNy00ZWJkLWFkYWYtNGE5YjcxOWI=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2783,16 +2783,16 @@ private const val SEP_6_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "ZGU5YmVmZGMtOGFlNy00ZWJkLWFkYWYtNGE5YjcxOWI=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2865,16 +2865,16 @@ private const val SEP_6_WITHDRAW_FULL_REFUND_FLOW_ACTION_RESPONSES =
                   ]
                 }
               ],
-              "source_account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+              "source_account": "%CLIENT_WALLET_ACCOUNT%",
               "memo": "ZGU5YmVmZGMtOGFlNy00ZWJkLWFkYWYtNGE5YjcxOWI=",
               "memo_type": "id",
               "client_name": "referenceCustodial",
               "customers": {
                 "sender": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 },
                 "receiver": {
-                  "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+                  "account": "%CLIENT_WALLET_ACCOUNT%"
                 }
               }
             },
@@ -2906,7 +2906,7 @@ private const val SEP_6_DEPOSIT_FLOW_REQUEST =
   """
         {
           "asset_code": "USDC",
-          "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+          "account": "%CLIENT_WALLET_ACCOUNT%",
           "amount": "1",
           "type": "SWIFT"
         }
@@ -2918,7 +2918,7 @@ private const val SEP_6_DEPOSIT_EXCHANGE_FLOW_REQUEST =
           "destination_asset": "USDC",
           "source_asset": "iso4217:USD",
           "amount": "1",
-          "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+          "account": "%CLIENT_WALLET_ACCOUNT%",
           "type": "SWIFT"
         }
       """
