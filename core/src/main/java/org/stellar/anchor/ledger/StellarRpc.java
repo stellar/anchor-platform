@@ -61,13 +61,13 @@ public class StellarRpc implements LedgerClient {
             .addInterceptor(new ClientIdentificationInterceptor())
             .addInterceptor(
                 chain -> {
-                  okhttp3.Request request = chain.request();
-                  chain
-                      .request()
-                      .newBuilder()
-                      .addHeader(
-                          rpcAuth.getHeaderConfig().getName(), secretConfig.getRpcAuthSecret())
-                      .build();
+                  okhttp3.Request request =
+                      chain
+                          .request()
+                          .newBuilder()
+                          .addHeader(
+                              rpcAuth.getHeaderConfig().getName(), secretConfig.getRpcAuthSecret())
+                          .build();
                   return chain.proceed(request);
                 })
             .connectTimeout(10, TimeUnit.SECONDS)
