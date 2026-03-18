@@ -59,11 +59,6 @@ class Sep31PlatformApiTests : PlatformApiTests() {
         SENDER_ID_KEY to senderCustomer!!.id,
       )
 
-    inject(
-      SEP_31_RECEIVE_FLOW_REQUEST,
-      RECEIVER_ID_KEY to receiverCustomer.id,
-      SENDER_ID_KEY to senderCustomer.id,
-    )
     val receiveRequest = gson.fromJson(receiveRequestJson, Sep31PostTransactionRequest::class.java)
     val receiveResponse = sep31Client.postTransaction(receiveRequest)
 
