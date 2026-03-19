@@ -81,6 +81,9 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
       Sep24Transaction txn = txnRepo.findOneByTransactionId(tr.getPagingId());
       if (txn != null) {
         olderThan = txn.getStartedAt();
+      } else {
+        throw new SepValidationException(
+            String.format("invalid paging_id field: %s", tr.getPagingId()));
       }
     }
 

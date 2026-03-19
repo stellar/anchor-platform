@@ -52,6 +52,22 @@ class JdbcSep6TransactionStoreTest {
   }
 
   @Test
+  fun `findTransactions with zero or negative limit uses default`() {
+    val request = GetTransactionsRequest.builder().assetCode("USDC").limit(0).build()
+
+    every { txnRepo.findTransactionsWithFilters(any(), any(), any(), any(), any(), any()) } returns
+      emptyList()
+
+    store.findTransactions("GACCOUNT", null, request)
+
+    val pageableSlot = slot<Pageable>()
+    verify {
+      txnRepo.findTransactionsWithFilters(any(), any(), any(), any(), any(), capture(pageableSlot))
+    }
+    assertEquals(TransactionQueryLimits.DEFAULT_LIMIT, pageableSlot.captured.pageSize)
+  }
+
+  @Test
   fun `findTransactions caps limit at MAX_LIMIT`() {
     val request = GetTransactionsRequest.builder().assetCode("USDC").limit(50000).build()
 
