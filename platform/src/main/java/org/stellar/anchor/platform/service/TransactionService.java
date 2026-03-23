@@ -348,7 +348,7 @@ public class TransactionService {
           break;
       }
     } catch (OptimisticLockingFailureException ex) {
-      throw new BadRequestException("Transaction was modified by another request. Please retry.");
+      throw new BadRequestException("Transaction was modified by another request. Please re-read the transaction state and retry if appropriate.");
     }
 
     return PlatformTransactionHelper.toGetTransactionResponse(txn, assetService);
