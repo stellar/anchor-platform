@@ -138,7 +138,7 @@ After the docker compose start and starting all servers, you can run the essenti
 
 ### Starting the servers with a specific test profile
 
-`export TEST_PROFILE_NAME=rpc && ./gradlew startServersWithTestProfile`
+`export TEST_PROFILE_NAME=default && ./gradlew startServersWithTestProfile`
 
 ## Set up the Git Hooks
 
@@ -198,7 +198,6 @@ Several IntelliJ run configurations are provided to make it easier to run the pr
 
 - `Docker - Run Dev Stack - Kafka, Postgres, SEP24 Reference UI`: runs the development stack locally, using `docker-compose`.
 - `Test Profile: default`: runs the tests with the default profile.
-- `Test Profile: rpc`: runs the tests with the rpc profile.
 - `Test Profile: auth-apikey-platform`: runs the tests with the auth-apikey-platform profile.
 - `Test Profile: auth-jwt-platform`: runs the tests with the auth-jwt-platform profile.
 - `Test Profile: host-docker-internal`: runs the tests with the host-docker-internal profile.
@@ -216,7 +215,6 @@ There are several test profiles that can be used to start the Anchor platform se
 the `service-runner/src/main/resources/profiles` folder.
 
 - `default`: starts all servers with the most commonly used configuration.
-- `rpc`: starts all servers with the RPC enabled.
 - `auth-apikey-platform`: starts the platform servers with the API key authentication enabled.
 - `auth-jwt-platform`: starts the platform servers with the JWT authentication enabled.
 - `deployment`: starts all servers so that all SEPs can be tested using the demo wallet.
@@ -250,9 +248,9 @@ If you would like to debug the unit tests or the end-to-end tests, there are two
 - Check if there are previous docker containers running on your machine. If there are, please stop and delete them.
 - Navigate to the directory to the project folder
 - `./gradlew dockerComposeStart` to start the development stack.
-- `export TEST_PROFILE_NAME=rpc && ./gradlew startServersWithTestProfile` to start the servers with `rpc`. You can also
+- `export TEST_PROFILE_NAME=default && ./gradlew startServersWithTestProfile` to start the servers. You can also
   choose other test profile name by changing the value of `TEST_PROFILE_NAME`.
-- `./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.RpcTestSuite`
+- `./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.End2EndTestSuite`
 
 ## Running the Tests From Gradle in IntelliJ
 
