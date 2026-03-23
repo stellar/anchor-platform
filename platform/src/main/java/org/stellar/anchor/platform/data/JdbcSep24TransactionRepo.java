@@ -10,7 +10,6 @@ import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.PagingAndSortingRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.lang.NonNull;
-import org.stellar.anchor.sep24.Sep24Transaction;
 
 public interface JdbcSep24TransactionRepo
     extends CrudRepository<JdbcSep24Transaction, String>,

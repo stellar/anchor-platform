@@ -10,7 +10,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.PagingAndSortingRepository;
 import org.springframework.data.repository.query.Param;
-import org.stellar.anchor.sep6.Sep6Transaction;
 
 public interface JdbcSep6TransactionRepo
     extends CrudRepository<JdbcSep6Transaction, String>,
