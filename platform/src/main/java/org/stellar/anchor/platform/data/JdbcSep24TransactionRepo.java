@@ -27,19 +27,6 @@ public interface JdbcSep24TransactionRepo
   JdbcSep24Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
       String withdrawAnchorAccount, String memo, String status);
 
-  JdbcSep24Transaction findOneByToAccountAndFromAccountAndStatus(
-      String toAccount, String fromAccount, String status);
-
-  JdbcSep24Transaction findFirstByToAccountAndFromAccountAndStatusOrderByStartedAtDesc(
-      String toAccount, String fromAccount, String status);
-
-  List<Sep24Transaction> findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
-      String webAuthAccount, String assetCode);
-
-  List<Sep24Transaction>
-      findByWebAuthAccountAndWebAuthAccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
-          String webAuthAccount, String webAuthAccountMemo, String assetCode);
-
   @Query(
       "SELECT t FROM JdbcSep24Transaction t WHERE t.webAuthAccount = :account"
           + " AND t.requestAssetCode = :assetCode"

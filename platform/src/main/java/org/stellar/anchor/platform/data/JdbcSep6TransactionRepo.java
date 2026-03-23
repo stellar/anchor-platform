@@ -29,13 +29,6 @@ public interface JdbcSep6TransactionRepo
   JdbcSep6Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
       String withdrawAnchorAccount, String memo, String status);
 
-  List<Sep6Transaction> findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
-      String webAuthAccount, String requestAssetCode);
-
-  List<Sep6Transaction>
-      findByWebAuthAccountAndWebAuthAccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
-          String webAuthAccount, String webAuthAccountMemo, String requestAssetCode);
-
   @Query(
       "SELECT t FROM JdbcSep6Transaction t WHERE t.webAuthAccount = :account"
           + " AND t.requestAssetCode = :assetCode"
