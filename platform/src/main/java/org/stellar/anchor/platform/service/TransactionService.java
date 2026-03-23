@@ -248,6 +248,22 @@ public class TransactionService {
     validateAsset("amount_in", patch.getTransaction().getAmountIn());
     validateAsset("amount_out", patch.getTransaction().getAmountOut());
 
+    try {
+      return doPatchTransaction(patch);
+    } catch (OptimisticLockingFailureException ex) {
+      Log.errorEx(
+          String.format(
+              "Concurrent modification detected while patching transaction(id=%s)",
+              patch.getTransaction().getId()),
+          ex);
+      throw new BadRequestException(
+          "Transaction was modified by another request. Please re-read the transaction state and retry if appropriate.");
+    }
+  }
+
+  @Deprecated
+  private GetTransactionResponse doPatchTransaction(PatchTransactionRequest patch)
+      throws AnchorException {
     FeeDetails feeDetails = patch.getTransaction().getFeeDetails();
 
     JdbcSepTransaction txn = queryTransactionById(patch.getTransaction().getId());

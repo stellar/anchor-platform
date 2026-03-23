@@ -212,7 +212,6 @@ public class Sep31Service {
     Context.get().setTransaction(txn);
     updateAmounts();
 
-    // TODO: open the connection with DB and only commit/save after publishing the event:
     Context.get().setTransaction(sep31TransactionStore.save(txn));
     txn = Context.get().getTransaction();
 

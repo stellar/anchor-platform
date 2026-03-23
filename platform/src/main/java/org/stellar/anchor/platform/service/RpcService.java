@@ -8,6 +8,7 @@ import static org.stellar.anchor.util.Log.errorEx;
 
 import java.util.List;
 import java.util.Map;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.rpc.InternalErrorException;
@@ -53,6 +54,16 @@ public class RpcService {
                 return RpcUtil.getRpcErrorResponse(rc, ex);
               } catch (BadRequestException ex) {
                 return RpcUtil.getRpcErrorResponse(rc, ex);
+              } catch (OptimisticLockingFailureException ex) {
+                errorEx(
+                    String.format(
+                        "Concurrent modification detected while processing RPC request with method[%s] and id[%s]",
+                        rc.getMethod(), rpcId),
+                    ex);
+                return RpcUtil.getRpcErrorResponse(
+                    rc,
+                    new InternalErrorException(
+                        "Transaction was modified by another request. Please re-read the transaction state and retry if appropriate."));
               } catch (NetworkException ex) {
                 var message =
                     ex.getMessage() + " Code: " + ex.getCode() + " , body: " + ex.getBody();

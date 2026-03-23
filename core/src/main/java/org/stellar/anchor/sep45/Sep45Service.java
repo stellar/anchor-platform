@@ -180,6 +180,10 @@ public class Sep45Service {
       throw new BadRequestException("authorization_entries is required");
     }
 
+    if (request.getAuthorizationEntries().length() > 100_000) {
+      throw new BadRequestException("authorization_entries exceeds maximum allowed size");
+    }
+
     SorobanAuthorizationEntries authEntries;
     try {
       authEntries = SorobanAuthorizationEntries.fromXdrBase64(request.getAuthorizationEntries());
@@ -213,10 +217,9 @@ public class Sep45Service {
     // Verify the nonce is valid and consume it
     Map<String, String> argsMap = extractArgs(firstEntryArgs[0].getMap().getSCMap());
     String nonceId = argsMap.get(KEY_NONCE);
-    if (!nonceManager.verify(nonceId)) {
+    if (!nonceManager.verifyAndUse(nonceId)) {
       throw new SepValidationException("Invalid nonce");
     }
-    nonceManager.use(nonceId);
 
     InvokeHostFunctionOperation operation =
         InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(

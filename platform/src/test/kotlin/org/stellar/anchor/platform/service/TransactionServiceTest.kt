@@ -15,6 +15,7 @@ import org.junit.jupiter.params.provider.NullSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode.LENIENT
+import org.springframework.dao.OptimisticLockingFailureException
 import org.stellar.anchor.api.exception.AnchorException
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.NotFoundException
@@ -946,6 +947,33 @@ class TransactionServiceTest {
       }
     """
       .trimIndent()
+
+  @Test
+  fun `test patchTransaction throws BadRequestException on optimistic locking failure`() {
+    val txId = "testTxId"
+    val tx = JdbcSep24Transaction()
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    tx.kind = "deposit"
+    val data = PlatformTransactionData()
+    data.id = txId
+    data.memo = "12345"
+    data.memoType = "id"
+    data.status = SepTransactionStatus.PENDING_ANCHOR
+    val request =
+      PatchTransactionsRequest.builder().records(listOf(PatchTransactionRequest(data))).build()
+
+    every { sep31TransactionStore.findByTransactionId(any()) } returns null
+    every { sep6TransactionStore.findByTransactionId(any()) } returns null
+    every { sep24TransactionStore.findByTransactionId(any()) } returns tx
+    every { sep24TransactionStore.save(any()) } throws
+      OptimisticLockingFailureException("Row was updated or deleted by another transaction")
+
+    val ex = assertThrows<BadRequestException> { transactionService.patchTransactions(request) }
+    assertEquals(
+      "Transaction was modified by another request. Please re-read the transaction state and retry if appropriate.",
+      ex.message
+    )
+  }
 
   @Test
   fun `patch transaction with bad body`() {

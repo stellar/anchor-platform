@@ -72,8 +72,7 @@ class Sep45ServiceTest {
     every { sep45Config.webAuthContractId } returns TEST_CONTRACT_ID
 
     every { nonceManager.create(300) } returns nonce
-    every { nonceManager.verify(any()) } returns true
-    every { nonceManager.use(any()) } answers {}
+    every { nonceManager.verifyAndUse(any()) } returns true
     every { nonce.id } returns "nonce-id"
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns passphrase
     every { stellarRpc.latestLedger } returns GetLatestLedgerResponse("id", 23, 123455)
