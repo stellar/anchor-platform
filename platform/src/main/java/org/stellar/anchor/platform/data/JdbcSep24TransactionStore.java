@@ -1,10 +1,15 @@
 package org.stellar.anchor.platform.data;
 
+import static org.stellar.anchor.util.TransactionQueryLimits.DEFAULT_LIMIT;
+import static org.stellar.anchor.util.TransactionQueryLimits.MAX_LIMIT;
+
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.sep.sep24.GetTransactionsRequest;
@@ -64,28 +69,9 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
   public List<Sep24Transaction> findTransactions(
       String accountId, String accountMemo, GetTransactionsRequest tr)
       throws SepValidationException {
-    List<Sep24Transaction> txns;
-    if (accountMemo == null) {
-      txns =
-          txnRepo.findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
-              accountId, tr.getAssetCode());
-    } else {
-      txns =
-          txnRepo.findByWebAuthAccountAndWebAuthAccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
-              accountId, accountMemo, tr.getAssetCode());
-      // Backward compatibility for legacy rows that may have stored account:memo in
-      // web_auth_account and left web_auth_account_memo empty.
-      if (txns.isEmpty()) {
-        txns =
-            txnRepo.findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
-                accountId + ":" + accountMemo, tr.getAssetCode());
-      }
-    }
-
-    // TODO: This should be replaced by Couchbase query
-    int limit = Integer.MAX_VALUE;
+    int limit = DEFAULT_LIMIT;
     if (tr.getLimit() != null && tr.getLimit() > 0) {
-      limit = tr.getLimit();
+      limit = Math.min(tr.getLimit(), MAX_LIMIT);
     }
 
     Instant noOlderThan = Instant.EPOCH;
@@ -95,6 +81,9 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
       Sep24Transaction txn = txnRepo.findOneByTransactionId(tr.getPagingId());
       if (txn != null) {
         olderThan = txn.getStartedAt();
+      } else {
+        throw new SepValidationException(
+            String.format("invalid paging_id field: %s", tr.getPagingId()));
       }
     }
 
@@ -107,18 +96,36 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
       }
     }
 
-    final Instant finalNoOlderThan = noOlderThan;
-    final Instant finalOlderThan = olderThan;
+    Pageable pageable = PageRequest.of(0, limit);
 
-    txns =
-        txns.stream()
-            .filter(txn -> (tr.getKind() == null || tr.getKind().equals(txn.getKind())))
-            .filter(txn -> (txn.getStartedAt().isAfter(finalNoOlderThan)))
-            .filter(txn -> (txn.getStartedAt().isBefore(finalOlderThan)))
-            .limit(limit)
-            .collect(Collectors.toList());
-
-    return txns;
+    if (accountMemo == null) {
+      return new ArrayList<>(
+          txnRepo.findTransactionsWithFilters(
+              accountId, tr.getAssetCode(), tr.getKind(), noOlderThan, olderThan, pageable));
+    } else {
+      List<JdbcSep24Transaction> txns =
+          txnRepo.findTransactionsWithMemoAndFilters(
+              accountId,
+              accountMemo,
+              tr.getAssetCode(),
+              tr.getKind(),
+              noOlderThan,
+              olderThan,
+              pageable);
+      // Backward compatibility for legacy rows that may have stored account:memo in
+      // web_auth_account and left web_auth_account_memo empty.
+      if (txns.isEmpty()) {
+        txns =
+            txnRepo.findTransactionsWithFilters(
+                accountId + ":" + accountMemo,
+                tr.getAssetCode(),
+                tr.getKind(),
+                noOlderThan,
+                olderThan,
+                pageable);
+      }
+      return new ArrayList<>(txns);
+    }
   }
 
   @Override
