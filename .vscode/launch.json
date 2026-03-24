@@ -1,0 +1,205 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Sep Server: default",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunSepServer",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "java",
+      "name": "Platform Server: default",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunPlatformServer",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "java",
+      "name": "Custody Server: custody",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunCustodyServer",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "java",
+      "name": "Event Processing Server: default",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunEventProcessingServer",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "java",
+      "name": "Horizon Observer: default",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunStellarObserver",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "java",
+      "name": "Soroban Observer: default",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunStellarObserver",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "stellar_network.rpc_url": "https://soroban-testnet.stellar.org"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Reference Server: default",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunKotlinReferenceServer",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "default"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Wallet Reference Server: default",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunWalletServer",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "java",
+      "name": "Docker - Run Dev Stack - Kafka, Postgres, SEP24 Reference UI",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunDockerDevStack",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: default",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: default - horizon",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "default-horizon"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: auth-apikey-custody",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "auth-apikey-custody"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: auth-apikey-platform",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "auth-apikey-platform"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: auth-jwt-custody",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "auth-jwt-custody"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: auth-jwt-platform",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "auth-jwt-platform"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: custody",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "custody"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: deployment",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "deployment"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: host.docker.internal",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: kafka-sasl-ssl",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "kafka-sasl-ssl"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: rpc",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "rpc"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Test Profile: soroban-rpc-default",
+      "request": "launch",
+      "mainClass": "org.stellar.anchor.platform.run_profiles.RunTestProfile",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TEST_PROFILE_NAME": "soroban-rpc-default"
+      }
+    }
+  ]
+}
