@@ -12,7 +12,6 @@ import org.stellar.anchor.TestConstants.Companion.TEST_CLIENT_NAME
 import org.stellar.anchor.TestConstants.Companion.TEST_HOME_DOMAIN
 import org.stellar.anchor.auth.JwtService.*
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
-import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.setupMock
 
@@ -28,14 +27,11 @@ internal class JwtServiceTest {
   }
 
   lateinit var secretConfig: SecretConfig
-  lateinit var custodySecretConfig: CustodySecretConfig
 
   @BeforeEach
   fun setup() {
     secretConfig = mockk()
-    custodySecretConfig = mockk()
     secretConfig.setupMock()
-    custodySecretConfig.setupMock()
   }
 
   @ValueSource(classes = [Sep10Jwt::class, Sep45Jwt::class])
@@ -43,7 +39,7 @@ internal class JwtServiceTest {
   fun `test apply WebAuthJwt encoding and decoding and make sure the original values are not changed`(
     clazz: Class<out WebAuthJwt>
   ) {
-    val jwtService = JwtService(secretConfig, custodySecretConfig)
+    val jwtService = JwtService(secretConfig)
     val constructor =
       clazz.getConstructor(
         String::class.java,
@@ -82,7 +78,7 @@ internal class JwtServiceTest {
 
   @Test
   fun `test apply Sep24MoreInfoUrlJwt encoding and decoding and make sure the original values are not changed`() {
-    val jwtService = JwtService(secretConfig, custodySecretConfig)
+    val jwtService = JwtService(secretConfig)
     val token =
       Sep24MoreInfoUrlJwt(TEST_ACCOUNT, TEST_ISS, TEST_EXP, TEST_CLIENT_DOMAIN, TEST_CLIENT_NAME)
     val cipher = jwtService.encode(token)
@@ -97,7 +93,7 @@ internal class JwtServiceTest {
 
   @Test
   fun `test apply Sep24InteractiveUrlJwt encoding and decoding and make sure the original values are not changed`() {
-    val jwtService = JwtService(secretConfig, custodySecretConfig)
+    val jwtService = JwtService(secretConfig)
     val token =
       Sep24InteractiveUrlJwt(
         TEST_ACCOUNT,
@@ -120,7 +116,7 @@ internal class JwtServiceTest {
 
   @Test
   fun `make sure decoding bad cipher test throws an error`() {
-    val jwtService = JwtService(secretConfig, custodySecretConfig)
+    val jwtService = JwtService(secretConfig)
 
     assertThrows<MalformedJwtException> {
       jwtService.decode("This is a bad cipher", Sep10Jwt::class.java)

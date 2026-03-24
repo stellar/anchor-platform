@@ -13,7 +13,6 @@ public class RpcConfig {
   @AllArgsConstructor
   @NoArgsConstructor
   public static class CustomMessages {
-    private String custodyTransactionFailed;
     private String incomingPaymentReceived;
     private String outgoingPaymentSent;
   }
