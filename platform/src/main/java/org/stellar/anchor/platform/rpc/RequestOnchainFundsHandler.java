@@ -28,6 +28,8 @@ import org.stellar.anchor.api.rpc.method.RpcMethod;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.api.shared.SepDepositInfo;
 import org.stellar.anchor.asset.AssetService;
+import org.stellar.anchor.config.CustodyConfig;
+import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
@@ -46,12 +48,15 @@ import org.stellar.anchor.sep31.Sep31DepositInfoGenerator;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep6.Sep6DepositInfoGenerator;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
+import org.stellar.anchor.util.CustodyUtils;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.Memo;
 
 public class RequestOnchainFundsHandler
     extends RpcTransactionStatusHandler<RequestOnchainFundsRequest> {
 
+  private final CustodyService custodyService;
+  private final CustodyConfig custodyConfig;
   private final Sep6DepositInfoGenerator sep6DepositInfoGenerator;
   private final Sep24DepositInfoGenerator sep24DepositInfoGenerator;
   private final Sep31DepositInfoGenerator sep31DepositInfoGenerator;
@@ -63,6 +68,8 @@ public class RequestOnchainFundsHandler
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
       AssetService assetService,
+      CustodyService custodyService,
+      CustodyConfig custodyConfig,
       Sep6DepositInfoGenerator sep6DepositInfoGenerator,
       Sep24DepositInfoGenerator sep24DepositInfoGenerator,
       Sep31DepositInfoGenerator sep31DepositInfoGenerator,
@@ -78,6 +85,8 @@ public class RequestOnchainFundsHandler
         eventService,
         metricsService,
         RequestOnchainFundsRequest.class);
+    this.custodyService = custodyService;
+    this.custodyConfig = custodyConfig;
     this.sep6DepositInfoGenerator = sep6DepositInfoGenerator;
     this.sep24DepositInfoGenerator = sep24DepositInfoGenerator;
     this.sep31DepositInfoGenerator = sep31DepositInfoGenerator;
@@ -280,6 +289,17 @@ public class RequestOnchainFundsHandler
           txn6.setMemo(sep6DepositInfo.getMemo());
           txn6.setMemoType("id");
         }
+
+        if (!CustodyUtils.isMemoTypeSupported(custodyConfig.getType(), txn6.getMemoType())) {
+          throw new InvalidParamsException(
+              String.format(
+                  "Memo type[%s] is not supported for custody type[%s]",
+                  txn6.getMemoType(), custodyConfig.getType()));
+        }
+
+        if (custodyConfig.isCustodyIntegrationEnabled()) {
+          custodyService.createTransaction(txn6);
+        }
         break;
       case SEP_24:
         JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
@@ -302,6 +322,17 @@ public class RequestOnchainFundsHandler
           txn24.setWithdrawAnchorAccount(sep24DepositInfo.getStellarAddress());
           txn24.setMemo(sep24DepositInfo.getMemo());
           txn24.setMemoType("id");
+        }
+
+        if (!CustodyUtils.isMemoTypeSupported(custodyConfig.getType(), txn24.getMemoType())) {
+          throw new InvalidParamsException(
+              String.format(
+                  "Memo type[%s] is not supported for custody type[%s]",
+                  txn24.getMemoType(), custodyConfig.getType()));
+        }
+
+        if (custodyConfig.isCustodyIntegrationEnabled()) {
+          custodyService.createTransaction(txn24);
         }
         break;
       case SEP_31:
@@ -329,6 +360,19 @@ public class RequestOnchainFundsHandler
 
         paymentObservingAccountsManager.upsert(
             txn31.getToAccount(), PaymentObservingAccountsManager.AccountType.TRANSIENT);
+
+        if (!CustodyUtils.isMemoTypeSupported(
+            custodyConfig.getType(), txn31.getStellarMemoType())) {
+          throw new InvalidParamsException(
+              String.format(
+                  "Memo type[%s] is not supported for custody type[%s]",
+                  txn31.getStellarMemoType(), custodyConfig.getType()));
+        }
+
+        if (custodyConfig.isCustodyIntegrationEnabled()) {
+          custodyService.createTransaction(txn31);
+        }
+
         break;
       default:
         break;

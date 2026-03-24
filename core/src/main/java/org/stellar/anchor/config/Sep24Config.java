@@ -25,6 +25,7 @@ public interface Sep24Config {
 
   enum DepositInfoGeneratorType {
     SELF,
+    CUSTODY,
     NONE
   }
 }

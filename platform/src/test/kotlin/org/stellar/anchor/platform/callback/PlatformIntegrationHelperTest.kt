@@ -47,6 +47,7 @@ class PlatformIntegrationHelperTest {
           JwtService.builder()
             .callbackAuthSecret("secret__________________________________")
             .platformAuthSecret("secret__________________________________")
+            .custodyAuthSecret("secret__________________________________")
             .build()
         val authHelper =
           AuthHelper.forJwtToken(

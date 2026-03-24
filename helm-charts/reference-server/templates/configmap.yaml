@@ -13,6 +13,7 @@ data:
       distributionWalletMemo:
       distributionWalletMemoType:
       enableTest: true
+      custodyEnabled: false
 
     auth:
       type: {{ .Values.config.auth.type | default "NONE" }}

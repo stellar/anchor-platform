@@ -203,16 +203,20 @@ class StellarRpcTest {
     val rpcAuth = mockk<RpcAuthConfig>()
     val headerConfig = RpcAuthConfig.HeaderConfig("Authorization")
     val chain = mockk<Interceptor.Chain>()
-    val originalRequest = Request.Builder().url(testUrl).build()
-    val proceedSlot = slot<Request>()
+    val request = mockk<Request>()
 
     every { config.rpcAuth } returns rpcAuth
     every { rpcAuth.type } returns RpcAuthConfig.RpcAuthType.HEADER
     every { rpcAuth.headerConfig } returns headerConfig
     every { secret.rpcAuthSecret } returns "test-token"
     every { config.rpcUrl } returns testUrl
-    every { chain.request() } returns originalRequest
-    every { chain.proceed(capture(proceedSlot)) } returns mockk()
+    every { chain.request() } returns request
+    every { request.newBuilder() } returns
+      mockk<Request.Builder> {
+        every { addHeader(capture(slotHeaderName), capture(slotHeaderValue)) } returns this
+        every { build() } returns request
+      }
+    every { chain.proceed(any()) } returns mockk()
 
     // action
     val rpc = spyk(StellarRpc(config, secret))
@@ -224,8 +228,7 @@ class StellarRpcTest {
 
     // assertions
     verify { rpc.createSorobanServerWithHttpClient(testUrl, any()) }
-    val proceededRequest = proceedSlot.captured
-    assertEquals("test-token", proceededRequest.header("Authorization"))
+    assertEquals("test-token", slotHeaderValue.captured)
   }
 }
 

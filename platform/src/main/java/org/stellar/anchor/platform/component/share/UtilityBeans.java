@@ -75,20 +75,22 @@ public class UtilityBeans {
 
   @Bean
   @ConfigurationProperties(prefix = "sep31")
-  Sep31Config sep31Config(AssetService assetService) {
-    return new PropertySep31Config(assetService);
+  Sep31Config sep31Config(CustodyConfig custodyConfig, AssetService assetService) {
+    return new PropertySep31Config(custodyConfig, assetService);
   }
 
   @Bean
   @ConfigurationProperties(prefix = "sep24")
-  PropertySep24Config sep24Config(SecretConfig secretConfig, AssetService assetService) {
-    return new PropertySep24Config(secretConfig, assetService);
+  PropertySep24Config sep24Config(
+      SecretConfig secretConfig, CustodyConfig custodyConfig, AssetService assetService) {
+    return new PropertySep24Config(secretConfig, custodyConfig, assetService);
   }
 
   @Bean
   @ConfigurationProperties(prefix = "sep6")
-  PropertySep6Config sep6Config(AssetService assetService, SecretConfig secretConfig) {
-    return new PropertySep6Config(assetService, secretConfig);
+  PropertySep6Config sep6Config(
+      CustodyConfig custodyConfig, AssetService assetService, SecretConfig secretConfig) {
+    return new PropertySep6Config(custodyConfig, assetService, secretConfig);
   }
 
   /**********************************
@@ -100,8 +102,9 @@ public class UtilityBeans {
   }
 
   @Bean
-  public JwtService jwtService(SecretConfig secretConfig) throws NotSupportedException {
-    return new JwtService(secretConfig);
+  public JwtService jwtService(SecretConfig secretConfig, CustodySecretConfig custodySecretConfig)
+      throws NotSupportedException {
+    return new JwtService(secretConfig, custodySecretConfig);
   }
 
   @Bean

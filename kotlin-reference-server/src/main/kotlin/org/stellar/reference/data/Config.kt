@@ -23,6 +23,7 @@ data class AppSettings(
   val distributionWallet: String,
   val distributionWalletMemo: String,
   val distributionWalletMemoType: String,
+  val custodyEnabled: Boolean,
   val rpcEnabled: Boolean,
   val enableTest: Boolean,
   val paymentSigningSeed: String,

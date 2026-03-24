@@ -38,6 +38,9 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     const val TEST_PAYMENT_DEST_ACCOUNT = "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
     const val TEST_PAYMENT_ASSET_CIRCLE_USDC =
       "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+
+    // custody deposit address
+    const val CUSTODY_DEST_ACCOUNT = "GC6X2ANA2OS3O2ESHUV6X44NH6J46EP2EO2JB7563Y7DYOIXFKHMHJ5O"
   }
 
   private lateinit var testPaymentValues: List<Pair<String, String>>
@@ -188,6 +191,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
             StrKey.encodeEd25519PublicKey(paymentOp.destination.ed25519.uint256),
           ),
           Pair("%TESTPAYMENT_ASSET_CIRCLE_USDC%", TEST_PAYMENT_ASSET_CIRCLE_USDC),
+          Pair("%CUSTODY_DEST_ACCOUNT%", CUSTODY_DEST_ACCOUNT),
         )
     }
   }

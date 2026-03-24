@@ -102,12 +102,14 @@ internal class Sep24ServiceTest {
   @MockK(relaxed = true) lateinit var languageConfig: LanguageConfig
   @MockK(relaxed = true) lateinit var stellarNetworkConfig: StellarNetworkConfig
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
+  @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) lateinit var sep24Config: Sep24Config
   @MockK(relaxed = true) lateinit var eventService: EventService
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
   @MockK(relaxed = true) lateinit var txnStore: Sep24TransactionStore
   @MockK(relaxed = true) lateinit var interactiveUrlConstructor: InteractiveUrlConstructor
   @MockK(relaxed = true) lateinit var moreInfoUrlConstructor: MoreInfoUrlConstructor
+  @MockK(relaxed = true) lateinit var custodyConfig: CustodyConfig
   @MockK(relaxed = true) lateinit var sep38QuoteStore: Sep38QuoteStore
   @MockK(relaxed = true) lateinit var clientService: ClientService
 
@@ -130,7 +132,7 @@ internal class Sep24ServiceTest {
     every { txnStore.newInstance() } returns PojoSep24Transaction()
 
     requestValidator = spyk(SepRequestValidator(assetService))
-    jwtService = spyk(JwtService(secretConfig))
+    jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
     testInteractiveUrlJwt = createTestInteractiveJwt(null)
     val strToken = jwtService.encode(testInteractiveUrlJwt)
     every { interactiveUrlConstructor.construct(any(), any(), any(), any()) } returns
@@ -170,6 +172,7 @@ internal class Sep24ServiceTest {
         eventService,
         interactiveUrlConstructor,
         moreInfoUrlConstructor,
+        custodyConfig,
         calculator,
       )
     depositQuote = gson.fromJson(DEPOSIT_QUOTE_JSON, PojoSep38Quote::class.java)

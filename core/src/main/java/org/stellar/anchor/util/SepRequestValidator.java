@@ -44,10 +44,6 @@ public class SepRequestValidator {
       throw new BadRequestException(messagePrefix + "amount is invalid", e);
     }
 
-    if (!NumberHelper.hasReasonableMagnitude(sAmount)) {
-      throw new BadRequestException(messagePrefix + "amount is invalid");
-    }
-
     if (allowZero) {
       if (sAmount.signum() < 0) {
         throw new BadRequestException(messagePrefix + "amount should be non-negative");

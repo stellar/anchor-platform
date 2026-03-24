@@ -11,6 +11,7 @@ import org.stellar.anchor.platform.component.sep.SepBeans
 
 class SepBeansTest {
   @MockK(relaxed = true) private lateinit var secretConfig: SecretConfig
+  @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) lateinit var sep38Config: Sep38Config
   private lateinit var jwtService: JwtService
   private lateinit var sepBeans: SepBeans
@@ -18,8 +19,9 @@ class SepBeansTest {
   @BeforeEach
   fun setUp() {
     secretConfig = mockk(relaxed = true)
+    custodySecretConfig = mockk(relaxed = true)
     sep38Config = mockk(relaxed = true)
-    jwtService = JwtService(secretConfig)
+    jwtService = JwtService(secretConfig, custodySecretConfig)
     sepBeans = SepBeans()
   }
 

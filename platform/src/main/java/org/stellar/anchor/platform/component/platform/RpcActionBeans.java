@@ -6,10 +6,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.stellar.anchor.api.callback.CustomerIntegration;
 import org.stellar.anchor.asset.AssetService;
+import org.stellar.anchor.config.CustodyConfig;
+import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.component.sep.ApiClientBeans;
+import org.stellar.anchor.platform.config.PropertyCustodyConfig;
 import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.JdbcTransactionPendingTrustRepo;
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager;
@@ -33,6 +36,56 @@ public class RpcActionBeans {
   @Bean
   RpcService rpcService(List<RpcMethodHandler<?>> rpcMethodHandlers, RpcConfig rpcConfig) {
     return new RpcService(rpcMethodHandlers, rpcConfig);
+  }
+
+  @Bean
+  DoStellarPaymentHandler doStellarPaymentHandler(
+      Sep6TransactionStore txn6Store,
+      Sep24TransactionStore txn24Store,
+      Sep31TransactionStore txn31Store,
+      RequestValidator requestValidator,
+      CustodyConfig custodyConfig,
+      LedgerClient ledgerClient,
+      AssetService assetService,
+      CustodyService custodyService,
+      EventService eventService,
+      MetricsService metricsService,
+      JdbcTransactionPendingTrustRepo transactionPendingTrustRepo) {
+    return new DoStellarPaymentHandler(
+        txn6Store,
+        txn24Store,
+        txn31Store,
+        requestValidator,
+        custodyConfig,
+        ledgerClient,
+        assetService,
+        custodyService,
+        eventService,
+        metricsService,
+        transactionPendingTrustRepo);
+  }
+
+  @Bean
+  DoStellarRefundHandler doStellarRefundHandler(
+      Sep6TransactionStore txn6Store,
+      Sep24TransactionStore txn24Store,
+      Sep31TransactionStore txn31Store,
+      RequestValidator requestValidator,
+      CustodyConfig custodyConfig,
+      AssetService assetService,
+      CustodyService custodyService,
+      EventService eventService,
+      MetricsService metricsService) {
+    return new DoStellarRefundHandler(
+        txn6Store,
+        txn24Store,
+        txn31Store,
+        requestValidator,
+        custodyConfig,
+        assetService,
+        custodyService,
+        eventService,
+        metricsService);
   }
 
   @Bean
@@ -133,6 +186,8 @@ public class RpcActionBeans {
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
       AssetService assetService,
+      CustodyService custodyService,
+      CustodyConfig custodyConfig,
       EventService eventService,
       MetricsService metricsService) {
     return new NotifyOffchainFundsReceivedHandler(
@@ -141,6 +196,8 @@ public class RpcActionBeans {
         txn31Store,
         requestValidator,
         assetService,
+        custodyService,
+        custodyConfig,
         eventService,
         metricsService);
   }
@@ -336,7 +393,9 @@ public class RpcActionBeans {
       RequestValidator requestValidator,
       AssetService assetService,
       EventService eventService,
-      MetricsService metricsService) {
+      MetricsService metricsService,
+      PropertyCustodyConfig custodyConfig,
+      CustodyService custodyService) {
     return new NotifyTrustSetHandler(
         txn6Store,
         txn24Store,
@@ -344,7 +403,9 @@ public class RpcActionBeans {
         requestValidator,
         assetService,
         eventService,
-        metricsService);
+        metricsService,
+        custodyConfig,
+        custodyService);
   }
 
   @Bean
@@ -394,6 +455,8 @@ public class RpcActionBeans {
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
       AssetService assetService,
+      CustodyService custodyService,
+      CustodyConfig custodyConfig,
       Sep6DepositInfoGenerator sep6DepositInfoGenerator,
       Sep24DepositInfoGenerator sep24DepositInfoGenerator,
       Sep31DepositInfoGenerator sep31DepositInfoGenerator,
@@ -406,6 +469,8 @@ public class RpcActionBeans {
         txn31Store,
         requestValidator,
         assetService,
+        custodyService,
+        custodyConfig,
         sep6DepositInfoGenerator,
         sep24DepositInfoGenerator,
         sep31DepositInfoGenerator,
@@ -421,6 +486,7 @@ public class RpcActionBeans {
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
       AssetService assetService,
+      CustodyConfig custodyConfig,
       EventService eventService,
       MetricsService metricsService) {
     return new RequestTrustlineHandler(
@@ -429,6 +495,7 @@ public class RpcActionBeans {
         txn31Store,
         requestValidator,
         assetService,
+        custodyConfig,
         eventService,
         metricsService);
   }

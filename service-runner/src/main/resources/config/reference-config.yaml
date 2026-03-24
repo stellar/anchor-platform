@@ -16,6 +16,8 @@ app:
   distributionWalletMemoType:
   # When true, enables test endpoints
   enableTest: true
+  # Indicates, that custody integration is enabled
+  custodyEnabled: false
   # Indicates, that RPC requests should be used instead of PATCH /transactions endpoint
   rpcEnabled: true
 

@@ -36,6 +36,14 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  custody-server:
+    command: "--custody-server"
+    volumes:
+      # add mounts for the new config directory
+      - ../config:/config
+    env_file:
+      - ../../../../../.env
+
   reference-server:
     command: "--kotlin-reference-server"
     volumes:

@@ -41,19 +41,30 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
       transaction = sep24.getTransaction(transactionId)
       log.info { "Transaction status changed: $transaction" }
 
-      lateinit var txHash: String
-      transactionWithRetry {
-        txHash =
-          paymentClient.send(
-            account,
-            Asset.create(asset.replace("stellar:", "")),
-            transaction.amountOut!!.amount!!,
-            memo,
-          )
+      if (cfg.appSettings.custodyEnabled) {
+        // 5. Send Stellar transaction using Custody Server
+        sendCustodyStellarTransaction(transactionId)
+
+        // 6. Wait for Stellar transaction
+        sep24.waitStellarTransaction(transactionId, "completed")
+
+        // 7. Finalize custody Stellar anchor transaction
+        finalizeCustodyStellarTransaction(transactionId)
+      } else {
+        lateinit var txHash: String
+        transactionWithRetry {
+          txHash =
+            paymentClient.send(
+              account,
+              Asset.create(asset.replace("stellar:", "")),
+              transaction.amountOut!!.amount!!,
+              memo,
+            )
+        }
+        waitForValidTransaction(paymentClient, txHash)
+        // 6. Finalize Stellar anchor transaction
+        finalizeStellarTransaction(transaction, txHash)
       }
-      waitForValidTransaction(paymentClient, txHash)
-      // 5. Finalize Stellar anchor transaction
-      finalizeStellarTransaction(transaction, txHash)
 
       log.info { "Transaction completed: $transactionId" }
     } catch (e: Exception) {
@@ -143,6 +154,22 @@ class DepositService(private val cfg: Config, private val paymentClient: Payment
         transactionId,
         "pending_anchor",
         "funds received, transaction is being processed",
+      )
+    }
+  }
+
+  private suspend fun sendCustodyStellarTransaction(transactionId: String) {
+    if (cfg.appSettings.rpcEnabled) {
+      sep24.rpcAction("do_stellar_payment", DoStellarPaymentRequest(transactionId = transactionId))
+    } else {
+      sep24.sendCustodyStellarTransaction(transactionId)
+    }
+  }
+
+  private suspend fun finalizeCustodyStellarTransaction(transactionId: String) {
+    if (!cfg.appSettings.rpcEnabled) {
+      sep24.patchTransaction(
+        PatchTransactionTransaction(transactionId, "completed", message = "completed")
       )
     }
   }

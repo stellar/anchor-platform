@@ -18,6 +18,7 @@ const val RUN_SEP_SERVER = "run.sep.server"
 const val RUN_PLATFORM_SERVER = "run.platform.server"
 const val RUN_EVENT_PROCESSING_SERVER = "run.event.processing.server"
 const val RUN_PAYMENT_OBSERVER = "run.observer"
+const val RUN_CUSTODY_SERVER = "run.custody.server"
 const val RUN_KOTLIN_REFERENCE_SERVER = "run.kotlin.reference.server"
 const val RUN_WALLET_SERVER = "run.wallet.server"
 const val WALLET_SECRET_KEY = "wallet.secret.key"
@@ -51,8 +52,10 @@ class TestProfileExecutor(val config: TestConfig) {
   private var shouldStartPlatformServer: Boolean = false
   private var shouldStartWalletServer: Boolean = false
   private var shouldStartObserver: Boolean = false
+  private var shouldStartCustodyServer: Boolean = false
   private var shouldStartEventProcessingServer: Boolean = false
   private var shouldStartKotlinReferenceServer: Boolean = false
+  private var custodyEnabled: Boolean = false
 
   fun start(wait: Boolean = false, preStart: (config: TestConfig) -> Unit = {}) {
     info("Starting TestProfileExecutor...")
@@ -65,9 +68,15 @@ class TestProfileExecutor(val config: TestConfig) {
     shouldStartSepServer = config.env[RUN_SEP_SERVER].toBoolean()
     shouldStartPlatformServer = config.env[RUN_PLATFORM_SERVER].toBoolean()
     shouldStartObserver = config.env[RUN_PAYMENT_OBSERVER].toBoolean()
+    shouldStartCustodyServer = config.env[RUN_CUSTODY_SERVER].toBoolean()
     shouldStartEventProcessingServer = config.env[RUN_EVENT_PROCESSING_SERVER].toBoolean()
     shouldStartKotlinReferenceServer = config.env[RUN_KOTLIN_REFERENCE_SERVER].toBoolean()
     shouldStartWalletServer = config.env[RUN_WALLET_SERVER].toBoolean()
+
+    val custodyType = config.env["custody.type"]
+    if (custodyType != null) {
+      custodyEnabled = "none" != custodyType
+    }
 
     startDocker()
     startServers(wait)
@@ -105,8 +114,11 @@ class TestProfileExecutor(val config: TestConfig) {
       if (shouldStartAllServers || shouldStartWalletServer) {
         jobs += scope.launch { ServiceRunner.startWalletServer(envMap, wait) }
       }
-      if (shouldStartAllServers || shouldStartObserver) {
+      if ((shouldStartAllServers || shouldStartObserver) && !custodyEnabled) {
         jobs += scope.launch { runningServers.add(ServiceRunner.startStellarObserver(envMap)) }
+      }
+      if ((shouldStartAllServers || shouldStartCustodyServer) && custodyEnabled) {
+        jobs += scope.launch { runningServers.add(ServiceRunner.startCustodyServer(envMap)) }
       }
       if (shouldStartAllServers || shouldStartEventProcessingServer) {
         jobs +=

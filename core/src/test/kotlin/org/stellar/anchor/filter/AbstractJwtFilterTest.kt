@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.auth.JwtService
+import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.setupMock
 
@@ -22,8 +23,9 @@ class AbstractJwtFilterTest {
   @BeforeEach
   fun setup() {
     val secretConfig = mockk<SecretConfig>(relaxed = true)
+    val custodySecretConfig = mockk<CustodySecretConfig>(relaxed = true)
     secretConfig.setupMock()
-    this.jwtService = JwtService(secretConfig)
+    this.jwtService = JwtService(secretConfig, custodySecretConfig)
   }
 
   @ParameterizedTest
