@@ -63,57 +63,20 @@ class NonceManagerTest {
   }
 
   @Test
-  fun testConsumeUnusedNonce() {
-    val nonce = nonceManager.create(300)
-
-    every { nonceStore.findById(nonce.id) } returns nonce
-    nonceManager.use(nonce.id)
-
-    assertTrue(nonce.used)
-    verify { nonceStore.save(nonce) }
+  fun testVerifyAndUseSuccess() {
+    every { nonceStore.markAsUsed("nonce-1", Instant.EPOCH) } returns 1
+    assertTrue(nonceManager.verifyAndUse("nonce-1"))
   }
 
   @Test
-  fun testConsumeMissingNonce() {
-    every { nonceStore.findById(any()) } returns null
-    assertThrows<RuntimeException> { nonceManager.use("123") }
-
-    verify(exactly = 0) { nonceStore.save(any()) }
+  fun testVerifyAndUseAlreadyUsed() {
+    every { nonceStore.markAsUsed("nonce-1", Instant.EPOCH) } returns 0
+    assertFalse(nonceManager.verifyAndUse("nonce-1"))
   }
 
   @Test
-  fun testConsumeUsedNonce() {
-    val nonce = PojoNonce()
-    nonce.used = true
-
-    every { nonceStore.findById(nonce.id) } returns nonce
-    assertThrows<RuntimeException> { nonceManager.use(nonce.id) }
-
-    verify(exactly = 0) { nonceStore.save(any()) }
-  }
-
-  @Test
-  fun testVerifyMissingNonce() {
-    every { nonceStore.findById(any()) } returns null
-    assertFalse(nonceManager.verify("123"))
-  }
-
-  @Test
-  fun testVerifyUsedNonce() {
-    val nonce = PojoNonce()
-    nonce.used = true
-
-    every { nonceStore.findById(any()) } returns nonce
-    assertFalse(nonceManager.verify("123"))
-  }
-
-  @Test
-  fun testVerifyExpiredNonce() {
-    val nonce = PojoNonce()
-    nonce.used = false
-    nonce.expiresAt = Instant.EPOCH.minusSeconds(1)
-
-    every { nonceStore.findById(any()) } returns nonce
-    assertFalse(nonceManager.verify("123"))
+  fun testVerifyAndUseNonexistent() {
+    every { nonceStore.markAsUsed("missing", Instant.EPOCH) } returns 0
+    assertFalse(nonceManager.verifyAndUse("missing"))
   }
 }

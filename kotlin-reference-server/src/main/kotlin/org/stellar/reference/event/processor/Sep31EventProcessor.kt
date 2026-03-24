@@ -1,6 +1,5 @@
 package org.stellar.reference.event.processor
 
-import java.util.*
 import kotlinx.coroutines.runBlocking
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.platform.*
@@ -27,6 +26,7 @@ class Sep31EventProcessor(
 
   override suspend fun onTransactionCreated(event: SendEventRequest) {
     log.info { "Transaction ${event.payload.transaction!!.id} is created" }
+    val txId = event.payload.transaction!!.id
 
     val (memo, memoType) =
       if (
@@ -44,7 +44,7 @@ class Sep31EventProcessor(
     sepHelper.rpcAction(
       RpcMethod.REQUEST_ONCHAIN_FUNDS.toString(),
       RequestOnchainFundsRequest(
-        transactionId = event.payload.transaction!!.id,
+        transactionId = txId,
         message = "Transaction created",
         destinationAccount = config.appSettings.distributionWallet,
         memoType = memoType,
@@ -64,7 +64,8 @@ class Sep31EventProcessor(
           requestKyc(event)
           return
         }
-        if (transaction.transferReceivedAt != null) sendExternal(transaction.id)
+        if (transaction.transferReceivedAt != null && transaction.amountOut?.amount != null)
+          sendExternal(transaction.id)
       }
       PENDING_EXTERNAL ->
         sepHelper.rpcAction(

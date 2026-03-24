@@ -13,6 +13,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_ASSET
 import org.stellar.anchor.api.asset.DepositWithdrawOperation
 import org.stellar.anchor.api.asset.Sep6Info
 import org.stellar.anchor.api.asset.StellarAssetInfo
+import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.asset.AssetService
 
@@ -167,5 +168,43 @@ class SepRequestValidatorTest {
   @Test
   fun `test validateAccount with invalid account`() {
     assertThrows<SepValidationException> { requestValidator.validateAccount("??") }
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "1.0E+500000000",
+        "1.0E+20",
+        "9.99E+999999999",
+        "1E+21",
+        "-1.0E+500000000",
+        "1.0E-21",
+        "0.000000000000000000001",
+      ]
+  )
+  fun `test static validateAmount rejects extreme exponents`(amount: String) {
+    assertThrows<BadRequestException> { SepRequestValidator.validateAmount("", amount, false) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "1.0E+5",
+        "100000",
+        "1.23",
+        "0.01",
+        "999999999999.9999",
+        "1.0E+10",
+        "0.0001",
+        "1.23E+2",
+        "9999999999.99",
+        "100.00",
+        "1.000000",
+      ]
+  )
+  fun `test static validateAmount accepts reasonable amounts`(amount: String) {
+    SepRequestValidator.validateAmount("", amount, false)
   }
 }

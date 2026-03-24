@@ -1,9 +1,14 @@
 package org.stellar.anchor.platform.data;
 
+import static org.stellar.anchor.util.TransactionQueryLimits.DEFAULT_LIMIT;
+import static org.stellar.anchor.util.TransactionQueryLimits.MAX_LIMIT;
+
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.sep.sep6.GetTransactionsRequest;
@@ -54,25 +59,13 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
   public List<Sep6Transaction> findTransactions(
       String accountId, String accountMemo, GetTransactionsRequest request)
       throws SepValidationException {
-    List<Sep6Transaction> txns;
-    if (accountMemo == null) {
-      txns =
-          transactionRepo.findByWebAuthAccountAndRequestAssetCodeOrderByStartedAtDesc(
-              accountId, request.getAssetCode());
-    } else {
-      txns =
-          transactionRepo
-              .findByWebAuthAccountAndWebAuthAccountMemoAndRequestAssetCodeOrderByStartedAtDesc(
-                  accountId, accountMemo, request.getAssetCode());
-    }
-
-    int limit = Integer.MAX_VALUE;
+    int limit = DEFAULT_LIMIT;
     if (request.getLimit() != null && request.getLimit() > 0) {
-      limit = request.getLimit();
+      limit = Math.min(request.getLimit(), MAX_LIMIT);
     }
 
-    final Instant noOlderThan;
-    final Instant olderThan;
+    Instant noOlderThan = Instant.EPOCH;
+    Instant olderThan = Instant.now();
 
     if (request.getPagingId() != null) {
       Sep6Transaction txn = transactionRepo.findOneByTransactionId(request.getPagingId());
@@ -82,8 +75,6 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
         throw new SepValidationException(
             String.format("invalid paging_id field: %s", request.getPagingId()));
       }
-    } else {
-      olderThan = Instant.now();
     }
 
     if (request.getNoOlderThan() != null) {
@@ -93,16 +84,31 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
         throw new SepValidationException(
             String.format("invalid no_older_than field: %s", request.getNoOlderThan()));
       }
-    } else {
-      noOlderThan = Instant.EPOCH;
     }
 
-    return txns.stream()
-        .filter(txn -> request.getKind() == null || request.getKind().equals(txn.getKind()))
-        .filter(txn -> txn.getStartedAt().isAfter(noOlderThan))
-        .filter(txn -> txn.getStartedAt().isBefore(olderThan))
-        .limit(limit)
-        .collect(Collectors.toList());
+    Pageable pageable = PageRequest.of(0, limit);
+
+    if (accountMemo == null) {
+      return new ArrayList<>(
+          transactionRepo.findTransactionsWithFilters(
+              accountId,
+              request.getAssetCode(),
+              request.getKind(),
+              noOlderThan,
+              olderThan,
+              pageable));
+    } else {
+      List<JdbcSep6Transaction> txns =
+          transactionRepo.findTransactionsWithMemoAndFilters(
+              accountId,
+              accountMemo,
+              request.getAssetCode(),
+              request.getKind(),
+              noOlderThan,
+              olderThan,
+              pageable);
+      return new ArrayList<>(txns);
+    }
   }
 
   @Override

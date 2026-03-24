@@ -3,7 +3,6 @@ package org.stellar.anchor.platform.service;
 import static org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.ERROR;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.EXPIRED;
-import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_ANCHOR;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_USR_TRANSFER_START;
 import static org.stellar.anchor.event.EventService.EventQueue.TRANSACTION;
@@ -24,6 +23,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
@@ -43,8 +43,6 @@ import org.stellar.anchor.api.shared.Amount;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.SepDepositInfo;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.config.CustodyConfig;
-import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.event.EventService.Session;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
@@ -83,8 +81,6 @@ public class TransactionService {
 
   private final Sep6DepositInfoGenerator sep6DepositInfoGenerator;
   private final Sep24DepositInfoGenerator sep24DepositInfoGenerator;
-  private final CustodyService custodyService;
-  private final CustodyConfig custodyConfig;
   private final Counter findSep6TransactionCounter =
       Metrics.counter(PLATFORM_FIND_TRANSACTION, SEP, TV_SEP6);
   private final Counter findSep24TransactionCounter =
@@ -123,9 +119,7 @@ public class TransactionService {
       AssetService assetService,
       EventService eventService,
       Sep6DepositInfoGenerator sep6DepositInfoGenerator,
-      Sep24DepositInfoGenerator sep24DepositInfoGenerator,
-      CustodyService custodyService,
-      CustodyConfig custodyConfig) {
+      Sep24DepositInfoGenerator sep24DepositInfoGenerator) {
     this.txn6Store = txn6Store;
     this.txn24Store = txn24Store;
     this.txn31Store = txn31Store;
@@ -135,8 +129,6 @@ public class TransactionService {
     this.assetService = assetService;
     this.sep6DepositInfoGenerator = sep6DepositInfoGenerator;
     this.sep24DepositInfoGenerator = sep24DepositInfoGenerator;
-    this.custodyService = custodyService;
-    this.custodyConfig = custodyConfig;
   }
 
   /**
@@ -255,6 +247,22 @@ public class TransactionService {
     validateAsset("amount_in", patch.getTransaction().getAmountIn());
     validateAsset("amount_out", patch.getTransaction().getAmountOut());
 
+    try {
+      return doPatchTransaction(patch);
+    } catch (OptimisticLockingFailureException ex) {
+      Log.errorEx(
+          String.format(
+              "Concurrent modification detected while patching transaction(id=%s)",
+              patch.getTransaction().getId()),
+          ex);
+      throw new BadRequestException(
+          "Transaction was modified by another request. Please re-read the transaction state and retry if appropriate.");
+    }
+  }
+
+  @Deprecated
+  private GetTransactionResponse doPatchTransaction(PatchTransactionRequest patch)
+      throws AnchorException {
     FeeDetails feeDetails = patch.getTransaction().getFeeDetails();
 
     JdbcSepTransaction txn = queryTransactionById(patch.getTransaction().getId());
@@ -262,7 +270,6 @@ public class TransactionService {
       throw new BadRequestException(
           String.format("transaction(id=%s) not found", patch.getTransaction().getId()));
 
-    String lastStatus = txn.getStatus();
     updateSepTransaction(patch.getTransaction(), txn);
     switch (txn.getProtocol()) {
       case "6":
@@ -270,11 +277,6 @@ public class TransactionService {
         Log.infoF(
             "Updating SEP-6 transaction: {}", GsonUtils.getInstance().toJson(sep6Transaction));
 
-        boolean shouldCreateDepositTxn =
-            ImmutableSet.of(Kind.DEPOSIT, Kind.DEPOSIT_EXCHANGE)
-                    .contains(Kind.from(sep6Transaction.getKind()))
-                // TODO: check if this is correct
-                && txn.getStatus().equals(PENDING_ANCHOR.toString());
         boolean shouldCreateWithdrawTxn =
             ImmutableSet.of(Kind.WITHDRAWAL, Kind.WITHDRAWAL_EXCHANGE)
                     .contains(Kind.from(sep6Transaction.getKind()))
@@ -285,12 +287,6 @@ public class TransactionService {
           sep6Transaction.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
           sep6Transaction.setMemo(sep6DepositInfo.getMemo());
           sep6Transaction.setMemoType("id");
-        }
-
-        if (custodyConfig.isCustodyIntegrationEnabled()
-            && !lastStatus.equals(sep6Transaction.getStatus())
-            && (shouldCreateDepositTxn || shouldCreateWithdrawTxn)) {
-          custodyService.createTransaction(sep6Transaction);
         }
 
         if (feeDetails != null) {
@@ -310,15 +306,6 @@ public class TransactionService {
         break;
       case "24":
         JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) txn;
-
-        if (custodyConfig.isCustodyIntegrationEnabled()
-            && !lastStatus.equals(sep24Txn.getStatus())
-            && ((Kind.DEPOSIT.getKind().equals(sep24Txn.getKind())
-                    && PENDING_ANCHOR.toString().equals(sep24Txn.getStatus()))
-                || (Kind.WITHDRAWAL.getKind().equals(sep24Txn.getKind())
-                    && PENDING_USR_TRANSFER_START.toString().equals(sep24Txn.getStatus())))) {
-          custodyService.createTransaction(sep24Txn);
-        }
 
         if (feeDetails != null) {
           sep24Txn.setFeeDetails(feeDetails);

@@ -207,7 +207,6 @@ public class SepBeans {
       Clock clock,
       InteractiveUrlConstructor interactiveUrlConstructor,
       @Qualifier("sep24MoreInfoUrlConstructor") MoreInfoUrlConstructor sep24MoreInfoUrlConstructor,
-      CustodyConfig custodyConfig,
       Sep38QuoteStore sep38QuoteStore) {
     ExchangeAmountsCalculator exchangeAmountsCalculator =
         new ExchangeAmountsCalculator(sep38QuoteStore, clock);
@@ -224,7 +223,6 @@ public class SepBeans {
         eventService,
         interactiveUrlConstructor,
         sep24MoreInfoUrlConstructor,
-        custodyConfig,
         exchangeAmountsCalculator);
   }
 
