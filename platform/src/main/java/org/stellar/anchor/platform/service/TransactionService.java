@@ -3,7 +3,6 @@ package org.stellar.anchor.platform.service;
 import static org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.ERROR;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.EXPIRED;
-import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_ANCHOR;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_USR_TRANSFER_START;
 import static org.stellar.anchor.event.EventService.EventQueue.TRANSACTION;
@@ -271,85 +270,74 @@ public class TransactionService {
       throw new BadRequestException(
           String.format("transaction(id=%s) not found", patch.getTransaction().getId()));
 
-    String lastStatus = txn.getStatus();
     updateSepTransaction(patch.getTransaction(), txn);
-    try {
-      switch (txn.getProtocol()) {
-        case "6":
-          JdbcSep6Transaction sep6Transaction = (JdbcSep6Transaction) txn;
-          Log.infoF(
-              "Updating SEP-6 transaction: {}", GsonUtils.getInstance().toJson(sep6Transaction));
+    switch (txn.getProtocol()) {
+      case "6":
+        JdbcSep6Transaction sep6Transaction = (JdbcSep6Transaction) txn;
+        Log.infoF(
+            "Updating SEP-6 transaction: {}", GsonUtils.getInstance().toJson(sep6Transaction));
 
-          boolean shouldCreateDepositTxn =
-              ImmutableSet.of(Kind.DEPOSIT, Kind.DEPOSIT_EXCHANGE)
-                      .contains(Kind.from(sep6Transaction.getKind()))
-                  // TODO: check if this is correct
-                  && txn.getStatus().equals(PENDING_ANCHOR.toString());
-          boolean shouldCreateWithdrawTxn =
-              ImmutableSet.of(Kind.WITHDRAWAL, Kind.WITHDRAWAL_EXCHANGE)
-                      .contains(Kind.from(sep6Transaction.getKind()))
-                  && txn.getStatus().equals(PENDING_USR_TRANSFER_START.toString());
+        boolean shouldCreateWithdrawTxn =
+            ImmutableSet.of(Kind.WITHDRAWAL, Kind.WITHDRAWAL_EXCHANGE)
+                    .contains(Kind.from(sep6Transaction.getKind()))
+                && txn.getStatus().equals(PENDING_USR_TRANSFER_START.toString());
 
-          if (sep6Transaction.getMemo() == null && shouldCreateWithdrawTxn) {
-            SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(sep6Transaction);
-            sep6Transaction.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
-            sep6Transaction.setMemo(sep6DepositInfo.getMemo());
-            sep6Transaction.setMemoType("id");
-          }
+        if (sep6Transaction.getMemo() == null && shouldCreateWithdrawTxn) {
+          SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(sep6Transaction);
+          sep6Transaction.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
+          sep6Transaction.setMemo(sep6DepositInfo.getMemo());
+          sep6Transaction.setMemoType("id");
+        }
 
-          if (feeDetails != null) {
-            sep6Transaction.setFeeDetails(feeDetails);
-          }
+        if (feeDetails != null) {
+          sep6Transaction.setFeeDetails(feeDetails);
+        }
 
-          txn6Store.save(sep6Transaction);
-          eventSession.publish(
-              AnchorEvent.builder()
-                  .id(UUID.randomUUID().toString())
-                  .sep("6")
-                  .type(TRANSACTION_STATUS_CHANGED)
-                  .transaction(
-                      TransactionMapper.toGetTransactionResponse(sep6Transaction, assetService))
-                  .build());
-          patchSep6TransactionCounter.increment();
-          break;
-        case "24":
-          JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) txn;
+        txn6Store.save(sep6Transaction);
+        eventSession.publish(
+            AnchorEvent.builder()
+                .id(UUID.randomUUID().toString())
+                .sep("6")
+                .type(TRANSACTION_STATUS_CHANGED)
+                .transaction(
+                    TransactionMapper.toGetTransactionResponse(sep6Transaction, assetService))
+                .build());
+        patchSep6TransactionCounter.increment();
+        break;
+      case "24":
+        JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) txn;
 
-          if (feeDetails != null) {
-            sep24Txn.setFeeDetails(feeDetails);
-          }
+        if (feeDetails != null) {
+          sep24Txn.setFeeDetails(feeDetails);
+        }
 
-          txn24Store.save(sep24Txn);
-          eventSession.publish(
-              AnchorEvent.builder()
-                  .id(UUID.randomUUID().toString())
-                  .sep("24")
-                  .type(TRANSACTION_STATUS_CHANGED)
-                  .transaction(TransactionMapper.toGetTransactionResponse(sep24Txn, assetService))
-                  .build());
-          patchSep24TransactionCounter.increment();
-          break;
-        case "31":
-          JdbcSep31Transaction sep31Txn = (JdbcSep31Transaction) txn;
+        txn24Store.save(sep24Txn);
+        eventSession.publish(
+            AnchorEvent.builder()
+                .id(UUID.randomUUID().toString())
+                .sep("24")
+                .type(TRANSACTION_STATUS_CHANGED)
+                .transaction(TransactionMapper.toGetTransactionResponse(sep24Txn, assetService))
+                .build());
+        patchSep24TransactionCounter.increment();
+        break;
+      case "31":
+        JdbcSep31Transaction sep31Txn = (JdbcSep31Transaction) txn;
 
-          if (feeDetails != null) {
-            sep31Txn.setFeeDetails(feeDetails);
-          }
+        if (feeDetails != null) {
+          sep31Txn.setFeeDetails(feeDetails);
+        }
 
-          txn31Store.save(sep31Txn);
-          eventSession.publish(
-              AnchorEvent.builder()
-                  .id(UUID.randomUUID().toString())
-                  .sep("31")
-                  .type(TRANSACTION_STATUS_CHANGED)
-                  .transaction(TransactionMapper.toGetTransactionResponse(sep31Txn))
-                  .build());
-          patchSep31TransactionCounter.increment();
-          break;
-      }
-    } catch (OptimisticLockingFailureException ex) {
-      throw new BadRequestException(
-          "Transaction was modified by another request. Please re-read the transaction state and retry if appropriate.");
+        txn31Store.save(sep31Txn);
+        eventSession.publish(
+            AnchorEvent.builder()
+                .id(UUID.randomUUID().toString())
+                .sep("31")
+                .type(TRANSACTION_STATUS_CHANGED)
+                .transaction(TransactionMapper.toGetTransactionResponse(sep31Txn))
+                .build());
+        patchSep31TransactionCounter.increment();
+        break;
     }
 
     return PlatformTransactionHelper.toGetTransactionResponse(txn, assetService);
