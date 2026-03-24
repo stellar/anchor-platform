@@ -1,7 +1,6 @@
 package org.stellar.anchor.platform.component.platform;
 
 import jakarta.servlet.Filter;
-import java.util.Optional;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,24 +8,16 @@ import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.NonceStore;
-import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.config.Sep6Config;
-import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.filter.ApiKeyFilter;
 import org.stellar.anchor.filter.NoneFilter;
 import org.stellar.anchor.filter.PlatformAuthJwtFilter;
-import org.stellar.anchor.ledger.LedgerClient;
-import org.stellar.anchor.platform.apiclient.CustodyApiClient;
 import org.stellar.anchor.platform.config.PlatformApiConfig;
 import org.stellar.anchor.platform.config.PlatformServerConfig;
-import org.stellar.anchor.platform.config.PropertyCustodyConfig;
-import org.stellar.anchor.platform.data.JdbcTransactionPendingTrustRepo;
 import org.stellar.anchor.platform.job.NonceCleanupJob;
-import org.stellar.anchor.platform.job.TrustlineCheckJob;
-import org.stellar.anchor.platform.rpc.NotifyTrustSetHandler;
 import org.stellar.anchor.platform.service.*;
 import org.stellar.anchor.sep24.Sep24DepositInfoGenerator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
@@ -72,17 +63,11 @@ public class PlatformServerBeans {
   }
 
   @Bean
-  Sep31DepositInfoGenerator sep31DepositInfoGenerator(
-      Sep31Config sep31Config, Optional<CustodyApiClient> custodyApiClient)
+  Sep31DepositInfoGenerator sep31DepositInfoGenerator(Sep31Config sep31Config)
       throws InvalidConfigException {
     switch (sep31Config.getDepositInfoGeneratorType()) {
       case SELF:
         return new Sep31DepositInfoSelfGenerator();
-      case CUSTODY:
-        return new Sep31DepositInfoCustodyGenerator(
-            custodyApiClient.orElseThrow(
-                () ->
-                    new InvalidConfigException("Integration with custody service is not enabled")));
       case NONE:
         return new Sep31DepositInfoNoneGenerator();
       default:
@@ -94,17 +79,11 @@ public class PlatformServerBeans {
   }
 
   @Bean
-  Sep24DepositInfoGenerator sep24DepositInfoGenerator(
-      Sep24Config sep24Config, Optional<CustodyApiClient> custodyApiClient)
+  Sep24DepositInfoGenerator sep24DepositInfoGenerator(Sep24Config sep24Config)
       throws InvalidConfigException {
     switch (sep24Config.getDepositInfoGeneratorType()) {
       case SELF:
         return new Sep24DepositInfoSelfGenerator();
-      case CUSTODY:
-        return new Sep24DepositInfoCustodyGenerator(
-            custodyApiClient.orElseThrow(
-                () ->
-                    new InvalidConfigException("Integration with custody service is not enabled")));
       case NONE:
         return new Sep24DepositInfoNoneGenerator();
       default:
@@ -117,16 +96,10 @@ public class PlatformServerBeans {
 
   @Bean
   Sep6DepositInfoGenerator sep6DepositInfoGenerator(
-      Sep6Config sep6Config, AssetService assetService, Optional<CustodyApiClient> custodyApiClient)
-      throws InvalidConfigException {
+      Sep6Config sep6Config, AssetService assetService) throws InvalidConfigException {
     switch (sep6Config.getDepositInfoGeneratorType()) {
       case SELF:
         return new Sep6DepositInfoSelfGenerator(assetService);
-      case CUSTODY:
-        return new Sep6DepositInfoCustodyGenerator(
-            custodyApiClient.orElseThrow(
-                () ->
-                    new InvalidConfigException("Integration with custody service is not enabled")));
       case NONE:
         return new Sep6DepositInfoNoneGenerator();
       default:
@@ -146,9 +119,7 @@ public class PlatformServerBeans {
       AssetService assetService,
       EventService eventService,
       Sep6DepositInfoGenerator sep6DepositInfoGenerator,
-      Sep24DepositInfoGenerator sep24DepositInfoGenerator,
-      CustodyService custodyService,
-      CustodyConfig custodyConfig) {
+      Sep24DepositInfoGenerator sep24DepositInfoGenerator) {
     return new TransactionService(
         txn6Store,
         txn24Store,
@@ -157,23 +128,7 @@ public class PlatformServerBeans {
         assetService,
         eventService,
         sep6DepositInfoGenerator,
-        sep24DepositInfoGenerator,
-        custodyService,
-        custodyConfig);
-  }
-
-  @Bean
-  TrustlineCheckJob trustlineCheckJob(
-      LedgerClient ledgerClient,
-      JdbcTransactionPendingTrustRepo transactionPendingTrustRepo,
-      PropertyCustodyConfig custodyConfig,
-      NotifyTrustSetHandler notifyTrustSetHandler) {
-    if (custodyConfig.isCustodyIntegrationEnabled()) {
-      return new TrustlineCheckJob(
-          ledgerClient, transactionPendingTrustRepo, custodyConfig, notifyTrustSetHandler);
-    } else {
-      return null;
-    }
+        sep24DepositInfoGenerator);
   }
 
   @Bean

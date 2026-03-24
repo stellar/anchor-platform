@@ -1,7 +1,6 @@
 package org.stellar.anchor.platform.event
 
 import org.apache.commons.lang3.NotImplementedException
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -25,9 +24,8 @@ internal class DefaultEventServiceTest {
     eventConfig.queue.type = KAFKA
     var defaultEventService = DefaultEventService(eventConfig)
     var session = defaultEventService.createSession("test", TRANSACTION)
-    assert(session is KafkaSession)
-    var kafkaSession: KafkaSession = session as KafkaSession
-    assertEquals(kafkaSession.topic, "TRANSACTION")
+    assert(session is AfterCommitEventSession)
+    var afterCommitSession: AfterCommitEventSession = session as AfterCommitEventSession
 
     // Test create SQS session should throw not implemented exception
     eventConfig.queue.type = SQS
