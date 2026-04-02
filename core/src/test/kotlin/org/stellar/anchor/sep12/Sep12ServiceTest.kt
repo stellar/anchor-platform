@@ -246,6 +246,65 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test transaction ownership check rejects mismatched creator`() {
+    val transaction =
+      GetTransactionResponse.builder()
+        .creator(StellarId.builder().account("GOTHER_ACCOUNT").build())
+        .customers(
+          Customers.builder()
+            .sender(StellarId.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).build())
+            .build()
+        )
+        .build()
+    every { platformApiClient.getTransaction(any()) } returns transaction
+
+    val request = Sep12GetCustomerRequest.builder().transactionId(TEST_TRANSACTION_ID).build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("The transaction specified does not exist", ex.message)
+  }
+
+  @Test
+  fun `test transaction ownership check rejects null creator`() {
+    val transaction =
+      GetTransactionResponse.builder()
+        .customers(
+          Customers.builder()
+            .sender(StellarId.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).build())
+            .build()
+        )
+        .build()
+    every { platformApiClient.getTransaction(any()) } returns transaction
+
+    val request = Sep12GetCustomerRequest.builder().transactionId(TEST_TRANSACTION_ID).build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("The transaction specified does not exist", ex.message)
+  }
+
+  @Test
+  fun `test transaction ownership check allows matching creator`() {
+    val transaction =
+      GetTransactionResponse.builder()
+        .creator(StellarId.builder().account(TEST_ACCOUNT).build())
+        .customers(
+          Customers.builder()
+            .sender(StellarId.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).build())
+            .build()
+        )
+        .build()
+    every { platformApiClient.getTransaction(any()) } returns transaction
+
+    val request = Sep12GetCustomerRequest.builder().transactionId(TEST_TRANSACTION_ID).build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertEquals(TEST_ACCOUNT, request.account)
+    assertEquals(TEST_MEMO, request.memo)
+  }
+
+  @Test
   fun `test update request memo and memo type`() {
     val mockRequestBase = mockk<Sep12CustomerRequestBase>(relaxed = true)
 
@@ -324,6 +383,7 @@ class Sep12ServiceTest {
     every { eventSession.publish(capture(kycUpdateEventSlot)) } returns Unit
     every { platformApiClient.getTransaction(any()) } returns
       GetTransactionResponse.builder()
+        .creator(StellarId.builder().account(TEST_ACCOUNT).build())
         .customers(
           Customers.builder()
             .sender(StellarId.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).build())

@@ -179,6 +179,17 @@ public class Sep12Service {
         // sep31-sender, sep-31-receiver) to get the customer account and memo
         GetTransactionResponse txn =
             platformApiClient.getTransaction(requestBase.getTransactionId());
+
+        // Verify transaction ownership
+        StellarId creator = txn.getCreator();
+        String tokenAccount =
+            Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
+        if (creator == null
+            || !Objects.equals(creator.getAccount(), tokenAccount)
+            || !Objects.equals(creator.getMemo(), token.getAccountMemo())) {
+          throw new Exception("ownership check failed");
+        }
+
         StellarId customer =
             "sep31-receiver".equals(requestBase.getType())
                 ? txn.getCustomers().getReceiver()
