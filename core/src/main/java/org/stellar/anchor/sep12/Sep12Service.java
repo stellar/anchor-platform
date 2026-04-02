@@ -180,12 +180,17 @@ public class Sep12Service {
         GetTransactionResponse txn =
             platformApiClient.getTransaction(requestBase.getTransactionId());
 
-        // Verify transaction ownership
+        // Verify transaction ownership.
+        // SEP-31 stores the muxed M-address in creator.account, while SEP-6/24 store the
+        // base G-address. Match against the corresponding token field accordingly.
         StellarId creator = txn.getCreator();
+        String creatorAccount = creator != null ? creator.getAccount() : null;
         String tokenAccount =
-            Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
+            creatorAccount != null && creatorAccount.startsWith("M")
+                ? token.getMuxedAccount()
+                : token.getAccount();
         if (creator == null
-            || !Objects.equals(creator.getAccount(), tokenAccount)
+            || !Objects.equals(creatorAccount, tokenAccount)
             || !Objects.equals(creator.getMemo(), token.getAccountMemo())) {
           throw new Exception("ownership check failed");
         }
