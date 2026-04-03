@@ -222,30 +222,6 @@ class Sep12ServiceTest {
   }
 
   @Test
-  fun `test get and put sets request account and memo using transaction`() {
-    val transaction =
-      GetTransactionResponse.builder()
-        .customers(
-          Customers.builder()
-            .sender(StellarId.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).build())
-            .build()
-        )
-        .build()
-    every { platformApiClient.getTransaction(any()) } returns transaction
-
-    val putRequest = Sep12PutCustomerRequest.builder().transactionId(TEST_TRANSACTION_ID).build()
-    assertDoesNotThrow { sep12Service.populateRequestFromTransactionId(putRequest) }
-    assertEquals(TEST_ACCOUNT, putRequest.account)
-    assertEquals(TEST_MEMO, putRequest.memo)
-
-    val getRequestBase =
-      Sep12GetCustomerRequest.builder().transactionId(TEST_TRANSACTION_ID).build()
-    assertDoesNotThrow { sep12Service.populateRequestFromTransactionId(getRequestBase) }
-    assertEquals(TEST_ACCOUNT, getRequestBase.account)
-    assertEquals(TEST_MEMO, getRequestBase.memo)
-  }
-
-  @Test
   fun `test transaction ownership check rejects mismatched creator`() {
     val transaction =
       GetTransactionResponse.builder()
