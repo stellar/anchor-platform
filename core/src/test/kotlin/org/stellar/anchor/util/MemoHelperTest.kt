@@ -80,7 +80,6 @@ internal class MemoHelperTest {
 
   @Test
   fun `test makeMemo rejects invalid memo id values`() {
-    assertThrows<SepValidationException> { makeMemo("0", "id") }
     assertThrows<SepValidationException> { makeMemo("-1", "id") }
     assertThrows<SepValidationException> { makeMemo("18446744073709551616", "id") }
     assertThrows<SepValidationException> { makeMemo("abc", "id") }

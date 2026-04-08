@@ -401,7 +401,7 @@ internal class Sep10ServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["ABC", "12AB", "-1", "0", Integer.MIN_VALUE.toString()])
+  @ValueSource(strings = ["ABC", "12AB", "-1", Integer.MIN_VALUE.toString()])
   fun `test createChallenge() with bad memo`(badMemo: String) {
     every { sep10Config.isClientAttributionRequired } returns false
     val cr =

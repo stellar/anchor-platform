@@ -106,11 +106,7 @@ public class MemoHelper {
    */
   public static MemoId makeMemoId(String memo) {
     try {
-      BigInteger memoId = new BigInteger(memo);
-      if (memoId.compareTo(BigInteger.ZERO) <= 0) {
-        throw new NumberFormatException("Memo ID must be greater than 0");
-      }
-      return new MemoId(memoId);
+      return new MemoId(new BigInteger(memo));
     } catch (IllegalArgumentException e) {
       NumberFormatException nfe = new NumberFormatException(e.getMessage());
       nfe.initCause(e);
