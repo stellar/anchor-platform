@@ -112,7 +112,9 @@ public class MemoHelper {
       }
       return new MemoId(memoId);
     } catch (IllegalArgumentException e) {
-      throw new NumberFormatException(e.getMessage());
+      NumberFormatException nfe = new NumberFormatException(e.getMessage());
+      nfe.initCause(e);
+      throw nfe;
     }
   }
 
