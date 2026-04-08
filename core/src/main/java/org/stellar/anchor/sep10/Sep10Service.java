@@ -119,6 +119,14 @@ public class Sep10Service implements ISep10Service {
       throws SepValidationException {
     info("Validating SEP-10 challenge.");
 
+    if (request == null || isEmpty(request.getTransaction())) {
+      throw new SepValidationException("transaction is required");
+    }
+
+    if (request.getTransaction().length() > 50_000) {
+      throw new SepValidationException("transaction exceeds maximum allowed size");
+    }
+
     ChallengeTransaction challenge = parseChallenge(request);
     // pre validation to be defined by the anchor
     preValidateRequestValidation(request, challenge);

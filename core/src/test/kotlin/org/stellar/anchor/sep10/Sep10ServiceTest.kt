@@ -281,6 +281,14 @@ internal class Sep10ServiceTest {
   }
 
   @Test
+  fun `Test validate challenge rejects oversized transaction`() {
+    val vr = ValidationRequest()
+    vr.transaction = "A".repeat(50_001)
+    val ex = assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
+    assertEquals("transaction exceeds maximum allowed size", ex.message)
+  }
+
+  @Test
   @LockAndMockStatic([Sep10Challenge::class])
   fun `Test validate challenge with bad home domain failure`() {
     val vr = ValidationRequest()

@@ -193,6 +193,16 @@ class Sep45ServiceTest {
   }
 
   @Test
+  fun `test validate throws BadRequestException when auth entries exceed max size`() {
+    val validationRequest =
+      ValidationRequest.builder().authorizationEntries("A".repeat(50_001)).build()
+
+    val ex =
+      assertThrows(BadRequestException::class.java) { sep45Service.validate(validationRequest) }
+    assertEquals("authorization_entries exceeds maximum allowed size", ex.message)
+  }
+
+  @Test
   fun `test validate throws BadRequestException when auth entries list empty`() {
     val emptyAuth = SorobanAuthorizationEntries(arrayOf())
     val validationRequest =
