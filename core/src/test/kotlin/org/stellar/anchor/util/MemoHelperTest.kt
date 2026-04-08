@@ -64,6 +64,48 @@ internal class MemoHelperTest {
   }
 
   @Test
+  fun `test makeMemoId with valid uint64 values`() {
+    // Small value - should not throw
+    makeMemoId("1234")
+
+    // Max signed long - should not throw
+    makeMemoId("9223372036854775807")
+
+    // Above signed long max (valid uint64)
+    makeMemoId("11872666534918305457")
+
+    // Max uint64 - should not throw
+    makeMemoId("18446744073709551615")
+  }
+
+  @Test
+  fun `test makeMemoId with invalid values`() {
+    assertThrows<SepValidationException> { makeMemo("0", "id") }
+    assertThrows<SepValidationException> { makeMemo("-1", "id") }
+    assertThrows<SepValidationException> { makeMemo("18446744073709551616", "id") }
+    assertThrows<SepValidationException> { makeMemo("abc", "id") }
+  }
+
+  @Test
+  fun `test xdrMemoToString round-trip with uint64 memo ids`() {
+    // Round-trip: makeMemoId -> toXdr -> xdrMemoToString should preserve the original value
+    val testValues =
+      listOf("1234", "9223372036854775807", "11872666534918305457", "18446744073709551615")
+    for (value in testValues) {
+      val memo = makeMemoId(value)
+      val xdr = toXdr(memo)
+      assertEquals(value, xdrMemoToString(xdr))
+    }
+  }
+
+  @Test
+  fun `test xdrMemoToString with null and none`() {
+    assertEquals(null, xdrMemoToString(null))
+    val noneMemo = toXdr(null)
+    assertEquals(null, xdrMemoToString(noneMemo))
+  }
+
+  @Test
   fun `test toXdr()`() {
     val memoId: MemoId = makeMemo("123", MEMO_ID) as MemoId
     assertEquals("123", "${toXdr(memoId).id.uint64.number}")
