@@ -180,7 +180,7 @@ public class Sep45Service {
       throw new BadRequestException("authorization_entries is required");
     }
 
-    if (request.getAuthorizationEntries().length() > 100_000) {
+    if (request.getAuthorizationEntries().length() > 50_000) {
       throw new BadRequestException("authorization_entries exceeds maximum allowed size");
     }
 
