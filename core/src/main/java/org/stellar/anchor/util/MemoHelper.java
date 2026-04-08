@@ -3,6 +3,7 @@ package org.stellar.anchor.util;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.xdr.MemoType.*;
 
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.apache.commons.codec.DecoderException;
@@ -78,7 +79,7 @@ public class MemoHelper {
     try {
       switch (memoType) {
         case MEMO_ID:
-          return new MemoId(Long.parseLong(memo));
+          return makeMemoId(memo);
         case MEMO_TEXT:
           return new MemoText(memo);
         case MEMO_HASH:
@@ -96,6 +97,20 @@ public class MemoHelper {
     } catch (NumberFormatException nfex) {
       throw new SepValidationException(
           String.format("Invalid memo %s of type: %s", memo, memoType), nfex);
+    }
+  }
+
+  /**
+   * Creates a MemoId from a string, supporting the full uint64 range (1 to
+   * 18,446,744,073,709,551,615) as defined by the Stellar protocol.
+   */
+  public static MemoId makeMemoId(String memo) {
+    try {
+      return new MemoId(new BigInteger(memo));
+    } catch (IllegalArgumentException e) {
+      NumberFormatException nfe = new NumberFormatException(e.getMessage());
+      nfe.initCause(e);
+      throw nfe;
     }
   }
 
@@ -160,7 +175,7 @@ public class MemoHelper {
     return switch (memoXdr.getDiscriminant()) {
       case MEMO_NONE -> null; // No memo
       case MEMO_TEXT -> new String(memoXdr.getText().getBytes(), StandardCharsets.UTF_8);
-      case MEMO_ID -> String.valueOf(memoXdr.getId().getUint64().getNumber().longValue());
+      case MEMO_ID -> memoXdr.getId().getUint64().getNumber().toString();
       case MEMO_HASH, MEMO_RETURN ->
           Base64.getEncoder().encodeToString(memoXdr.getHash().getHash());
     };

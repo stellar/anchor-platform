@@ -149,7 +149,7 @@ public class DefaultPaymentListener implements PaymentListener {
         && accountType(ledgerPayment.getTo()) == Muxed) {
       MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
       toAccount = muxedAccount.getAccountId();
-      memo = Memo.id(Objects.requireNonNull(muxedAccount.getMuxedId()).longValue());
+      memo = Memo.id(Objects.requireNonNull(muxedAccount.getMuxedId()));
     } else {
       toAccount = ledgerPayment.getTo();
       memo = Memo.fromXdr(ledgerTransaction.getMemo());

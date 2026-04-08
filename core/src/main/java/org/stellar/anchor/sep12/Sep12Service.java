@@ -51,24 +51,8 @@ public class Sep12Service {
     Log.info("Sep12Service initialized.");
   }
 
-  public void populateRequestFromTransactionId(Sep12CustomerRequestBase requestBase)
-      throws SepNotFoundException {
-    if (requestBase.getTransactionId() != null) {
-      try {
-        GetTransactionResponse txn =
-            platformApiClient.getTransaction(requestBase.getTransactionId());
-        requestBase.setAccount(txn.getCustomers().getSender().getAccount());
-        requestBase.setMemo(txn.getCustomers().getSender().getMemo());
-      } catch (Exception e) {
-        throw new SepNotFoundException("The transaction specified does not exist");
-      }
-    }
-  }
-
   public Sep12GetCustomerResponse getCustomer(WebAuthJwt token, Sep12GetCustomerRequest request)
       throws AnchorException {
-    populateRequestFromTransactionId(request);
-
     validateGetOrPutRequest(request, token);
     if (request.getAccount() == null && token.getAccount() != null) {
       request.setAccount(token.getAccount());
@@ -85,8 +69,6 @@ public class Sep12Service {
 
   public Sep12PutCustomerResponse putCustomer(WebAuthJwt token, Sep12PutCustomerRequest request)
       throws AnchorException {
-    populateRequestFromTransactionId(request);
-
     validateGetOrPutRequest(request, token);
 
     if (request.getAccount() == null && token.getAccount() != null) {
@@ -179,6 +161,22 @@ public class Sep12Service {
         // sep31-sender, sep-31-receiver) to get the customer account and memo
         GetTransactionResponse txn =
             platformApiClient.getTransaction(requestBase.getTransactionId());
+
+        // Verify transaction ownership.
+        // SEP-31 stores the muxed M-address in creator.account, while SEP-6/24 store the
+        // base G-address. Match against the corresponding token field accordingly.
+        StellarId creator = txn.getCreator();
+        String creatorAccount = creator != null ? creator.getAccount() : null;
+        String tokenAccount =
+            creatorAccount != null && creatorAccount.startsWith("M")
+                ? token.getMuxedAccount()
+                : token.getAccount();
+        if (creator == null
+            || !Objects.equals(creatorAccount, tokenAccount)
+            || !Objects.equals(creator.getMemo(), token.getAccountMemo())) {
+          throw new Exception("ownership check failed");
+        }
+
         StellarId customer =
             "sep31-receiver".equals(requestBase.getType())
                 ? txn.getCustomers().getReceiver()
