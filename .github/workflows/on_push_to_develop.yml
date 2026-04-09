@@ -51,7 +51,7 @@ jobs:
           build-args: |
             TARGETARCH=amd64
           tags: |
-            stellar/anchor-platform:edge,stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}
+            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-amd64
           # add build cache for faster rebuilds
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -86,7 +86,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Docker images - AMD64
+      - name: Build and push Docker images - ARM64
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -96,14 +96,50 @@ jobs:
           build-args: |
             TARGETARCH=arm64
           tags: |
-            stellar/anchor-platform:edge,stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}
+            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-arm64
           # add build cache for faster rebuilds
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  create_multi_arch_manifest:
+    name: Create Multi-Arch Manifest
+    needs: [ build_and_push_docker_image_amd64, build_and_push_docker_image_arm64 ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get current date
+        id: get_date
+        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Calculate Github SHA
+        shell: bash
+        id: get_sha
+        run: echo "SHA=$(git rev-parse --short ${{ github.sha }} )" >> $GITHUB_OUTPUT
+
+      - name: Login to DockerHub
+        uses: docker/login-action@bb984efc561711aaa26e433c32c3521176eae55b
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest for edge tag
+        run: |
+          docker manifest create stellar/anchor-platform:edge \
+            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-amd64 \
+            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-arm64
+          docker manifest push stellar/anchor-platform:edge
+
+      - name: Create and push multi-arch manifest for dated tag
+        run: |
+          docker manifest create stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }} \
+            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-amd64 \
+            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-arm64
+          docker manifest push stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}
+
   complete:
     if: always()
-    needs: [ build_and_push_docker_image_amd64, build_and_push_docker_image_arm64 ]
+    needs: [ build_and_push_docker_image_amd64, build_and_push_docker_image_arm64, create_multi_arch_manifest ]
     runs-on: ubuntu-latest
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
