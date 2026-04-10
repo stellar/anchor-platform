@@ -14,13 +14,14 @@ permissions:
   contents: read
 
 jobs:
-  build_and_push_docker_image_amd64:
-    name: Push to DockerHub - AMD64
+  build_docker_image_amd64:
+    name: Build Docker Image - AMD64
     runs-on: ubuntu-24.04
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
-      # Use a Buildx builder with the docker-container driver (required for --platform)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -29,22 +30,14 @@ jobs:
           driver-opts: |
             image=moby/buildkit:latest
 
-      - name: Get current date
-        id: get_date
-        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-
-      - name: Calculate Github SHA
-        shell: bash
-        id: get_sha
-        run: echo "SHA=$(git rev-parse --short ${{ github.sha }} )" >> $GITHUB_OUTPUT
-
       - name: Login to DockerHub
         uses: docker/login-action@bb984efc561711aaa26e433c32c3521176eae55b
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Docker images - AMD64
+      - name: Build and push by digest - AMD64
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -53,19 +46,18 @@ jobs:
           platforms: linux/amd64
           build-args: |
             TARGETARCH=amd64
-          tags: |
-            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-amd64
-          # add build cache for faster rebuilds
+          outputs: type=image,name=stellar/anchor-platform,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build_and_push_docker_image_arm64:
-    name: Push to DockerHub - ARM64
+  build_docker_image_arm64:
+    name: Build Docker Image - ARM64
     runs-on: ubuntu-24.04-arm
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
-      # Use a Buildx builder with the docker-container driver (required for --platform)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -74,22 +66,14 @@ jobs:
           driver-opts: |
             image=moby/buildkit:latest
 
-      - name: Get current date
-        id: get_date
-        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-
-      - name: Calculate Github SHA
-        shell: bash
-        id: get_sha
-        run: echo "SHA=$(git rev-parse --short ${{ github.sha }} )" >> $GITHUB_OUTPUT
-
       - name: Login to DockerHub
         uses: docker/login-action@bb984efc561711aaa26e433c32c3521176eae55b
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Docker images - ARM64
+      - name: Build and push by digest - ARM64
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -98,15 +82,13 @@ jobs:
           platforms: linux/arm64
           build-args: |
             TARGETARCH=arm64
-          tags: |
-            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-arm64
-          # add build cache for faster rebuilds
+          outputs: type=image,name=stellar/anchor-platform,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   create_multi_arch_manifest:
     name: Create Multi-Arch Manifest
-    needs: [ build_and_push_docker_image_amd64, build_and_push_docker_image_arm64 ]
+    needs: [ build_docker_image_amd64, build_docker_image_arm64 ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -120,6 +102,9 @@ jobs:
         id: get_sha
         run: echo "SHA=$(git rev-parse --short ${{ github.sha }} )" >> $GITHUB_OUTPUT
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to DockerHub
         uses: docker/login-action@bb984efc561711aaa26e433c32c3521176eae55b
         with:
@@ -128,21 +113,19 @@ jobs:
 
       - name: Create and push multi-arch manifest for edge tag
         run: |
-          docker manifest create stellar/anchor-platform:edge \
-            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-amd64 \
-            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-arm64
-          docker manifest push stellar/anchor-platform:edge
+          docker buildx imagetools create -t stellar/anchor-platform:edge \
+            stellar/anchor-platform@${{ needs.build_docker_image_amd64.outputs.digest }} \
+            stellar/anchor-platform@${{ needs.build_docker_image_arm64.outputs.digest }}
 
       - name: Create and push multi-arch manifest for dated tag
         run: |
-          docker manifest create stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }} \
-            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-amd64 \
-            stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}-arm64
-          docker manifest push stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }}
+          docker buildx imagetools create -t stellar/anchor-platform:edge-${{ steps.get_date.outputs.DATE }}-${{ steps.get_sha.outputs.SHA }} \
+            stellar/anchor-platform@${{ needs.build_docker_image_amd64.outputs.digest }} \
+            stellar/anchor-platform@${{ needs.build_docker_image_arm64.outputs.digest }}
 
   complete:
     if: always()
-    needs: [ build_and_push_docker_image_amd64, build_and_push_docker_image_arm64, create_multi_arch_manifest ]
+    needs: [ build_docker_image_amd64, build_docker_image_arm64, create_multi_arch_manifest ]
     runs-on: ubuntu-latest
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
