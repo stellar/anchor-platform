@@ -5,6 +5,9 @@ on:
   release:
     types: [ created, edited ]
 
+permissions:
+  contents: read
+
 jobs:
   check_release_tag:
     runs-on: ubuntu-latest

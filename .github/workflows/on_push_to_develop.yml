@@ -10,6 +10,9 @@ on:
     # when commits are pushed or pull requests merged onto `develop` branch
     branches: [ develop ]
 
+permissions:
+  contents: read
+
 jobs:
   build_and_push_docker_image_amd64:
     name: Push to DockerHub - AMD64
