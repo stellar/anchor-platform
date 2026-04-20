@@ -171,7 +171,7 @@ public class RequestOnchainFundsHandler
       try {
         memo = makeMemo(request.getMemo(), "id");
       } catch (SepException e) {
-        throw new InvalidParamsException(String.format("Invalid id memo : %s", e.getMessage()), e);
+        throw new InvalidParamsException(String.format("Invalid id memo : %s", e.getMessage()));
       }
 
       if (memo == null) {
