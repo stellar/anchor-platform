@@ -393,7 +393,7 @@ private const val testMuxedPathPaymentStrictSendOpJson =
          "destAsset":{
             "discriminant":"ASSET_TYPE_NATIVE"
          },
-         "destAmount":{
+         "destMin":{
             "int64":1230
          }
       }
