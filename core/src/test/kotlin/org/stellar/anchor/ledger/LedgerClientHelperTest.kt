@@ -11,6 +11,7 @@ import org.stellar.sdk.xdr.CryptoKeyType.KEY_TYPE_ED25519
 import org.stellar.sdk.xdr.EnvelopeType.*
 import org.stellar.sdk.xdr.MemoType.MEMO_TEXT
 import org.stellar.sdk.xdr.OperationType.PATH_PAYMENT_STRICT_RECEIVE
+import org.stellar.sdk.xdr.OperationType.PATH_PAYMENT_STRICT_SEND
 import org.stellar.sdk.xdr.SignerKeyType.*
 
 internal class LedgerClientHelperTest {
@@ -85,6 +86,63 @@ internal class LedgerClientHelperTest {
       )
 
     assertNull(ledgerOperation)
+  }
+
+  @Test
+  fun `test convert() with muxed destination payment returns M-address`() {
+    val operation = GsonUtils.getInstance().fromJson(testMuxedPaymentOpJson, Operation::class.java)
+
+    val ledgerOperation =
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+      )
+
+    assertEquals(OperationType.PAYMENT, ledgerOperation.type)
+    assertNotNull(ledgerOperation.paymentOperation.to)
+    assertTrue(ledgerOperation.paymentOperation.to.startsWith("M"))
+  }
+
+  @Test
+  fun `test convert() with muxed destination path payment strict receive returns M-address`() {
+    val operation =
+      GsonUtils.getInstance()
+        .fromJson(testMuxedPathPaymentStrictReceiveOpJson, Operation::class.java)
+
+    val ledgerOperation =
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+      )
+
+    assertEquals(PATH_PAYMENT_STRICT_RECEIVE, ledgerOperation.type)
+    assertNotNull(ledgerOperation.pathPaymentOperation.to)
+    assertTrue(ledgerOperation.pathPaymentOperation.to.startsWith("M"))
+  }
+
+  @Test
+  fun `test convert() with muxed destination path payment strict send returns M-address`() {
+    val operation =
+      GsonUtils.getInstance().fromJson(testMuxedPathPaymentStrictSendOpJson, Operation::class.java)
+
+    val ledgerOperation =
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+      )
+
+    assertEquals(PATH_PAYMENT_STRICT_SEND, ledgerOperation.type)
+    assertNotNull(ledgerOperation.pathPaymentOperation.to)
+    assertTrue(ledgerOperation.pathPaymentOperation.to.startsWith("M"))
   }
 
   @Test
@@ -246,6 +304,90 @@ private const val testPathPaymentOpJson =
             "discriminant":"KEY_TYPE_ED25519",
             "ed25519":{
                "uint256":"0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlU="
+            }
+         },
+         "destAsset":{
+            "discriminant":"ASSET_TYPE_NATIVE"
+         },
+         "destAmount":{
+            "int64":1230
+         }
+      }
+   }
+}
+"""
+
+private const val testMuxedPaymentOpJson =
+  """
+{
+   "body":{
+      "discriminant":"PAYMENT",
+      "paymentOp":{
+         "destination":{
+            "discriminant":"KEY_TYPE_MUXED_ED25519",
+            "med25519":{
+               "id":{"uint64":{"number":12345}},
+               "ed25519":{"uint256":"0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlU="}
+            }
+         },
+         "asset":{
+            "discriminant":"ASSET_TYPE_NATIVE"
+         },
+         "amount":{
+            "int64":1230
+         }
+      }
+   }
+}
+"""
+
+private const val testMuxedPathPaymentStrictReceiveOpJson =
+  """
+{
+   "body":{
+      "discriminant":"PATH_PAYMENT_STRICT_RECEIVE",
+      "pathPaymentStrictReceiveOp":{
+         "sendAsset":{
+             "discriminant":"ASSET_TYPE_NATIVE"
+         },
+         "sendMax":{
+             "int64":1230
+         },
+         "destination":{
+            "discriminant":"KEY_TYPE_MUXED_ED25519",
+            "med25519":{
+               "id":{"uint64":{"number":12345}},
+               "ed25519":{"uint256":"0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlU="}
+            }
+         },
+         "destAsset":{
+            "discriminant":"ASSET_TYPE_NATIVE"
+         },
+         "destAmount":{
+            "int64":1230
+         }
+      }
+   }
+}
+"""
+
+private const val testMuxedPathPaymentStrictSendOpJson =
+  """
+{
+   "body":{
+      "discriminant":"PATH_PAYMENT_STRICT_SEND",
+      "pathPaymentStrictSendOp":{
+         "sendAsset":{
+             "discriminant":"ASSET_TYPE_NATIVE"
+         },
+         "sendAmount":{
+             "int64":1230
+         },
+         "destination":{
+            "discriminant":"KEY_TYPE_MUXED_ED25519",
+            "med25519":{
+               "id":{"uint64":{"number":12345}},
+               "ed25519":{"uint256":"0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlU="}
             }
          },
          "destAsset":{

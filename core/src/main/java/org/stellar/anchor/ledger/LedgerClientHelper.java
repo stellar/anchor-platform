@@ -58,13 +58,12 @@ public class LedgerClientHelper {
                   StrKey.encodeEd25519PublicKey(payment.getDestination().getEd25519().getUint256());
               case KEY_TYPE_MUXED_ED25519 -> {
                 try {
-                  StrKey.encodeMed25519PublicKey(
+                  yield StrKey.encodeMed25519PublicKey(
                       payment.getDestination().getMed25519().toXdrByteArray());
                 } catch (IOException ioex) {
                   throw new LedgerException(
                       "Failed to encode muxed account: " + payment.getDestination(), ioex);
                 }
-                yield null;
               }
               default -> {
                 debugF("Unsupported payment destination type: {}", payment.getDestination());
@@ -103,13 +102,12 @@ public class LedgerClientHelper {
                             .getUint256());
                 case KEY_TYPE_MUXED_ED25519 -> {
                   try {
-                    StrKey.encodeMed25519PublicKey(
+                    yield StrKey.encodeMed25519PublicKey(
                         payment.getDestination().getMed25519().toXdrByteArray());
                   } catch (IOException ioex) {
                     throw new LedgerException(
                         "Failed to encode muxed account: " + payment.getDestination(), ioex);
                   }
-                  yield null;
                 }
                 default -> {
                   debugF("Unsupported payment destination type: {}", payment.getDestination());
@@ -127,13 +125,12 @@ public class LedgerClientHelper {
                         payment.getDestination().getEd25519().getUint256());
                 case KEY_TYPE_MUXED_ED25519 -> {
                   try {
-                    StrKey.encodeMed25519PublicKey(
+                    yield StrKey.encodeMed25519PublicKey(
                         payment.getDestination().getMed25519().toXdrByteArray());
                   } catch (IOException ioex) {
                     throw new LedgerException(
                         "Failed to encode muxed account: " + payment.getDestination(), ioex);
                   }
-                  yield null;
                 }
                 default -> {
                   debugF("Unsupported payment destination type: {}", payment.getDestination());
