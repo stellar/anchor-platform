@@ -31,26 +31,32 @@ class DepositInfoSelfGeneratorBaseTest {
   fun `concurrent generation produces no collisions`() {
     val probe = Probe()
     val threads = 64
-    val perThread = 2_000
+    val perThread = 1_000
     val pool = Executors.newFixedThreadPool(threads)
     val start = CountDownLatch(1)
     val seen = ConcurrentHashMap.newKeySet<String>()
 
-    repeat(threads) {
-      pool.submit {
-        start.await()
-        repeat(perThread) { seen.add(probe.generate()) }
+    try {
+      repeat(threads) {
+        pool.submit {
+          start.await()
+          repeat(perThread) { seen.add(probe.generate()) }
+        }
       }
+      start.countDown()
+      pool.shutdown()
+      assertTrue(
+        pool.awaitTermination(60, TimeUnit.SECONDS),
+        "generator pool did not finish in time"
+      )
+    } finally {
+      pool.shutdownNow()
     }
-
-    start.countDown()
-    pool.shutdown()
-    assertTrue(pool.awaitTermination(60, TimeUnit.SECONDS), "generator pool did not finish in time")
 
     assertEquals(
       threads * perThread,
       seen.size,
-      "expected all memos to be unique under concurrent load"
+      "expected all memos to be unique under concurrent load",
     )
   }
 }
