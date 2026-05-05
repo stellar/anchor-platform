@@ -778,6 +778,94 @@ internal class Sep24ServiceTest {
     assertTrue(response.url.indexOf("lang=en") != -1)
   }
 
+  @Test
+  fun `test withdraw with muxed token stores muxed address as webAuthAccount`() {
+    val strToken = jwtService.encode(createTestInteractiveJwt(null))
+    every { interactiveUrlConstructor.construct(any(), any(), any(), any()) } returns
+      "${TEST_SEP24_INTERACTIVE_URL}?lang=en&token=$strToken"
+    val slotTxn = slot<Sep24Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+
+    val muxedJwt =
+      TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L, TEST_HOME_DOMAIN, TEST_CLIENT_DOMAIN)
+    sep24Service.withdraw(muxedJwt, createTestTransactionRequest())
+
+    assertEquals(muxedJwt.muxedAccount, slotTxn.captured.webAuthAccount)
+    assertNotEquals(TEST_ACCOUNT, slotTxn.captured.webAuthAccount)
+    assertNull(slotTxn.captured.webAuthAccountMemo)
+  }
+
+  @Test
+  fun `test deposit with muxed token stores muxed address as webAuthAccount`() {
+    val strToken = jwtService.encode(createTestInteractiveJwt(null))
+    every { interactiveUrlConstructor.construct(any(), any(), any(), any()) } returns
+      "${TEST_SEP24_INTERACTIVE_URL}?lang=en&token=$strToken"
+    val slotTxn = slot<Sep24Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+
+    val muxedJwt =
+      TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L, TEST_HOME_DOMAIN, TEST_CLIENT_DOMAIN)
+    sep24Service.deposit(muxedJwt, createTestTransactionRequest())
+
+    assertEquals(muxedJwt.muxedAccount, slotTxn.captured.webAuthAccount)
+    assertNotEquals(TEST_ACCOUNT, slotTxn.captured.webAuthAccount)
+    assertNull(slotTxn.captured.webAuthAccountMemo)
+  }
+
+  @Test
+  fun `test find transaction rejects different muxed sub-id on same underlying account`() {
+    val muxedAJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val muxedBJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 22L)
+
+    val testTxn = createTestTransaction("deposit")
+    testTxn.webAuthAccount = muxedAJwt.muxedAccount
+    every { txnStore.findByTransactionId(any()) } returns testTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    // muxed-A can read its own
+    assertEquals(
+      testTxn.transactionId,
+      sep24Service.findTransaction(muxedAJwt, gtr).transaction.id,
+    )
+    // muxed-B (same underlying G) cannot
+    assertThrows<SepNotFoundException> { sep24Service.findTransaction(muxedBJwt, gtr) }
+  }
+
+  @Test
+  fun `test find transaction allows muxed user to read own legacy G-stored row by ID`() {
+    // Backwards-compat path for transactions created before muxed-aware storage:
+    // webAuthAccount was stored as the underlying G-account. A muxed token reading
+    // such a legacy row by ID is admitted via the G-fallback branch.
+    val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+
+    val legacyTxn = createTestTransaction("deposit")
+    legacyTxn.webAuthAccount = TEST_ACCOUNT // legacy: G-stored, no muxed info
+    legacyTxn.webAuthAccountMemo = null
+    every { txnStore.findByTransactionId(any()) } returns legacyTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    assertEquals(
+      legacyTxn.transactionId,
+      sep24Service.findTransaction(muxedJwt, gtr).transaction.id,
+    )
+  }
+
+  @Test
+  fun `test find transactions only returns rows for own muxed sub-id`() {
+    val muxedAJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    every { txnStore.findTransactions(muxedAJwt.muxedAccount, null, any()) } returns
+      createTestTransactions("deposit")
+    every { txnStore.findTransactions(TEST_ACCOUNT, null, any()) } returns emptyList()
+
+    val request = GetTransactionsRequest()
+    request.assetCode = TEST_ASSET
+    val response = sep24Service.findTransactions(muxedAJwt, request)
+
+    assertEquals(2, response.transactions.size)
+    verify(exactly = 1) { txnStore.findTransactions(muxedAJwt.muxedAccount, null, any()) }
+    verify(exactly = 0) { txnStore.findTransactions(TEST_ACCOUNT, null, any()) }
+  }
+
   private fun createTestWebAuthJwt(): WebAuthJwt {
     return TestHelper.createWebAuthJwt(TEST_ACCOUNT, null, TEST_HOME_DOMAIN, TEST_CLIENT_DOMAIN)
   }

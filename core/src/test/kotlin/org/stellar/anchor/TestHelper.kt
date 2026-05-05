@@ -1,12 +1,14 @@
 package org.stellar.anchor
 
 import io.mockk.every
+import java.math.BigInteger
 import javax.crypto.SecretKey
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.util.KeyUtil
 import org.stellar.anchor.util.KeyUtil.toSecretKeySpecOrNull
+import org.stellar.sdk.MuxedAccount
 
 class TestHelper {
   companion object {
@@ -24,6 +26,26 @@ class TestHelper {
       return Sep10Jwt.of(
         "$hostUrl/auth",
         if (accountMemo == null) account else "$account:$accountMemo",
+        issuedAt,
+        issuedAt + 60,
+        "",
+        clientDomain,
+        homeDomain,
+      )
+    }
+
+    fun createMuxedWebAuthJwt(
+      account: String = TEST_ACCOUNT,
+      muxedId: Long,
+      hostUrl: String = "",
+      clientDomain: String = "vibrant.stellar.org",
+      homeDomain: String = "test.stellar.org",
+    ): WebAuthJwt {
+      val muxedAddress = MuxedAccount(account, BigInteger.valueOf(muxedId)).address
+      val issuedAt: Long = System.currentTimeMillis() / 1000L
+      return Sep10Jwt.of(
+        "$hostUrl/auth",
+        muxedAddress,
         issuedAt,
         issuedAt + 60,
         "",
