@@ -1421,6 +1421,119 @@ class Sep6ServiceTest {
     JSONAssert.assertEquals(Sep6ServiceTestData.transactionsJson, gson.toJson(response), true)
   }
 
+  @Test
+  fun `test deposit with muxed token stores muxed address as webAuthAccount`() {
+    val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartDepositRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account(TEST_ACCOUNT)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+    sep6Service.deposit(muxedJwt, request)
+
+    assertEquals(muxedJwt.muxedAccount, slotTxn.captured.webAuthAccount)
+    Assertions.assertNotEquals(TEST_ACCOUNT, slotTxn.captured.webAuthAccount)
+  }
+
+  @Test
+  fun `test withdraw with muxed token stores muxed address as webAuthAccount`() {
+    val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartWithdrawRequest.builder()
+        .assetCode(TEST_ASSET)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+    sep6Service.withdraw(muxedJwt, request)
+
+    assertEquals(muxedJwt.muxedAccount, slotTxn.captured.webAuthAccount)
+    Assertions.assertNotEquals(TEST_ACCOUNT, slotTxn.captured.webAuthAccount)
+  }
+
+  @Test
+  fun `test find transaction rejects different muxed sub-id on same underlying account`() {
+    val muxedAJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val muxedBJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 22L)
+
+    val depositTxn = createDepositTxn(muxedAJwt.muxedAccount)
+    val request = GetTransactionRequest.builder().id(depositTxn.id).lang("en-US").build()
+    every { txnStore.findByTransactionId(depositTxn.id) } returns depositTxn
+
+    // Muxed A can read its own transaction.
+    sep6Service.findTransaction(muxedAJwt, request)
+    // Muxed B (same underlying G) cannot.
+    assertThrows<NotFoundException> { sep6Service.findTransaction(muxedBJwt, request) }
+  }
+
+  @Test
+  fun `test find transaction allows muxed user to read own legacy G-stored row by ID`() {
+    // Backwards-compat path for transactions created before muxed-aware storage:
+    // webAuthAccount was stored as the underlying G-account. A muxed token reading
+    // such a legacy row by ID is admitted via the G-fallback branch.
+    val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+
+    val legacyTxn = createDepositTxn(TEST_ACCOUNT) // legacy: G-stored, no muxed info
+    val request = GetTransactionRequest.builder().id(legacyTxn.id).lang("en-US").build()
+    every { txnStore.findByTransactionId(legacyTxn.id) } returns legacyTxn
+
+    sep6Service.findTransaction(muxedJwt, request)
+
+    verify { txnStore.findByTransactionId(legacyTxn.id) }
+  }
+
+  @Test
+  fun `test find transactions only queries store for muxed account, not underlying G`() {
+    val muxedAJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val depositTxn = createDepositTxn(muxedAJwt.muxedAccount)
+    every { txnStore.findTransactions(muxedAJwt.muxedAccount, any(), any()) } returns
+      listOf(depositTxn)
+
+    val request =
+      GetTransactionsRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account(muxedAJwt.muxedAccount)
+        .noOlderThan(Instant.now().toString())
+        .limit(10)
+        .kind("deposit")
+        .pagingId("1")
+        .lang("en-US")
+        .build()
+
+    sep6Service.findTransactions(muxedAJwt, request)
+
+    verify(exactly = 1) { txnStore.findTransactions(muxedAJwt.muxedAccount, null, request) }
+    verify(exactly = 0) { txnStore.findTransactions(TEST_ACCOUNT, null, request) }
+  }
+
+  @Test
+  fun `test find transactions rejects request using underlying G when authenticated as muxed`() {
+    val muxedAJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+
+    val request =
+      GetTransactionsRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account(TEST_ACCOUNT)
+        .noOlderThan(Instant.now().toString())
+        .limit(10)
+        .kind("deposit")
+        .pagingId("1")
+        .lang("en-US")
+        .build()
+
+    assertThrows<SepNotAuthorizedException> { sep6Service.findTransactions(muxedAJwt, request) }
+    verify { txnStore wasNot Called }
+  }
+
   private fun createDepositTxn(
     webAuthAccount: String,
     webAuthAccountMemo: String? = null,

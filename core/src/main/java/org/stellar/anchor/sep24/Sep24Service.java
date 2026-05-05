@@ -209,7 +209,7 @@ public class Sep24Service {
                 sep24Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep24Config.getInitialUserDeadlineSeconds()))
-            .webAuthAccount(token.getAccount())
+            .webAuthAccount(Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount()))
             .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .toAccount(asset.getDistributionAccount())
@@ -391,7 +391,7 @@ public class Sep24Service {
                 sep24Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep24Config.getInitialUserDeadlineSeconds()))
-            .webAuthAccount(token.getAccount())
+            .webAuthAccount(Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount()))
             .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
@@ -484,8 +484,9 @@ public class Sep24Service {
           (txReq.getAssetCode() == null) ? "null" : txReq.getAssetCode());
       throw new SepValidationException("asset code not supported");
     }
+    String tokenAccount = Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
     List<Sep24Transaction> txns =
-        txnStore.findTransactions(token.getAccount(), token.getAccountMemo(), txReq);
+        txnStore.findTransactions(tokenAccount, token.getAccountMemo(), txReq);
     GetTransactionsResponse result = new GetTransactionsResponse();
     List<TransactionResponse> list = new ArrayList<>();
     debugF("found {} transactions", txns.size());
@@ -530,13 +531,18 @@ public class Sep24Service {
           "One of id, stellar_transaction_id or external_transaction_id is required.");
     }
 
-    // We should not return the transaction that belongs to other accounts.
-    if (txn == null || !Objects.equals(txn.getWebAuthAccount(), token.getAccount())) {
+    // Match the stored web_auth_account against the requesting token. To preserve
+    // access to transactions created before muxed-aware storage was introduced
+    // (where muxed customers had their sub-id collapsed to the underlying G), we
+    // branch on the stored value: M-prefixed values require exact muxed match
+    // (post-fix isolation); non-muxed values fall back to comparing the underlying
+    // G-account. The listing endpoint is kept strict, so legacy rows are reachable
+    // by direct ID only — they are not enumerable.
+    if (txn == null || !webAuthAccountMatches(txn.getWebAuthAccount(), token)) {
       infoF("no transactions found with account:{}", token.getAccount());
       throw new SepNotFoundException("transaction not found");
     }
 
-    // Make sure the transaction belongs to the account with the same memo.
     if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
       infoF(
           "no transactions found with account:{} memo:{}",
@@ -600,5 +606,21 @@ public class Sep24Service {
     builder.amountOut(quote.getBuyAmount());
     builder.amountOutAsset(quote.getBuyAsset());
     builder.feeDetails(quote.getFee());
+  }
+
+  /**
+   * Whether the stored web_auth_account belongs to the requesting token. M-prefixed stored values
+   * (post-fix muxed-aware storage) require an exact muxed match; non-muxed stored values fall back
+   * to the underlying G so that legacy rows predating muxed-aware storage remain reachable by their
+   * original creator.
+   */
+  private static boolean webAuthAccountMatches(String storedAccount, WebAuthJwt token) {
+    if (storedAccount == null) {
+      return false;
+    }
+    if (storedAccount.startsWith("M")) {
+      return storedAccount.equals(token.getMuxedAccount());
+    }
+    return storedAccount.equals(token.getAccount());
   }
 }
