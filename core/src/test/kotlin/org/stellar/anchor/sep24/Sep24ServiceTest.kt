@@ -263,6 +263,7 @@ internal class Sep24ServiceTest {
     val slotTxn = slot<Sep24Transaction>()
     every { txnStore.save(capture(slotTxn)) } returns null
     every { sep38QuoteStore.findByQuoteId(any()) } returns withdrawQuote
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns true
     sep24Service.withdraw(
       createTestWebAuthJwtWithMemo(),
       createTestTransactionRequest(withdrawQuote.id),
@@ -411,6 +412,7 @@ internal class Sep24ServiceTest {
     val slotTxn = slot<Sep24Transaction>()
     every { txnStore.save(capture(slotTxn)) } returns null
     every { sep38QuoteStore.findByQuoteId(any()) } returns depositQuote
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns true
     sep24Service.deposit(
       createTestWebAuthJwtWithMemo(),
       createTestTransactionRequest(depositQuote.id),
