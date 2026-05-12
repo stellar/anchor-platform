@@ -171,4 +171,24 @@ class ExchangeAmountsCalculatorTest {
     val ex = assertThrows<BadRequestException> { calculator.bindQuoteToTransaction("id", "txn2") }
     assert(ex.message!!.contains("has already been used"))
   }
+
+  @Test
+  fun `test calculateFromQuote rejects T2 after T1 is cancelled`() {
+    val quoteId = "q-cancel"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns
+      usdcQuote().apply { transactionId = "T1-cancelled" }
+    val ex =
+      assertThrows<BadRequestException> {
+        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), "100")
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test bindQuoteToTransaction rejects T2 after T1 is cancelled`() {
+    every { sep38QuoteStore.bindToTransaction("q-cancel", "T2") } returns false
+    val ex =
+      assertThrows<BadRequestException> { calculator.bindQuoteToTransaction("q-cancel", "T2") }
+    assert(ex.message!!.contains("has already been used"))
+  }
 }
