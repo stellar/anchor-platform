@@ -249,8 +249,9 @@ public class SepBeans {
       AssetService assetService,
       RateIntegration rateIntegration,
       Clock clock,
-      EventService eventService,
-      ExchangeAmountsCalculator exchangeAmountsCalculator) {
+      EventService eventService) {
+    ExchangeAmountsCalculator exchangeAmountsCalculator =
+        new ExchangeAmountsCalculator(sep38QuoteStore, clock);
     return new Sep31Service(
         languageConfig,
         sep10Config,
