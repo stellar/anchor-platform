@@ -101,9 +101,10 @@ public class ExchangeAmountsCalculator {
   }
 
   /**
-   * Bind a quote to a transaction. Delegates to {@link
-   * Sep38QuoteStore#bindToTransaction}.
+   * Bind a quote to a transaction. Delegates to {@link Sep38QuoteStore#bindToTransaction}.
    *
+   * @param quoteId The quote ID
+   * @param transactionId The transaction ID to bind
    * @throws BadRequestException if the quote has already been bound to a transaction
    * @throws SepException if a storage error occurs
    */
