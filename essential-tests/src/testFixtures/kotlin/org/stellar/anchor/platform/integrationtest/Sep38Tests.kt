@@ -2,6 +2,7 @@ package org.stellar.anchor.platform.integrationtest
 
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.Executors
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -187,6 +188,71 @@ class Sep38Tests : IntegrationTestBase(TestConfig()) {
       }
     assert(ex24.message!!.contains("has already been used")) {
       "Expected 'has already been used' but got: ${ex24.message}"
+    }
+  }
+
+  @Test
+  fun `test concurrent POST sep31 transactions with same quote_id result in exactly one success`() {
+    val sender =
+      sep12Client.putCustomer(
+        gson.fromJson(testCustomer1Json, Sep12PutCustomerRequest::class.java)
+      )!!
+    val receiver =
+      sep12Client.putCustomer(
+        gson.fromJson(testCustomer2Json, Sep12PutCustomerRequest::class.java)
+      )!!
+
+    val quote =
+      sep38Client.postQuote(
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        "10",
+        "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+      )
+
+    val txnRequest =
+      Sep31PostTransactionRequest().apply {
+        amount = "10"
+        assetCode = "USDC"
+        assetIssuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+        senderId = sender.id
+        receiverId = receiver.id
+        quoteId = quote.id
+        fundingMethod = "SEPA"
+        fields =
+          org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest.Sep31TxnFields(
+            hashMapOf(
+              "receiver_routing_number" to "r0123",
+              "receiver_account_number" to "a0456",
+              "type" to "SWIFT",
+            )
+          )
+      }
+
+    val executor = Executors.newFixedThreadPool(2)
+    val futures =
+      (1..2).map {
+        executor.submit<Exception?> {
+          try {
+            sep31Client.postTransaction(txnRequest)
+            null
+          } catch (e: SepException) {
+            e
+          }
+        }
+      }
+
+    val exceptions = futures.map { it.get() }
+    executor.shutdown()
+
+    val successCount = exceptions.count { it == null }
+    val failureCount = exceptions.count { it != null }
+
+    assertEquals(1, successCount, "Expected exactly 1 successful transaction, got $successCount")
+    assertEquals(1, failureCount, "Expected exactly 1 failed transaction, got $failureCount")
+
+    val error = exceptions.first { it != null }!!
+    assert(error.message!!.contains("has already been used")) {
+      "Expected 'has already been used' but got: ${error.message}"
     }
   }
 }
