@@ -881,6 +881,66 @@ internal class Sep24ServiceTest {
     )
   }
 
+  @Test
+  fun `test withdraw rejects already-bound quote`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      withdrawQuote.apply { transactionId = "already-used-txn" }
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.withdraw(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(withdrawQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test withdraw bind failure rejects second use`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      withdrawQuote.apply { transactionId = null }
+    every { txnStore.save(any()) } returns null
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns false
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.withdraw(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(withdrawQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test deposit rejects already-bound quote`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      depositQuote.apply { transactionId = "already-used-txn" }
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.deposit(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(depositQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test deposit bind failure rejects second use`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      depositQuote.apply { transactionId = null }
+    every { txnStore.save(any()) } returns null
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns false
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.deposit(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(depositQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
   private fun createTestInteractiveJwt(accountMemo: String?): Sep24InteractiveUrlJwt {
     val jwt =
       Sep24InteractiveUrlJwt(

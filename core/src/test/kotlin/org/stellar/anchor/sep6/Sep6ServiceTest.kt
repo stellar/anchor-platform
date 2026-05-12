@@ -22,6 +22,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_QUOTE_ID
 import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.event.AnchorEvent
+import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.NotFoundException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepValidationException
@@ -1578,5 +1579,89 @@ class Sep6ServiceTest {
     txn.requiredInfoUpdates = listOf("first_name", "last_name")
 
     return txn
+  }
+
+  @Test
+  fun `test depositExchange rejects already-bound quote`() {
+    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } throws
+      BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+    val ex = assertThrows<BadRequestException> { sep6Service.depositExchange(token, request) }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test depositExchange bind failure rejects second use`() {
+    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset("iso4217:USD")
+        .amountOut("98")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("2", TEST_ASSET_SEP38_FORMAT))
+        .build()
+    every { txnStore.save(any()) } returns null
+    every { exchangeAmountsCalculator.bindQuoteToTransaction(TEST_QUOTE_ID, any()) } throws
+      BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+    val ex = assertThrows<BadRequestException> { sep6Service.depositExchange(token, request) }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test withdrawExchange rejects already-bound quote`() {
+    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } throws
+      BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+    val ex = assertThrows<BadRequestException> { sep6Service.withdrawExchange(token, request) }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test withdrawExchange bind failure rejects second use`() {
+    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset("iso4217:USD")
+        .feeDetails(FeeDetails("2", "iso4217:USD"))
+        .build()
+    every { txnStore.save(any()) } returns null
+    every { exchangeAmountsCalculator.bindQuoteToTransaction(TEST_QUOTE_ID, any()) } throws
+      BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+    val ex = assertThrows<BadRequestException> { sep6Service.withdrawExchange(token, request) }
+    assert(ex.message!!.contains("has already been used"))
   }
 }
