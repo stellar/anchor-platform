@@ -52,6 +52,7 @@ import org.stellar.anchor.sep31.Sep31Service.Context
 import org.stellar.anchor.sep38.PojoSep38Quote
 import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.setupMock
+import org.stellar.anchor.util.ExchangeAmountsCalculator
 import org.stellar.anchor.util.GsonUtils
 
 @Order(13)
@@ -250,6 +251,7 @@ class Sep31ServiceTest {
   @MockK(relaxed = true) lateinit var sep31Config: Sep31Config
   @MockK(relaxed = true) lateinit var sep31DepositInfoGenerator: Sep31DepositInfoGenerator
   @MockK(relaxed = true) lateinit var quoteStore: Sep38QuoteStore
+  @MockK(relaxed = true) lateinit var exchangeAmountsCalculator: ExchangeAmountsCalculator
   @MockK(relaxed = true) lateinit var rateIntegration: RateIntegration
   @MockK(relaxed = true) lateinit var customerIntegration: CustomerIntegration
   @MockK(relaxed = true) lateinit var eventService: EventService
@@ -287,6 +289,7 @@ class Sep31ServiceTest {
         rateIntegration,
         eventService,
         Clock.systemUTC(),
+        exchangeAmountsCalculator,
       )
 
     request = gson.fromJson(requestJson, Sep31PostTransactionRequest::class.java)
@@ -700,7 +703,6 @@ class Sep31ServiceTest {
         firstArg<Sep31Transaction>().id = "ABC-123"
         firstArg()
       }
-
     // POST transaction
     val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
     var gotResponse: Sep31PostTransactionResponse? = null
@@ -708,6 +710,7 @@ class Sep31ServiceTest {
 
     // verify if the mocks were called
     verify(exactly = 1) { quoteStore.findByQuoteId("my_quote_id") }
+    verify(exactly = 1) { exchangeAmountsCalculator.bindQuoteToTransaction("my_quote_id", any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
 
     // validate the values of the saved sep31Transaction
@@ -749,6 +752,93 @@ class Sep31ServiceTest {
     // validate the final response
     val wantResponse = Sep31PostTransactionResponse.builder().id(txId).build()
     assertEquals(wantResponse, gotResponse)
+  }
+
+  @Test
+  fun `test preValidateQuote rejects already-bound quote`() {
+    val tomorrow = Instant.now().plus(1, ChronoUnit.DAYS)
+    val boundQuote =
+      PojoSep38Quote().apply {
+        id = "bound-quote-id"
+        sellAsset = stellarUSDC
+        sellAmount = "100"
+        buyAsset = stellarJPYC
+        buyAmount = "12500"
+        expiresAt = tomorrow
+        fee = FeeDetails("10", stellarUSDC)
+        transactionId = "already-used-txn"
+      }
+    every { quoteStore.findByQuoteId("bound-quote-id") } returns boundQuote
+
+    val postTxRequest = Sep31PostTransactionRequest()
+    postTxRequest.amount = "100"
+    postTxRequest.assetCode = "USDC"
+    postTxRequest.assetIssuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    postTxRequest.quoteId = "bound-quote-id"
+    postTxRequest.fundingMethod = "SEPA"
+    postTxRequest.fields =
+      Sep31TxnFields(
+        hashMapOf(
+          "receiver_account_number" to "1",
+          "type" to "SWIFT",
+          "receiver_routing_number" to "1"
+        )
+      )
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex = assertThrows<AnchorException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test POST transaction atomic bind failure rejects second use`() {
+    val tomorrow = Instant.now().plus(1, ChronoUnit.DAYS)
+    val quoteId = "race-quote-id"
+    val freshQuote =
+      PojoSep38Quote().apply {
+        id = quoteId
+        sellAsset = stellarUSDC
+        sellAmount = "100"
+        buyAsset = stellarJPYC
+        buyAmount = "12500"
+        expiresAt = tomorrow
+        fee = FeeDetails("10", stellarUSDC)
+      }
+    every { quoteStore.findByQuoteId(quoteId) } returns freshQuote
+    every { exchangeAmountsCalculator.bindQuoteToTransaction(quoteId, any()) } throws
+      BadRequestException("quote(id=$quoteId) has already been used")
+
+    val postTxRequest = Sep31PostTransactionRequest()
+    postTxRequest.amount = "100"
+    postTxRequest.assetCode = "USDC"
+    postTxRequest.assetIssuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    postTxRequest.quoteId = quoteId
+    postTxRequest.fundingMethod = "SEPA"
+    postTxRequest.fields =
+      Sep31TxnFields(
+        hashMapOf(
+          "receiver_account_number" to "1",
+          "type" to "SWIFT",
+          "receiver_routing_number" to "1"
+        )
+      )
+
+    val mockCustomer = GetCustomerResponse()
+    mockCustomer.status = Sep12Status.ACCEPTED.name
+    every { customerIntegration.getCustomer(any()) } returns mockCustomer
+    every { sep10Config.allowedClientNames } returns listOf("vibrant")
+    every { clientService.getClientConfigBySigningKey(any()) } returns
+      CustodialClient().apply { name = "vibrant" }
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "TXN-RACE" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex = assertThrows<AnchorException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assert(ex.message!!.contains("has already been used"))
   }
 
   @Test
@@ -812,6 +902,7 @@ class Sep31ServiceTest {
         rateIntegration,
         eventService,
         Clock.systemUTC(),
+        exchangeAmountsCalculator,
       )
 
     val senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"
