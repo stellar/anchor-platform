@@ -215,6 +215,14 @@ public class Sep31Service {
     Context.get().setTransaction(sep31TransactionStore.save(txn));
     txn = Context.get().getTransaction();
 
+    Sep38Quote consumedQuote = Context.get().getQuote();
+    if (consumedQuote != null) {
+      if (!sep38QuoteStore.bindToTransaction(consumedQuote.getId(), txn.getId())) {
+        throw new BadRequestException(
+            String.format("quote(id=%s) has already been used", consumedQuote.getId()));
+      }
+    }
+
     eventSession.publish(
         AnchorEvent.builder()
             .id(UUID.randomUUID().toString())
@@ -467,6 +475,15 @@ public class Sep31Service {
       infoF("Quote ({}) was not found", request.getQuoteId());
       throw new BadRequestException(
           String.format("quote(id=%s) was not found.", request.getQuoteId()));
+    }
+
+    if (quote.getTransactionId() != null) {
+      infoF(
+          "Quote ({}) has already been used in transaction ({})",
+          request.getQuoteId(),
+          quote.getTransactionId());
+      throw new BadRequestException(
+          String.format("quote(id=%s) has already been used", request.getQuoteId()));
     }
 
     if (quote.getExpiresAt() != null && !quote.getExpiresAt().isAfter(clock.instant())) {
