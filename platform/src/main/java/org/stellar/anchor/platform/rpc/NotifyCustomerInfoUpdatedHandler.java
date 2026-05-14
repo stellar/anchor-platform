@@ -23,6 +23,8 @@ import org.stellar.anchor.api.sep.sep12.Sep12Status;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.metrics.MetricsService;
+import org.stellar.anchor.platform.data.JdbcSep31Transaction;
+import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
 import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
@@ -81,11 +83,20 @@ public class NotifyCustomerInfoUpdatedHandler
                   .type(request.getCustomerType())
                   .build());
       status = customer.getStatus();
+
+      String clientName = null;
+
+      if (txn instanceof JdbcSep6Transaction) {
+        clientName = ((JdbcSep6Transaction) txn).getClientName();
+      } else if (txn instanceof JdbcSep31Transaction) {
+        clientName = ((JdbcSep31Transaction) txn).getClientName();
+      }
       eventSession.publish(
           AnchorEvent.builder()
               .id(UUID.randomUUID().toString())
               .sep(SEP_12.getSep().toString())
               .type(AnchorEvent.Type.CUSTOMER_UPDATED)
+              .clientName(clientName)
               .customer(GetCustomerResponse.to(customer))
               .build());
     }

@@ -300,7 +300,7 @@ class ClientStatusCallbackHandlerTest {
   @Test
   fun `handleEvent should skip and return true when transaction belongs to a different client`() {
     val handlerSpy = spyk(handler)
-    event.transaction.clientName = "other-wallet"
+    event.transaction.clientName = "wallet-a"
     every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
 
     val result = handlerSpy.handleEvent(event)
@@ -332,9 +332,10 @@ class ClientStatusCallbackHandlerTest {
   }
 
   @Test
-  fun `handleEvent should skip customer events because Sep12GetCustomerResponse carries no client attribution`() {
+  fun `handleEvent should skip customer event when clientName does not match`() {
     val handlerSpy = spyk(handler)
     event.transaction = null
+    event.clientName = "wallet-a"
     event.customer = Sep12GetCustomerResponse.builder().build()
     every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
 
@@ -342,6 +343,33 @@ class ClientStatusCallbackHandlerTest {
 
     Assertions.assertTrue(result)
     verify(exactly = 0) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+  }
+
+  @Test
+  fun `handleEvent should skip customer event when clientName is null`() {
+    val handlerSpy = spyk(handler)
+    event.transaction = null
+    event.clientName = null
+    event.customer = Sep12GetCustomerResponse.builder().build()
+    every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
+
+    val result = handlerSpy.handleEvent(event)
+
+    Assertions.assertTrue(result)
+    verify(exactly = 0) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+  }
+
+  @Test
+  fun `handleEvent should fire for customer event when clientName matches`() {
+    val handlerSpy = spyk(handler)
+    event.transaction = null
+    event.clientName = "circle"
+    event.customer = Sep12GetCustomerResponse.builder().build()
+    every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
+
+    handlerSpy.handleEvent(event)
+
+    verify(exactly = 1) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
   }
 
   @Test
