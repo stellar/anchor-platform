@@ -43,6 +43,7 @@ httpRoute:
   hostnames: []
   annotations: {}
   labels: {}
+  responseHeaders: {}
   gateway:
     enabled: false
     gatewayClassName: ""
