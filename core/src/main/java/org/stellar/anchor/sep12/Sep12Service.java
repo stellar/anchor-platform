@@ -107,7 +107,7 @@ public class Sep12Service {
       clientName = clientFinder.getClientName(token);
     } catch (Exception ignored) {
     }
-    
+
     eventSession.publish(
         AnchorEvent.builder()
             .id(UUID.randomUUID().toString())
