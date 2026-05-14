@@ -19,6 +19,10 @@ public interface ClientConfig {
     private String sep12;
   }
 
+  default boolean matchesDomain(String domain) {
+    return false;
+  }
+
   /**
    * Returns true if any of the callback URLs are set.
    *
