@@ -34,9 +34,41 @@ services:
           memory: 1Gi
           cpu: 1
 ingress:
+  enabled: true
   name: ingress-reference-server
   rules:
     host: reference-server.local
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
+
+httpRoute:
+  enabled: false
+  parentRefs:
+    - name: reference-server-gateway
+      namespace: ""      # defaults to release namespace
+      sectionName: ""
+  hostnames: []
+  annotations: {}
+  labels: {}
+  gateway:
+    enabled: false
+    gatewayClassName: ""
+    name: ""
+    listeners:
+      - name: http
+        protocol: HTTP
+        port: 80
+      # - name: https
+      #   protocol: HTTPS
+      #   port: 443
+      #   hostname: reference-server.example.com
+      #   tls:
+      #     mode: Terminate
+      #     certificateRefs:
+      #       - name: reference-server-tls-cert
+      #   allowedRoutes:
+      #     namespaces:
+      #       from: Same
+    annotations: {}
+    labels: {}
