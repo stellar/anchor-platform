@@ -1,3 +1,4 @@
+{{- if .Values.ingress.enabled -}}
 apiVersion: v1
 data:
   {{- if .Values.ingress.responseHeaders }}
@@ -51,3 +52,4 @@ spec:
                 name: {{ .Values.fullName }}-svc-{{ .Values.services.ref.name }}
                 port:
                   number: {{ .Values.services.ref.servicePort | default 8091 }}
+{{- end }}

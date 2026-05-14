@@ -137,10 +137,42 @@ config:
       base_url: http://localhost:3000/txn
 
 ingress:
+  enabled: true
   name: ingress-anchor-platform
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
+
+httpRoute:
+  enabled: false
+  parentRefs:
+    - name: sep-gateway
+      namespace: ""      # defaults to release namespace
+      sectionName: ""
+  hostnames: []
+  annotations: {}
+  labels: {}
+  gateway:
+    enabled: false
+    gatewayClassName: ""
+    name: ""
+    listeners:
+      - name: http
+        protocol: HTTP
+        port: 80
+      # - name: https
+      #   protocol: HTTPS
+      #   port: 443
+      #   hostname: sep.example.com
+      #   tls:
+      #     mode: Terminate
+      #     certificateRefs:
+      #       - name: sep-tls-cert
+      #   allowedRoutes:
+      #     namespaces:
+      #       from: Same
+    annotations: {}
+    labels: {}
 
 sep1_toml: |
   ACCOUNTS = ["GCSGSR6KQQ5BP2FXVPWRL6SWPUSFWLVONLIBJZUKTVQB5FYJFVL6XOXE"]

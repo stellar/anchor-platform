@@ -1,0 +1,38 @@
+{{- if and .Values.httpRoute.enabled .Values.httpRoute.gateway.enabled -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.httpRoute.gateway.name | default (printf "%s-gateway" .Values.fullName) }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.fullName }}-gateway
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    {{- with .Values.httpRoute.gateway.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.httpRoute.gateway.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  gatewayClassName: {{ required "httpRoute.gateway.gatewayClassName is required when httpRoute.gateway.enabled is true" .Values.httpRoute.gateway.gatewayClassName }}
+  listeners:
+    {{- range .Values.httpRoute.gateway.listeners }}
+    - name: {{ .name }}
+      protocol: {{ .protocol }}
+      port: {{ .port }}
+      {{- if .hostname }}
+      hostname: {{ tpl .hostname $ | quote }}
+      {{- end }}
+      {{- if .allowedRoutes }}
+      allowedRoutes:
+        {{- toYaml .allowedRoutes | nindent 8 }}
+      {{- end }}
+      {{- if .tls }}
+      tls:
+        {{- toYaml .tls | nindent 8 }}
+      {{- end }}
+    {{- end }}
+{{- end }}

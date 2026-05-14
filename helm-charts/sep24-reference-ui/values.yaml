@@ -26,9 +26,41 @@ services:
           memory: 1Gi
           cpu: 1
 ingress:
+  enabled: true
   name: ingress-sep24-reference-ui
   rules:
     host: sep24-reference-ui.local
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
+
+httpRoute:
+  enabled: false
+  parentRefs:
+    - name: sep24-reference-ui-gateway
+      namespace: ""      # defaults to release namespace
+      sectionName: ""
+  hostnames: []
+  annotations: {}
+  labels: {}
+  gateway:
+    enabled: false
+    gatewayClassName: ""
+    name: ""
+    listeners:
+      - name: http
+        protocol: HTTP
+        port: 80
+      # - name: https
+      #   protocol: HTTPS
+      #   port: 443
+      #   hostname: sep24-reference-ui.example.com
+      #   tls:
+      #     mode: Terminate
+      #     certificateRefs:
+      #       - name: sep24-reference-ui-tls-cert
+      #   allowedRoutes:
+      #     namespaces:
+      #       from: Same
+    annotations: {}
+    labels: {}
