@@ -25,6 +25,7 @@ import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.micrometer.core.instrument.Counter;
+import jakarta.transaction.Transactional;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
@@ -123,6 +124,13 @@ public class Sep24Service {
     info("Sep24Service initialized.");
   }
 
+  @Transactional(
+      rollbackOn = {
+        AnchorException.class,
+        MalformedURLException.class,
+        URISyntaxException.class,
+        RuntimeException.class
+      })
   public InteractiveTransactionResponse withdraw(
       WebAuthJwt token, Map<String, String> withdrawRequest)
       throws AnchorException, MalformedURLException, URISyntaxException {
@@ -246,6 +254,10 @@ public class Sep24Service {
     Sep24Transaction txn = builder.build();
     txnStore.save(txn);
 
+    if (quoteId != null) {
+      exchangeAmountsCalculator.bindQuoteToTransaction(quoteId, txn.getTransactionId());
+    }
+
     eventSession.publish(
         AnchorEvent.builder()
             .id(UUID.randomUUID().toString())
@@ -271,6 +283,13 @@ public class Sep24Service {
     return response;
   }
 
+  @Transactional(
+      rollbackOn = {
+        AnchorException.class,
+        MalformedURLException.class,
+        URISyntaxException.class,
+        RuntimeException.class
+      })
   public InteractiveTransactionResponse deposit(
       WebAuthJwt token, Map<String, String> depositRequest)
       throws AnchorException, MalformedURLException, URISyntaxException {
@@ -431,6 +450,10 @@ public class Sep24Service {
 
     Sep24Transaction txn = builder.build();
     txnStore.save(txn);
+
+    if (quoteId != null) {
+      exchangeAmountsCalculator.bindQuoteToTransaction(quoteId, txn.getTransactionId());
+    }
 
     eventSession.publish(
         AnchorEvent.builder()

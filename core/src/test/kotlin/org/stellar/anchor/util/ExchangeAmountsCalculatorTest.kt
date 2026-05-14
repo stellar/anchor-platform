@@ -132,4 +132,63 @@ class ExchangeAmountsCalculatorTest {
       )
     }
   }
+
+  @Test
+  fun `test calculateFromQuote rejects already-bound quote`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns
+      usdcQuote().apply { transactionId = "existing-txn-id" }
+    val ex =
+      assertThrows<BadRequestException> {
+        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), "100")
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test validateQuoteAgainstRequestInfo passes for unbound quote`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
+    val result =
+      calculator.validateQuoteAgainstRequestInfo(
+        quoteId,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+      )
+    assertEquals(TEST_ASSET_SEP38_FORMAT, result.sellAsset)
+  }
+
+  @Test
+  fun `test bindQuoteToTransaction succeeds when unbound`() {
+    every { sep38QuoteStore.bindToTransaction("id", "txn1") } returns true
+    calculator.bindQuoteToTransaction("id", "txn1")
+  }
+
+  @Test
+  fun `test bindQuoteToTransaction throws when already bound`() {
+    every { sep38QuoteStore.bindToTransaction("id", "txn2") } returns false
+    val ex = assertThrows<BadRequestException> { calculator.bindQuoteToTransaction("id", "txn2") }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test calculateFromQuote rejects T2 after T1 is cancelled`() {
+    val quoteId = "q-cancel"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns
+      usdcQuote().apply { transactionId = "T1-cancelled" }
+    val ex =
+      assertThrows<BadRequestException> {
+        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), "100")
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test bindQuoteToTransaction rejects T2 after T1 is cancelled`() {
+    every { sep38QuoteStore.bindToTransaction("q-cancel", "T2") } returns false
+    val ex =
+      assertThrows<BadRequestException> { calculator.bindQuoteToTransaction("q-cancel", "T2") }
+    assert(ex.message!!.contains("has already been used"))
+  }
 }

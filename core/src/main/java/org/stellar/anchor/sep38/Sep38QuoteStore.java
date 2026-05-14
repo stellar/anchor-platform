@@ -24,4 +24,15 @@ public interface Sep38QuoteStore {
    */
   @SuppressWarnings("UnusedReturnValue")
   Sep38Quote save(Sep38Quote sep38Quote) throws SepException;
+
+  /**
+   * Bind this quote to a transaction.
+   *
+   * @param quoteId The quote ID
+   * @param transactionId The transaction ID to bind
+   * @return true if the quote was bound, false if it was already bound to another transaction
+   * @throws SepException if a storage error occurs
+   */
+  boolean bindToTransaction(@NonNull String quoteId, @NonNull String transactionId)
+      throws SepException;
 }

@@ -54,6 +54,7 @@ import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
+import org.stellar.anchor.util.ExchangeAmountsCalculator;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.SepRequestValidator;
 import org.stellar.anchor.util.TransactionMapper;
@@ -72,6 +73,7 @@ public class Sep31Service {
   private final EventService.Session eventSession;
   private final Counter sep31TransactionCreatedCounter = counter(SEP31_TRANSACTION_CREATED);
   private final Counter sep31TransactionPatchedCounter = counter(SEP31_TRANSACTION_PATCHED);
+  final ExchangeAmountsCalculator exchangeAmountsCalculator;
 
   public Sep31Service(
       LanguageConfig languageConfig,
@@ -83,7 +85,8 @@ public class Sep31Service {
       AssetService assetService,
       RateIntegration rateIntegration,
       EventService eventService,
-      Clock clock) {
+      Clock clock,
+      ExchangeAmountsCalculator exchangeAmountsCalculator) {
     debug("sep31Config:", sep31Config);
     this.languageConfig = languageConfig;
     this.sep10Config = sep10Config;
@@ -94,6 +97,7 @@ public class Sep31Service {
     this.assetService = assetService;
     this.rateIntegration = rateIntegration;
     this.clock = clock;
+    this.exchangeAmountsCalculator = exchangeAmountsCalculator;
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.infoResponse = sep31InfoResponseFromAssetInfoList(assetService.getAssets());
     Log.info("Sep31Service initialized.");
@@ -214,6 +218,11 @@ public class Sep31Service {
 
     Context.get().setTransaction(sep31TransactionStore.save(txn));
     txn = Context.get().getTransaction();
+
+    Sep38Quote consumedQuote = Context.get().getQuote();
+    if (consumedQuote != null) {
+      exchangeAmountsCalculator.bindQuoteToTransaction(consumedQuote.getId(), txn.getId());
+    }
 
     eventSession.publish(
         AnchorEvent.builder()
@@ -467,6 +476,15 @@ public class Sep31Service {
       infoF("Quote ({}) was not found", request.getQuoteId());
       throw new BadRequestException(
           String.format("quote(id=%s) was not found.", request.getQuoteId()));
+    }
+
+    if (quote.getTransactionId() != null) {
+      infoF(
+          "Quote ({}) has already been used in transaction ({})",
+          request.getQuoteId(),
+          quote.getTransactionId());
+      throw new BadRequestException(
+          String.format("quote(id=%s) has already been used", request.getQuoteId()));
     }
 
     if (quote.getExpiresAt() != null && !quote.getExpiresAt().isAfter(clock.instant())) {
