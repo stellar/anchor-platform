@@ -73,20 +73,25 @@ public class ClientStatusCallbackHandler extends EventHandler {
 
   @Override
   boolean handleEvent(AnchorEvent event) throws IOException {
-    if (event.getTransaction() != null || event.getCustomer() != null) {
-      KeyPair signer = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
-      Request request = buildHttpRequest(signer, event);
+    GetTransactionResponse tx = event.getTransaction();
 
-      if (request != null) {
-        try (Response response = httpClient.newCall(request).execute()) {
-          debugF("Sending event: {} to client status api: {}", json(event), request.url());
-          if (response.code() < 200 || response.code() >= 400) {
-            errorF("Failed to send event to client status API. Error code: {}", response.code());
-            return false;
-          }
+    if (tx == null || !clientConfig.getName().equals(tx.getClientName())) {
+      return true;
+    }
+
+    KeyPair signer = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
+    Request request = buildHttpRequest(signer, event);
+
+    if (request != null) {
+      try (Response response = httpClient.newCall(request).execute()) {
+        debugF("Sending event: {} to client status api: {}", json(event), request.url());
+        if (response.code() < 200 || response.code() >= 400) {
+          errorF("Failed to send event to client status API. Error code: {}", response.code());
+          return false;
         }
       }
     }
+
     return true;
   }
 
