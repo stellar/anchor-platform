@@ -33,6 +33,7 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.WebAuthJwt
+import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.util.StringHelper.json
 
@@ -100,6 +101,7 @@ class Sep12ServiceTest {
   @MockK(relaxed = true) private lateinit var platformApiClient: PlatformApiClient
   @MockK(relaxed = true) private lateinit var eventService: EventService
   @MockK(relaxed = true) private lateinit var eventSession: EventService.Session
+  @MockK(relaxed = true) private lateinit var clientFinder: ClientFinder
 
   @BeforeEach
   fun setup() {
@@ -111,7 +113,7 @@ class Sep12ServiceTest {
     every { assetService.getAssets() } returns assets
     every { eventService.createSession(any(), any()) } returns eventSession
 
-    sep12Service = Sep12Service(customerIntegration, platformApiClient, eventService)
+    sep12Service = Sep12Service(customerIntegration, platformApiClient, eventService, clientFinder)
   }
 
   @ValueSource(strings = [TEST_ACCOUNT, TEST_CONTRACT_ACCOUNT, TEST_MUXED_ACCOUNT])
