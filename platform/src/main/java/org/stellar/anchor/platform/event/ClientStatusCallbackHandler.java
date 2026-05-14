@@ -75,14 +75,11 @@ public class ClientStatusCallbackHandler extends EventHandler {
   boolean handleEvent(AnchorEvent event) throws IOException {
     GetTransactionResponse tx = event.getTransaction();
 
-    if (tx == null) {
-      return true;
-    }
+    String eventClientName = (tx != null) ? tx.getClientName() : event.getClientName();
+    String eventClientDomain = (tx != null) ? tx.getClientDomain() : null;
 
-    boolean isClientName = clientConfig.getName().equals(tx.getClientName());
-    boolean isClientDomain = clientConfig.matchesDomain(tx.getClientDomain());
-
-    if (!isClientName && !isClientDomain) {
+    if (!clientConfig.getName().equals(eventClientName)
+        && !clientConfig.matchesDomain(eventClientDomain)) {
       return true;
     }
 
