@@ -18,6 +18,7 @@ public class AnchorEvent {
   Type type;
   String id;
   String sep;
+  String clientName;
   GetTransactionResponse transaction;
   GetQuoteResponse quote;
   Sep12GetCustomerResponse customer;
