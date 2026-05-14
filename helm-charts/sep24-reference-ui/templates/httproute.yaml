@@ -20,6 +20,10 @@ spec:
   parentRefs:
     {{- if .Values.httpRoute.gateway.enabled }}
     - name: {{ .Values.httpRoute.gateway.name | default (printf "%s-gateway" .Values.fullName) }}
+      namespace: {{ .Values.namespace }}
+      {{- with (first .Values.httpRoute.gateway.listeners) }}
+      sectionName: {{ .name }}
+      {{- end }}
     {{- else }}
     {{- range .Values.httpRoute.parentRefs }}
     - name: {{ .name }}
@@ -42,6 +46,16 @@ spec:
         - path:
             type: PathPrefix
             value: /
+      {{- if .Values.httpRoute.responseHeaders }}
+      filters:
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              {{- range $key, $value := .Values.httpRoute.responseHeaders }}
+              - name: {{ $key }}
+                value: {{ $value | quote }}
+              {{- end }}
+      {{- end }}
       backendRefs:
         - name: {{ .Values.fullName }}-svc-{{ .Values.services.ui.name }}
           port: {{ .Values.services.ui.servicePort | default 3000 }}
