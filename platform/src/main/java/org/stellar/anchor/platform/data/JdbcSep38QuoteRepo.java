@@ -1,12 +1,14 @@
 package org.stellar.anchor.platform.data;
 
 import java.util.Optional;
+
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.lang.NonNull;
-import org.springframework.transaction.annotation.Transactional;
+
+import jakarta.transaction.Transactional;
 
 public interface JdbcSep38QuoteRepo extends CrudRepository<JdbcSep38Quote, String> {
   Optional<JdbcSep38Quote> findById(@NonNull String id);
