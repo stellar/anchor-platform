@@ -7,6 +7,8 @@ import io.mockk.spyk
 import io.mockk.verify
 import java.util.*
 import java.util.concurrent.TimeUnit
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -427,6 +429,87 @@ class ClientStatusCallbackHandlerTest {
 
     Assertions.assertTrue(result)
     verify(exactly = 0) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+  }
+
+  @Test
+  @LockAndMockStatic([Sep24Helper::class])
+  fun `two handlers bound to different clients - only matching handler fires HTTP callback on SEP-24 withdrawal`() {
+    val circleServer = MockWebServer()
+    val walletBServer = MockWebServer()
+    circleServer.start()
+    walletBServer.start()
+    try {
+      circleServer.enqueue(MockResponse().setResponseCode(200))
+
+      val circleClient =
+        CustodialClient.builder()
+          .name("circle")
+          .signingKeys(setOf("GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"))
+          .callbackUrls(
+            CallbackUrls.builder().sep24(circleServer.url("/callback/sep24").toString()).build()
+          )
+          .allowAnyDestination(false)
+          .destinationAccounts(emptySet())
+          .build()
+
+      val walletBClient =
+        CustodialClient.builder()
+          .name("wallet-b")
+          .signingKeys(setOf("GACYKME36AI6UYAV7A5ZUA6MG4C4K2VAPNYMW5YLOM6E7GS6FSHDPV4F"))
+          .callbackUrls(
+            CallbackUrls.builder().sep24(walletBServer.url("/callback/sep24").toString()).build()
+          )
+          .allowAnyDestination(false)
+          .destinationAccounts(emptySet())
+          .build()
+
+      val circleHandler =
+        ClientStatusCallbackHandler(
+          secretConfig,
+          circleClient,
+          assetService,
+          sep6MoreInfoUrlConstructor,
+          sep24MoreInfoUrlConstructor
+        )
+      val walletBHandler =
+        ClientStatusCallbackHandler(
+          secretConfig,
+          walletBClient,
+          assetService,
+          sep6MoreInfoUrlConstructor,
+          sep24MoreInfoUrlConstructor
+        )
+
+      val withdrawalEvent =
+        AnchorEvent().apply {
+          transaction =
+            GetTransactionResponse().apply {
+              sep = SEP_24
+              kind = Kind.WITHDRAWAL
+              status = COMPLETED
+              clientName = "circle"
+            }
+        }
+
+      every { fromTxn(any(), any(), any(), any()) } returns mockk(relaxed = true)
+
+      circleHandler.handleEvent(withdrawalEvent)
+      walletBHandler.handleEvent(withdrawalEvent)
+
+      assertEquals(
+        1,
+        circleServer.requestCount,
+        "circle's callback receiver should get exactly one POST"
+      )
+      assertEquals(
+        0,
+        walletBServer.requestCount,
+        "wallet-b's callback receiver must not receive any request"
+      )
+    } finally {
+      circleServer.shutdown()
+      walletBServer.shutdown()
+    }
   }
 
   @Test
