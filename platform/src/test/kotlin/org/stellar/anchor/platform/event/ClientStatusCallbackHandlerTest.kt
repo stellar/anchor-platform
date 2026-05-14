@@ -3,6 +3,8 @@ package org.stellar.anchor.platform.event
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
+import io.mockk.spyk
+import io.mockk.verify
 import java.util.*
 import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.Assertions
@@ -26,6 +28,7 @@ import org.stellar.anchor.api.shared.FeeDetails
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.client.ClientConfig.CallbackUrls
 import org.stellar.anchor.client.CustodialClient
+import org.stellar.anchor.client.NonCustodialClient
 import org.stellar.anchor.platform.config.PropertySecretConfig
 import org.stellar.anchor.platform.service.Sep24MoreInfoUrlConstructor
 import org.stellar.anchor.platform.service.Sep6MoreInfoUrlConstructor
@@ -292,6 +295,110 @@ class ClientStatusCallbackHandlerTest {
     assertEquals("client.com", sep24Txn.clientDomain)
     assertEquals("quote-id", sep24Txn.quoteId)
     assertEquals("message", sep24Txn.message)
+  }
+
+  @Test
+  fun `handleEvent should skip and return true when transaction belongs to a different client`() {
+    val handlerSpy = spyk(handler)
+    event.transaction.clientName = "other-wallet"
+    every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
+
+    val result = handlerSpy.handleEvent(event)
+
+    Assertions.assertTrue(result)
+    verify(exactly = 0) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+  }
+
+  @Test
+  fun `handleEvent should build and send request when transaction clientName matches handler client`() {
+    val handlerSpy = spyk(handler)
+    event.transaction.clientName = "circle"
+    every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
+
+    handlerSpy.handleEvent(event)
+
+    verify(exactly = 1) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+  }
+
+  @Test
+  fun `handleEvent should skip when transaction clientName is null`() {
+    val handlerSpy = spyk(handler)
+    every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
+
+    val result = handlerSpy.handleEvent(event)
+
+    Assertions.assertTrue(result)
+    verify(exactly = 0) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+  }
+
+  @Test
+  fun `handleEvent should skip customer events because Sep12GetCustomerResponse carries no client attribution`() {
+    val handlerSpy = spyk(handler)
+    event.transaction = null
+    event.customer = Sep12GetCustomerResponse.builder().build()
+    every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
+
+    val result = handlerSpy.handleEvent(event)
+
+    Assertions.assertTrue(result)
+    verify(exactly = 0) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+  }
+
+  @Test
+  fun `handleEvent should fire for noncustodial client when clientDomain matches even if clientName is null`() {
+    val nonCustodialClient =
+      NonCustodialClient.builder()
+        .name("noncustodial-wallet")
+        .domains(setOf("wallet.example.com"))
+        .callbackUrls(
+          CallbackUrls.builder().sep24("https://wallet.example.com/callback/sep24").build()
+        )
+        .build()
+    val ncHandler =
+      ClientStatusCallbackHandler(
+        secretConfig,
+        nonCustodialClient,
+        assetService,
+        sep6MoreInfoUrlConstructor,
+        sep24MoreInfoUrlConstructor
+      )
+    val handlerSpy = spyk(ncHandler)
+    event.transaction.clientName = null
+    event.transaction.clientDomain = "wallet.example.com"
+    every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
+
+    handlerSpy.handleEvent(event)
+
+    verify(exactly = 1) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+  }
+
+  @Test
+  fun `handleEvent should skip when neither clientName nor clientDomain matches noncustodial client`() {
+    val nonCustodialClient =
+      NonCustodialClient.builder()
+        .name("noncustodial-wallet")
+        .domains(setOf("wallet.example.com"))
+        .callbackUrls(
+          CallbackUrls.builder().sep24("https://wallet.example.com/callback/sep24").build()
+        )
+        .build()
+    val ncHandler =
+      ClientStatusCallbackHandler(
+        secretConfig,
+        nonCustodialClient,
+        assetService,
+        sep6MoreInfoUrlConstructor,
+        sep24MoreInfoUrlConstructor
+      )
+    val handlerSpy = spyk(ncHandler)
+    event.transaction.clientName = "other-wallet"
+    event.transaction.clientDomain = "other.example.com"
+    every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
+
+    val result = handlerSpy.handleEvent(event)
+
+    Assertions.assertTrue(result)
+    verify(exactly = 0) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
   }
 
   @Test
