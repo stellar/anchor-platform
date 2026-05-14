@@ -253,8 +253,6 @@ public class SepBeans {
       RateIntegration rateIntegration,
       Clock clock,
       EventService eventService) {
-    ExchangeAmountsCalculator exchangeAmountsCalculator =
-        new ExchangeAmountsCalculator(sep38QuoteStore, clock);
     return new Sep31Service(
         languageConfig,
         sep10Config,
@@ -266,7 +264,7 @@ public class SepBeans {
         rateIntegration,
         eventService,
         clock,
-        exchangeAmountsCalculator);
+        exchangeAmountsCalculator(sep38QuoteStore, clock));
   }
 
   @Bean
