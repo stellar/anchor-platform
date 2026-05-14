@@ -16,3 +16,9 @@ items:
       sep24: http://wallet-server:8092/callbacks/sep24
       sep31: http://wallet-server:8092/callbacks/sep31
       sep12: http://wallet-server:8092/callbacks/sep12
+  - name: circleWallet
+    type: noncustodial
+    domains:
+      - circlewallet.example.com
+    callback_urls:
+      sep24: http://localhost:19091/callbacks/sep24
