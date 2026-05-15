@@ -78,7 +78,9 @@ public class ClientStatusCallbackHandler extends EventHandler {
     String eventClientName = (tx != null) ? tx.getClientName() : event.getClientName();
     String eventClientDomain = (tx != null) ? tx.getClientDomain() : null;
 
-    if (!clientConfig.getName().equals(eventClientName)
+    boolean isAttributed = eventClientName != null || eventClientDomain != null;
+    if (isAttributed
+        && !clientConfig.getName().equals(eventClientName)
         && !clientConfig.matchesDomain(eventClientDomain)) {
       return true;
     }
