@@ -2,6 +2,7 @@ package org.stellar.anchor.sep12;
 
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Sep.SEP_12;
 import static org.stellar.anchor.util.Log.infoF;
+import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.MetricConstants.*;
 import static org.stellar.anchor.util.MetricConstants.SEP12_CUSTOMER;
 
@@ -105,7 +106,11 @@ public class Sep12Service {
 
     try {
       clientName = clientFinder.getClientName(token);
-    } catch (Exception ignored) {
+    } catch (SepNotAuthorizedException e) {
+      warnF(
+          "Client attribution required but client is not authorized; CUSTOMER_UPDATED event will have no clientName. token={}, reason={}",
+          token.getAccount(),
+          e.getMessage());
     }
 
     eventSession.publish(
@@ -114,6 +119,7 @@ public class Sep12Service {
             .sep(SEP_12.getSep().toString())
             .type(AnchorEvent.Type.CUSTOMER_UPDATED)
             .clientName(clientName)
+            .clientDomain(token.getClientDomain())
             .customer(GetCustomerResponse.to(updatedCustomer))
             .build());
 
