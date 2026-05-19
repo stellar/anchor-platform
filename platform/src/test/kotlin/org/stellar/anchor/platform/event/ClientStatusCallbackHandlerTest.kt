@@ -323,13 +323,13 @@ class ClientStatusCallbackHandlerTest {
   }
 
   @Test
-  fun `handleEvent should send callback when transaction is unattributed (clientName and clientDomain both null)`() {
+  fun `handleEvent should not send callback when transaction is unattributed (clientName and clientDomain both null)`() {
     val handlerSpy = spyk(handler)
     every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
 
     handlerSpy.handleEvent(event)
 
-    verify(exactly = 1) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+    verify(exactly = 0) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
   }
 
   @Test
@@ -347,7 +347,7 @@ class ClientStatusCallbackHandlerTest {
   }
 
   @Test
-  fun `handleEvent should send callback for unattributed customer event (clientName null)`() {
+  fun `handleEvent should not send callback for unattributed customer event (clientName null)`() {
     val handlerSpy = spyk(handler)
     event.transaction = null
     event.clientName = null
@@ -356,7 +356,7 @@ class ClientStatusCallbackHandlerTest {
 
     handlerSpy.handleEvent(event)
 
-    verify(exactly = 1) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+    verify(exactly = 0) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
   }
 
   @Test
