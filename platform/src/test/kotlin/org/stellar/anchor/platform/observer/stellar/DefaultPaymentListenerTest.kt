@@ -584,7 +584,17 @@ class DefaultPaymentListenerTest {
       verify(exactly = 0) {
         platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any())
       }
-      verify(exactly = 1) { Log.errorF(match { it.contains("Ambiguous SEP-24") }, *anyVararg()) }
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("Ambiguous SEP-24") },
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep24-id-1") && it.toString().contains("sep24-id-2") },
+        )
+      }
       assertEquals(
         1.0,
         registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
@@ -626,7 +636,17 @@ class DefaultPaymentListenerTest {
       verify(exactly = 0) {
         platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any())
       }
-      verify(exactly = 1) { Log.errorF(match { it.contains("Ambiguous SEP-6") }, *anyVararg()) }
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("Ambiguous SEP-6") },
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep6-id-1") && it.toString().contains("sep6-id-2") },
+        )
+      }
       assertEquals(
         1.0,
         registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
@@ -662,7 +682,17 @@ class DefaultPaymentListenerTest {
       verify(exactly = 0) {
         platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any())
       }
-      verify(exactly = 1) { Log.errorF(match { it.contains("Ambiguous SEP-31") }, *anyVararg()) }
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("Ambiguous SEP-31") },
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep31-id-1") && it.toString().contains("sep31-id-2") },
+        )
+      }
       assertEquals(
         1.0,
         registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
@@ -670,6 +700,97 @@ class DefaultPaymentListenerTest {
     } finally {
       Metrics.removeRegistry(registry)
       unmockkStatic(Log::class)
+    }
+  }
+
+  @Test
+  fun `test single-match SEP-24 routes payment and does not increment ambiguous metric`() {
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("unique_memo")
+    ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(JdbcSep24Transaction().apply { id = "sep24-id-only" })
+    every { paymentListener.handleSep24Transaction(any(), any(), any()) } answers {}
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      verify(exactly = 1) {
+        paymentListener.handleSep24Transaction(ledgerTransaction, any(), any())
+      }
+      assertEquals(
+        0.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test single-match SEP-6 routes payment and does not increment ambiguous metric`() {
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("unique_memo")
+    ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns emptyList()
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(JdbcSep6Transaction().apply { id = "sep6-id-only" })
+    every { paymentListener.handleSep6Transaction(any(), any(), any()) } answers {}
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      verify(exactly = 1) { paymentListener.handleSep6Transaction(ledgerTransaction, any(), any()) }
+      assertEquals(
+        0.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test single-match SEP-31 routes payment and does not increment ambiguous metric`() {
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("unique_memo")
+    ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      listOf(JdbcSep31Transaction().apply { id = "sep31-id-only" })
+    every { paymentListener.handleSep31Transaction(any(), any(), any()) } answers {}
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      verify(exactly = 1) {
+        paymentListener.handleSep31Transaction(ledgerTransaction, any(), any())
+      }
+      assertEquals(
+        0.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
     }
   }
 }
