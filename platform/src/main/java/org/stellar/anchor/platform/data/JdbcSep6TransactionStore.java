@@ -133,4 +133,10 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
     return transactionRepo.findOneByWithdrawAnchorAccountAndMemoAndStatus(
         withdrawAnchorAccount, memo, status);
   }
+
+  public List<JdbcSep6Transaction> findAllByWithdrawAnchorAccountAndMemoAndStatus(
+      String withdrawAnchorAccount, String memo, String status) {
+    return transactionRepo.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+        withdrawAnchorAccount, memo, status);
+  }
 }
