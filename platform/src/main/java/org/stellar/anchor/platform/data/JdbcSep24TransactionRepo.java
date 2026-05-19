@@ -26,6 +26,9 @@ public interface JdbcSep24TransactionRepo
   JdbcSep24Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
       String withdrawAnchorAccount, String memo, String status);
 
+  List<JdbcSep24Transaction> findAllByWithdrawAnchorAccountAndMemoAndStatus(
+      String withdrawAnchorAccount, String memo, String status);
+
   @Query(
       "SELECT t FROM JdbcSep24Transaction t WHERE t.webAuthAccount = :account"
           + " AND t.requestAssetCode = :assetCode"

@@ -65,6 +65,11 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
     return optTxn.orElse(null);
   }
 
+  public List<JdbcSep24Transaction> findAllByWithdrawAnchorAccountAndMemoAndStatus(
+      String toAccount, String memo, String status) {
+    return txnRepo.findAllByWithdrawAnchorAccountAndMemoAndStatus(toAccount, memo, status);
+  }
+
   @Override
   public List<Sep24Transaction> findTransactions(
       String accountId, String accountMemo, GetTransactionsRequest tr)
