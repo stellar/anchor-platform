@@ -28,4 +28,7 @@ public interface JdbcSep31TransactionRepo
 
   Optional<JdbcSep31Transaction> findByToAccountAndStellarMemoAndStatus(
       String toAccount, String stellarMemo, String status);
+
+  List<JdbcSep31Transaction> findAllByToAccountAndStellarMemoAndStatus(
+      String toAccount, String stellarMemo, String status);
 }

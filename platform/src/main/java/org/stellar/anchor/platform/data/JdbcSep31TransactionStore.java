@@ -73,6 +73,11 @@ public class JdbcSep31TransactionStore implements Sep31TransactionStore {
     return optTxn.orElse(null);
   }
 
+  public List<JdbcSep31Transaction> findAllByToAccountAndMemoAndStatus(
+      String toAccount, String memo, String status) {
+    return transactionRepo.findAllByToAccountAndStellarMemoAndStatus(toAccount, memo, status);
+  }
+
   public Integer findByStatusCount(String status) {
     return transactionRepo.findByStatusCount(status);
   }
