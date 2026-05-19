@@ -24,8 +24,8 @@ import org.stellar.walletsdk.asset.IssuedAssetId
  * fires an HTTP request. A second callback-enabled client ("circleWallet") that does not own the
  * transaction must receive nothing.
  *
- * Requires the platform to be running with the clients.yaml that contains both the "reference"
- * noncustodial client (callback → wallet-server:8092) and the "circleWallet" noncustodial client
+ * Requires the platform to be running with the clients.yaml that contains the "referenceCustodial"
+ * custodial client (callback → wallet-server:8092) and the "circleWallet" noncustodial client
  * (callback → localhost:19091). Start via: ./gradlew startAllServers
  */
 @TestInstance(PER_CLASS)
@@ -80,7 +80,7 @@ class MultiClientCallbackTests : IntegrationTestBase(TestConfig()) {
           Sep24GetTransactionResponse::class.java,
         )
       assertThat(callbacks)
-        .withFailMessage("reference client should receive exactly one SEP-24 callback")
+        .withFailMessage("referenceCustodial client should receive exactly one SEP-24 callback")
         .hasSize(1)
 
       assertThat(circleWalletServer.requestCount)
