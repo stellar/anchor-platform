@@ -373,6 +373,36 @@ class ClientStatusCallbackHandlerTest {
   }
 
   @Test
+  fun `handleEvent should fire for noncustodial client customer event when clientDomain matches`() {
+    val nonCustodialClient =
+      NonCustodialClient.builder()
+        .name("noncustodial-wallet")
+        .domains(setOf("wallet.example.com"))
+        .callbackUrls(
+          CallbackUrls.builder().sep12("https://wallet.example.com/callback/sep12").build()
+        )
+        .build()
+    val ncHandler =
+      ClientStatusCallbackHandler(
+        secretConfig,
+        nonCustodialClient,
+        assetService,
+        sep6MoreInfoUrlConstructor,
+        sep24MoreInfoUrlConstructor
+      )
+    val handlerSpy = spyk(ncHandler)
+    event.transaction = null
+    event.clientName = null
+    event.clientDomain = "wallet.example.com"
+    event.customer = Sep12GetCustomerResponse.builder().build()
+    every { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) } returns null
+
+    handlerSpy.handleEvent(event)
+
+    verify(exactly = 1) { handlerSpy.buildHttpRequest(any<KeyPair>(), any<AnchorEvent>()) }
+  }
+
+  @Test
   fun `handleEvent should fire for noncustodial client when clientDomain matches even if clientName is null`() {
     val nonCustodialClient =
       NonCustodialClient.builder()
