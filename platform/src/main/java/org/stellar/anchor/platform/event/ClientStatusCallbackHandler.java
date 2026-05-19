@@ -76,14 +76,22 @@ public class ClientStatusCallbackHandler extends EventHandler {
     GetTransactionResponse tx = event.getTransaction();
 
     String eventClientName = (tx != null) ? tx.getClientName() : event.getClientName();
-    String eventClientDomain = (tx != null) ? tx.getClientDomain() : null;
+    String eventClientDomain = (tx != null) ? tx.getClientDomain() : event.getClientDomain();
 
     boolean isAttributed = eventClientName != null || eventClientDomain != null;
+
+    if (!isAttributed) {
+      debugF(
+          "Skipping event id={} type={}: no clientName or clientDomain — event cannot be attributed to any client",
+          event.getId(),
+          event.getType());
+      return true;
+    }
 
     boolean isClientName = clientConfig.getName().equals(eventClientName);
     boolean isClientDomain = clientConfig.matchesDomain(eventClientDomain);
 
-    if (!isAttributed || (isAttributed && !isClientName && !isClientDomain)) {
+    if (!isClientName && !isClientDomain) {
       return true;
     }
 
