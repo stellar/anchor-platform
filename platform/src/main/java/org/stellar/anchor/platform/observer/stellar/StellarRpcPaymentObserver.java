@@ -229,12 +229,14 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                   new String(Base64.getEncoder().encode(memoVal.getBytes().getSCBytes()));
               default -> null;
             };
-        if (scValue.getMap().getSCMap()[1].getVal().getDiscriminant() == SCValType.SCV_U64) {
-          toAddr =
-              new MuxedAccount(
-                      Scv.fromAddress(to).toString(),
-                      Scv.fromUint64(scValue.getMap().getSCMap()[1].getVal()))
-                  .getAddress();
+        if (memoVal.getDiscriminant() == SCValType.SCV_U64) {
+          try {
+            toAddr =
+                new MuxedAccount(Scv.fromAddress(to).toString(), Scv.fromUint64(memoVal))
+                    .getAddress();
+          } catch (IllegalArgumentException iae) {
+            warnF("Cannot build MuxedAccount for address '{}', using unmuxed value. ex={}", toAddr, iae.getMessage());
+          }
         }
       }
 
