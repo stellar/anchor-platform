@@ -227,8 +227,16 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       if (scValue.getDiscriminant() == SCValType.SCV_I128) {
         amount = Scv.fromInt128(scValue).longValue();
       } else if (scValue.getDiscriminant() == SCValType.SCV_MAP) {
-        amount = Scv.fromInt128(scValue.getMap().getSCMap()[0].getVal()).longValue();
-        SCVal memoVal = scValue.getMap().getSCMap()[1].getVal();
+        var entries = scValue.getMap() == null ? null : scValue.getMap().getSCMap();
+        if (entries == null || entries.length < 2) {
+          return builder.build();
+        }
+        SCVal amountVal = entries[0].getVal();
+        SCVal memoVal = entries[1].getVal();
+        if (amountVal.getDiscriminant() != SCValType.SCV_I128) {
+          return builder.build();
+        }
+        amount = Scv.fromInt128(amountVal).longValue();
         eventMemo =
             switch (memoVal.getDiscriminant()) {
               case SCV_STRING -> memoVal.getStr().getSCString().toString();
