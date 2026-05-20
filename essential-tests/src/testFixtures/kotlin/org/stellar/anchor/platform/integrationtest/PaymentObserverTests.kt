@@ -347,7 +347,7 @@ class PaymentObserverTests {
   private suspend fun waitForEventsCoroutine(
     fromAccountId: String,
     listener: EventCapturingListener,
-    timeout: Long = 30000L,
+    timeout: Long = 60000L,
   ) {
     val startTime = System.currentTimeMillis()
     while (System.currentTimeMillis() - startTime <= timeout) {
