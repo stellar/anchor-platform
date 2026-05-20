@@ -31,6 +31,10 @@ import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.OperationType
+import org.stellar.sdk.xdr.SCMap
+import org.stellar.sdk.xdr.SCMapEntry
+import org.stellar.sdk.xdr.SCVal
+import org.stellar.sdk.xdr.SCValType
 
 class StellarRpcPaymentObserverTest {
   private lateinit var config: StellarPaymentObserverConfig
@@ -375,6 +379,46 @@ class StellarRpcPaymentObserverTest {
 
     assertDoesNotThrow { observer.fetchEvents() }
     assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
+  }
+
+  @Test
+  fun `fetchEvents skips empty SCV_MAP poison event without crashing or stalling`() {
+    val distAccount = KeyPair.random().accountId
+    val attackerAccount = KeyPair.random().accountId
+    
+    val topics =
+      listOf(
+        Scv.toSymbol("transfer").toXdrBase64(),
+        Scv.toAddress(distAccount).toXdrBase64(),
+        Scv.toAddress(attackerAccount).toXdrBase64(),
+        Scv.toString("native").toXdrBase64(),
+      )
+      
+    val emptyMapValue =
+      SCVal.builder()
+        .discriminant(SCValType.SCV_MAP)
+        .map(SCMap(emptyArray<SCMapEntry>()))
+        .build()
+        .toXdrBase64()
+        
+    val poisonEvent = mockk<GetEventsResponse.EventInfo>()
+    every { poisonEvent.topic } returns topics
+    every { poisonEvent.value } returns emptyMapValue
+
+    val response = mockk<GetEventsResponse>()
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { response.events } returns listOf(poisonEvent)
+    every { response.latestLedger } returns 777L
+    every { response.cursor } returns "SAFE_CUR"
+    every { sorobanServer.getEvents(any()) } returns response
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+
+    observer.setStatus(ObserverStatus.RUNNING)
+    
+    assertDoesNotThrow { observer.fetchEvents() }
+    
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("SAFE_CUR", observer.cursor)
   }
 }
 
