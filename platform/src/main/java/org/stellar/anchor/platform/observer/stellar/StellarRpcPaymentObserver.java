@@ -123,17 +123,18 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       lastActivityTime = Instant.now();
       silenceTimeoutCount = 0;
       metricLatestBlockRead.set(response.getLatestLedger());
-      if (response.getEvents() != null && !response.getEvents().isEmpty()) {
-        processEvents(response.getEvents());
-      }
-      // Save the cursor for the next request
-      cursor = response.getCursor();
       try {
-        saveCursor(cursor);
-        metricLatestBlockProcessed.set(response.getLatestLedger());
-      } catch (Exception tex) {
-        warnF("Failed to persist RPC cursor. Will retry next tick. ex={}", tex.getMessage());
-        setStatus(ObserverStatus.DATABASE_ERROR);
+        if (response.getEvents() != null && !response.getEvents().isEmpty()) {
+          processEvents(response.getEvents());
+        }
+      } finally {
+        try {
+          saveCursor(response.getCursor());
+          metricLatestBlockProcessed.set(response.getLatestLedger());
+        } catch (Exception tex) {
+          warnF("Failed to persist RPC cursor. Will retry next tick. ex={}", tex.getMessage());
+          setStatus(ObserverStatus.DATABASE_ERROR);
+        }
       }
     } catch (IOException ioex) {
       warnF(
