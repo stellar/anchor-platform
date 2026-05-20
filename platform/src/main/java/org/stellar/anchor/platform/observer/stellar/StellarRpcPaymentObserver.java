@@ -235,7 +235,10 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                 new MuxedAccount(Scv.fromAddress(to).toString(), Scv.fromUint64(memoVal))
                     .getAddress();
           } catch (IllegalArgumentException iae) {
-            warnF("Cannot build MuxedAccount for address '{}', using unmuxed value. ex={}", toAddr, iae.getMessage());
+            warnF(
+                "Cannot build MuxedAccount for address '{}', using unmuxed value. ex={}",
+                toAddr,
+                iae.getMessage());
           }
         }
       }
@@ -254,11 +257,9 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           .eventMemo(eventMemo)
           .sep11Asset(asset.getStr().getSCString().toString())
           .build();
-    } catch (IOException ioex) {
+    } catch (Exception ex) {
       warnF(
-          "Skip processing event: {}. ex={}",
-          GsonUtils.getInstance().toJson(event),
-          ioex.getMessage());
+          "Skip processing event: {}. ex={}", GsonUtils.getInstance().toJson(event), ex.toString());
       return builder.build();
     }
   }
