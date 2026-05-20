@@ -153,9 +153,16 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     debugF("Processing {} 'transfer' events", events.size());
 
     for (EventInfo event : events) {
-      ShouldProcessResult result = shouldProcess(event);
-      if (result.shouldProcess) {
-        processTransferEvent(result);
+      try {
+        ShouldProcessResult result = shouldProcess(event);
+        if (result.shouldProcess) {
+          processTransferEvent(result);
+        }
+      } catch (Exception ex) {
+        warnF(
+            "Skip event due to unexpected error: {}. ex={}",
+            GsonUtils.getInstance().toJson(event),
+            ex.toString());
       }
     }
   }
