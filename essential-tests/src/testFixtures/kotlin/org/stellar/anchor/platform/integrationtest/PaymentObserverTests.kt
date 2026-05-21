@@ -11,6 +11,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.asset.AssetService
@@ -358,9 +359,7 @@ class PaymentObserverTests {
       }
       delay(1000)
     }
-    assertNotNull(null) {
-      "Timed out after ${timeout}ms waiting for event from account $fromAccountId"
-    }
+    fail("Timed out after ${timeout}ms waiting for event from account $fromAccountId")
   }
 
   private fun sendTestPayment(fromKeyPair: KeyPair, toKeyPair: KeyPair): Transaction {
