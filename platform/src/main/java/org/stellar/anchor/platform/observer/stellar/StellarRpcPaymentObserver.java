@@ -82,6 +82,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Override
   void shutdownInternal() {
     task.cancel(true);
+    executorService.shutdownNow();
     status = ObserverStatus.SHUTDOWN;
   }
 
