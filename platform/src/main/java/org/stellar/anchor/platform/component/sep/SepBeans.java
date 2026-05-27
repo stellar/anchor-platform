@@ -185,8 +185,9 @@ public class SepBeans {
   Sep12Service sep12Service(
       CustomerIntegration customerIntegration,
       PlatformApiClient platformApiClient,
-      EventService eventService) {
-    return new Sep12Service(customerIntegration, platformApiClient, eventService);
+      EventService eventService,
+      ClientFinder clientFinder) {
+    return new Sep12Service(customerIntegration, platformApiClient, eventService, clientFinder);
   }
 
   @Bean

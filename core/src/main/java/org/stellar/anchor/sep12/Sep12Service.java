@@ -2,6 +2,7 @@ package org.stellar.anchor.sep12;
 
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Sep.SEP_12;
 import static org.stellar.anchor.util.Log.infoF;
+import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.MetricConstants.*;
 import static org.stellar.anchor.util.MetricConstants.SEP12_CUSTOMER;
 
@@ -23,6 +24,7 @@ import org.stellar.anchor.api.sep.sep12.*;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.auth.WebAuthJwt;
+import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.MemoHelper;
@@ -38,15 +40,18 @@ public class Sep12Service {
       Metrics.counter(SEP12_CUSTOMER, TYPE, TV_SEP12_DELETE_CUSTOMER);
   private final PlatformApiClient platformApiClient;
   private final EventService.Session eventSession;
+  private final ClientFinder clientFinder;
 
   public Sep12Service(
       CustomerIntegration customerIntegration,
       PlatformApiClient platformApiClient,
-      EventService eventService) {
+      EventService eventService,
+      ClientFinder clientFinder) {
     this.customerIntegration = customerIntegration;
     this.platformApiClient = platformApiClient;
     this.eventSession =
         eventService.createSession(this.getClass().getName(), EventService.EventQueue.TRANSACTION);
+    this.clientFinder = clientFinder;
 
     Log.info("Sep12Service initialized.");
   }
@@ -97,12 +102,24 @@ public class Sep12Service {
     PutCustomerResponse updatedCustomer =
         customerIntegration.putCustomer(PutCustomerRequest.from(request));
 
-    // Only publish event if the customer was updated.
+    String clientName = null;
+
+    try {
+      clientName = clientFinder.getClientName(token);
+    } catch (SepNotAuthorizedException e) {
+      warnF(
+          "Client attribution required but client is not authorized; CUSTOMER_UPDATED event will have no clientName. token={}, reason={}",
+          token.getAccount(),
+          e.getMessage());
+    }
+
     eventSession.publish(
         AnchorEvent.builder()
             .id(UUID.randomUUID().toString())
             .sep(SEP_12.getSep().toString())
             .type(AnchorEvent.Type.CUSTOMER_UPDATED)
+            .clientName(clientName)
+            .clientDomain(token.getClientDomain())
             .customer(GetCustomerResponse.to(updatedCustomer))
             .build());
 
