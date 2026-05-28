@@ -131,6 +131,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       } finally {
         try {
           saveCursor(response.getCursor());
+          streamBackoffTimer.reset();
           metricLatestBlockProcessed.set(response.getLatestLedger());
         } catch (Exception tex) {
           warnF("Failed to persist RPC cursor. Will retry next tick. ex={}", tex.getMessage());
