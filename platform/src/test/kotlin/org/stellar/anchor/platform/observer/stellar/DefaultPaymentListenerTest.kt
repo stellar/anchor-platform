@@ -1,5 +1,7 @@
 package org.stellar.anchor.platform.observer.stellar
 
+import io.micrometer.core.instrument.Metrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import java.math.BigInteger
@@ -14,7 +16,9 @@ import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.platform.config.RpcConfig
 import org.stellar.anchor.platform.data.*
+import org.stellar.anchor.platform.service.AnchorMetrics
 import org.stellar.anchor.util.AssetHelper.fromXdrAmount
+import org.stellar.anchor.util.Log
 import org.stellar.sdk.TOID
 import org.stellar.sdk.xdr.Asset
 import org.stellar.sdk.xdr.AssetType.ASSET_TYPE_POOL_SHARE
@@ -117,19 +121,19 @@ class DefaultPaymentListenerTest {
     val slotStatus = slot<String>()
 
     every {
-      sep31TransactionStore.findByToAccountAndMemoAndStatus(
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
         capture(slotAccount),
         capture(slotMemo),
         capture(slotStatus),
       )
-    } returns JdbcSep31Transaction()
+    } returns listOf(JdbcSep31Transaction())
 
     every { paymentListener.handleSep31Transaction(any(), any(), any()) } answers {}
 
     paymentListener.onReceived(event)
 
     verify(exactly = 1) {
-      sep31TransactionStore.findByToAccountAndMemoAndStatus(
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_1",
         "pending_sender",
@@ -154,23 +158,23 @@ class DefaultPaymentListenerTest {
     val slotAccount = slot<String>()
     val slotStatus = slot<String>()
 
-    every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
-      null
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
 
     every {
-      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
         capture(slotAccount),
         capture(slotMemo),
         capture(slotStatus),
       )
-    } returns JdbcSep24Transaction()
+    } returns listOf(JdbcSep24Transaction())
 
     every { paymentListener.handleSep24Transaction(any(), any(), any()) } answers {}
 
     paymentListener.onReceived(event)
 
     verify(exactly = 1) {
-      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_1",
         "pending_user_transfer_start",
@@ -195,25 +199,25 @@ class DefaultPaymentListenerTest {
     val slotAccount = slot<String>()
     val slotStatus = slot<String>()
 
-    every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
-      null
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
     every {
-      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
-    } returns null
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns emptyList()
     every {
-      sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
         capture(slotAccount),
         capture(slotMemo),
         capture(slotStatus),
       )
-    } returns JdbcSep6Transaction()
+    } returns listOf(JdbcSep6Transaction())
 
     every { paymentListener.handleSep6Transaction(any(), any(), any()) } answers {}
 
     paymentListener.onReceived(event)
 
     verify(exactly = 1) {
-      sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_1",
         "pending_user_transfer_start",
@@ -274,7 +278,7 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  fun `test if Sep31 findByToAccountAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
+  fun `test if Sep31 findAllByToAccountAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
     val event = createTestTransferEvent()
     val ledgerTransaction = event.ledgerTransaction
 
@@ -282,7 +286,7 @@ class DefaultPaymentListenerTest {
     ledgerTransaction.memo = xdrMemoText
 
     every {
-      sep31TransactionStore.findByToAccountAndMemoAndStatus(
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_3",
         "pending_sender",
@@ -292,7 +296,7 @@ class DefaultPaymentListenerTest {
     paymentListener.onReceived(event)
 
     verify(exactly = 1) {
-      sep31TransactionStore.findByToAccountAndMemoAndStatus(
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_3",
         "pending_sender",
@@ -309,17 +313,17 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  fun `test if Sep24 findByStellarAccountIdAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
+  fun `test if Sep24 findAllByWithdrawAnchorAccountAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
     val event = createTestTransferEvent()
     val ledgerTransaction = event.ledgerTransaction
 
     xdrMemoText.text = XdrString("my_memo_3")
     ledgerTransaction.memo = xdrMemoText
 
-    every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
-      null
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
     every {
-      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_3",
         "pending_user_transfer_start",
@@ -329,7 +333,7 @@ class DefaultPaymentListenerTest {
     paymentListener.onReceived(event)
 
     verify(exactly = 1) {
-      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_3",
         "pending_user_transfer_start",
@@ -346,20 +350,20 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  fun `test if Sep6 findOneByWithdrawAnchorAccountAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
+  fun `test if Sep6 findAllByWithdrawAnchorAccountAndMemoAndStatus throws an exception, we shouldn't trigger any updates`() {
     val event = createTestTransferEvent()
     val ledgerTransaction = event.ledgerTransaction
 
     xdrMemoText.text = XdrString("my_memo_3")
     ledgerTransaction.memo = xdrMemoText
 
-    every { sep31TransactionStore.findByToAccountAndMemoAndStatus(any(), any(), any()) } returns
-      null
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
     every {
-      sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
-    } returns null
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns emptyList()
     every {
-      sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_3",
         "pending_user_transfer_start",
@@ -369,7 +373,7 @@ class DefaultPaymentListenerTest {
     paymentListener.onReceived(event)
 
     verify(exactly = 1) {
-      sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_3",
         "pending_user_transfer_start",
@@ -377,7 +381,7 @@ class DefaultPaymentListenerTest {
     }
 
     verify(exactly = 0) {
-      paymentListener.handleSep24Transaction(
+      paymentListener.handleSep6Transaction(
         ledgerTransaction,
         ledgerTransaction.operations[0].paymentOperation,
         any(),
@@ -400,15 +404,15 @@ class DefaultPaymentListenerTest {
     val slotAccount = slot<String>()
     val slotStatus = slot<String>()
     every {
-      sep31TransactionStore.findByToAccountAndMemoAndStatus(
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
         capture(slotAccount),
         capture(slotMemo),
         capture(slotStatus),
       )
-    } returns sep31TxMock
+    } returns listOf(sep31TxMock)
     paymentListener.onReceived(event)
     verify(exactly = 1) {
-      sep31TransactionStore.findByToAccountAndMemoAndStatus(
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
         "my_memo_4",
         "pending_sender",
@@ -550,5 +554,255 @@ class DefaultPaymentListenerTest {
       paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
     }
     verify(exactly = 1) { platformApiClient.notifyOnchainFundsSent("123", testTxn.hash, any()) }
+  }
+
+  @Test
+  fun `test ambiguous SEP-24 routing does not route payment and increments metric`() {
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("dup_memo")
+    ledgerTransaction.memo = xdrMemoText
+
+    val txn1 = JdbcSep24Transaction().apply { id = "sep24-id-1" }
+    val txn2 = JdbcSep24Transaction().apply { id = "sep24-id-2" }
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(txn1, txn2)
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    mockkStatic(Log::class)
+    try {
+      every { Log.debugF(any(), *anyVararg()) } just Runs
+      every { Log.errorF(any(), *anyVararg()) } just Runs
+
+      paymentListener.onReceived(event)
+
+      verify(exactly = 0) {
+        platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any())
+      }
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("Ambiguous SEP-24") },
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep24-id-1") && it.toString().contains("sep24-id-2") },
+        )
+      }
+      assertEquals(
+        1.0,
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "24")
+          .count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+      unmockkStatic(Log::class)
+    }
+  }
+
+  @Test
+  fun `test ambiguous SEP-6 routing does not route payment and increments metric`() {
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("dup_memo")
+    ledgerTransaction.memo = xdrMemoText
+
+    val txn1 = JdbcSep6Transaction().apply { id = "sep6-id-1" }
+    val txn2 = JdbcSep6Transaction().apply { id = "sep6-id-2" }
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns emptyList()
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(txn1, txn2)
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    mockkStatic(Log::class)
+    try {
+      every { Log.debugF(any(), *anyVararg()) } just Runs
+      every { Log.errorF(any(), *anyVararg()) } just Runs
+
+      paymentListener.onReceived(event)
+
+      verify(exactly = 0) {
+        platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any())
+      }
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("Ambiguous SEP-6") },
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep6-id-1") && it.toString().contains("sep6-id-2") },
+        )
+      }
+      assertEquals(
+        1.0,
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "6")
+          .count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+      unmockkStatic(Log::class)
+    }
+  }
+
+  @Test
+  fun `test ambiguous SEP-31 routing does not route payment and increments metric`() {
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("dup_memo")
+    ledgerTransaction.memo = xdrMemoText
+
+    val txn1 = JdbcSep31Transaction().apply { id = "sep31-id-1" }
+    val txn2 = JdbcSep31Transaction().apply { id = "sep31-id-2" }
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      listOf(txn1, txn2)
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    mockkStatic(Log::class)
+    try {
+      every { Log.debugF(any(), *anyVararg()) } just Runs
+      every { Log.errorF(any(), *anyVararg()) } just Runs
+
+      paymentListener.onReceived(event)
+
+      verify(exactly = 0) {
+        platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any())
+      }
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("Ambiguous SEP-31") },
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep31-id-1") && it.toString().contains("sep31-id-2") },
+        )
+      }
+      assertEquals(
+        1.0,
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "31")
+          .count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+      unmockkStatic(Log::class)
+    }
+  }
+
+  @Test
+  fun `test single-match SEP-24 routes payment and does not increment ambiguous metric`() {
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("unique_memo")
+    ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(JdbcSep24Transaction().apply { id = "sep24-id-only" })
+    every { paymentListener.handleSep24Transaction(any(), any(), any()) } answers {}
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      verify(exactly = 1) {
+        paymentListener.handleSep24Transaction(ledgerTransaction, any(), any())
+      }
+      assertEquals(
+        0.0,
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "24")
+          .count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test single-match SEP-6 routes payment and does not increment ambiguous metric`() {
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("unique_memo")
+    ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns emptyList()
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(JdbcSep6Transaction().apply { id = "sep6-id-only" })
+    every { paymentListener.handleSep6Transaction(any(), any(), any()) } answers {}
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      verify(exactly = 1) { paymentListener.handleSep6Transaction(ledgerTransaction, any(), any()) }
+      assertEquals(
+        0.0,
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "6")
+          .count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test single-match SEP-31 routes payment and does not increment ambiguous metric`() {
+    val event = createTestTransferEvent()
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("unique_memo")
+    ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      listOf(JdbcSep31Transaction().apply { id = "sep31-id-only" })
+    every { paymentListener.handleSep31Transaction(any(), any(), any()) } answers {}
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      verify(exactly = 1) {
+        paymentListener.handleSep31Transaction(ledgerTransaction, any(), any())
+      }
+      assertEquals(
+        0.0,
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "31")
+          .count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
   }
 }

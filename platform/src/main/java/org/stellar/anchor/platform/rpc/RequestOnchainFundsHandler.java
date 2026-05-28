@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.SepException;
@@ -82,6 +83,16 @@ public class RequestOnchainFundsHandler
     this.sep24DepositInfoGenerator = sep24DepositInfoGenerator;
     this.sep31DepositInfoGenerator = sep31DepositInfoGenerator;
     this.paymentObservingAccountsManager = paymentObservingAccountsManager;
+  }
+
+  @Override
+  public Object handle(Object requestParams) throws AnchorException {
+    try {
+      return super.handle(requestParams);
+    } catch (DataIntegrityViolationException ex) {
+      throw new BadRequestException(
+          "memo_in_use: the requested memo and destination account are already assigned to a pending transaction");
+    }
   }
 
   @Override

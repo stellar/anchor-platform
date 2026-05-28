@@ -25,7 +25,7 @@ public interface JdbcSep6TransactionRepo
 
   JdbcSep6Transaction findOneByExternalTransactionId(String externalTransactionId);
 
-  JdbcSep6Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
+  List<JdbcSep6Transaction> findAllByWithdrawAnchorAccountAndMemoAndStatus(
       String withdrawAnchorAccount, String memo, String status);
 
   @Query(
