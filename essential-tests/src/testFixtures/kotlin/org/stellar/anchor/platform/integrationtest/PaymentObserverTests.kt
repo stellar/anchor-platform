@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -301,9 +302,11 @@ class PaymentObserverTests {
     fromEvent: List<PaymentTransferEvent>?,
     toEvent: List<PaymentTransferEvent>?,
   ) {
-    assertEquals(1, fromEvent?.size)
-    assertEquals(1, toEvent?.size)
-    assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
+    assertNotNull(fromEvent) { "Observer did not capture a fromEvent within timeout" }
+    assertNotNull(toEvent) { "Observer did not capture a toEvent within timeout" }
+    assertEquals(1, fromEvent!!.size)
+    assertEquals(1, toEvent!!.size)
+    assertEquals(fromKeyPair.accountId, fromEvent[0].from)
     assertEquals(toKeyPair.accountId, fromEvent[0].to)
     val paymentOperation: PaymentOperation = txn.operations[0] as PaymentOperation
     assertEquals(
@@ -322,9 +325,11 @@ class PaymentObserverTests {
     fromEvent: List<PaymentTransferEvent>?,
     toEvent: List<PaymentTransferEvent>?,
   ) {
-    assertEquals(1, fromEvent?.size)
-    assertEquals(1, toEvent?.size)
-    assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
+    assertNotNull(fromEvent) { "Observer did not capture a fromEvent within timeout" }
+    assertNotNull(toEvent) { "Observer did not capture a toEvent within timeout" }
+    assertEquals(1, fromEvent!!.size)
+    assertEquals(1, toEvent!!.size)
+    assertEquals(fromKeyPair.accountId, fromEvent[0].from)
     assertEquals(toKeyPair.accountId, fromEvent[0].to)
     val paymentOperation: PathPaymentStrictSendOperation =
       txn.operations[0] as PathPaymentStrictSendOperation
@@ -353,7 +358,9 @@ class PaymentObserverTests {
       }
       delay(1000)
     }
-    info("Timeout waiting for event for account: $fromAccountId")
+    throw AssertionError(
+      "Timed out after ${timeout}ms waiting for event from account $fromAccountId"
+    )
   }
 
   private fun sendTestPayment(fromKeyPair: KeyPair, toKeyPair: KeyPair): Transaction {

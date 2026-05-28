@@ -22,6 +22,7 @@ import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
 import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.ObserverStatus
+import org.stellar.sdk.Address
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.SorobanServer
@@ -31,6 +32,10 @@ import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.OperationType
+import org.stellar.sdk.xdr.SCMap
+import org.stellar.sdk.xdr.SCMapEntry
+import org.stellar.sdk.xdr.SCVal
+import org.stellar.sdk.xdr.SCValType
 
 class StellarRpcPaymentObserverTest {
   private lateinit var config: StellarPaymentObserverConfig
@@ -375,6 +380,147 @@ class StellarRpcPaymentObserverTest {
 
     assertDoesNotThrow { observer.fetchEvents() }
     assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
+  }
+
+  @Test
+  fun `fetchEvents skips empty SCV_MAP poison event without crashing or stalling`() {
+    val distAccount = KeyPair.random().accountId
+    val attackerAccount = KeyPair.random().accountId
+
+    val topics =
+      listOf(
+        Scv.toSymbol("transfer").toXdrBase64(),
+        Scv.toAddress(distAccount).toXdrBase64(),
+        Scv.toAddress(attackerAccount).toXdrBase64(),
+        Scv.toString("native").toXdrBase64(),
+      )
+
+    val emptyMapValue =
+      SCVal.builder()
+        .discriminant(SCValType.SCV_MAP)
+        .map(SCMap(emptyArray<SCMapEntry>()))
+        .build()
+        .toXdrBase64()
+
+    val poisonEvent = mockk<GetEventsResponse.EventInfo>()
+    every { poisonEvent.topic } returns topics
+    every { poisonEvent.value } returns emptyMapValue
+
+    val response = mockk<GetEventsResponse>()
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { response.events } returns listOf(poisonEvent)
+    every { response.latestLedger } returns 777L
+    every { response.cursor } returns "SAFE_CUR"
+    every { sorobanServer.getEvents(any()) } returns response
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    assertDoesNotThrow { observer.fetchEvents() }
+
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("SAFE_CUR", observer.cursor)
+  }
+
+  @Test
+  fun `fetchEvents skips one-entry SCV_MAP without crashing or stalling`() {
+    val oneEntryMap =
+      SCVal.builder()
+        .discriminant(SCValType.SCV_MAP)
+        .map(
+          SCMap(arrayOf(SCMapEntry(Scv.toSymbol("amount"), Scv.toInt128(BigInteger.valueOf(100)))))
+        )
+        .build()
+        .toXdrBase64()
+
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } returns mockPoisonResponse(oneEntryMap)
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    assertDoesNotThrow { observer.fetchEvents() }
+
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("POISON_CUR", observer.cursor)
+  }
+
+  @Test
+  fun `fetchEvents skips SCV_MAP with wrong first-entry type without crashing or stalling`() {
+    val wrongTypeMap =
+      SCVal.builder()
+        .discriminant(SCValType.SCV_MAP)
+        .map(
+          SCMap(
+            arrayOf(
+              SCMapEntry(Scv.toSymbol("amount"), Scv.toUint64(BigInteger.valueOf(100))),
+              SCMapEntry(Scv.toSymbol("memo"), Scv.toString("memo123")),
+            )
+          )
+        )
+        .build()
+        .toXdrBase64()
+
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } returns mockPoisonResponse(wrongTypeMap)
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    assertDoesNotThrow { observer.fetchEvents() }
+
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("POISON_CUR", observer.cursor)
+  }
+
+  @Test
+  fun `fetchEvents handles contract-address recipient with SCV_U64 memo without crashing`() {
+    val contractAddress = Address.fromContract(ByteArray(32)).toSCVal()
+    val validMapWithU64Memo =
+      SCVal.builder()
+        .discriminant(SCValType.SCV_MAP)
+        .map(
+          SCMap(
+            arrayOf(
+              SCMapEntry(Scv.toSymbol("amount"), Scv.toInt128(BigInteger.valueOf(500))),
+              SCMapEntry(Scv.toSymbol("memo"), Scv.toUint64(BigInteger.valueOf(42))),
+            )
+          )
+        )
+        .build()
+        .toXdrBase64()
+
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } returns
+      mockPoisonResponse(validMapWithU64Memo, toSCVal = contractAddress)
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    assertDoesNotThrow { observer.fetchEvents() }
+
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("POISON_CUR", observer.cursor)
+  }
+
+  private fun mockPoisonResponse(
+    valueBase64: String,
+    fromAccount: String = KeyPair.random().accountId,
+    toSCVal: SCVal = Scv.toAddress(KeyPair.random().accountId),
+  ): GetEventsResponse {
+    val topics =
+      listOf(
+        Scv.toSymbol("transfer").toXdrBase64(),
+        Scv.toAddress(fromAccount).toXdrBase64(),
+        toSCVal.toXdrBase64(),
+        Scv.toString("native").toXdrBase64(),
+      )
+    val event = mockk<GetEventsResponse.EventInfo>()
+    every { event.topic } returns topics
+    every { event.value } returns valueBase64
+
+    val response = mockk<GetEventsResponse>()
+    every { response.events } returns listOf(event)
+    every { response.latestLedger } returns 777L
+    every { response.cursor } returns "POISON_CUR"
+    return response
   }
 }
 
