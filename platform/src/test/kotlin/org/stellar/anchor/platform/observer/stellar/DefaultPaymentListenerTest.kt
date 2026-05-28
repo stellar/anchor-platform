@@ -597,7 +597,9 @@ class DefaultPaymentListenerTest {
       }
       assertEquals(
         1.0,
-        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "24")
+          .count(),
       )
     } finally {
       Metrics.removeRegistry(registry)
@@ -649,7 +651,9 @@ class DefaultPaymentListenerTest {
       }
       assertEquals(
         1.0,
-        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "6")
+          .count(),
       )
     } finally {
       Metrics.removeRegistry(registry)
@@ -695,7 +699,9 @@ class DefaultPaymentListenerTest {
       }
       assertEquals(
         1.0,
-        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "31")
+          .count(),
       )
     } finally {
       Metrics.removeRegistry(registry)
@@ -727,7 +733,9 @@ class DefaultPaymentListenerTest {
       }
       assertEquals(
         0.0,
-        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "24")
+          .count(),
       )
     } finally {
       Metrics.removeRegistry(registry)
@@ -759,7 +767,9 @@ class DefaultPaymentListenerTest {
       verify(exactly = 1) { paymentListener.handleSep6Transaction(ledgerTransaction, any(), any()) }
       assertEquals(
         0.0,
-        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "6")
+          .count(),
       )
     } finally {
       Metrics.removeRegistry(registry)
@@ -787,7 +797,9 @@ class DefaultPaymentListenerTest {
       }
       assertEquals(
         0.0,
-        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).count(),
+        registry
+          .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "31")
+          .count(),
       )
     } finally {
       Metrics.removeRegistry(registry)
