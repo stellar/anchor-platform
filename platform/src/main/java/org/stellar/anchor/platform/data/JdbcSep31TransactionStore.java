@@ -3,7 +3,6 @@ package org.stellar.anchor.platform.data;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import lombok.NonNull;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.sep31.RefundPayment;
@@ -64,13 +63,6 @@ public class JdbcSep31TransactionStore implements Sep31TransactionStore {
     }
 
     return transactionRepo.save((JdbcSep31Transaction) transaction);
-  }
-
-  public JdbcSep31Transaction findByToAccountAndMemoAndStatus(
-      String toAccount, String memo, String status) {
-    Optional<JdbcSep31Transaction> optTxn =
-        transactionRepo.findByToAccountAndStellarMemoAndStatus(toAccount, memo, status);
-    return optTxn.orElse(null);
   }
 
   public List<JdbcSep31Transaction> findAllByToAccountAndMemoAndStatus(
