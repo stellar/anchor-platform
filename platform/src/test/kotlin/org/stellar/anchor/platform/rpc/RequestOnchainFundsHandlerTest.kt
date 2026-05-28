@@ -1927,4 +1927,31 @@ class RequestOnchainFundsHandlerTest {
     verify(exactly = 0) { txn31Store.save(any()) }
     verify(exactly = 0) { sepTransactionCounter.increment() }
   }
+
+  @Test
+  fun test_handle_sep24_memo_in_use_returns_400() {
+    val request =
+      RequestOnchainFundsRequest.builder()
+        .transactionId(TX_ID)
+        .memo(ID_MEMO)
+        .destinationAccount(DESTINATION_ACCOUNT_2)
+        .amountIn(AmountAssetRequest("1", STELLAR_USDC))
+        .amountOut(AmountAssetRequest("1", FIAT_USD))
+        .feeDetails(FeeDetails("1", STELLAR_USDC))
+        .build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = PENDING_ANCHOR.toString()
+    txn24.kind = WITHDRAWAL.kind
+    txn24.amountInAsset = STELLAR_USDC
+    txn24.amountOutAsset = FIAT_USD
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn24Store.save(any()) } throws
+      org.springframework.dao.DataIntegrityViolationException("duplicate key")
+
+    val ex = assertThrows<BadRequestException> { handler.handle(request) }
+    assertTrue(ex.message!!.contains("memo_in_use"))
+  }
 }
