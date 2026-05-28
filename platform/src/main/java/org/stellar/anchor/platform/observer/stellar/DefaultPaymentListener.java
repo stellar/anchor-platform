@@ -133,7 +133,8 @@ public class DefaultPaymentListener implements PaymentListener {
             memo,
             SepTransactionStatus.PENDING_SENDER,
             ids);
-        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).increment();
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "31")
+            .increment();
         return;
       }
       if (!sep31Txns.isEmpty()) {
@@ -190,7 +191,8 @@ public class DefaultPaymentListener implements PaymentListener {
             memoAsString(memo),
             SepTransactionStatus.PENDING_USR_TRANSFER_START,
             ids);
-        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).increment();
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "24")
+            .increment();
         return;
       }
       if (!sep24Txns.isEmpty()) {
@@ -231,7 +233,8 @@ public class DefaultPaymentListener implements PaymentListener {
             memoAsString(memo),
             SepTransactionStatus.PENDING_USR_TRANSFER_START,
             ids);
-        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString()).increment();
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "6")
+            .increment();
         return;
       }
       if (!sep6Txns.isEmpty()) {
