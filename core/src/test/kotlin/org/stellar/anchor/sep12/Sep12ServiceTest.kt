@@ -778,6 +778,48 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test memo-only customer account is not overwritten by token account on get`() {
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.memo = TEST_MEMO
+    prefetchResponse.memoType = "id"
+    val callbackSlot = slot<GetCustomerRequest>()
+    val callbackResponse = GetCustomerResponse()
+    callbackResponse.id = "customer-id"
+    every { customerIntegration.getCustomer(capture(callbackSlot)) } returnsMany
+      listOf(prefetchResponse, callbackResponse)
+
+    val memoToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
+    sep12Service.getCustomer(memoToken, Sep12GetCustomerRequest.builder().id("customer-id").build())
+
+    assertEquals("customer-id", callbackSlot.captured.id)
+    assertEquals(TEST_MEMO, callbackSlot.captured.memo)
+    assertEquals(null, callbackSlot.captured.account)
+  }
+
+  @Test
+  fun `test memo-only customer account is not overwritten by token account on put`() {
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.memo = TEST_MEMO
+    prefetchResponse.memoType = "id"
+    val callbackSlot = slot<PutCustomerRequest>()
+    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+    every { customerIntegration.putCustomer(capture(callbackSlot)) } returns
+      PutCustomerResponse.builder().id("customer-id").build()
+
+    val memoToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
+    sep12Service.putCustomer(
+      memoToken,
+      Sep12PutCustomerRequest.builder().id("customer-id").firstName("Alice").build(),
+    )
+
+    assertEquals("customer-id", callbackSlot.captured.id)
+    assertEquals(TEST_MEMO, callbackSlot.captured.memo)
+    assertEquals(null, callbackSlot.captured.account)
+  }
+
+  @Test
   fun `test id prefetch propagates memo_type to avoid text memo rejection`() {
     val prefetchResponse = GetCustomerResponse()
     prefetchResponse.id = "customer-id"

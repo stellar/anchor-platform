@@ -59,7 +59,10 @@ public class Sep12Service {
   public Sep12GetCustomerResponse getCustomer(WebAuthJwt token, Sep12GetCustomerRequest request)
       throws AnchorException {
     validateGetOrPutRequest(request, token);
-    if (request.getAccount() == null && token.getAccount() != null) {
+    if (request.getAccount() == null
+        && token.getAccount() != null
+        && request.getId() == null
+        && request.getTransactionId() == null) {
       request.setAccount(token.getAccount());
     }
 
@@ -76,7 +79,10 @@ public class Sep12Service {
       throws AnchorException {
     validateGetOrPutRequest(request, token);
 
-    if (request.getAccount() == null && token.getAccount() != null) {
+    if (request.getAccount() == null
+        && token.getAccount() != null
+        && request.getId() == null
+        && request.getTransactionId() == null) {
       request.setAccount(token.getAccount());
     }
 
