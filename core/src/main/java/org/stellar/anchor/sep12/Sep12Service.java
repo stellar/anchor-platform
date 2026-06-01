@@ -235,11 +235,11 @@ public class Sep12Service {
     try {
       validateRequestAndTokenAccounts(requestBase, token);
       validateRequestAndTokenMemos(requestBase, token);
-    } catch (SepNotAuthorizedException e) {
+      updateRequestMemoAndMemoType(requestBase, token);
+    } catch (SepException e) {
       if (isIdPath) throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
       throw e;
     }
-    updateRequestMemoAndMemoType(requestBase, token);
   }
 
   void validateRequestAndTokenAccounts(

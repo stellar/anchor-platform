@@ -713,6 +713,23 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test id path normalizes SepValidationException from memo mismatch to 403`() {
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.account = TEST_ACCOUNT
+    prefetchResponse.memo = "non-numeric-text-memo"
+    prefetchResponse.memoType = null
+    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("customer-id").build()
+
+    val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
+  }
+
+  @Test
   fun `test id prefetch includes type in request`() {
     val prefetchSlot = slot<GetCustomerRequest>()
     val prefetchResponse = GetCustomerResponse()
