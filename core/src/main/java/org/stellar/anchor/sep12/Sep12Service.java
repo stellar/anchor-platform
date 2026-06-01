@@ -191,8 +191,15 @@ public class Sep12Service {
       try {
         GetCustomerResponse existing =
             customerIntegration.getCustomer(
-                GetCustomerRequest.builder().id(requestBase.getId()).build());
+                GetCustomerRequest.builder()
+                    .id(requestBase.getId())
+                    .type(requestBase.getType())
+                    .build());
         if (existing == null || existing.getId() == null) {
+          throw new SepNotAuthorizedException("The customer id specified does not exist");
+        }
+
+        if (existing.getAccount() == null && existing.getMemo() == null) {
           throw new SepNotAuthorizedException("The customer id specified does not exist");
         }
         requestBase.setAccount(existing.getAccount());

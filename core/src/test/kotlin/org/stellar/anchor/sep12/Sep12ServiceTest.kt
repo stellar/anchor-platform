@@ -647,6 +647,35 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test id prefetch with null account and memo fails closed`() {
+    val noOwnershipResponse = GetCustomerResponse()
+    noOwnershipResponse.id = "some-id"
+    every { customerIntegration.getCustomer(any()) } returns noOwnershipResponse
+
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("some-id").build()
+
+    val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+  }
+
+  @Test
+  fun `test id prefetch includes type in request`() {
+    val prefetchSlot = slot<GetCustomerRequest>()
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.account = TEST_ACCOUNT
+    every { customerIntegration.getCustomer(capture(prefetchSlot)) } returns prefetchResponse
+
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("customer-id").type("sep31-receiver").build()
+
+    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertEquals("customer-id", prefetchSlot.captured.id)
+    assertEquals("sep31-receiver", prefetchSlot.captured.type)
+  }
+
+  @Test
   fun `test delete customer validation`() {
     every { customerIntegration.deleteCustomer(any()) } just Runs
 
