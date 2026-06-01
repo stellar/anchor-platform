@@ -555,10 +555,13 @@ class Sep12ServiceTest {
   @Test
   fun `Test get customer request with id injects account`() {
     val callbackApiGetRequestSlot = slot<GetCustomerRequest>()
-    val mockCallbackApiGetCustomerResponse = GetCustomerResponse()
-    mockCallbackApiGetCustomerResponse.id = "customer-id"
-    every { customerIntegration.getCustomer(capture(callbackApiGetRequestSlot)) } returns
-      mockCallbackApiGetCustomerResponse
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.account = TEST_ACCOUNT
+    val fullResponse = GetCustomerResponse()
+    fullResponse.id = "customer-id"
+    every { customerIntegration.getCustomer(capture(callbackApiGetRequestSlot)) } returnsMany
+      listOf(prefetchResponse, fullResponse)
 
     val mockGetRequest = Sep12GetCustomerRequest.builder().id("customer-id").build()
     val jwtToken = createJwtToken(TEST_ACCOUNT)
@@ -574,6 +577,10 @@ class Sep12ServiceTest {
   @Test
   fun `Test put customer request with id injects account`() {
     val callbackApiPutRequestSlot = slot<PutCustomerRequest>()
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.account = TEST_ACCOUNT
+    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
     val mockCallbackApiPutCustomerResponse = PutCustomerResponse.builder().id("customer-id").build()
     every { customerIntegration.putCustomer(capture(callbackApiPutRequestSlot)) } returns
       mockCallbackApiPutCustomerResponse
@@ -587,6 +594,56 @@ class Sep12ServiceTest {
       PutCustomerRequest.builder().id("customer-id").account(TEST_ACCOUNT).build()
     assertEquals(wantCallbackApiPutRequest, callbackApiPutRequestSlot.captured)
     assertEquals(TEST_ACCOUNT, mockPutRequest.account)
+  }
+
+  @Test
+  fun `test get customer with id belonging to different account should throw`() {
+    val victimAccount = "GDIFFERENT_ACCOUNT_VICTIM_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "victim-customer-id"
+    prefetchResponse.account = victimAccount
+    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+
+    val attackerToken = createJwtToken(TEST_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("victim-customer-id").build()
+
+    val ex: SepException = assertThrows {
+      sep12Service.validateGetOrPutRequest(request, attackerToken)
+    }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 1) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test put customer with id belonging to different account should throw`() {
+    val victimAccount = "GDIFFERENT_ACCOUNT_VICTIM_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "victim-customer-id"
+    prefetchResponse.account = victimAccount
+    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+
+    val attackerToken = createJwtToken(TEST_ACCOUNT)
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .id("victim-customer-id")
+        .bankAccountNumber("attacker-iban")
+        .build()
+
+    val ex: SepException = assertThrows { sep12Service.putCustomer(attackerToken, request) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { customerIntegration.putCustomer(any()) }
+  }
+
+  @Test
+  fun `test get customer with unknown id should throw`() {
+    val notFoundResponse = GetCustomerResponse()
+    every { customerIntegration.getCustomer(any()) } returns notFoundResponse
+
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("nonexistent-id").build()
+
+    val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
   }
 
   @Test
