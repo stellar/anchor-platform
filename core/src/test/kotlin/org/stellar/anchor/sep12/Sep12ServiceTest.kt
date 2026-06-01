@@ -746,6 +746,38 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test memo-only customer with no-memo token is denied`() {
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.memo = "123456"
+    prefetchResponse.memoType = "id"
+    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+
+    val noMemoToken = createJwtToken(TEST_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("customer-id").build()
+
+    val ex: SepException = assertThrows {
+      sep12Service.validateGetOrPutRequest(request, noMemoToken)
+    }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
+  }
+
+  @Test
+  fun `test memo-only customer with matching token memo is allowed`() {
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.memo = TEST_MEMO
+    prefetchResponse.memoType = "id"
+    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+
+    val memoToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
+    val request = Sep12GetCustomerRequest.builder().id("customer-id").build()
+
+    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, memoToken) }
+  }
+
+  @Test
   fun `test id prefetch propagates memo_type to avoid text memo rejection`() {
     val prefetchResponse = GetCustomerResponse()
     prefetchResponse.id = "customer-id"

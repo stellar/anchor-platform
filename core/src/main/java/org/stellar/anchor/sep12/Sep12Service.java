@@ -225,6 +225,10 @@ public class Sep12Service {
         requestBase.setAccount(existing.getAccount());
         requestBase.setMemo(existing.getMemo());
         requestBase.setMemoType(existing.getMemoType());
+        boolean tokenHasMemo = token.getAccountMemo() != null || token.getMuxedAccountId() != null;
+        if (existing.getAccount() == null && !tokenHasMemo) {
+          throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+        }
       } catch (SepNotAuthorizedException e) {
         throw e;
       } catch (Exception e) {
