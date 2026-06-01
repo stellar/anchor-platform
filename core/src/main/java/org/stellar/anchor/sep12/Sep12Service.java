@@ -170,8 +170,11 @@ public class Sep12Service {
     sep12DeleteCustomerCounter.increment();
   }
 
+  private static final String ERR_CUSTOMER_ID_NOT_AUTHORIZED = "not authorized for customer id";
+
   void validateGetOrPutRequest(Sep12CustomerRequestBase requestBase, WebAuthJwt token)
       throws SepException {
+    boolean isIdPath = false;
     if (requestBase.getTransactionId() != null) {
       try {
         // `transactionId` should be used in conjunction with customer type `type` (sep6,
@@ -205,6 +208,7 @@ public class Sep12Service {
         throw new SepNotAuthorizedException("The transaction specified does not exist");
       }
     } else if (requestBase.getId() != null) {
+      isIdPath = true;
       try {
         GetCustomerResponse existing =
             customerIntegration.getCustomer(
@@ -213,11 +217,10 @@ public class Sep12Service {
                     .type(requestBase.getType())
                     .build());
         if (existing == null || existing.getId() == null) {
-          throw new SepNotAuthorizedException("The customer id specified does not exist");
+          throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
         }
-
         if (existing.getAccount() == null && existing.getMemo() == null) {
-          throw new SepNotAuthorizedException("The customer id specified does not exist");
+          throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
         }
         requestBase.setAccount(existing.getAccount());
         requestBase.setMemo(existing.getMemo());
@@ -225,11 +228,17 @@ public class Sep12Service {
       } catch (SepNotAuthorizedException e) {
         throw e;
       } catch (Exception e) {
-        throw new SepNotAuthorizedException("The customer id specified does not exist");
+        throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
       }
     }
-    validateRequestAndTokenAccounts(requestBase, token);
-    validateRequestAndTokenMemos(requestBase, token);
+
+    try {
+      validateRequestAndTokenAccounts(requestBase, token);
+      validateRequestAndTokenMemos(requestBase, token);
+    } catch (SepNotAuthorizedException e) {
+      if (isIdPath) throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+      throw e;
+    }
     updateRequestMemoAndMemoType(requestBase, token);
   }
 

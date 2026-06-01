@@ -633,6 +633,7 @@ class Sep12ServiceTest {
       sep12Service.validateGetOrPutRequest(request, attackerToken)
     }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
     verify(exactly = 1) { customerIntegration.getCustomer(any()) }
   }
 
@@ -653,6 +654,7 @@ class Sep12ServiceTest {
 
     val ex: SepException = assertThrows { sep12Service.putCustomer(attackerToken, request) }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
     verify(exactly = 0) { customerIntegration.putCustomer(any()) }
   }
 
@@ -666,6 +668,7 @@ class Sep12ServiceTest {
 
     val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
   }
 
   @Test
@@ -679,6 +682,34 @@ class Sep12ServiceTest {
 
     val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
+  }
+
+  @Test
+  fun `test id path normalizes error message across all failure modes`() {
+    val existingOtherResponse = GetCustomerResponse()
+    existingOtherResponse.id = "victim-id"
+    existingOtherResponse.account = "GDIFFERENT_ACCOUNT_VICTIM_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    every { customerIntegration.getCustomer(any()) } returns existingOtherResponse
+
+    val attackerToken = createJwtToken(TEST_ACCOUNT)
+    val existingEx: SepException = assertThrows {
+      sep12Service.validateGetOrPutRequest(
+        Sep12GetCustomerRequest.builder().id("victim-id").build(),
+        attackerToken
+      )
+    }
+
+    every { customerIntegration.getCustomer(any()) } returns GetCustomerResponse()
+    val unknownEx: SepException = assertThrows {
+      sep12Service.validateGetOrPutRequest(
+        Sep12GetCustomerRequest.builder().id("unknown-id").build(),
+        attackerToken
+      )
+    }
+
+    assertEquals(existingEx.message, unknownEx.message)
+    assertEquals("not authorized for customer id", existingEx.message)
   }
 
   @Test
