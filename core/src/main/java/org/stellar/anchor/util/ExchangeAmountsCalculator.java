@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
+import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.sep38.Sep38Quote;
@@ -61,6 +62,10 @@ public class ExchangeAmountsCalculator {
       throw new BadRequestException("Quote not found");
     }
 
+    if (quote.getTransactionId() != null) {
+      throw new BadRequestException(String.format("quote(id=%s) has already been used", quoteId));
+    }
+
     if (quote.getExpiresAt() != null && !quote.getExpiresAt().isAfter(clock.instant())) {
       throw new BadRequestException(
           String.format("quote(id=%s) has expired at %s", quoteId, quote.getExpiresAt()));
@@ -93,6 +98,21 @@ public class ExchangeAmountsCalculator {
     }
 
     return quote;
+  }
+
+  /**
+   * Bind a quote to a transaction. Delegates to {@link Sep38QuoteStore#bindToTransaction}.
+   *
+   * @param quoteId The quote ID
+   * @param transactionId The transaction ID to bind
+   * @throws BadRequestException if the quote has already been bound to a transaction
+   * @throws SepException if a storage error occurs
+   */
+  public void bindQuoteToTransaction(String quoteId, String transactionId)
+      throws BadRequestException, SepException {
+    if (!sep38QuoteStore.bindToTransaction(quoteId, transactionId)) {
+      throw new BadRequestException(String.format("quote(id=%s) has already been used", quoteId));
+    }
   }
 
   /** Amounts calculated for an exchange request. */

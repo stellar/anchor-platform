@@ -155,8 +155,6 @@ public class SepBeans {
       Clock clock,
       Sep38QuoteStore sep38QuoteStore,
       @Qualifier("sep6MoreInfoUrlConstructor") MoreInfoUrlConstructor sep6MoreInfoUrlConstructor) {
-    ExchangeAmountsCalculator exchangeAmountsCalculator =
-        new ExchangeAmountsCalculator(sep38QuoteStore, clock);
     return new Sep6Service(
         languageConfig,
         sep6Config,
@@ -164,7 +162,7 @@ public class SepBeans {
         requestValidator,
         clientFinder,
         txnStore,
-        exchangeAmountsCalculator,
+        exchangeAmountsCalculator(sep38QuoteStore, clock),
         eventService,
         sep6MoreInfoUrlConstructor);
   }
@@ -187,8 +185,16 @@ public class SepBeans {
   Sep12Service sep12Service(
       CustomerIntegration customerIntegration,
       PlatformApiClient platformApiClient,
-      EventService eventService) {
-    return new Sep12Service(customerIntegration, platformApiClient, eventService);
+      EventService eventService,
+      ClientFinder clientFinder) {
+    return new Sep12Service(customerIntegration, platformApiClient, eventService, clientFinder);
+  }
+
+  @Bean
+  @OnAllSepsEnabled(seps = {"sep6", "sep24", "sep31"})
+  ExchangeAmountsCalculator exchangeAmountsCalculator(
+      Sep38QuoteStore sep38QuoteStore, Clock clock) {
+    return new ExchangeAmountsCalculator(sep38QuoteStore, clock);
   }
 
   @Bean
@@ -208,8 +214,6 @@ public class SepBeans {
       InteractiveUrlConstructor interactiveUrlConstructor,
       @Qualifier("sep24MoreInfoUrlConstructor") MoreInfoUrlConstructor sep24MoreInfoUrlConstructor,
       Sep38QuoteStore sep38QuoteStore) {
-    ExchangeAmountsCalculator exchangeAmountsCalculator =
-        new ExchangeAmountsCalculator(sep38QuoteStore, clock);
     return new Sep24Service(
         languageConfig,
         stellarNetworkConfig,
@@ -223,7 +227,7 @@ public class SepBeans {
         eventService,
         interactiveUrlConstructor,
         sep24MoreInfoUrlConstructor,
-        exchangeAmountsCalculator);
+        exchangeAmountsCalculator(sep38QuoteStore, clock));
   }
 
   @Bean
@@ -260,7 +264,8 @@ public class SepBeans {
         assetService,
         rateIntegration,
         eventService,
-        clock);
+        clock,
+        exchangeAmountsCalculator(sep38QuoteStore, clock));
   }
 
   @Bean

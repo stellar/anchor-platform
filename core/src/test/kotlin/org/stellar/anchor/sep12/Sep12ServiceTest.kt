@@ -33,6 +33,7 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.WebAuthJwt
+import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.util.StringHelper.json
 
@@ -100,6 +101,7 @@ class Sep12ServiceTest {
   @MockK(relaxed = true) private lateinit var platformApiClient: PlatformApiClient
   @MockK(relaxed = true) private lateinit var eventService: EventService
   @MockK(relaxed = true) private lateinit var eventSession: EventService.Session
+  @MockK(relaxed = true) private lateinit var clientFinder: ClientFinder
 
   @BeforeEach
   fun setup() {
@@ -111,7 +113,7 @@ class Sep12ServiceTest {
     every { assetService.getAssets() } returns assets
     every { eventService.createSession(any(), any()) } returns eventSession
 
-    sep12Service = Sep12Service(customerIntegration, platformApiClient, eventService)
+    sep12Service = Sep12Service(customerIntegration, platformApiClient, eventService, clientFinder)
   }
 
   @ValueSource(strings = [TEST_ACCOUNT, TEST_CONTRACT_ACCOUNT, TEST_MUXED_ACCOUNT])
@@ -412,6 +414,7 @@ class Sep12ServiceTest {
     assertNotNull(kycUpdateEventSlot.captured.id)
     assertEquals("12", kycUpdateEventSlot.captured.sep)
     assertEquals(AnchorEvent.Type.CUSTOMER_UPDATED, kycUpdateEventSlot.captured.type)
+    assertEquals(CLIENT_DOMAIN, kycUpdateEventSlot.captured.clientDomain)
     assertEquals(
       GetCustomerResponse.to(mockCallbackApiGetCustomerResponse),
       kycUpdateEventSlot.captured.customer,
@@ -421,6 +424,25 @@ class Sep12ServiceTest {
     verify(exactly = 1) { customerIntegration.putCustomer(any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
     assertEquals(TEST_ACCOUNT, mockPutRequest.account)
+  }
+
+  @Test
+  fun `Test put customer publishes event with null clientName and logs warning when client is not authorized`() {
+    val kycUpdateEventSlot = slot<AnchorEvent>()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("customer-id").build()
+    every { eventSession.publish(capture(kycUpdateEventSlot)) } returns Unit
+    every { clientFinder.getClientName(any<WebAuthJwt>()) } throws
+      SepNotAuthorizedException("Client not found")
+
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    assertDoesNotThrow {
+      sep12Service.putCustomer(jwtToken, Sep12PutCustomerRequest.builder().build())
+    }
+
+    verify(exactly = 1) { eventSession.publish(any()) }
+    assertEquals(AnchorEvent.Type.CUSTOMER_UPDATED, kycUpdateEventSlot.captured.type)
+    assertEquals(null, kycUpdateEventSlot.captured.clientName)
   }
 
   @Test

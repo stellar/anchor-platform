@@ -73,20 +73,41 @@ public class ClientStatusCallbackHandler extends EventHandler {
 
   @Override
   boolean handleEvent(AnchorEvent event) throws IOException {
-    if (event.getTransaction() != null || event.getCustomer() != null) {
-      KeyPair signer = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
-      Request request = buildHttpRequest(signer, event);
+    GetTransactionResponse tx = event.getTransaction();
 
-      if (request != null) {
-        try (Response response = httpClient.newCall(request).execute()) {
-          debugF("Sending event: {} to client status api: {}", json(event), request.url());
-          if (response.code() < 200 || response.code() >= 400) {
-            errorF("Failed to send event to client status API. Error code: {}", response.code());
-            return false;
-          }
+    String eventClientName = (tx != null) ? tx.getClientName() : event.getClientName();
+    String eventClientDomain = (tx != null) ? tx.getClientDomain() : event.getClientDomain();
+
+    boolean isAttributed = eventClientName != null || eventClientDomain != null;
+
+    if (!isAttributed) {
+      debugF(
+          "Skipping event id={} type={}: no clientName or clientDomain — event cannot be attributed to any client",
+          event.getId(),
+          event.getType());
+      return true;
+    }
+
+    boolean isClientName = clientConfig.getName().equals(eventClientName);
+    boolean isClientDomain = clientConfig.matchesDomain(eventClientDomain);
+
+    if (!isClientName && !isClientDomain) {
+      return true;
+    }
+
+    KeyPair signer = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
+    Request request = buildHttpRequest(signer, event);
+
+    if (request != null) {
+      try (Response response = httpClient.newCall(request).execute()) {
+        debugF("Sending event: {} to client status api: {}", json(event), request.url());
+        if (response.code() < 200 || response.code() >= 400) {
+          errorF("Failed to send event to client status API. Error code: {}", response.code());
+          return false;
         }
       }
     }
+
     return true;
   }
 

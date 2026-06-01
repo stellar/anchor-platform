@@ -23,7 +23,7 @@ public interface JdbcSep24TransactionRepo
 
   JdbcSep24Transaction findOneByStellarTransactionId(String stellarTransactionId);
 
-  JdbcSep24Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
+  List<JdbcSep24Transaction> findAllByWithdrawAnchorAccountAndMemoAndStatus(
       String withdrawAnchorAccount, String memo, String status);
 
   @Query(
