@@ -221,6 +221,7 @@ public class Sep12Service {
         }
         requestBase.setAccount(existing.getAccount());
         requestBase.setMemo(existing.getMemo());
+        requestBase.setMemoType(existing.getMemoType());
       } catch (SepNotAuthorizedException e) {
         throw e;
       } catch (Exception e) {

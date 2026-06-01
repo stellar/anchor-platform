@@ -26,6 +26,10 @@ public class GetCustomerResponse {
   String id;
   String account;
   String memo;
+
+  @SerializedName("memo_type")
+  String memoType;
+
   String status;
   Map<String, CustomerField> fields;
 

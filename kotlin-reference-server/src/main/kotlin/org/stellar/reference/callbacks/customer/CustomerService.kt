@@ -636,6 +636,7 @@ class CustomerService(
       .id(customer.id)
       .account(customer.stellarAccount)
       .memo(customer.memo)
+      .memoType(customer.memoType)
       .status(status)
       .providedFields(providedFields)
       .fields(missingFields)

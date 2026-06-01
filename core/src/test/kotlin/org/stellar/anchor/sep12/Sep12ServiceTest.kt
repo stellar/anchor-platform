@@ -698,6 +698,23 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test id prefetch propagates memo_type to avoid text memo rejection`() {
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.account = TEST_ACCOUNT
+    prefetchResponse.memo = "text-memo"
+    prefetchResponse.memoType = "text"
+    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("customer-id").build()
+
+    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertEquals("text-memo", request.memo)
+    assertEquals("text", request.memoType)
+  }
+
+  @Test
   fun `test delete customer validation`() {
     every { customerIntegration.deleteCustomer(any()) } just Runs
 
