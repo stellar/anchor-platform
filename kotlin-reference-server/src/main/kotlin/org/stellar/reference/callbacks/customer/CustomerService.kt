@@ -634,6 +634,8 @@ class CustomerService(
 
     return GetCustomerResponse.builder()
       .id(customer.id)
+      .account(customer.stellarAccount)
+      .memo(customer.memo)
       .status(status)
       .providedFields(providedFields)
       .fields(missingFields)

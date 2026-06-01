@@ -24,6 +24,8 @@ import org.stellar.anchor.api.shared.ProvidedCustomerField;
 @SuperBuilder(toBuilder = true)
 public class GetCustomerResponse {
   String id;
+  String account;
+  String memo;
   String status;
   Map<String, CustomerField> fields;
 

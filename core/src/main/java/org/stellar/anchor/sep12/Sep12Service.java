@@ -187,6 +187,21 @@ public class Sep12Service {
       } catch (Exception e) {
         throw new SepNotAuthorizedException("The transaction specified does not exist");
       }
+    } else if (requestBase.getId() != null) {
+      try {
+        GetCustomerResponse existing =
+            customerIntegration.getCustomer(
+                GetCustomerRequest.builder().id(requestBase.getId()).build());
+        if (existing == null || existing.getId() == null) {
+          throw new SepNotAuthorizedException("The customer id specified does not exist");
+        }
+        requestBase.setAccount(existing.getAccount());
+        requestBase.setMemo(existing.getMemo());
+      } catch (SepNotAuthorizedException e) {
+        throw e;
+      } catch (Exception e) {
+        throw new SepNotAuthorizedException("The customer id specified does not exist");
+      }
     }
     validateRequestAndTokenAccounts(requestBase, token);
     validateRequestAndTokenMemos(requestBase, token);
