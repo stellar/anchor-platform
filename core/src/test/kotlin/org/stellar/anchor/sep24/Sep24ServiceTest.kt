@@ -263,6 +263,7 @@ internal class Sep24ServiceTest {
     val slotTxn = slot<Sep24Transaction>()
     every { txnStore.save(capture(slotTxn)) } returns null
     every { sep38QuoteStore.findByQuoteId(any()) } returns withdrawQuote
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns true
     sep24Service.withdraw(
       createTestWebAuthJwtWithMemo(),
       createTestTransactionRequest(withdrawQuote.id),
@@ -411,6 +412,7 @@ internal class Sep24ServiceTest {
     val slotTxn = slot<Sep24Transaction>()
     every { txnStore.save(capture(slotTxn)) } returns null
     every { sep38QuoteStore.findByQuoteId(any()) } returns depositQuote
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns true
     sep24Service.deposit(
       createTestWebAuthJwtWithMemo(),
       createTestTransactionRequest(depositQuote.id),
@@ -877,6 +879,66 @@ internal class Sep24ServiceTest {
       TEST_HOME_DOMAIN,
       TEST_CLIENT_DOMAIN,
     )
+  }
+
+  @Test
+  fun `test withdraw rejects already-bound quote`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      withdrawQuote.apply { transactionId = "already-used-txn" }
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.withdraw(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(withdrawQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test withdraw bind failure rejects second use`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      withdrawQuote.apply { transactionId = null }
+    every { txnStore.save(any()) } returns null
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns false
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.withdraw(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(withdrawQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test deposit rejects already-bound quote`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      depositQuote.apply { transactionId = "already-used-txn" }
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.deposit(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(depositQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test deposit bind failure rejects second use`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      depositQuote.apply { transactionId = null }
+    every { txnStore.save(any()) } returns null
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns false
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.deposit(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(depositQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
   }
 
   private fun createTestInteractiveJwt(accountMemo: String?): Sep24InteractiveUrlJwt {

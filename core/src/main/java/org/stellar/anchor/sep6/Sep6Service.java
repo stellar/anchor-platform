@@ -13,6 +13,7 @@ import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 
 import com.google.common.collect.ImmutableMap;
 import io.micrometer.core.instrument.Counter;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.*;
 import org.stellar.anchor.MoreInfoUrlConstructor;
@@ -184,6 +185,7 @@ public class Sep6Service {
         .build();
   }
 
+  @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
   public StartDepositResponse depositExchange(WebAuthJwt token, StartDepositExchangeRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
@@ -273,6 +275,10 @@ public class Sep6Service {
     Sep6Transaction txn = builder.build();
     txnStore.save(txn);
 
+    if (request.getQuoteId() != null) {
+      exchangeAmountsCalculator.bindQuoteToTransaction(request.getQuoteId(), id);
+    }
+
     eventSession.publish(
         AnchorEvent.builder()
             .id(UUID.randomUUID().toString())
@@ -360,6 +366,7 @@ public class Sep6Service {
     return StartWithdrawResponse.builder().id(txn.getId()).build();
   }
 
+  @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
   public StartWithdrawResponse withdrawExchange(
       WebAuthJwt token, StartWithdrawExchangeRequest request) throws AnchorException {
     sep6TransactionRequestedCounter.increment();
@@ -445,6 +452,10 @@ public class Sep6Service {
 
     Sep6Transaction txn = builder.build();
     txnStore.save(txn);
+
+    if (request.getQuoteId() != null) {
+      exchangeAmountsCalculator.bindQuoteToTransaction(request.getQuoteId(), id);
+    }
 
     eventSession.publish(
         AnchorEvent.builder()
