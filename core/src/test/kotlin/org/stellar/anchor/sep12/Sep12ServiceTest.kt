@@ -778,6 +778,49 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test getCustomer denies no-memo token for memo-only customer end-to-end`() {
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.memo = TEST_MEMO
+    prefetchResponse.memoType = "id"
+    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+
+    val noMemoToken = createJwtToken(TEST_ACCOUNT)
+
+    val ex: AnchorException = assertThrows {
+      sep12Service.getCustomer(
+        noMemoToken,
+        Sep12GetCustomerRequest.builder().id("customer-id").build(),
+      )
+    }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
+    // The real callback must never be reached — only the prefetch call fires.
+    verify(exactly = 1) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test putCustomer denies no-memo token for memo-only customer end-to-end`() {
+    val prefetchResponse = GetCustomerResponse()
+    prefetchResponse.id = "customer-id"
+    prefetchResponse.memo = TEST_MEMO
+    prefetchResponse.memoType = "id"
+    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+
+    val noMemoToken = createJwtToken(TEST_ACCOUNT)
+
+    val ex: AnchorException = assertThrows {
+      sep12Service.putCustomer(
+        noMemoToken,
+        Sep12PutCustomerRequest.builder().id("customer-id").firstName("Alice").build(),
+      )
+    }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
+    verify(exactly = 0) { customerIntegration.putCustomer(any()) }
+  }
+
+  @Test
   fun `test memo-only customer account is not overwritten by token account on get`() {
     val prefetchResponse = GetCustomerResponse()
     prefetchResponse.id = "customer-id"
