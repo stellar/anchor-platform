@@ -579,7 +579,6 @@ class Sep12ServiceTest {
     val callbackApiGetRequestSlot = slot<GetCustomerRequest>()
     val prefetchResponse = GetCustomerResponse()
     prefetchResponse.id = "customer-id"
-    prefetchResponse.account = TEST_ACCOUNT
     val fullResponse = GetCustomerResponse()
     fullResponse.id = "customer-id"
     every { customerIntegration.getCustomer(capture(callbackApiGetRequestSlot)) } returnsMany
@@ -601,7 +600,6 @@ class Sep12ServiceTest {
     val callbackApiPutRequestSlot = slot<PutCustomerRequest>()
     val prefetchResponse = GetCustomerResponse()
     prefetchResponse.id = "customer-id"
-    prefetchResponse.account = TEST_ACCOUNT
     every { customerIntegration.getCustomer(any()) } returns prefetchResponse
     val mockCallbackApiPutCustomerResponse = PutCustomerResponse.builder().id("customer-id").build()
     every { customerIntegration.putCustomer(capture(callbackApiPutRequestSlot)) } returns
@@ -620,11 +618,9 @@ class Sep12ServiceTest {
 
   @Test
   fun `test get customer with id belonging to different account should throw`() {
-    val victimAccount = "GDIFFERENT_ACCOUNT_VICTIM_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    val prefetchResponse = GetCustomerResponse()
-    prefetchResponse.id = "victim-customer-id"
-    prefetchResponse.account = victimAccount
-    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+    val attackerOwned = GetCustomerResponse()
+    attackerOwned.id = "attacker-own-customer-id"
+    every { customerIntegration.getCustomer(any()) } returns attackerOwned
 
     val attackerToken = createJwtToken(TEST_ACCOUNT)
     val request = Sep12GetCustomerRequest.builder().id("victim-customer-id").build()
@@ -639,11 +635,9 @@ class Sep12ServiceTest {
 
   @Test
   fun `test put customer with id belonging to different account should throw`() {
-    val victimAccount = "GDIFFERENT_ACCOUNT_VICTIM_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    val prefetchResponse = GetCustomerResponse()
-    prefetchResponse.id = "victim-customer-id"
-    prefetchResponse.account = victimAccount
-    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+    val attackerOwned = GetCustomerResponse()
+    attackerOwned.id = "attacker-own-customer-id"
+    every { customerIntegration.getCustomer(any()) } returns attackerOwned
 
     val attackerToken = createJwtToken(TEST_ACCOUNT)
     val request =
@@ -672,13 +666,13 @@ class Sep12ServiceTest {
   }
 
   @Test
-  fun `test id prefetch with null account and memo fails closed`() {
-    val noOwnershipResponse = GetCustomerResponse()
-    noOwnershipResponse.id = "some-id"
-    every { customerIntegration.getCustomer(any()) } returns noOwnershipResponse
+  fun `test id ownership mismatch fails closed`() {
+    val callerOwned = GetCustomerResponse()
+    callerOwned.id = "caller-owns-this-id"
+    every { customerIntegration.getCustomer(any()) } returns callerOwned
 
     val jwtToken = createJwtToken(TEST_ACCOUNT)
-    val request = Sep12GetCustomerRequest.builder().id("some-id").build()
+    val request = Sep12GetCustomerRequest.builder().id("some-other-id").build()
 
     val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
@@ -687,10 +681,9 @@ class Sep12ServiceTest {
 
   @Test
   fun `test id path normalizes error message across all failure modes`() {
-    val existingOtherResponse = GetCustomerResponse()
-    existingOtherResponse.id = "victim-id"
-    existingOtherResponse.account = "GDIFFERENT_ACCOUNT_VICTIM_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    every { customerIntegration.getCustomer(any()) } returns existingOtherResponse
+    val attackerOwned = GetCustomerResponse()
+    attackerOwned.id = "attacker-own-id"
+    every { customerIntegration.getCustomer(any()) } returns attackerOwned
 
     val attackerToken = createJwtToken(TEST_ACCOUNT)
     val existingEx: SepException = assertThrows {
@@ -713,13 +706,8 @@ class Sep12ServiceTest {
   }
 
   @Test
-  fun `test id path normalizes SepValidationException from memo mismatch to 403`() {
-    val prefetchResponse = GetCustomerResponse()
-    prefetchResponse.id = "customer-id"
-    prefetchResponse.account = TEST_ACCOUNT
-    prefetchResponse.memo = "non-numeric-text-memo"
-    prefetchResponse.memoType = null
-    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+  fun `test id path converts callback exception to 403`() {
+    every { customerIntegration.getCustomer(any()) } throws RuntimeException("db error")
 
     val jwtToken = createJwtToken(TEST_ACCOUNT)
     val request = Sep12GetCustomerRequest.builder().id("customer-id").build()
@@ -734,24 +722,23 @@ class Sep12ServiceTest {
     val prefetchSlot = slot<GetCustomerRequest>()
     val prefetchResponse = GetCustomerResponse()
     prefetchResponse.id = "customer-id"
-    prefetchResponse.account = TEST_ACCOUNT
     every { customerIntegration.getCustomer(capture(prefetchSlot)) } returns prefetchResponse
 
     val jwtToken = createJwtToken(TEST_ACCOUNT)
     val request = Sep12GetCustomerRequest.builder().id("customer-id").type("sep31-receiver").build()
 
     assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
-    assertEquals("customer-id", prefetchSlot.captured.id)
+    assertEquals(null, prefetchSlot.captured.id)
+    assertEquals(TEST_ACCOUNT, prefetchSlot.captured.account)
     assertEquals("sep31-receiver", prefetchSlot.captured.type)
   }
 
   @Test
   fun `test memo-only customer with no-memo token is denied`() {
-    val prefetchResponse = GetCustomerResponse()
-    prefetchResponse.id = "customer-id"
-    prefetchResponse.memo = "123456"
-    prefetchResponse.memoType = "id"
-    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+    // Account-only lookup returns a different customer than the memo-keyed one being requested.
+    val accountOnlyCustomer = GetCustomerResponse()
+    accountOnlyCustomer.id = "account-only-customer-id"
+    every { customerIntegration.getCustomer(any()) } returns accountOnlyCustomer
 
     val noMemoToken = createJwtToken(TEST_ACCOUNT)
     val request = Sep12GetCustomerRequest.builder().id("customer-id").build()
@@ -765,10 +752,9 @@ class Sep12ServiceTest {
 
   @Test
   fun `test memo-only customer with matching token memo is allowed`() {
+    // Reverse lookup: account+memo finds the customer; returned id matches the request.
     val prefetchResponse = GetCustomerResponse()
     prefetchResponse.id = "customer-id"
-    prefetchResponse.memo = TEST_MEMO
-    prefetchResponse.memoType = "id"
     every { customerIntegration.getCustomer(any()) } returns prefetchResponse
 
     val memoToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
@@ -779,11 +765,9 @@ class Sep12ServiceTest {
 
   @Test
   fun `test getCustomer denies no-memo token for memo-only customer end-to-end`() {
-    val prefetchResponse = GetCustomerResponse()
-    prefetchResponse.id = "customer-id"
-    prefetchResponse.memo = TEST_MEMO
-    prefetchResponse.memoType = "id"
-    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+    val accountOnlyCustomer = GetCustomerResponse()
+    accountOnlyCustomer.id = "account-only-customer-id"
+    every { customerIntegration.getCustomer(any()) } returns accountOnlyCustomer
 
     val noMemoToken = createJwtToken(TEST_ACCOUNT)
 
@@ -795,17 +779,14 @@ class Sep12ServiceTest {
     }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
     assertEquals("not authorized for customer id", ex.message)
-    // The real callback must never be reached — only the prefetch call fires.
     verify(exactly = 1) { customerIntegration.getCustomer(any()) }
   }
 
   @Test
   fun `test putCustomer denies no-memo token for memo-only customer end-to-end`() {
-    val prefetchResponse = GetCustomerResponse()
-    prefetchResponse.id = "customer-id"
-    prefetchResponse.memo = TEST_MEMO
-    prefetchResponse.memoType = "id"
-    every { customerIntegration.getCustomer(any()) } returns prefetchResponse
+    val accountOnlyCustomer = GetCustomerResponse()
+    accountOnlyCustomer.id = "account-only-customer-id"
+    every { customerIntegration.getCustomer(any()) } returns accountOnlyCustomer
 
     val noMemoToken = createJwtToken(TEST_ACCOUNT)
 
@@ -821,11 +802,9 @@ class Sep12ServiceTest {
   }
 
   @Test
-  fun `test memo-only customer account is not overwritten by token account on get`() {
+  fun `test id path forwards token account and memo to callback on get`() {
     val prefetchResponse = GetCustomerResponse()
     prefetchResponse.id = "customer-id"
-    prefetchResponse.memo = TEST_MEMO
-    prefetchResponse.memoType = "id"
     val callbackSlot = slot<GetCustomerRequest>()
     val callbackResponse = GetCustomerResponse()
     callbackResponse.id = "customer-id"
@@ -837,15 +816,13 @@ class Sep12ServiceTest {
 
     assertEquals("customer-id", callbackSlot.captured.id)
     assertEquals(TEST_MEMO, callbackSlot.captured.memo)
-    assertEquals(null, callbackSlot.captured.account)
+    assertEquals(TEST_ACCOUNT, callbackSlot.captured.account)
   }
 
   @Test
-  fun `test memo-only customer account is not overwritten by token account on put`() {
+  fun `test id path forwards token account and memo to callback on put`() {
     val prefetchResponse = GetCustomerResponse()
     prefetchResponse.id = "customer-id"
-    prefetchResponse.memo = TEST_MEMO
-    prefetchResponse.memoType = "id"
     val callbackSlot = slot<PutCustomerRequest>()
     every { customerIntegration.getCustomer(any()) } returns prefetchResponse
     every { customerIntegration.putCustomer(capture(callbackSlot)) } returns
@@ -859,24 +836,23 @@ class Sep12ServiceTest {
 
     assertEquals("customer-id", callbackSlot.captured.id)
     assertEquals(TEST_MEMO, callbackSlot.captured.memo)
-    assertEquals(null, callbackSlot.captured.account)
+    assertEquals(TEST_ACCOUNT, callbackSlot.captured.account)
   }
 
   @Test
-  fun `test id prefetch propagates memo_type to avoid text memo rejection`() {
+  fun `test id path sets token account and memo on request`() {
+    // After a successful reverse lookup the token's own account and memo are written onto the
+    // request.
     val prefetchResponse = GetCustomerResponse()
     prefetchResponse.id = "customer-id"
-    prefetchResponse.account = TEST_ACCOUNT
-    prefetchResponse.memo = "text-memo"
-    prefetchResponse.memoType = "text"
     every { customerIntegration.getCustomer(any()) } returns prefetchResponse
 
-    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val memoToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
     val request = Sep12GetCustomerRequest.builder().id("customer-id").build()
 
-    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
-    assertEquals("text-memo", request.memo)
-    assertEquals("text", request.memoType)
+    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, memoToken) }
+    assertEquals(TEST_ACCOUNT, request.account)
+    assertEquals(TEST_MEMO, request.memo)
   }
 
   @Test
