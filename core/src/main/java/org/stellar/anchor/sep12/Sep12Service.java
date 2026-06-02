@@ -217,32 +217,29 @@ public class Sep12Service {
       }
     } else if (requestBase.getId() != null) {
       isIdPath = true;
-      try {
-        GetCustomerResponse existing =
-            customerIntegration.getCustomer(
-                GetCustomerRequest.builder()
-                    .id(requestBase.getId())
-                    .type(requestBase.getType())
-                    .build());
-        if (existing == null || existing.getId() == null) {
-          throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
-        }
-        if (existing.getAccount() == null && existing.getMemo() == null) {
-          throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
-        }
-        requestBase.setAccount(existing.getAccount());
-        requestBase.setMemo(existing.getMemo());
-        requestBase.setMemoType(existing.getMemoType());
-        boolean tokenHasMemo = token.getAccountMemo() != null || token.getMuxedAccountId() != null;
-        if (existing.getAccount() == null && !tokenHasMemo) {
-          throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
-        }
-      } catch (SepNotAuthorizedException e) {
-        throw e;
-      } catch (Exception e) {
-        Log.warnEx(e)
+
+      String tokenAccount =
+          token.getMuxedAccount() != null ? token.getMuxedAccount() : token.getAccount();
+      String tokenMemo =
+          token.getMuxedAccountId() != null
+              ? token.getMuxedAccountId().toString()
+              : token.getAccountMemo();
+
+      GetCustomerResponse owned =
+          customerIntegration.getCustomer(
+              GetCustomerRequest.builder()
+                  .account(tokenAccount)
+                  .memo(tokenMemo)
+                  .memoType(tokenMemo != null ? "id" : null)
+                  .type(requestBase.getType())
+                  .build());
+
+      if (owned == null || !requestBase.getId().equals(owned.getId())) {
         throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
       }
+
+      requestBase.setAccount(tokenAccount);
+      requestBase.setMemo(tokenMemo);
     }
 
     try {
