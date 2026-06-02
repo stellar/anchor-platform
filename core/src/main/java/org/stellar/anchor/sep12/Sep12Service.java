@@ -6,13 +6,16 @@ import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.MetricConstants.*;
 import static org.stellar.anchor.util.MetricConstants.SEP12_CUSTOMER;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Metrics;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Stream;
-
+import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.NotNull;
 import org.stellar.anchor.api.callback.*;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.*;
@@ -26,11 +29,6 @@ import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.xdr.MemoType;
-
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.Metrics;
-import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.NotNull;
 
 public class Sep12Service {
   private final CustomerIntegration customerIntegration;
@@ -218,28 +216,35 @@ public class Sep12Service {
     } else if (requestBase.getId() != null) {
       isIdPath = true;
 
-      String tokenAccount =
-          token.getMuxedAccount() != null ? token.getMuxedAccount() : token.getAccount();
-      String tokenMemo =
-          token.getMuxedAccountId() != null
-              ? token.getMuxedAccountId().toString()
-              : token.getAccountMemo();
+      try {
+        String tokenAccount =
+            token.getMuxedAccount() != null ? token.getMuxedAccount() : token.getAccount();
+        String tokenMemo =
+            token.getMuxedAccountId() != null
+                ? token.getMuxedAccountId().toString()
+                : token.getAccountMemo();
 
-      GetCustomerResponse owned =
-          customerIntegration.getCustomer(
-              GetCustomerRequest.builder()
-                  .account(tokenAccount)
-                  .memo(tokenMemo)
-                  .memoType(tokenMemo != null ? "id" : null)
-                  .type(requestBase.getType())
-                  .build());
+        GetCustomerResponse owned =
+            customerIntegration.getCustomer(
+                GetCustomerRequest.builder()
+                    .account(tokenAccount)
+                    .memo(tokenMemo)
+                    .memoType(tokenMemo != null ? "id" : null)
+                    .type(requestBase.getType())
+                    .build());
 
-      if (owned == null || !requestBase.getId().equals(owned.getId())) {
+        if (owned == null || !requestBase.getId().equals(owned.getId())) {
+          throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+        }
+
+        requestBase.setAccount(tokenAccount);
+        requestBase.setMemo(tokenMemo);
+      } catch (SepNotAuthorizedException e) {
+        throw e;
+      } catch (Exception e) {
+        Log.warnEx(e);
         throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
       }
-
-      requestBase.setAccount(tokenAccount);
-      requestBase.setMemo(tokenMemo);
     }
 
     try {
