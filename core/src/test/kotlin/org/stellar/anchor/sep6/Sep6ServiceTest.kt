@@ -34,6 +34,8 @@ import org.stellar.anchor.api.shared.Refunds
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.client.ClientFinder
+import org.stellar.anchor.client.ClientService
+import org.stellar.anchor.client.CustodialClient
 import org.stellar.anchor.config.LanguageConfig
 import org.stellar.anchor.config.Sep6Config
 import org.stellar.anchor.config.StellarNetworkConfig
@@ -55,6 +57,7 @@ class Sep6ServiceTest {
   @MockK(relaxed = true) lateinit var stellarNetworkConfig: StellarNetworkConfig
   @MockK(relaxed = true) lateinit var sep6Config: Sep6Config
   @MockK(relaxed = true) lateinit var requestValidator: SepRequestValidator
+  @MockK(relaxed = true) lateinit var clientService: ClientService
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
   @MockK(relaxed = true) lateinit var txnStore: Sep6TransactionStore
   @MockK(relaxed = true) lateinit var exchangeAmountsCalculator: ExchangeAmountsCalculator
@@ -63,6 +66,7 @@ class Sep6ServiceTest {
   @MockK(relaxed = true) lateinit var sep6MoreInfoUrlConstructor: MoreInfoUrlConstructor
 
   private lateinit var sep6Service: Sep6Service
+  private lateinit var sep6ServiceWithRealValidator: Sep6Service
 
   @BeforeEach
   fun setup() {
@@ -82,6 +86,21 @@ class Sep6ServiceTest {
         sep6Config,
         assetService,
         requestValidator,
+        clientFinder,
+        txnStore,
+        exchangeAmountsCalculator,
+        eventService,
+        sep6MoreInfoUrlConstructor,
+      )
+    val realValidator = spyk(SepRequestValidator(assetService, clientService))
+    every { realValidator.getDepositAsset(TEST_ASSET) } returns asset
+    every { realValidator.getWithdrawAsset(TEST_ASSET) } returns asset
+    sep6ServiceWithRealValidator =
+      Sep6Service(
+        languageConfig,
+        sep6Config,
+        assetService,
+        realValidator,
         clientFinder,
         txnStore,
         exchangeAmountsCalculator,
@@ -1731,5 +1750,122 @@ class Sep6ServiceTest {
         .build()
     val ex = assertThrows<BadRequestException> { sep6Service.withdrawExchange(token, request) }
     assert(ex.message!!.contains("has already been used"))
+  }
+
+  // Integration tests: real SepRequestValidator + CustodialClient fixture (mirrors
+  // Sep24ServiceTest.kt:154, 470-471 pattern from the security report)
+
+  @Test
+  fun `test deposit enforces destination policy — rejects account not on allowlist`() {
+    val allowedAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val attackerAccount = "GC6TP2RCW665CBOTMR5Q2JXNRK77FWV2FCTHNQXS3FNDMWZCGJBJ4QCY"
+    every { clientService.getClientConfigBySigningKey(TEST_ACCOUNT) } returns
+      CustodialClient.builder()
+        .name("referenceCustodial")
+        .signingKeys(setOf(TEST_ACCOUNT))
+        .allowAnyDestination(false)
+        .destinationAccounts(setOf(allowedAccount))
+        .build()
+
+    val request =
+      StartDepositRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account(attackerAccount)
+        .fundingMethod("SWIFT")
+        .build()
+
+    assertThrows<SepValidationException> { sep6ServiceWithRealValidator.deposit(token, request) }
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test deposit enforces destination policy — allows account on allowlist`() {
+    val whitelistedAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    every { clientService.getClientConfigBySigningKey(TEST_ACCOUNT) } returns
+      CustodialClient.builder()
+        .name("referenceCustodial")
+        .signingKeys(setOf(TEST_ACCOUNT))
+        .allowAnyDestination(false)
+        .destinationAccounts(setOf(whitelistedAccount))
+        .build()
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartDepositRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account(whitelistedAccount)
+        .fundingMethod("SWIFT")
+        .build()
+
+    val response = sep6ServiceWithRealValidator.deposit(token, request)
+    assertNotNull(response.id)
+    verify(exactly = 1) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test depositExchange enforces destination policy — rejects account not on allowlist`() {
+    val allowedAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val attackerAccount = "GC6TP2RCW665CBOTMR5Q2JXNRK77FWV2FCTHNQXS3FNDMWZCGJBJ4QCY"
+    every { clientService.getClientConfigBySigningKey(TEST_ACCOUNT) } returns
+      CustodialClient.builder()
+        .name("referenceCustodial")
+        .signingKeys(setOf(TEST_ACCOUNT))
+        .allowAnyDestination(false)
+        .destinationAccounts(setOf(allowedAccount))
+        .build()
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .amount("100")
+        .account(attackerAccount)
+        .fundingMethod("SWIFT")
+        .build()
+
+    assertThrows<SepValidationException> {
+      sep6ServiceWithRealValidator.depositExchange(token, request)
+    }
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test deposit allows any destination when allowAnyDestination is true`() {
+    val anyAccount = "GC6TP2RCW665CBOTMR5Q2JXNRK77FWV2FCTHNQXS3FNDMWZCGJBJ4QCY"
+    every { clientService.getClientConfigBySigningKey(TEST_ACCOUNT) } returns
+      CustodialClient.builder()
+        .name("referenceCustodial")
+        .signingKeys(setOf(TEST_ACCOUNT))
+        .allowAnyDestination(true)
+        .build()
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartDepositRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account(anyAccount)
+        .fundingMethod("SWIFT")
+        .build()
+
+    val response = sep6ServiceWithRealValidator.deposit(token, request)
+    assertNotNull(response.id)
+    verify(exactly = 1) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test deposit defaults to token account when account is omitted`() {
+    every { clientService.getClientConfigBySigningKey(any()) } returns null
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+
+    val request = StartDepositRequest.builder().assetCode(TEST_ASSET).fundingMethod("SWIFT").build()
+
+    sep6ServiceWithRealValidator.deposit(token, request)
+    assertEquals(TEST_ACCOUNT, slotTxn.captured.toAccount)
   }
 }
