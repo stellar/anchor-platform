@@ -134,7 +134,7 @@ class Sep6ServiceTest {
         asset.sep6.deposit.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -189,7 +189,7 @@ class Sep6ServiceTest {
 
     // Verify validations
     verify(exactly = 1) { requestValidator.getDepositAsset(TEST_ASSET) }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -219,6 +219,74 @@ class Sep6ServiceTest {
       gson.toJson(response),
       JSONCompareMode.LENIENT,
     )
+  }
+
+  @Test
+  fun `test deposit rejects unauthorized destination account`() {
+    val attackerAccount = "GATTACKER00000000000000000000000000000000000000000000000000"
+    val request =
+      StartDepositRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account(attackerAccount)
+        .fundingMethod("bank_account")
+        .build()
+    every { requestValidator.validateDestinationAccount(token, attackerAccount) } throws
+      SepValidationException("Provided 'account' is not allowed")
+
+    assertThrows<SepValidationException> { sep6Service.deposit(token, request) }
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test depositExchange rejects unauthorized destination account`() {
+    val attackerAccount = "GATTACKER00000000000000000000000000000000000000000000000000"
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .amount("100")
+        .account(attackerAccount)
+        .fundingMethod("SWIFT")
+        .build()
+    every { requestValidator.validateDestinationAccount(token, attackerAccount) } throws
+      SepValidationException("Provided 'account' is not allowed")
+
+    assertThrows<SepValidationException> { sep6Service.depositExchange(token, request) }
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test withdraw rejects unauthorized source account`() {
+    val attackerAccount = "GATTACKER00000000000000000000000000000000000000000000000000"
+    val request =
+      StartWithdrawRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account(attackerAccount)
+        .fundingMethod("bank_account")
+        .build()
+    every { requestValidator.validateDestinationAccount(token, attackerAccount) } throws
+      SepValidationException("'account' does not match the one in the token")
+
+    assertThrows<SepValidationException> { sep6Service.withdraw(token, request) }
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test withdrawExchange rejects unauthorized source account`() {
+    val attackerAccount = "GATTACKER00000000000000000000000000000000000000000000000000"
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .amount("100")
+        .account(attackerAccount)
+        .fundingMethod("bank_account")
+        .build()
+    every { requestValidator.validateDestinationAccount(token, attackerAccount) } throws
+      SepValidationException("'account' does not match the one in the token")
+
+    assertThrows<SepValidationException> { sep6Service.withdrawExchange(token, request) }
+    verify(exactly = 0) { txnStore.save(any()) }
   }
 
   @Test
@@ -336,7 +404,7 @@ class Sep6ServiceTest {
         asset.sep6.deposit.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -391,7 +459,7 @@ class Sep6ServiceTest {
         asset.sep6.deposit.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) {
@@ -472,7 +540,7 @@ class Sep6ServiceTest {
         asset.sep6.deposit.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -648,7 +716,7 @@ class Sep6ServiceTest {
         asset.sep6.deposit.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -690,7 +758,7 @@ class Sep6ServiceTest {
         asset.sep6.withdraw.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -752,7 +820,7 @@ class Sep6ServiceTest {
 
     // Verify validations
     verify(exactly = 1) { requestValidator.getWithdrawAsset(TEST_ASSET) }
-    verify(exactly = 1) { requestValidator.validateAccount("requested_account") }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, "requested_account") }
 
     // Verify effects
     assertEquals("requested_account", slotTxn.captured.fromAccount)
@@ -777,7 +845,7 @@ class Sep6ServiceTest {
 
     // Verify validations
     verify(exactly = 1) { requestValidator.getWithdrawAsset(TEST_ASSET) }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -923,7 +991,7 @@ class Sep6ServiceTest {
         asset.sep6.withdraw.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -976,7 +1044,7 @@ class Sep6ServiceTest {
         asset.sep6.withdraw.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) {
@@ -1050,7 +1118,7 @@ class Sep6ServiceTest {
         asset.sep6.withdraw.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -1118,7 +1186,7 @@ class Sep6ServiceTest {
 
     // Verify validations
     verify(exactly = 1) { requestValidator.getWithdrawAsset(TEST_ASSET) }
-    verify(exactly = 1) { requestValidator.validateAccount("requested_account") }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, "requested_account") }
 
     // Verify effects
     assertEquals("requested_account", slotTxn.captured.fromAccount)
@@ -1264,7 +1332,7 @@ class Sep6ServiceTest {
         asset.sep6.withdraw.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }

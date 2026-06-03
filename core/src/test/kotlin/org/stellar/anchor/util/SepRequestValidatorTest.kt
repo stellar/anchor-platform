@@ -10,22 +10,26 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.TestConstants.Companion.TEST_ASSET
+import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.asset.DepositWithdrawOperation
 import org.stellar.anchor.api.asset.Sep6Info
 import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.asset.AssetService
+import org.stellar.anchor.client.ClientService
+import org.stellar.anchor.client.CustodialClient
 
 class SepRequestValidatorTest {
   @MockK(relaxed = true) lateinit var assetService: AssetService
+  @MockK(relaxed = true) lateinit var clientService: ClientService
 
   private lateinit var requestValidator: SepRequestValidator
 
   @BeforeEach
   fun setup() {
     MockKAnnotations.init(this, relaxUnitFun = true)
-    requestValidator = SepRequestValidator(assetService)
+    requestValidator = SepRequestValidator(assetService, clientService)
   }
 
   @Test
@@ -206,5 +210,74 @@ class SepRequestValidatorTest {
   )
   fun `test static validateAmount accepts reasonable amounts`(amount: String) {
     SepRequestValidator.validateAmount("", amount, false)
+  }
+
+  @Test
+  fun `test validateDestinationAccount allows destination matching token account`() {
+    val token = TestHelper.createWebAuthJwt()
+    requestValidator.validateDestinationAccount(token, token.account)
+  }
+
+  @Test
+  fun `test validateDestinationAccount allows destination on client allowlist`() {
+    val token = TestHelper.createWebAuthJwt()
+    val allowedAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .destinationAccounts(setOf(allowedAccount))
+        .build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    requestValidator.validateDestinationAccount(token, allowedAccount)
+  }
+
+  @Test
+  fun `test validateDestinationAccount allows destination when allowAnyDestination is true`() {
+    val token = TestHelper.createWebAuthJwt()
+    val anyAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client = CustodialClient.builder().name("test-client").allowAnyDestination(true).build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    requestValidator.validateDestinationAccount(token, anyAccount)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects destination not on allowlist`() {
+    val token = TestHelper.createWebAuthJwt()
+    val attackerAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .destinationAccounts(setOf("GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGBXT0E4EPJOS2W2YNHH6K"))
+        .build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    assertThrows<SepValidationException> {
+      requestValidator.validateDestinationAccount(token, attackerAccount)
+    }
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects when client config is null and account differs`() {
+    val token = TestHelper.createWebAuthJwt()
+    val differentAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    every { clientService.getClientConfigBySigningKey(token.account) } returns null
+
+    assertThrows<SepValidationException> {
+      requestValidator.validateDestinationAccount(token, differentAccount)
+    }
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects when client has no allowlist and allowAnyDestination is false`() {
+    val token = TestHelper.createWebAuthJwt()
+    val differentAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client = CustodialClient.builder().name("test-client").allowAnyDestination(false).build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    assertThrows<SepValidationException> {
+      requestValidator.validateDestinationAccount(token, differentAccount)
+    }
   }
 }
