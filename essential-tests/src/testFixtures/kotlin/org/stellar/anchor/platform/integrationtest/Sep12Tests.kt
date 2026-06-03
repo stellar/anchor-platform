@@ -167,6 +167,45 @@ open class Sep12Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  @Test
+  fun `test cross-account id access is rejected`() = runBlocking {
+    val sepDomain = config.env["anchor.domain"]!!
+
+    val victimKeyPair = SigningKeyPair(KeyPair.random())
+    val victimToken = anchor.auth().authenticate(victimKeyPair)
+    val victimPr =
+      anchor
+        .sep12(victimToken)
+        .add(
+          Json.decodeFromString<Map<String, String>>(testCustomer1Json).toMutableMap(),
+          type = "sep24",
+        )
+    val victimCustomerId = victimPr.id
+
+    val attackerKeyPair = SigningKeyPair(KeyPair.random())
+    val attackerToken = anchor.auth().authenticate(attackerKeyPair)
+
+    HttpClient().use { httpClient ->
+      val getResponse =
+        httpClient.get("$sepDomain/sep12/customer") {
+          headers { bearerAuth(attackerToken.token) }
+          parameter("id", victimCustomerId)
+        }
+      assertEquals(HttpStatusCode.Forbidden, getResponse.status)
+
+      val putResponse =
+        httpClient.put("$sepDomain/sep12/customer") {
+          headers { bearerAuth(attackerToken.token) }
+          contentType(ContentType.Application.Json)
+          setBody("""{"id":"$victimCustomerId","bank_account_number":"attacker-iban"}""")
+        }
+      assertEquals(HttpStatusCode.Forbidden, putResponse.status)
+    }
+
+    val victimGr = anchor.sep12(victimToken).get(victimCustomerId, type = "sep24")
+    assert(victimGr.providedFields!!.containsKey("bank_account_number"))
+  }
+
   companion object {
     const val customerJson =
       """
