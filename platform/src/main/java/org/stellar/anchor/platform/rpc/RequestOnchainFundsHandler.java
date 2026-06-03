@@ -286,8 +286,10 @@ public class RequestOnchainFundsHandler
           txn6.setMemo(request.getMemo());
           txn6.setMemoType(memoTypeString(memoType(memo)));
           txn6.setWithdrawAnchorAccount(request.getDestinationAccount());
+          txn6.setToAccount(request.getDestinationAccount());
         } else {
           SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(txn6);
+          txn6.setToAccount(sep6DepositInfo.getStellarAddress());
           txn6.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
           txn6.setMemo(sep6DepositInfo.getMemo());
           txn6.setMemoType("id");
