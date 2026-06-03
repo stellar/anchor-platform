@@ -12,6 +12,9 @@ import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.asset.AssetService;
+import org.stellar.anchor.auth.WebAuthJwt;
+import org.stellar.anchor.client.ClientService;
+import org.stellar.anchor.client.CustodialClient;
 import org.stellar.sdk.Address;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.scval.Scv;
@@ -19,7 +22,11 @@ import org.stellar.sdk.scval.Scv;
 /** SEP request validations */
 @RequiredArgsConstructor
 public class SepRequestValidator {
+  public static final String ERR_TOKEN_ACCOUNT_MISMATCH =
+      "'account' does not match the one in the token";
+
   @NonNull private final AssetService assetService;
+  @NonNull private final ClientService clientService;
 
   public static void validateAmount(String amount) throws AnchorException {
     validateAmount("", amount);
@@ -222,6 +229,42 @@ public class SepRequestValidator {
               "invalid type %s for asset %s, supported types are %s",
               requestType, assetCode, validTypes));
     }
+  }
+
+  /**
+   * Validates that the resolved destination account is permitted by the operator-configured
+   * destination policy (CustodialClient.destinationAccounts / allowAnyDestination), then verifies
+   * the address is syntactically valid. The caller is responsible for resolving the account to the
+   * SEP-10 subject when the request omits it (i.e. pass token.getAccount() when the request field
+   * is empty).
+   *
+   * @param token the SEP-10 JWT of the authenticated client
+   * @param destinationAccount the already-resolved destination account
+   * @throws SepValidationException if the account is not permitted or syntactically invalid
+   */
+  public void validateDestinationAccount(WebAuthJwt token, String destinationAccount)
+      throws AnchorException {
+    if (!destinationAccount.equals(token.getAccount())) {
+      CustodialClient clientConfig = clientService.getClientConfigBySigningKey(token.getAccount());
+      if (clientConfig != null && clientConfig.getDestinationAccounts() != null) {
+        if (!clientConfig.getDestinationAccounts().contains(destinationAccount)) {
+          Log.infoF(
+              "The request account:{} for wallet:{} is not in the allowed destination accounts list",
+              destinationAccount,
+              clientConfig.getName());
+          throw new SepValidationException("Provided 'account' is not allowed");
+        }
+      } else {
+        if (clientConfig == null || !clientConfig.isAllowAnyDestination()) {
+          Log.infoF(
+              "The request account:{} does not match the one in the token:{}",
+              destinationAccount,
+              token.getAccount());
+          throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
+        }
+      }
+    }
+    validateAccount(destinationAccount);
   }
 
   /**
