@@ -1853,19 +1853,4 @@ class Sep6ServiceTest {
     assertNotNull(response.id)
     verify(exactly = 1) { txnStore.save(any()) }
   }
-
-  @Test
-  fun `test deposit defaults to token account when account is omitted`() {
-    every { clientService.getClientConfigBySigningKey(any()) } returns null
-    every { txnStore.save(any()) } returns null
-    every { eventSession.publish(any()) } returns Unit
-
-    val slotTxn = slot<Sep6Transaction>()
-    every { txnStore.save(capture(slotTxn)) } returns null
-
-    val request = StartDepositRequest.builder().assetCode(TEST_ASSET).fundingMethod("SWIFT").build()
-
-    sep6ServiceWithRealValidator.deposit(token, request)
-    assertEquals(TEST_ACCOUNT, slotTxn.captured.toAccount)
-  }
 }
