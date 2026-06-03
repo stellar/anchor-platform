@@ -112,21 +112,33 @@ public class DefaultPaymentListener implements PaymentListener {
 
     try {
       String memo = xdrMemoToString(ledgerTransaction.getMemo());
-      JdbcSep31Transaction sep31Txn =
-          sep31TransactionStore.findByToAccountAndMemoAndStatus(
+      List<JdbcSep31Transaction> sep31Txns =
+          sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
               ledgerPayment.getTo(), memo, SepTransactionStatus.PENDING_SENDER.toString());
-      if (sep31Txn == null) {
-        if (ledgerPayment.getTo().startsWith("M")) {
-          // Try again if the destination account is a muxed account.
-          MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
-          sep31Txn =
-              sep31TransactionStore.findByToAccountAndMemoAndStatus(
-                  muxedAccount.getAccountId(),
-                  String.valueOf(muxedAccount.getMuxedId()),
-                  SepTransactionStatus.PENDING_SENDER.toString());
-        }
+      if (sep31Txns.isEmpty() && ledgerPayment.getTo().startsWith("M")) {
+        MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
+        sep31Txns =
+            sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
+                muxedAccount.getAccountId(),
+                String.valueOf(muxedAccount.getMuxedId()),
+                SepTransactionStatus.PENDING_SENDER.toString());
       }
-      if (sep31Txn != null) {
+      if (sep31Txns.size() > 1) {
+        List<String> ids = sep31Txns.stream().map(JdbcSep31Transaction::getId).toList();
+        errorF(
+            "Ambiguous SEP-31 payment routing: paymentId={}, txHash={}, toAccount={}, memo={}, status={}, matchedIds={}",
+            ledgerPayment.getId(),
+            ledgerTransaction.getHash(),
+            ledgerPayment.getTo(),
+            memo,
+            SepTransactionStatus.PENDING_SENDER,
+            ids);
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "31")
+            .increment();
+        return;
+      }
+      if (!sep31Txns.isEmpty()) {
+        JdbcSep31Transaction sep31Txn = sep31Txns.get(0);
         try {
           handleSep31Transaction(ledgerTransaction, ledgerPayment, sep31Txn);
           return;
@@ -156,24 +168,35 @@ public class DefaultPaymentListener implements PaymentListener {
     }
 
     try {
-      JdbcSep24Transaction sep24Txn =
-          sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      List<JdbcSep24Transaction> sep24Txns =
+          sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
               toAccount,
               memoAsString(memo),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
-      if (sep24Txn == null) {
-        if (toAccount.startsWith("M")) {
-          // Try again if the destination account is a muxed account.
-          MuxedAccount muxedAccount = new MuxedAccount(toAccount);
-          sep24Txn =
-              sep24TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
-                  muxedAccount.getAccountId(),
-                  String.valueOf(muxedAccount.getMuxedId()),
-                  SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
-        }
+      if (sep24Txns.isEmpty() && toAccount.startsWith("M")) {
+        MuxedAccount muxedAccount = new MuxedAccount(toAccount);
+        sep24Txns =
+            sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+                muxedAccount.getAccountId(),
+                String.valueOf(muxedAccount.getMuxedId()),
+                SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       }
-
-      if (sep24Txn != null) {
+      if (sep24Txns.size() > 1) {
+        List<String> ids = sep24Txns.stream().map(JdbcSep24Transaction::getId).toList();
+        errorF(
+            "Ambiguous SEP-24 payment routing: paymentId={}, txHash={}, toAccount={}, memo={}, status={}, matchedIds={}",
+            ledgerPayment.getId(),
+            ledgerTransaction.getHash(),
+            toAccount,
+            memoAsString(memo),
+            SepTransactionStatus.PENDING_USR_TRANSFER_START,
+            ids);
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "24")
+            .increment();
+        return;
+      }
+      if (!sep24Txns.isEmpty()) {
+        JdbcSep24Transaction sep24Txn = sep24Txns.get(0);
         try {
           handleSep24Transaction(ledgerTransaction, ledgerPayment, sep24Txn);
           return;
@@ -187,23 +210,35 @@ public class DefaultPaymentListener implements PaymentListener {
     }
 
     try {
-      JdbcSep6Transaction sep6Txn =
-          sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
+      List<JdbcSep6Transaction> sep6Txns =
+          sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
               toAccount,
               memoAsString(memo),
               SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
-      if (sep6Txn == null) {
-        if (toAccount.startsWith("M")) {
-          // Try again if the destination account is a muxed account.
-          MuxedAccount muxedAccount = new MuxedAccount(toAccount);
-          sep6Txn =
-              sep6TransactionStore.findOneByWithdrawAnchorAccountAndMemoAndStatus(
-                  muxedAccount.getAccountId(),
-                  String.valueOf(muxedAccount.getMuxedId()),
-                  SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
-        }
+      if (sep6Txns.isEmpty() && toAccount.startsWith("M")) {
+        MuxedAccount muxedAccount = new MuxedAccount(toAccount);
+        sep6Txns =
+            sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+                muxedAccount.getAccountId(),
+                String.valueOf(muxedAccount.getMuxedId()),
+                SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
       }
-      if (sep6Txn != null) {
+      if (sep6Txns.size() > 1) {
+        List<String> ids = sep6Txns.stream().map(JdbcSep6Transaction::getId).toList();
+        errorF(
+            "Ambiguous SEP-6 payment routing: paymentId={}, txHash={}, toAccount={}, memo={}, status={}, matchedIds={}",
+            ledgerPayment.getId(),
+            ledgerTransaction.getHash(),
+            toAccount,
+            memoAsString(memo),
+            SepTransactionStatus.PENDING_USR_TRANSFER_START,
+            ids);
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "6")
+            .increment();
+        return;
+      }
+      if (!sep6Txns.isEmpty()) {
+        JdbcSep6Transaction sep6Txn = sep6Txns.get(0);
         try {
           handleSep6Transaction(ledgerTransaction, ledgerPayment, sep6Txn);
         } catch (AnchorException aex) {

@@ -7,7 +7,6 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.stellar.anchor.api.exception.SepException;
@@ -57,12 +56,9 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
     return txnRepo.findOneByExternalTransactionId(externalTransactionId);
   }
 
-  public JdbcSep24Transaction findOneByWithdrawAnchorAccountAndMemoAndStatus(
+  public List<JdbcSep24Transaction> findAllByWithdrawAnchorAccountAndMemoAndStatus(
       String toAccount, String memo, String status) {
-    Optional<JdbcSep24Transaction> optTxn =
-        Optional.ofNullable(
-            txnRepo.findOneByWithdrawAnchorAccountAndMemoAndStatus(toAccount, memo, status));
-    return optTxn.orElse(null);
+    return txnRepo.findAllByWithdrawAnchorAccountAndMemoAndStatus(toAccount, memo, status);
   }
 
   @Override
