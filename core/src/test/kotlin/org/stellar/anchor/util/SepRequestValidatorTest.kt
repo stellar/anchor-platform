@@ -219,6 +219,14 @@ class SepRequestValidatorTest {
   }
 
   @Test
+  fun `test validateDestinationAccount allows muxed destination whose base account matches token`() {
+    val token = TestHelper.createWebAuthJwt()
+    val muxedDestination =
+      org.stellar.sdk.MuxedAccount(token.account, java.math.BigInteger.valueOf(99L)).address
+    requestValidator.validateDestinationAccount(token, muxedDestination)
+  }
+
+  @Test
   fun `test validateDestinationAccount allows destination on client allowlist`() {
     val token = TestHelper.createWebAuthJwt()
     val allowedAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"

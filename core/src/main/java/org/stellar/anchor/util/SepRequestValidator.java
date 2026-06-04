@@ -244,7 +244,16 @@ public class SepRequestValidator {
    */
   public void validateDestinationAccount(WebAuthJwt token, String destinationAccount)
       throws AnchorException {
-    if (!destinationAccount.equals(token.getAccount())) {
+    String destinationBase = destinationAccount;
+    if (SepHelper.accountType(destinationAccount) == SepHelper.AccountType.Muxed) {
+      try {
+        destinationBase = new MuxedAccount(destinationAccount).getAccountId();
+      } catch (RuntimeException ex) {
+        Log.warnF(
+            "Failed to demux destination account {}: {}", destinationAccount, ex.getMessage());
+      }
+    }
+    if (!destinationBase.equals(token.getAccount())) {
       CustodialClient clientConfig = clientService.getClientConfigBySigningKey(token.getAccount());
       if (clientConfig != null && clientConfig.getDestinationAccounts() != null) {
         if (!clientConfig.getDestinationAccounts().contains(destinationAccount)) {
