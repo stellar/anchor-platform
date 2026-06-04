@@ -233,7 +233,7 @@ public class Sep12Service {
                     .type(requestBase.getType())
                     .build());
 
-        if (owned == null || owned.getId() == null) {
+        if (owned == null || !requestBase.getId().equals(owned.getId())) {
           throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
         }
 
