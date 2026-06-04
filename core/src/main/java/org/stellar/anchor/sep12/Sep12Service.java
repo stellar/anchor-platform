@@ -227,28 +227,14 @@ public class Sep12Service {
         GetCustomerResponse owned =
             customerIntegration.getCustomer(
                 GetCustomerRequest.builder()
-                    .id(requestBase.getId())
+                    .memo(tokenMemo)
+                    .memoType(tokenMemo != null ? "id" : null)
                     .account(tokenAccount)
                     .type(requestBase.getType())
                     .build());
 
         if (owned == null || owned.getId() == null) {
           throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
-        }
-
-        if (tokenMemo != null) {
-          GetCustomerResponse memoOwned =
-              customerIntegration.getCustomer(
-                  GetCustomerRequest.builder()
-                      .account(tokenAccount)
-                      .memo(tokenMemo)
-                      .memoType("id")
-                      .type(requestBase.getType())
-                      .build());
-
-          if (memoOwned == null || !requestBase.getId().equals(memoOwned.getId())) {
-            throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
-          }
         }
 
         requestBase.setAccount(tokenAccount);
