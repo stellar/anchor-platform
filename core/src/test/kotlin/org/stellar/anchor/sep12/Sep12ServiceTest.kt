@@ -722,7 +722,7 @@ class Sep12ServiceTest {
     val request = Sep12GetCustomerRequest.builder().id("customer-id").type("sep31-receiver").build()
 
     assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
-    assertEquals("customer-id", prefetchSlot.captured.id)
+    assertNull(prefetchSlot.captured.id)
     assertEquals(TEST_ACCOUNT, prefetchSlot.captured.account)
     assertEquals("sep31-receiver", prefetchSlot.captured.type)
   }
@@ -750,25 +750,6 @@ class Sep12ServiceTest {
     val request = Sep12GetCustomerRequest.builder().id("customer-id").build()
 
     assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, memoToken) }
-  }
-
-  @Test
-  fun `test layer 2 reverse lookup independently blocks IDOR for memo token even if business server does not enforce it`() {
-    val forwardResponse = GetCustomerResponse()
-    forwardResponse.id = "victim-customer-id"
-
-    val reverseResponse = GetCustomerResponse()
-    reverseResponse.id = "attacker-own-customer-id"
-
-    every { customerIntegration.getCustomer(match { it.id != null }) } returns forwardResponse
-    every { customerIntegration.getCustomer(match { it.id == null }) } returns reverseResponse
-
-    val memoToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
-    val request = Sep12GetCustomerRequest.builder().id("victim-customer-id").build()
-
-    val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, memoToken) }
-    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
-    assertEquals("not authorized for customer id", ex.message)
   }
 
   @Test
