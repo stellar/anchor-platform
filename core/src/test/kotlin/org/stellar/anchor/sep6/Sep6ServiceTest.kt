@@ -1752,9 +1752,6 @@ class Sep6ServiceTest {
     assert(ex.message!!.contains("has already been used"))
   }
 
-  // Integration tests: real SepRequestValidator + CustodialClient fixture (mirrors
-  // Sep24ServiceTest.kt:154, 470-471 pattern from the security report)
-
   @Test
   fun `test deposit enforces destination policy — rejects account not on allowlist`() {
     val allowedAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
