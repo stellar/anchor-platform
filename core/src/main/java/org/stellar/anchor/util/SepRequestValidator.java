@@ -244,6 +244,11 @@ public class SepRequestValidator {
    */
   public void validateDestinationAccount(WebAuthJwt token, String destinationAccount)
       throws AnchorException {
+    validateDestinationAccount(token.getAccount(), destinationAccount);
+  }
+
+  public void validateDestinationAccount(String webAuthAccount, String destinationAccount)
+      throws AnchorException {
     String destinationBase = destinationAccount;
     if (SepHelper.accountType(destinationAccount) == SepHelper.AccountType.Muxed) {
       try {
@@ -253,8 +258,8 @@ public class SepRequestValidator {
             "Failed to demux destination account {}: {}", destinationAccount, ex.getMessage());
       }
     }
-    if (!destinationBase.equals(token.getAccount())) {
-      CustodialClient clientConfig = clientService.getClientConfigBySigningKey(token.getAccount());
+    if (!destinationBase.equals(webAuthAccount)) {
+      CustodialClient clientConfig = clientService.getClientConfigBySigningKey(webAuthAccount);
       if (clientConfig != null && clientConfig.getDestinationAccounts() != null) {
         if (!clientConfig.getDestinationAccounts().contains(destinationAccount)) {
           Log.infoF(
@@ -268,7 +273,7 @@ public class SepRequestValidator {
           Log.infoF(
               "The request account:{} does not match the one in the token:{}",
               destinationAccount,
-              token.getAccount());
+              webAuthAccount);
           throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
         }
       }

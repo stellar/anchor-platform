@@ -49,6 +49,7 @@ import org.stellar.anchor.sep31.Sep31TransactionStore
 import org.stellar.anchor.sep6.Sep6Transaction
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.SepRequestValidator
 
 class RequestOnchainFundsHandlerTest {
 
@@ -100,6 +101,8 @@ class RequestOnchainFundsHandlerTest {
 
   @MockK(relaxed = true) private lateinit var sepTransactionCounter: Counter
 
+  @MockK(relaxed = true) private lateinit var sepRequestValidator: SepRequestValidator
+
   private lateinit var handler: RequestOnchainFundsHandler
 
   @BeforeEach
@@ -120,6 +123,7 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
+        sepRequestValidator,
       )
   }
 
@@ -687,6 +691,7 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
+        sepRequestValidator,
       )
 
     val request =
@@ -1007,6 +1012,7 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
+        sepRequestValidator,
       )
 
     val request =
@@ -1188,6 +1194,7 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
+        sepRequestValidator,
       )
 
     val request =
@@ -1506,6 +1513,7 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
+        sepRequestValidator,
       )
 
     val request =
@@ -1602,6 +1610,7 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
+        sepRequestValidator,
       )
 
     val request =
@@ -1900,6 +1909,7 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
+        sepRequestValidator,
       )
 
     val request =
