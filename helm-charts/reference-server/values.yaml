@@ -34,7 +34,7 @@ services:
           memory: 1Gi
           cpu: 1
 ingress:
-  enabled: true
+  enabled: false
   name: ingress-reference-server
   rules:
     host: reference-server.local

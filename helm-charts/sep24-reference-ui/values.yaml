@@ -26,7 +26,7 @@ services:
           memory: 1Gi
           cpu: 1
 ingress:
-  enabled: true
+  enabled: false
   name: ingress-sep24-reference-ui
   rules:
     host: sep24-reference-ui.local

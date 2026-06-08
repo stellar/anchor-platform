@@ -135,9 +135,8 @@ config:
       base_url: http://localhost:3000
     more_info_url:
       base_url: http://localhost:3000/txn
-
 ingress:
-  enabled: true
+  enabled: false
   name: ingress-anchor-platform
   className: nginx
   annotations:
