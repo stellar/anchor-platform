@@ -250,7 +250,13 @@ public class SepRequestValidator {
   public void validateDestinationAccount(String webAuthAccount, String destinationAccount)
       throws AnchorException {
     String destinationBase = destinationAccount;
-    if (SepHelper.accountType(destinationAccount) == SepHelper.AccountType.Muxed) {
+    SepHelper.AccountType destAccountType;
+    try {
+      destAccountType = SepHelper.accountType(destinationAccount);
+    } catch (IllegalArgumentException ex) {
+      throw new SepValidationException(String.format("invalid account %s", destinationAccount), ex);
+    }
+    if (destAccountType == SepHelper.AccountType.Muxed) {
       try {
         destinationBase = new MuxedAccount(destinationAccount).getAccountId();
       } catch (RuntimeException ex) {
