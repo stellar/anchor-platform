@@ -253,11 +253,6 @@ class SepRequestValidatorTest {
 
   @Test
   fun `test validateDestinationAccount allows destination when allowAnyDestination is true even if destinationAccounts would not contain it`() {
-    // Intentional behavior change vs the pre-refactor inline block: previously a non-null
-    // destinationAccounts was checked first and allowAnyDestination was only consulted when
-    // destinationAccounts was null, so both fields set would silently ignore allowAnyDestination.
-    // Now allowAnyDestination=true takes precedence per CustodialClient contract:
-    // "If allow_any_destination set to true, this configuration option is ignored."
     val token = TestHelper.createWebAuthJwt()
     val destination = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     val client =
