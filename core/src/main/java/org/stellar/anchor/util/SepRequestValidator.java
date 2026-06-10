@@ -255,6 +255,8 @@ public class SepRequestValidator {
         webAuthBase = new MuxedAccount(webAuthAccount).getAccountId();
       }
     } catch (RuntimeException ex) {
+      throw new SepValidationException(
+          String.format("invalid token account %s", webAuthAccount), ex);
     }
 
     String destinationBase = destinationAccount;

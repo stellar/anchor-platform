@@ -4,6 +4,7 @@ import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -252,6 +253,11 @@ class SepRequestValidatorTest {
 
   @Test
   fun `test validateDestinationAccount allows destination when allowAnyDestination is true even if destinationAccounts would not contain it`() {
+    // Intentional behavior change vs the pre-refactor inline block: previously a non-null
+    // destinationAccounts was checked first and allowAnyDestination was only consulted when
+    // destinationAccounts was null, so both fields set would silently ignore allowAnyDestination.
+    // Now allowAnyDestination=true takes precedence per CustodialClient contract:
+    // "If allow_any_destination set to true, this configuration option is ignored."
     val token = TestHelper.createWebAuthJwt()
     val destination = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     val client =
@@ -266,7 +272,25 @@ class SepRequestValidatorTest {
   }
 
   @Test
-  fun `test validateDestinationAccount rejects when destinationAccounts is empty and allowAnyDestination is false`() {
+  fun `test validateDestinationAccount rejects destination not on allowlist with account-not-allowed message`() {
+    val token = TestHelper.createWebAuthJwt()
+    val attackerAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .destinationAccounts(setOf("GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGBXT0E4EPJOS2W2YNHH6K"))
+        .build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    val ex =
+      assertThrows<SepValidationException> {
+        requestValidator.validateDestinationAccount(token, attackerAccount)
+      }
+    assertEquals("Provided 'account' is not allowed", ex.message)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects empty destinationAccounts with token-mismatch message`() {
     val token = TestHelper.createWebAuthJwt()
     val differentAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     val client =
@@ -277,25 +301,11 @@ class SepRequestValidatorTest {
         .build()
     every { clientService.getClientConfigBySigningKey(token.account) } returns client
 
-    assertThrows<SepValidationException> {
-      requestValidator.validateDestinationAccount(token, differentAccount)
-    }
-  }
-
-  @Test
-  fun `test validateDestinationAccount rejects destination not on allowlist`() {
-    val token = TestHelper.createWebAuthJwt()
-    val attackerAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-    val client =
-      CustodialClient.builder()
-        .name("test-client")
-        .destinationAccounts(setOf("GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGBXT0E4EPJOS2W2YNHH6K"))
-        .build()
-    every { clientService.getClientConfigBySigningKey(token.account) } returns client
-
-    assertThrows<SepValidationException> {
-      requestValidator.validateDestinationAccount(token, attackerAccount)
-    }
+    val ex =
+      assertThrows<SepValidationException> {
+        requestValidator.validateDestinationAccount(token, differentAccount)
+      }
+    assertEquals(SepRequestValidator.ERR_TOKEN_ACCOUNT_MISMATCH, ex.message)
   }
 
   @Test
@@ -304,9 +314,11 @@ class SepRequestValidatorTest {
     val differentAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     every { clientService.getClientConfigBySigningKey(token.account) } returns null
 
-    assertThrows<SepValidationException> {
-      requestValidator.validateDestinationAccount(token, differentAccount)
-    }
+    val ex =
+      assertThrows<SepValidationException> {
+        requestValidator.validateDestinationAccount(token, differentAccount)
+      }
+    assertEquals(SepRequestValidator.ERR_TOKEN_ACCOUNT_MISMATCH, ex.message)
   }
 
   @Test
@@ -316,8 +328,17 @@ class SepRequestValidatorTest {
     val client = CustodialClient.builder().name("test-client").allowAnyDestination(false).build()
     every { clientService.getClientConfigBySigningKey(token.account) } returns client
 
+    val ex =
+      assertThrows<SepValidationException> {
+        requestValidator.validateDestinationAccount(token, differentAccount)
+      }
+    assertEquals(SepRequestValidator.ERR_TOKEN_ACCOUNT_MISMATCH, ex.message)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects malformed muxed webAuthAccount`() {
     assertThrows<SepValidationException> {
-      requestValidator.validateDestinationAccount(token, differentAccount)
+      requestValidator.validateDestinationAccount("MINVALIDMUXEDADDRESS", TestHelper.TEST_ACCOUNT)
     }
   }
 

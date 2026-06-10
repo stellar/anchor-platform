@@ -309,6 +309,44 @@ class Sep6ServiceTest {
   }
 
   @Test
+  fun `test withdraw with empty account defaults to token subject`() {
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartWithdrawRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account("")
+        .fundingMethod("bank_account")
+        .build()
+    sep6Service.withdraw(token, request)
+
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
+    assertEquals(TEST_ACCOUNT, slotTxn.captured.fromAccount)
+  }
+
+  @Test
+  fun `test withdrawExchange with empty account defaults to token subject`() {
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .amount("100")
+        .account("")
+        .fundingMethod("bank_account")
+        .build()
+    sep6Service.withdrawExchange(token, request)
+
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
+    assertEquals(TEST_ACCOUNT, slotTxn.captured.fromAccount)
+  }
+
+  @Test
   fun `test deposit with unsupported asset`() {
     val unsupportedAsset = "??"
     val request =
