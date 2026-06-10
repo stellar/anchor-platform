@@ -251,6 +251,38 @@ class SepRequestValidatorTest {
   }
 
   @Test
+  fun `test validateDestinationAccount allows destination when allowAnyDestination is true even if destinationAccounts would not contain it`() {
+    val token = TestHelper.createWebAuthJwt()
+    val destination = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .allowAnyDestination(true)
+        .destinationAccounts(setOf("GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGBXT0E4EPJOS2W2YNHH6K"))
+        .build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    requestValidator.validateDestinationAccount(token, destination)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects when destinationAccounts is empty and allowAnyDestination is false`() {
+    val token = TestHelper.createWebAuthJwt()
+    val differentAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .allowAnyDestination(false)
+        .destinationAccounts(emptySet())
+        .build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    assertThrows<SepValidationException> {
+      requestValidator.validateDestinationAccount(token, differentAccount)
+    }
+  }
+
+  @Test
   fun `test validateDestinationAccount rejects destination not on allowlist`() {
     val token = TestHelper.createWebAuthJwt()
     val attackerAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
