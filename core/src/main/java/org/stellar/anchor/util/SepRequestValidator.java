@@ -274,7 +274,10 @@ public class SepRequestValidator {
     }
     if (!destinationBase.equals(webAuthBase)) {
       CustodialClient clientConfig = clientService.getClientConfigBySigningKey(webAuthBase);
-      if (clientConfig != null && clientConfig.getDestinationAccounts() != null) {
+      if (clientConfig != null && clientConfig.isAllowAnyDestination()) {
+      } else if (clientConfig != null
+          && clientConfig.getDestinationAccounts() != null
+          && !clientConfig.getDestinationAccounts().isEmpty()) {
         if (!clientConfig.getDestinationAccounts().contains(destinationBase)) {
           Log.infoF(
               "The request account:{} for wallet:{} is not in the allowed destination accounts list",
@@ -283,13 +286,11 @@ public class SepRequestValidator {
           throw new SepValidationException("Provided 'account' is not allowed");
         }
       } else {
-        if (clientConfig == null || !clientConfig.isAllowAnyDestination()) {
-          Log.infoF(
-              "The request account:{} does not match the one in the token:{}",
-              destinationAccount,
-              webAuthAccount);
-          throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
-        }
+        Log.infoF(
+            "The request account:{} does not match the one in the token:{}",
+            destinationAccount,
+            webAuthAccount);
+        throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
       }
     }
     validateAccount(destinationAccount);
