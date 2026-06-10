@@ -59,7 +59,10 @@ public class Sep12Service {
   public Sep12GetCustomerResponse getCustomer(WebAuthJwt token, Sep12GetCustomerRequest request)
       throws AnchorException {
     validateGetOrPutRequest(request, token);
-    if (request.getAccount() == null && token.getAccount() != null) {
+    if (request.getAccount() == null
+        && token.getAccount() != null
+        && request.getId() == null
+        && request.getTransactionId() == null) {
       request.setAccount(token.getAccount());
     }
 
@@ -76,7 +79,10 @@ public class Sep12Service {
       throws AnchorException {
     validateGetOrPutRequest(request, token);
 
-    if (request.getAccount() == null && token.getAccount() != null) {
+    if (request.getAccount() == null
+        && token.getAccount() != null
+        && request.getId() == null
+        && request.getTransactionId() == null) {
       request.setAccount(token.getAccount());
     }
 
@@ -170,8 +176,11 @@ public class Sep12Service {
     sep12DeleteCustomerCounter.increment();
   }
 
+  private static final String ERR_CUSTOMER_ID_NOT_AUTHORIZED = "not authorized for customer id";
+
   void validateGetOrPutRequest(Sep12CustomerRequestBase requestBase, WebAuthJwt token)
       throws SepException {
+    boolean isIdPath = false;
     if (requestBase.getTransactionId() != null) {
       try {
         // `transactionId` should be used in conjunction with customer type `type` (sep6,
@@ -204,10 +213,51 @@ public class Sep12Service {
       } catch (Exception e) {
         throw new SepNotAuthorizedException("The transaction specified does not exist");
       }
+    } else if (requestBase.getId() != null) {
+      isIdPath = true;
+
+      try {
+        String tokenAccount =
+            token.getMuxedAccount() != null ? token.getMuxedAccount() : token.getAccount();
+        String tokenMemo =
+            token.getMuxedAccountId() != null
+                ? token.getMuxedAccountId().toString()
+                : token.getAccountMemo();
+
+        GetCustomerResponse owned =
+            customerIntegration.getCustomer(
+                GetCustomerRequest.builder()
+                    .memo(tokenMemo)
+                    .memoType(tokenMemo != null ? "id" : null)
+                    .account(tokenAccount)
+                    .type(requestBase.getType())
+                    .build());
+
+        if (owned == null || !requestBase.getId().equals(owned.getId())) {
+          throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+        }
+
+        requestBase.setAccount(tokenAccount);
+      } catch (SepNotAuthorizedException e) {
+        throw e;
+      } catch (Exception e) {
+        Log.warnEx(e);
+        throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+      }
     }
-    validateRequestAndTokenAccounts(requestBase, token);
-    validateRequestAndTokenMemos(requestBase, token);
-    updateRequestMemoAndMemoType(requestBase, token);
+
+    try {
+      validateRequestAndTokenAccounts(requestBase, token);
+
+      if (!isIdPath) {
+        validateRequestAndTokenMemos(requestBase, token);
+      }
+
+      updateRequestMemoAndMemoType(requestBase, token);
+    } catch (SepException e) {
+      if (isIdPath) throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+      throw e;
+    }
   }
 
   void validateRequestAndTokenAccounts(
