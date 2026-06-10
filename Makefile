@@ -13,3 +13,6 @@ docker-build:
 
 docker-push:
 	$(SUDO) docker push $(TAG)
+
+env:
+	set -a && source .env && set +a
