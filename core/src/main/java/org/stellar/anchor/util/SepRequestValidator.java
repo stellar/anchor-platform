@@ -249,6 +249,14 @@ public class SepRequestValidator {
 
   public void validateDestinationAccount(String webAuthAccount, String destinationAccount)
       throws AnchorException {
+    String webAuthBase = webAuthAccount;
+    try {
+      if (SepHelper.accountType(webAuthAccount) == SepHelper.AccountType.Muxed) {
+        webAuthBase = new MuxedAccount(webAuthAccount).getAccountId();
+      }
+    } catch (RuntimeException ex) {
+    }
+
     String destinationBase = destinationAccount;
     SepHelper.AccountType destAccountType;
     try {
@@ -264,10 +272,10 @@ public class SepRequestValidator {
             "Failed to demux destination account {}: {}", destinationAccount, ex.getMessage());
       }
     }
-    if (!destinationBase.equals(webAuthAccount)) {
-      CustodialClient clientConfig = clientService.getClientConfigBySigningKey(webAuthAccount);
+    if (!destinationBase.equals(webAuthBase)) {
+      CustodialClient clientConfig = clientService.getClientConfigBySigningKey(webAuthBase);
       if (clientConfig != null && clientConfig.getDestinationAccounts() != null) {
-        if (!clientConfig.getDestinationAccounts().contains(destinationAccount)) {
+        if (!clientConfig.getDestinationAccounts().contains(destinationBase)) {
           Log.infoF(
               "The request account:{} for wallet:{} is not in the allowed destination accounts list",
               destinationAccount,
