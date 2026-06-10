@@ -288,4 +288,80 @@ class SepRequestValidatorTest {
       requestValidator.validateDestinationAccount(token, differentAccount)
     }
   }
+
+  @Test
+  fun `test validateDestinationAccount allows classic destination when webAuthAccount is muxed`() {
+    val muxedWebAuth =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(7L))
+        .address
+    requestValidator.validateDestinationAccount(muxedWebAuth, TestHelper.TEST_ACCOUNT)
+  }
+
+  @Test
+  fun `test validateDestinationAccount allows muxed destination when webAuthAccount is muxed with same base`() {
+    val muxedWebAuth =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(1L))
+        .address
+    val muxedDestination =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(2L))
+        .address
+    requestValidator.validateDestinationAccount(muxedWebAuth, muxedDestination)
+  }
+
+  @Test
+  fun `test validateDestinationAccount looks up client by base address when webAuthAccount is muxed`() {
+    val muxedWebAuth =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(5L))
+        .address
+    val allowedAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .destinationAccounts(setOf(allowedAccount))
+        .build()
+    every { clientService.getClientConfigBySigningKey(TestHelper.TEST_ACCOUNT) } returns client
+
+    requestValidator.validateDestinationAccount(muxedWebAuth, allowedAccount)
+  }
+
+  @Test
+  fun `test validateDestinationAccount accepts muxed destination whose base is on the allowlist`() {
+    val muxedWebAuth =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(3L))
+        .address
+    val allowedBase = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val muxedDestination =
+      org.stellar.sdk.MuxedAccount(allowedBase, java.math.BigInteger.valueOf(99L)).address
+    val client =
+      CustodialClient.builder().name("test-client").destinationAccounts(setOf(allowedBase)).build()
+    every { clientService.getClientConfigBySigningKey(TestHelper.TEST_ACCOUNT) } returns client
+
+    requestValidator.validateDestinationAccount(muxedWebAuth, muxedDestination)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects muxed destination whose base is not on allowlist`() {
+    val muxedWebAuth =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(4L))
+        .address
+    val attackerBase = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val muxedAttacker =
+      org.stellar.sdk.MuxedAccount(attackerBase, java.math.BigInteger.valueOf(1L)).address
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .destinationAccounts(setOf("GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGBXT0E4EPJOS2W2YNHH6K"))
+        .build()
+    every { clientService.getClientConfigBySigningKey(TestHelper.TEST_ACCOUNT) } returns client
+
+    assertThrows<SepValidationException> {
+      requestValidator.validateDestinationAccount(muxedWebAuth, muxedAttacker)
+    }
+  }
 }
