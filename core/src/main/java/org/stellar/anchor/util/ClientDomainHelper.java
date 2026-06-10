@@ -4,6 +4,9 @@ import static org.stellar.anchor.util.Log.debugF;
 import static org.stellar.anchor.util.Log.infoF;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.UnknownHostException;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -23,6 +26,13 @@ public class ClientDomainHelper {
    */
   public static String fetchSigningKeyFromClientDomain(String clientDomain, boolean allowHttpRetry)
       throws SepException {
+    // allowHttpRetry is true for non-public networks (testnet/dev) and false for mainnet.
+    // We only enforce SSRF protection on public network because test/dev environments
+    // legitimately use localhost and internal addresses as client_domain.
+    if (!allowHttpRetry) {
+      validateDomainNotPrivateNetwork(clientDomain);
+    }
+
     String clientSigningKey = "";
     String url = "https://" + clientDomain + "/.well-known/stellar.toml";
     try {
@@ -118,5 +128,53 @@ public class ClientDomainHelper {
       }
     }
     return null;
+  }
+
+  /**
+   * Validates that a client domain does not resolve to a private, loopback, or link-local IP
+   * address. This prevents SSRF attacks where an attacker supplies a domain that resolves to
+   * internal network addresses.
+   *
+   * @param clientDomain The domain to validate.
+   * @throws SepException if the domain resolves to a non-public IP address.
+   */
+  public static void validateDomainNotPrivateNetwork(String clientDomain) throws SepException {
+    String hostname = extractHostname(clientDomain);
+
+    try {
+      InetAddress[] addresses = InetAddress.getAllByName(hostname);
+      for (InetAddress address : addresses) {
+        if (address.isLoopbackAddress()
+            || address.isSiteLocalAddress()
+            || address.isLinkLocalAddress()
+            || address.isAnyLocalAddress()) {
+          infoF("client_domain {} resolves to non-public address {}", clientDomain, address);
+          throw new SepException("client_domain resolves to a non-public address");
+        }
+      }
+    } catch (UnknownHostException e) {
+      infoF("client_domain {} could not be resolved", clientDomain);
+      throw new SepException("client_domain could not be resolved");
+    }
+  }
+
+  /**
+   * Extracts the hostname from a client domain string, correctly handling IPv6 literals (e.g.
+   * [::1]:8080) and domains with ports.
+   */
+  static String extractHostname(String clientDomain) {
+    try {
+      URI uri = new URI("https://" + clientDomain);
+      String host = uri.getHost();
+      if (host != null) {
+        if (host.startsWith("[") && host.endsWith("]")) {
+          host = host.substring(1, host.length() - 1);
+        }
+        return host;
+      }
+    } catch (Exception ignored) {
+      // Fall through
+    }
+    return clientDomain;
   }
 }

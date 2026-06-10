@@ -22,7 +22,6 @@ import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
 import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.client.ClientService
 import org.stellar.anchor.client.DefaultClientService
-import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.platform.callback.PlatformIntegrationHelperTest.Companion.TEST_HOME_DOMAIN
 import org.stellar.anchor.platform.config.PropertySep24Config
@@ -43,7 +42,6 @@ class SimpleInteractiveUrlConstructorTest {
 
   @MockK(relaxed = true) private lateinit var assetService: AssetService
   @MockK(relaxed = true) private lateinit var secretConfig: SecretConfig
-  @MockK(relaxed = true) private lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) private lateinit var customerIntegration: CustomerIntegration
   @MockK(relaxed = true) private lateinit var testAsset: AssetInfo
   @MockK(relaxed = true) private lateinit var webAuthJwt: WebAuthJwt
@@ -63,7 +61,7 @@ class SimpleInteractiveUrlConstructorTest {
       "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     every { webAuthJwt.homeDomain } returns TEST_HOME_DOMAIN
 
-    jwtService = JwtService(secretConfig, custodySecretConfig)
+    jwtService = JwtService(secretConfig)
     sep24Config = gson.fromJson(SEP24_CONFIG_JSON_1, PropertySep24Config::class.java)
     request = gson.fromJson(REQUEST_JSON_1, HashMap::class.java) as HashMap<String, String>
     txn = gson.fromJson(TXN_JSON_1, JdbcSep24Transaction::class.java)

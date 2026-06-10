@@ -85,7 +85,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
   @Retry(attempts = 3, delayMs = 200)
   fun `test classic asset receive with PENDING_CUSTOMER_INFO_UDPATE`() = runBlocking {
     val asset = USDC
-    val amount = "5"
+    val amount = "2"
 
     walletServerClient.clearCallbacks()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, null, toml)
@@ -165,7 +165,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
   @Retry(attempts = 3, delayMs = 200)
   fun `test classic asset receive without PENDING_CUSTOMER_INFO_UDPATE`() = runBlocking {
     val asset = USDC
-    val amount = "5"
+    val amount = "2"
 
     walletServerClient.clearCallbacks()
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, null, toml)
@@ -327,7 +327,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
 
   private val postSep31TxnRequest =
     """{
-    "amount": "5",
+    "amount": "2",
     "asset_code": "USDC",
     "asset_issuer": "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
     "receiver_id": "MOCK_RECEIVER_ID",

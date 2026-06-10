@@ -207,7 +207,10 @@ class NotifyOnchainFundsSentHandlerTest {
     every { horizon.getTransaction(any()) } throws LedgerException("Invalid stellar transaction")
 
     val ex = assertThrows<InternalErrorException> { handler.handle(request) }
-    assertEquals("Failed to retrieve Stellar transaction by ID[stellarTxId]", ex.message)
+    assertEquals(
+      "Failed to retrieve Stellar transaction by ID[stellarTxId]: Invalid stellar transaction",
+      ex.message
+    )
 
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }

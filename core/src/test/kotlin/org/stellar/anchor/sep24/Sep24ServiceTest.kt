@@ -6,6 +6,7 @@ import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import java.net.URI
 import java.nio.charset.Charset
+import java.time.Clock
 import java.time.Instant
 import org.apache.hc.core5.net.URLEncodedUtils
 import org.junit.jupiter.api.Assertions.*
@@ -101,14 +102,12 @@ internal class Sep24ServiceTest {
   @MockK(relaxed = true) lateinit var languageConfig: LanguageConfig
   @MockK(relaxed = true) lateinit var stellarNetworkConfig: StellarNetworkConfig
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
-  @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) lateinit var sep24Config: Sep24Config
   @MockK(relaxed = true) lateinit var eventService: EventService
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
   @MockK(relaxed = true) lateinit var txnStore: Sep24TransactionStore
   @MockK(relaxed = true) lateinit var interactiveUrlConstructor: InteractiveUrlConstructor
   @MockK(relaxed = true) lateinit var moreInfoUrlConstructor: MoreInfoUrlConstructor
-  @MockK(relaxed = true) lateinit var custodyConfig: CustodyConfig
   @MockK(relaxed = true) lateinit var sep38QuoteStore: Sep38QuoteStore
   @MockK(relaxed = true) lateinit var clientService: ClientService
 
@@ -131,7 +130,7 @@ internal class Sep24ServiceTest {
     every { txnStore.newInstance() } returns PojoSep24Transaction()
 
     requestValidator = spyk(SepRequestValidator(assetService))
-    jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
+    jwtService = spyk(JwtService(secretConfig))
     testInteractiveUrlJwt = createTestInteractiveJwt(null)
     val strToken = jwtService.encode(testInteractiveUrlJwt)
     every { interactiveUrlConstructor.construct(any(), any(), any(), any()) } returns
@@ -155,7 +154,7 @@ internal class Sep24ServiceTest {
         .allowAnyDestination(false)
         .build()
     every { clientFinder.getClientName(any()) } returns TEST_CLIENT_NAME
-    calculator = ExchangeAmountsCalculator(sep38QuoteStore)
+    calculator = ExchangeAmountsCalculator(sep38QuoteStore, Clock.systemUTC())
 
     sep24Service =
       Sep24Service(
@@ -171,7 +170,6 @@ internal class Sep24ServiceTest {
         eventService,
         interactiveUrlConstructor,
         moreInfoUrlConstructor,
-        custodyConfig,
         calculator,
       )
     depositQuote = gson.fromJson(DEPOSIT_QUOTE_JSON, PojoSep38Quote::class.java)
@@ -265,6 +263,7 @@ internal class Sep24ServiceTest {
     val slotTxn = slot<Sep24Transaction>()
     every { txnStore.save(capture(slotTxn)) } returns null
     every { sep38QuoteStore.findByQuoteId(any()) } returns withdrawQuote
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns true
     sep24Service.withdraw(
       createTestWebAuthJwtWithMemo(),
       createTestTransactionRequest(withdrawQuote.id),
@@ -413,6 +412,7 @@ internal class Sep24ServiceTest {
     val slotTxn = slot<Sep24Transaction>()
     every { txnStore.save(capture(slotTxn)) } returns null
     every { sep38QuoteStore.findByQuoteId(any()) } returns depositQuote
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns true
     sep24Service.deposit(
       createTestWebAuthJwtWithMemo(),
       createTestTransactionRequest(depositQuote.id),
@@ -656,6 +656,62 @@ internal class Sep24ServiceTest {
     verify(exactly = 1) { txnStore.findByExternalTransactionId(TEST_TRANSACTION_ID_0) }
   }
 
+  @Test
+  fun `test find transaction with different account memo`() {
+    val testTxn = createTestTransaction("deposit")
+    testTxn.webAuthAccountMemo = "other-memo"
+    every { txnStore.findByTransactionId(any()) } returns testTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    assertThrows<SepNotFoundException> {
+      sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
+    }
+  }
+
+  @Test
+  fun `test find transaction with token without memo and transaction with memo`() {
+    val testTxn = createTestTransaction("deposit")
+    testTxn.webAuthAccountMemo = TEST_MEMO
+    every { txnStore.findByTransactionId(any()) } returns testTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    assertThrows<SepNotFoundException> { sep24Service.findTransaction(createTestWebAuthJwt(), gtr) }
+  }
+
+  @Test
+  fun `test find transaction with token with memo and transaction without memo`() {
+    val testTxn = createTestTransaction("deposit")
+    testTxn.webAuthAccountMemo = null
+    every { txnStore.findByTransactionId(any()) } returns testTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    assertThrows<SepNotFoundException> {
+      sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
+    }
+  }
+
+  @Test
+  fun `test find transaction with matching account memo`() {
+    val testTxn = createTestTransaction("deposit")
+    testTxn.webAuthAccountMemo = TEST_MEMO
+    every { txnStore.findByTransactionId(any()) } returns testTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    val response = sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
+
+    assertEquals(testTxn.transactionId, response.transaction.id)
+  }
+
+  @Test
+  fun `test find transaction with null web auth account`() {
+    val testTxn = createTestTransaction("deposit")
+    testTxn.webAuthAccount = null
+    every { txnStore.findByTransactionId(any()) } returns testTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    assertThrows<SepNotFoundException> { sep24Service.findTransaction(createTestWebAuthJwt(), gtr) }
+  }
+
   @ParameterizedTest
   @ValueSource(strings = ["deposit", "withdrawal"])
   fun `test find transaction validation error`(kind: String) {
@@ -724,6 +780,94 @@ internal class Sep24ServiceTest {
     assertTrue(response.url.indexOf("lang=en") != -1)
   }
 
+  @Test
+  fun `test withdraw with muxed token stores muxed address as webAuthAccount`() {
+    val strToken = jwtService.encode(createTestInteractiveJwt(null))
+    every { interactiveUrlConstructor.construct(any(), any(), any(), any()) } returns
+      "${TEST_SEP24_INTERACTIVE_URL}?lang=en&token=$strToken"
+    val slotTxn = slot<Sep24Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+
+    val muxedJwt =
+      TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L, TEST_HOME_DOMAIN, TEST_CLIENT_DOMAIN)
+    sep24Service.withdraw(muxedJwt, createTestTransactionRequest())
+
+    assertEquals(muxedJwt.muxedAccount, slotTxn.captured.webAuthAccount)
+    assertNotEquals(TEST_ACCOUNT, slotTxn.captured.webAuthAccount)
+    assertNull(slotTxn.captured.webAuthAccountMemo)
+  }
+
+  @Test
+  fun `test deposit with muxed token stores muxed address as webAuthAccount`() {
+    val strToken = jwtService.encode(createTestInteractiveJwt(null))
+    every { interactiveUrlConstructor.construct(any(), any(), any(), any()) } returns
+      "${TEST_SEP24_INTERACTIVE_URL}?lang=en&token=$strToken"
+    val slotTxn = slot<Sep24Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+
+    val muxedJwt =
+      TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L, TEST_HOME_DOMAIN, TEST_CLIENT_DOMAIN)
+    sep24Service.deposit(muxedJwt, createTestTransactionRequest())
+
+    assertEquals(muxedJwt.muxedAccount, slotTxn.captured.webAuthAccount)
+    assertNotEquals(TEST_ACCOUNT, slotTxn.captured.webAuthAccount)
+    assertNull(slotTxn.captured.webAuthAccountMemo)
+  }
+
+  @Test
+  fun `test find transaction rejects different muxed sub-id on same underlying account`() {
+    val muxedAJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val muxedBJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 22L)
+
+    val testTxn = createTestTransaction("deposit")
+    testTxn.webAuthAccount = muxedAJwt.muxedAccount
+    every { txnStore.findByTransactionId(any()) } returns testTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    // muxed-A can read its own
+    assertEquals(
+      testTxn.transactionId,
+      sep24Service.findTransaction(muxedAJwt, gtr).transaction.id,
+    )
+    // muxed-B (same underlying G) cannot
+    assertThrows<SepNotFoundException> { sep24Service.findTransaction(muxedBJwt, gtr) }
+  }
+
+  @Test
+  fun `test find transaction allows muxed user to read own legacy G-stored row by ID`() {
+    // Backwards-compat path for transactions created before muxed-aware storage:
+    // webAuthAccount was stored as the underlying G-account. A muxed token reading
+    // such a legacy row by ID is admitted via the G-fallback branch.
+    val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+
+    val legacyTxn = createTestTransaction("deposit")
+    legacyTxn.webAuthAccount = TEST_ACCOUNT // legacy: G-stored, no muxed info
+    legacyTxn.webAuthAccountMemo = null
+    every { txnStore.findByTransactionId(any()) } returns legacyTxn
+
+    val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+    assertEquals(
+      legacyTxn.transactionId,
+      sep24Service.findTransaction(muxedJwt, gtr).transaction.id,
+    )
+  }
+
+  @Test
+  fun `test find transactions only returns rows for own muxed sub-id`() {
+    val muxedAJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    every { txnStore.findTransactions(muxedAJwt.muxedAccount, null, any()) } returns
+      createTestTransactions("deposit")
+    every { txnStore.findTransactions(TEST_ACCOUNT, null, any()) } returns emptyList()
+
+    val request = GetTransactionsRequest()
+    request.assetCode = TEST_ASSET
+    val response = sep24Service.findTransactions(muxedAJwt, request)
+
+    assertEquals(2, response.transactions.size)
+    verify(exactly = 1) { txnStore.findTransactions(muxedAJwt.muxedAccount, null, any()) }
+    verify(exactly = 0) { txnStore.findTransactions(TEST_ACCOUNT, null, any()) }
+  }
+
   private fun createTestWebAuthJwt(): WebAuthJwt {
     return TestHelper.createWebAuthJwt(TEST_ACCOUNT, null, TEST_HOME_DOMAIN, TEST_CLIENT_DOMAIN)
   }
@@ -735,6 +879,66 @@ internal class Sep24ServiceTest {
       TEST_HOME_DOMAIN,
       TEST_CLIENT_DOMAIN,
     )
+  }
+
+  @Test
+  fun `test withdraw rejects already-bound quote`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      withdrawQuote.apply { transactionId = "already-used-txn" }
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.withdraw(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(withdrawQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test withdraw bind failure rejects second use`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      withdrawQuote.apply { transactionId = null }
+    every { txnStore.save(any()) } returns null
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns false
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.withdraw(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(withdrawQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test deposit rejects already-bound quote`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      depositQuote.apply { transactionId = "already-used-txn" }
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.deposit(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(depositQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test deposit bind failure rejects second use`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      depositQuote.apply { transactionId = null }
+    every { txnStore.save(any()) } returns null
+    every { sep38QuoteStore.bindToTransaction(any(), any()) } returns false
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.deposit(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(depositQuote.id)
+        )
+      }
+    assert(ex.message!!.contains("has already been used"))
   }
 
   private fun createTestInteractiveJwt(accountMemo: String?): Sep24InteractiveUrlJwt {

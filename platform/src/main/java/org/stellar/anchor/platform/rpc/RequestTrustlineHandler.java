@@ -18,7 +18,6 @@ import org.stellar.anchor.api.rpc.method.RequestTrustRequest;
 import org.stellar.anchor.api.rpc.method.RpcMethod;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
@@ -31,15 +30,12 @@ import org.stellar.anchor.sep6.Sep6TransactionStore;
 
 public class RequestTrustlineHandler extends RpcTransactionStatusHandler<RequestTrustRequest> {
 
-  private final CustodyConfig custodyConfig;
-
   public RequestTrustlineHandler(
       Sep6TransactionStore txn6Store,
       Sep24TransactionStore txn24Store,
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
       AssetService assetService,
-      CustodyConfig custodyConfig,
       EventService eventService,
       MetricsService metricsService) {
     super(
@@ -51,18 +47,12 @@ public class RequestTrustlineHandler extends RpcTransactionStatusHandler<Request
         eventService,
         metricsService,
         RequestTrustRequest.class);
-    this.custodyConfig = custodyConfig;
   }
 
   @Override
   protected void validate(JdbcSepTransaction txn, RequestTrustRequest request)
       throws InvalidRequestException, InvalidParamsException, BadRequestException {
     super.validate(txn, request);
-
-    if (custodyConfig.isCustodyIntegrationEnabled()) {
-      throw new InvalidRequestException(
-          String.format("RPC method[%s] requires disabled custody integration", getRpcMethod()));
-    }
   }
 
   @Override

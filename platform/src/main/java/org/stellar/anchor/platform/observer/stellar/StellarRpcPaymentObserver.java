@@ -82,6 +82,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Override
   void shutdownInternal() {
     task.cancel(true);
+    executorService.shutdownNow();
     status = ObserverStatus.SHUTDOWN;
   }
 
@@ -123,17 +124,19 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       lastActivityTime = Instant.now();
       silenceTimeoutCount = 0;
       metricLatestBlockRead.set(response.getLatestLedger());
-      if (response.getEvents() != null && !response.getEvents().isEmpty()) {
-        processEvents(response.getEvents());
-      }
-      // Save the cursor for the next request
-      cursor = response.getCursor();
       try {
-        saveCursor(cursor);
-        metricLatestBlockProcessed.set(response.getLatestLedger());
-      } catch (Exception tex) {
-        warnF("Failed to persist RPC cursor. Will retry next tick. ex={}", tex.getMessage());
-        setStatus(ObserverStatus.DATABASE_ERROR);
+        if (response.getEvents() != null && !response.getEvents().isEmpty()) {
+          processEvents(response.getEvents());
+        }
+      } finally {
+        try {
+          saveCursor(response.getCursor());
+          streamBackoffTimer.reset();
+          metricLatestBlockProcessed.set(response.getLatestLedger());
+        } catch (Exception tex) {
+          warnF("Failed to persist RPC cursor. Will retry next tick. ex={}", tex.getMessage());
+          setStatus(ObserverStatus.DATABASE_ERROR);
+        }
       }
     } catch (IOException ioex) {
       warnF(
@@ -153,9 +156,16 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     debugF("Processing {} 'transfer' events", events.size());
 
     for (EventInfo event : events) {
-      ShouldProcessResult result = shouldProcess(event);
-      if (result.shouldProcess) {
-        processTransferEvent(result);
+      try {
+        ShouldProcessResult result = shouldProcess(event);
+        if (result.shouldProcess) {
+          processTransferEvent(result);
+        }
+      } catch (Exception ex) {
+        warnF(
+            "Skip event due to unexpected error: {}. ex={}",
+            GsonUtils.getInstance().toJson(event),
+            ex.toString());
       }
     }
   }
@@ -219,8 +229,16 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       if (scValue.getDiscriminant() == SCValType.SCV_I128) {
         amount = Scv.fromInt128(scValue).longValue();
       } else if (scValue.getDiscriminant() == SCValType.SCV_MAP) {
-        amount = Scv.fromInt128(scValue.getMap().getSCMap()[0].getVal()).longValue();
-        SCVal memoVal = scValue.getMap().getSCMap()[1].getVal();
+        var entries = scValue.getMap() == null ? null : scValue.getMap().getSCMap();
+        if (entries == null || entries.length < 2) {
+          return builder.build();
+        }
+        SCVal amountVal = entries[0].getVal();
+        SCVal memoVal = entries[1].getVal();
+        if (amountVal.getDiscriminant() != SCValType.SCV_I128) {
+          return builder.build();
+        }
+        amount = Scv.fromInt128(amountVal).longValue();
         eventMemo =
             switch (memoVal.getDiscriminant()) {
               case SCV_STRING -> memoVal.getStr().getSCString().toString();
@@ -229,12 +247,17 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                   new String(Base64.getEncoder().encode(memoVal.getBytes().getSCBytes()));
               default -> null;
             };
-        if (scValue.getMap().getSCMap()[1].getVal().getDiscriminant() == SCValType.SCV_U64) {
-          toAddr =
-              new MuxedAccount(
-                      Scv.fromAddress(to).toString(),
-                      Scv.fromUint64(scValue.getMap().getSCMap()[1].getVal()))
-                  .getAddress();
+        if (memoVal.getDiscriminant() == SCValType.SCV_U64) {
+          try {
+            toAddr =
+                new MuxedAccount(Scv.fromAddress(to).toString(), Scv.fromUint64(memoVal))
+                    .getAddress();
+          } catch (IllegalArgumentException iae) {
+            warnF(
+                "Cannot build MuxedAccount for address '{}', using unmuxed value. ex={}",
+                toAddr,
+                iae.getMessage());
+          }
         }
       }
 
@@ -252,11 +275,9 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           .eventMemo(eventMemo)
           .sep11Asset(asset.getStr().getSCString().toString())
           .build();
-    } catch (IOException ioex) {
+    } catch (Exception ex) {
       warnF(
-          "Skip processing event: {}. ex={}",
-          GsonUtils.getInstance().toJson(event),
-          ioex.getMessage());
+          "Skip processing event: {}. ex={}", GsonUtils.getInstance().toJson(event), ex.toString());
       return builder.build();
     }
   }

@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.data;
 
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.stellar.anchor.auth.Nonce;
 import org.stellar.anchor.auth.NonceStore;
@@ -25,5 +26,9 @@ public class JdbcNonceStore implements NonceStore {
     int expired = jdbcNonceRepo.countExpired();
     jdbcNonceRepo.deleteAllExpired();
     Log.debug("Deleted " + expired + " expired nonces");
+  }
+
+  public int markAsUsed(String id, Instant now) {
+    return jdbcNonceRepo.markAsUsed(id, now);
   }
 }

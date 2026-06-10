@@ -10,8 +10,4 @@ public class InvalidParamsException extends RpcException {
   public InvalidParamsException(String message) {
     super(INVALID_PARAMS, message);
   }
-
-  public InvalidParamsException(String message, Throwable e) {
-    super(INVALID_PARAMS, message, e);
-  }
 }

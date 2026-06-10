@@ -31,7 +31,6 @@ import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.MuxedAccount
-import org.stellar.walletsdk.anchor.customer
 import org.stellar.walletsdk.asset.IssuedAssetId
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -119,9 +118,8 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
 
     // Supply missing KYC info to continue with the transaction
     val additionalRequiredFields =
-      anchor
-        .customer(token)
-        .get(transactionId = deposit.id)
+      wallet.sep12
+        .getCustomer(transactionId = deposit.id)!!
         .fields
         ?.filter { it.key != null && it.value?.optional == false }
         ?.map { it.key!! }

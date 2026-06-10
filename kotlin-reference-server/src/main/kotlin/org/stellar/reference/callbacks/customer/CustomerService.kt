@@ -55,8 +55,17 @@ class CustomerService(
           customer
         }
         request.id != null -> {
-          customerRepository.get(request.id)
-            ?: throw NotFoundException("customer for 'id' '${request.id}' not found", request.id)
+          val customer =
+            customerRepository.get(request.id)
+              ?: throw NotFoundException("customer for 'id' '${request.id}' not found", request.id)
+          assertCustomerMatchesRequest(
+            customer,
+            request.id,
+            request.account,
+            request.memo,
+            request.memoType
+          )
+          customer
         }
         request.account != null -> {
           customerRepository.get(request.account, request.memo, request.memoType)
@@ -80,7 +89,19 @@ class CustomerService(
         request.transactionId != null -> {
           getCustomerFromTransaction(request.transactionId, request.type)
         }
-        request.id != null -> customerRepository.get(request.id)
+        request.id != null -> {
+          val customer = customerRepository.get(request.id)
+          if (customer != null) {
+            assertCustomerMatchesRequest(
+              customer,
+              request.id,
+              request.account,
+              request.memo,
+              request.memoType
+            )
+          }
+          customer
+        }
         request.account != null ->
           customerRepository.get(request.account, request.memo, request.memoType)
         else -> {
@@ -248,6 +269,24 @@ class CustomerService(
       txnCustomer.account != null ->
         customerRepository.get(txnCustomer.account, txnCustomer.memo, memoType)
       else -> throw BadRequestException("Either id or account must be provided")
+    }
+  }
+
+  private fun assertCustomerMatchesRequest(
+    customer: Customer,
+    requestId: String,
+    requestAccount: String?,
+    requestMemo: String?,
+    requestMemoType: String?,
+  ) {
+    if (requestAccount != null && requestAccount != customer.stellarAccount) {
+      throw NotFoundException("customer for 'id' '$requestId' not found", requestId)
+    }
+    if (requestMemo != null && requestMemo != customer.memo) {
+      throw NotFoundException("customer for 'id' '$requestId' not found", requestId)
+    }
+    if (requestMemoType != null && requestMemoType != customer.memoType) {
+      throw NotFoundException("customer for 'id' '$requestId' not found", requestId)
     }
   }
 

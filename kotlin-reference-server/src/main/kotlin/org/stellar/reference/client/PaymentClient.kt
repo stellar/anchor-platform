@@ -4,6 +4,7 @@ import java.math.BigInteger
 import org.stellar.sdk.*
 import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
 import org.stellar.sdk.Auth.authorizeEntry
+import org.stellar.sdk.contract.AssembledTransaction
 import org.stellar.sdk.exception.BadRequestException
 import org.stellar.sdk.operations.InvokeHostFunctionOperation
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
@@ -85,21 +86,21 @@ class PaymentClient(
         .sourceAccount(keyPair.accountId)
         .build()
 
-    var account = rpc.getAccount(keyPair.accountId)
-    val transaction =
-      TransactionBuilder(account, Network.TESTNET)
+    val transactionBuilder =
+      TransactionBuilder(rpc.getAccount(keyPair.accountId), Network.TESTNET)
         .addOperation(operation)
         .setBaseFee(MIN_BASE_FEE)
         .setTimeout(300)
-        .build()
 
-    val simulationResponse = rpc.simulateTransaction(transaction)
+    val simulationResponse =
+      AssembledTransaction<SCVal>(transactionBuilder, rpc, keyPair, null, 30)
+        .simulate(true)
+        .simulation
     val signedAuthEntries = mutableListOf<SorobanAuthorizationEntry>()
     simulationResponse.results.forEach {
       it.auth.forEach { entryXdr ->
         val entry = SorobanAuthorizationEntry.fromXdrBase64(entryXdr)
         val validUntilLedgerSeq = simulationResponse.latestLedger + 10
-
         val signedEntry = authorizeEntry(entry, keyPair, validUntilLedgerSeq, Network.TESTNET)
         signedAuthEntries.add(signedEntry)
       }
@@ -115,9 +116,8 @@ class PaymentClient(
         .auth(signedAuthEntries)
         .build()
 
-    account = rpc.getAccount(keyPair.accountId)
     val authorizedTransaction =
-      TransactionBuilder(account, Network.TESTNET)
+      TransactionBuilder(rpc.getAccount(keyPair.accountId), Network.TESTNET)
         .addOperation(signedOperation)
         .setBaseFee(MIN_BASE_FEE)
         .setTimeout(300)

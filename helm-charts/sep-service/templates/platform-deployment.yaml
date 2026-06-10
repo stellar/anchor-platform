@@ -118,6 +118,16 @@ spec:
                   name: {{ .Values.fullName }}-secrets
                   key: SEP45_JWT_SECRET
                   optional: true
+            - name: SECRET_CALLBACK_API_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: CALLBACK_API_AUTH_SECRET
+            - name: SECRET_PLATFORM_API_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fullName }}-secrets
+                  key: PLATFORM_API_AUTH_SECRET
           resources:
             requests:
               memory: {{ .Values.services.platform.deployment.resources.requests.memory }}

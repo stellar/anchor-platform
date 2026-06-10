@@ -85,7 +85,6 @@ communicate with each other.
 127.0.0.1 reference-db
 127.0.0.1 wallet-server
 127.0.0.1 platform
-127.0.0.1 custody-server
 127.0.0.1 host.docker.internal
 ```
 
@@ -139,7 +138,7 @@ After the docker compose start and starting all servers, you can run the essenti
 
 ### Starting the servers with a specific test profile
 
-`export TEST_PROFILE_NAME=rpc && ./gradlew startServersWithTestProfile`
+`export TEST_PROFILE_NAME=default && ./gradlew startServersWithTestProfile`
 
 ## Set up the Git Hooks
 
@@ -199,10 +198,6 @@ Several IntelliJ run configurations are provided to make it easier to run the pr
 
 - `Docker - Run Dev Stack - Kafka, Postgres, SEP24 Reference UI`: runs the development stack locally, using `docker-compose`.
 - `Test Profile: default`: runs the tests with the default profile.
-- `Test Profile: rpc`: runs the tests with the rpc profile.
-- `Test Profile: custody`: runs the tests with the custody profile.
-- `Test Profile: auth-apikey-custody`: runs the tests with the auth-apikey-custody profile.
-- `Test Profile: auth-jwt-custody`: runs the tests with the auth-jwt-custody profile.
 - `Test Profile: auth-apikey-platform`: runs the tests with the auth-apikey-platform profile.
 - `Test Profile: auth-jwt-platform`: runs the tests with the auth-jwt-platform profile.
 - `Test Profile: host-docker-internal`: runs the tests with the host-docker-internal profile.
@@ -213,7 +208,6 @@ Several IntelliJ run configurations are provided to make it easier to run the pr
 - `Event Processing Server: default`: runs the Event Processing server locally with `default` profile.
 - `Reference Server: default`: runs the Reference server locally with `default` profile.
 - `Wallet Reference Server: default`: runs the Wallet Reference server locally with `default` profile.
-- `Custody Server: custody`: runs the Custody server locally with `custody` profile.
 
 ## Test Profiles
 
@@ -221,10 +215,6 @@ There are several test profiles that can be used to start the Anchor platform se
 the `service-runner/src/main/resources/profiles` folder.
 
 - `default`: starts all servers with the most commonly used configuration.
-- `rpc`: starts all servers with the RPC enabled.
-- `custody`: starts all servers with the custody servers enabled.
-- `auth-apikey-custody`: starts the custody servers with the API key authentication enabled.
-- `auth-jwt-custody`: starts the custody servers with the JWT authentication enabled.
 - `auth-apikey-platform`: starts the platform servers with the API key authentication enabled.
 - `auth-jwt-platform`: starts the platform servers with the JWT authentication enabled.
 - `deployment`: starts all servers so that all SEPs can be tested using the demo wallet.
@@ -258,9 +248,9 @@ If you would like to debug the unit tests or the end-to-end tests, there are two
 - Check if there are previous docker containers running on your machine. If there are, please stop and delete them.
 - Navigate to the directory to the project folder
 - `./gradlew dockerComposeStart` to start the development stack.
-- `export TEST_PROFILE_NAME=rpc && ./gradlew startServersWithTestProfile` to start the servers with `rpc`. You can also
+- `export TEST_PROFILE_NAME=default && ./gradlew startServersWithTestProfile` to start the servers. You can also
   choose other test profile name by changing the value of `TEST_PROFILE_NAME`.
-- `./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.RpcTestSuite`
+- `./gradlew :extended-tests:test --tests org.stellar.anchor.platform.suite.End2EndTestSuite`
 
 ## Running the Tests From Gradle in IntelliJ
 

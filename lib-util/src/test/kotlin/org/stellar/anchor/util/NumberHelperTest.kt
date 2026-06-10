@@ -33,7 +33,11 @@ class NumberHelperTest {
         "101.000000, 2",
         "-1.00, 2",
         "01.00, 2",
-        "1.000, 2"
+        "1.000, 2",
+        "1.0E+5, 2",
+        "1.0E+10, 2",
+        "1.23E+2, 2",
+        "9999999999.99, 2",
       ]
   )
   fun `test proper significant decimals`(value: String, maxDecimals: Int) {
@@ -49,6 +53,12 @@ class NumberHelperTest {
         "1.0000001, 4",
         "-1.0000001, 4",
         "a, 1, 2",
+        "1.0E+500000000, 2",
+        "1.0E+20, 2",
+        "9.99E+999999999, 4",
+        "1E+21, 2",
+        "1.0E-21, 4",
+        "-1.0E+500000000, 2",
       ]
   )
   fun `test violating significant decimals`(value: String, maxDecimals: Int) {

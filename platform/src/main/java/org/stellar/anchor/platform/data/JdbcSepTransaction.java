@@ -6,6 +6,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.Transient;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.List;
 import lombok.Getter;
@@ -24,6 +25,8 @@ public abstract class JdbcSepTransaction {
   @Transient static Gson gson = GsonUtils.getInstance();
 
   @Id String id;
+
+  @Version Integer version;
 
   String status;
 

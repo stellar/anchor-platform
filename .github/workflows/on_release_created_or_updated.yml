@@ -5,6 +5,9 @@ on:
   release:
     types: [ created, edited ]
 
+permissions:
+  contents: read
+
 jobs:
   check_release_tag:
     runs-on: ubuntu-latest
@@ -24,15 +27,14 @@ jobs:
           echo "The release tag must match project version."
           exit 1
 
-  build_and_push_docker_image_amd64:
-    name: Push to DockerHub (tag=stellar/anchor-platform:${{ github.event.release.tag_name }}) - AMD64
+  build_docker_image_amd64:
+    name: Build Docker Image - AMD64
+    needs: [ check_release_tag ]
     runs-on: ubuntu-24.04
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Get EXPECTED_RELEASE_TAG
-        shell: bash
-        run: echo "EXPECTED_RELEASE_TAG=$(./gradlew -q printVersionName)" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -48,7 +50,8 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Docker images - AMD64
+      - name: Build and push by digest - AMD64
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -57,24 +60,20 @@ jobs:
           platforms: linux/amd64
           build-args: |
             TARGETARCH=amd64
-          tags: |
-            stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }}
-            stellar/anchor-platform:latest
-          # add build cache for faster rebuilds
+          outputs: type=image,name=stellar/anchor-platform,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build_and_push_docker_image_arm64:
-    name: Push to DockerHub (tag=stellar/anchor-platform:${{ github.event.release.tag_name }}) - ARM64
+  build_docker_image_arm64:
+    name: Build Docker Image - ARM64
+    needs: [ check_release_tag ]
     # Having a separate job for ARM64 helps to reduce overall build time.
     # The multi-arch build takes longer if running the arm build on an amd64 runner via emulation.
     runs-on: ubuntu-24.04-arm
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Get EXPECTED_RELEASE_TAG
-        shell: bash
-        run: echo "EXPECTED_RELEASE_TAG=$(./gradlew -q printVersionName)" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -90,7 +89,8 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Docker images - ARM64
+      - name: Build and push by digest - ARM64
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -99,16 +99,45 @@ jobs:
           platforms: linux/arm64
           build-args: |
             TARGETARCH=arm64
-          tags: |
-            stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }}
-            stellar/anchor-platform:latest
-          # Optional: add build cache for faster rebuilds
+          outputs: type=image,name=stellar/anchor-platform,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  create_multi_arch_manifest:
+    name: Create Multi-Arch Manifest
+    needs: [ build_docker_image_amd64, build_docker_image_arm64 ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get EXPECTED_RELEASE_TAG
+        shell: bash
+        run: echo "EXPECTED_RELEASE_TAG=$(./gradlew -q printVersionName)" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest for version tag
+        run: |
+          docker buildx imagetools create -t stellar/anchor-platform:${{ env.EXPECTED_RELEASE_TAG }} \
+            stellar/anchor-platform@${{ needs.build_docker_image_amd64.outputs.digest }} \
+            stellar/anchor-platform@${{ needs.build_docker_image_arm64.outputs.digest }}
+
+      - name: Create and push multi-arch manifest for latest tag
+        run: |
+          docker buildx imagetools create -t stellar/anchor-platform:latest \
+            stellar/anchor-platform@${{ needs.build_docker_image_amd64.outputs.digest }} \
+            stellar/anchor-platform@${{ needs.build_docker_image_arm64.outputs.digest }}
+
   complete:
     if: always()
-    needs: [ build_and_push_docker_image_amd64, build_and_push_docker_image_arm64, check_release_tag ]
+    needs: [ check_release_tag, build_docker_image_amd64, build_docker_image_arm64, create_multi_arch_manifest ]
     runs-on: ubuntu-latest
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

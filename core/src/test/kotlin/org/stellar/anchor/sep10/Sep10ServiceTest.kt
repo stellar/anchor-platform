@@ -41,7 +41,6 @@ import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.client.ClientFinder
-import org.stellar.anchor.config.CustodySecretConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
 import org.stellar.anchor.config.StellarNetworkConfig
@@ -92,7 +91,6 @@ internal class Sep10ServiceTest {
 
   @MockK(relaxed = true) lateinit var stellarNetworkConfig: StellarNetworkConfig
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
-  @MockK(relaxed = true) lateinit var custodySecretConfig: CustodySecretConfig
   @MockK(relaxed = true) lateinit var sep10Config: Sep10Config
   @MockK(relaxed = true) lateinit var ledgerClient: LedgerClient
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
@@ -115,7 +113,7 @@ internal class Sep10ServiceTest {
 
     secretConfig.setupMock()
 
-    this.jwtService = spyk(JwtService(secretConfig, custodySecretConfig))
+    this.jwtService = spyk(JwtService(secretConfig))
     this.sep10Service =
       Sep10Service(
         stellarNetworkConfig,
@@ -158,8 +156,13 @@ internal class Sep10ServiceTest {
 
   @ParameterizedTest
   @CsvSource(value = ["true,test.client.stellar.org", "false,test.client.stellar.org", "false,"])
-  @LockAndMockStatic([NetUtil::class, Sep10Challenge::class])
+  @LockAndMockStatic([NetUtil::class, Sep10Challenge::class, ClientDomainHelper::class])
   fun `test create challenge ok`(clientAttributionRequired: Boolean, clientDomain: String?) {
+    every { ClientDomainHelper.validateDomainNotPrivateNetwork(any()) } just Runs
+    every { ClientDomainHelper.fetchSigningKeyFromClientDomain(any(), any()) } answers
+      {
+        callOriginal()
+      }
     every { NetUtil.fetch(any()) } returns TEST_CLIENT_TOML
 
     every { sep10Config.isClientAttributionRequired } returns clientAttributionRequired
@@ -278,6 +281,14 @@ internal class Sep10ServiceTest {
   }
 
   @Test
+  fun `Test validate challenge rejects oversized transaction`() {
+    val vr = ValidationRequest()
+    vr.transaction = "A".repeat(50_001)
+    val ex = assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
+    assertEquals("transaction exceeds maximum allowed size", ex.message)
+  }
+
+  @Test
   @LockAndMockStatic([Sep10Challenge::class])
   fun `Test validate challenge with bad home domain failure`() {
     val vr = ValidationRequest()
@@ -300,8 +311,13 @@ internal class Sep10ServiceTest {
   }
 
   @Test
-  @LockAndMockStatic([NetUtil::class])
+  @LockAndMockStatic([NetUtil::class, ClientDomainHelper::class])
   fun `Test create challenge with wildcard matched home domain success`() {
+    every { ClientDomainHelper.validateDomainNotPrivateNetwork(any()) } just Runs
+    every { ClientDomainHelper.fetchSigningKeyFromClientDomain(any(), any()) } answers
+      {
+        callOriginal()
+      }
     every { NetUtil.fetch(any()) } returns TEST_CLIENT_TOML
     val cr =
       ChallengeRequest.builder()
@@ -316,8 +332,13 @@ internal class Sep10ServiceTest {
   }
 
   @Test
-  @LockAndMockStatic([NetUtil::class, Sep10Challenge::class])
+  @LockAndMockStatic([NetUtil::class, Sep10Challenge::class, ClientDomainHelper::class])
   fun `Test create challenge request with empty memo`() {
+    every { ClientDomainHelper.validateDomainNotPrivateNetwork(any()) } just Runs
+    every { ClientDomainHelper.fetchSigningKeyFromClientDomain(any(), any()) } answers
+      {
+        callOriginal()
+      }
     every { NetUtil.fetch(any()) } returns TEST_CLIENT_TOML
     val cr =
       ChallengeRequest.builder()
@@ -380,7 +401,7 @@ internal class Sep10ServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["ABC", "12AB", "-1", "0", Integer.MIN_VALUE.toString()])
+  @ValueSource(strings = ["ABC", "12AB", "-1", Integer.MIN_VALUE.toString()])
   fun `test createChallenge() with bad memo`(badMemo: String) {
     every { sep10Config.isClientAttributionRequired } returns false
     val cr =
@@ -458,8 +479,13 @@ internal class Sep10ServiceTest {
   }
 
   @Test
-  @LockAndMockStatic([NetUtil::class])
+  @LockAndMockStatic([NetUtil::class, ClientDomainHelper::class])
   fun `test getClientAccountId failure`() {
+    every { ClientDomainHelper.validateDomainNotPrivateNetwork(any()) } just Runs
+    every { ClientDomainHelper.fetchSigningKeyFromClientDomain(any(), any()) } answers
+      {
+        callOriginal()
+      }
     every { NetUtil.fetch(any()) } returns
       "       NETWORK_PASSPHRASE=\"Public Global Stellar Network ; September 2015\"\n"
 

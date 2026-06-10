@@ -111,6 +111,18 @@ internal class ApiKeyFilterTest {
     verify { mockFilterChain.doFilter(request, response) }
   }
 
+  @Test
+  fun `health endpoint bypasses api key auth`() {
+    every { request.method } returns "GET"
+    every { request.servletPath } returns "/health"
+    every { request.getHeader("X-Api-Key") } returns null
+
+    apiKeyFilter.doFilter(request, response, mockFilterChain)
+
+    verify { mockFilterChain.doFilter(request, response) }
+    verify(exactly = 0) { response.setStatus(HttpStatus.SC_FORBIDDEN) }
+  }
+
   @ParameterizedTest
   @ValueSource(strings = ["GET", "PUT", "POST", "DELETE"])
   fun `make sure FORBIDDEN is returned when the filter requires header names other than X-Api-Key`(

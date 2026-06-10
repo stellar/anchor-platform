@@ -47,7 +47,6 @@ public class RpcUtil {
                 .id(getTransactionId(rpcRequest.getParams()))
                 .code(ex.getErrorCode().getErrorCode())
                 .message(ex.getMessage())
-                .data(ex.getAdditionalData())
                 .build())
         .build();
   }

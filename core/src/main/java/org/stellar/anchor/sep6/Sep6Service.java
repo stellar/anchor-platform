@@ -13,6 +13,7 @@ import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 
 import com.google.common.collect.ImmutableMap;
 import io.micrometer.core.instrument.Counter;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.*;
 import org.stellar.anchor.MoreInfoUrlConstructor;
@@ -141,7 +142,7 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .webAuthAccount(token.getAccount())
+            .webAuthAccount(Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount()))
             .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
@@ -184,6 +185,7 @@ public class Sep6Service {
         .build();
   }
 
+  @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
   public StartDepositResponse depositExchange(WebAuthJwt token, StartDepositExchangeRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
@@ -256,7 +258,7 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .webAuthAccount(token.getAccount())
+            .webAuthAccount(Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount()))
             .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(request.getAccount())
             .clientDomain(token.getClientDomain())
@@ -272,6 +274,10 @@ public class Sep6Service {
 
     Sep6Transaction txn = builder.build();
     txnStore.save(txn);
+
+    if (request.getQuoteId() != null) {
+      exchangeAmountsCalculator.bindQuoteToTransaction(request.getQuoteId(), id);
+    }
 
     eventSession.publish(
         AnchorEvent.builder()
@@ -336,7 +342,7 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .webAuthAccount(token.getAccount())
+            .webAuthAccount(Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount()))
             .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
@@ -360,6 +366,7 @@ public class Sep6Service {
     return StartWithdrawResponse.builder().id(txn.getId()).build();
   }
 
+  @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
   public StartWithdrawResponse withdrawExchange(
       WebAuthJwt token, StartWithdrawExchangeRequest request) throws AnchorException {
     sep6TransactionRequestedCounter.increment();
@@ -433,7 +440,7 @@ public class Sep6Service {
                 sep6Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
-            .webAuthAccount(token.getAccount())
+            .webAuthAccount(Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount()))
             .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
@@ -445,6 +452,10 @@ public class Sep6Service {
 
     Sep6Transaction txn = builder.build();
     txnStore.save(txn);
+
+    if (request.getQuoteId() != null) {
+      exchangeAmountsCalculator.bindQuoteToTransaction(request.getQuoteId(), id);
+    }
 
     eventSession.publish(
         AnchorEvent.builder()
@@ -467,7 +478,8 @@ public class Sep6Service {
     if (request == null) {
       throw new SepValidationException("missing request");
     }
-    if (!request.getAccount().equals(token.getAccount())) {
+    String tokenAccount = Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
+    if (!request.getAccount().equals(tokenAccount)) {
       throw new SepNotAuthorizedException("account does not match token");
     }
     if (assetService.getAsset(request.getAssetCode()) == null) {
@@ -477,7 +489,7 @@ public class Sep6Service {
 
     // Query the transaction store
     List<Sep6Transaction> transactions =
-        txnStore.findTransactions(token.getAccount(), token.getAccountMemo(), request);
+        txnStore.findTransactions(tokenAccount, token.getAccountMemo(), request);
     List<Sep6TransactionResponse> responses = new ArrayList<>();
     for (Sep6Transaction txn : transactions) {
       String lang = validateLanguage(languageConfig, request.getLang());
@@ -512,12 +524,13 @@ public class Sep6Service {
           "One of id, stellar_transaction_id, or external_transaction_id is required");
     }
 
-    // Validate the transaction
-    if (txn == null) {
+    // Validate the transaction. M-prefixed stored values (post-fix muxed-aware
+    // storage) require an exact muxed match; non-muxed stored values fall back to
+    // the underlying G so that legacy rows predating muxed-aware storage remain
+    // reachable by their original creator. The listing endpoint stays strict, so
+    // legacy rows are reachable by direct ID only — they are not enumerable.
+    if (txn == null || !webAuthAccountMatches(txn.getWebAuthAccount(), token)) {
       throw new NotFoundException("transaction not found");
-    }
-    if (!Objects.equals(txn.getWebAuthAccount(), token.getAccount())) {
-      throw new NotFoundException("account does not match token");
     }
     if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
       throw new NotFoundException("account memo does not match token");
@@ -597,5 +610,21 @@ public class Sep6Service {
       }
     }
     return response;
+  }
+
+  /**
+   * Whether the stored web_auth_account belongs to the requesting token. M-prefixed stored values
+   * (post-fix muxed-aware storage) require an exact muxed match; non-muxed stored values fall back
+   * to the underlying G so that legacy rows predating muxed-aware storage remain reachable by their
+   * original creator.
+   */
+  private static boolean webAuthAccountMatches(String storedAccount, WebAuthJwt token) {
+    if (storedAccount == null) {
+      return false;
+    }
+    if (storedAccount.startsWith("M")) {
+      return storedAccount.equals(token.getMuxedAccount());
+    }
+    return storedAccount.equals(token.getAccount());
   }
 }

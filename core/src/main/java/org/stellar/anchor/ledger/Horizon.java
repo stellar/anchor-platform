@@ -108,7 +108,11 @@ public class Horizon implements LedgerClient {
       debug("Transaction not found: " + txnHash);
       return null;
     } catch (NetworkException nex) {
-      throw new LedgerException("Error getting transaction: " + txnHash, nex);
+      throw new LedgerException(
+          String.format(
+              "Error getting transaction: %s. Code: %s, body: %s",
+              txnHash, nex.getCode(), nex.getBody()),
+          nex);
     }
 
     TransactionEnvelope txnEnv;

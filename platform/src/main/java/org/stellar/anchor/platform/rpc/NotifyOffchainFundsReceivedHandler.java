@@ -20,8 +20,6 @@ import org.stellar.anchor.api.rpc.method.NotifyOffchainFundsReceivedRequest;
 import org.stellar.anchor.api.rpc.method.RpcMethod;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.asset.AssetService;
-import org.stellar.anchor.config.CustodyConfig;
-import org.stellar.anchor.custody.CustodyService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
@@ -36,17 +34,12 @@ import org.stellar.anchor.sep6.Sep6TransactionStore;
 public class NotifyOffchainFundsReceivedHandler
     extends RpcTransactionStatusHandler<NotifyOffchainFundsReceivedRequest> {
 
-  private final CustodyService custodyService;
-  private final CustodyConfig custodyConfig;
-
   public NotifyOffchainFundsReceivedHandler(
       Sep6TransactionStore txn6Store,
       Sep24TransactionStore txn24Store,
       Sep31TransactionStore txn31Store,
       RequestValidator requestValidator,
       AssetService assetService,
-      CustodyService custodyService,
-      CustodyConfig custodyConfig,
       EventService eventService,
       MetricsService metricsService) {
     super(
@@ -58,8 +51,6 @@ public class NotifyOffchainFundsReceivedHandler
         eventService,
         metricsService,
         NotifyOffchainFundsReceivedRequest.class);
-    this.custodyService = custodyService;
-    this.custodyConfig = custodyConfig;
   }
 
   @Override
@@ -170,23 +161,6 @@ public class NotifyOffchainFundsReceivedHandler
     if (request.getFeeDetails() != null) {
       txn.setAmountFee(request.getFeeDetails().getTotal());
       txn.setFeeDetailsList(request.getFeeDetails().getDetails());
-    }
-
-    switch (Sep.from(txn.getProtocol())) {
-      case SEP_6:
-        JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
-        if (custodyConfig.isCustodyIntegrationEnabled()) {
-          custodyService.createTransaction(txn6);
-        }
-        break;
-      case SEP_24:
-        JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
-        if (custodyConfig.isCustodyIntegrationEnabled()) {
-          custodyService.createTransaction(txn24);
-        }
-        break;
-      default:
-        break;
     }
   }
 }

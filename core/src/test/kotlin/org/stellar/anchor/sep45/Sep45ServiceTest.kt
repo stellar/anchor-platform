@@ -72,8 +72,7 @@ class Sep45ServiceTest {
     every { sep45Config.webAuthContractId } returns TEST_CONTRACT_ID
 
     every { nonceManager.create(300) } returns nonce
-    every { nonceManager.verify(any()) } returns true
-    every { nonceManager.use(any()) } answers {}
+    every { nonceManager.verifyAndUse(any()) } returns true
     every { nonce.id } returns "nonce-id"
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns passphrase
     every { stellarRpc.latestLedger } returns GetLatestLedgerResponse("id", 23, 123455)
@@ -191,6 +190,16 @@ class Sep45ServiceTest {
     val ex =
       assertThrows(BadRequestException::class.java) { sep45Service.validate(validationRequest) }
     assertEquals("authorization_entries is required", ex.message)
+  }
+
+  @Test
+  fun `test validate throws BadRequestException when auth entries exceed max size`() {
+    val validationRequest =
+      ValidationRequest.builder().authorizationEntries("A".repeat(50_001)).build()
+
+    val ex =
+      assertThrows(BadRequestException::class.java) { sep45Service.validate(validationRequest) }
+    assertEquals("authorization_entries exceeds maximum allowed size", ex.message)
   }
 
   @Test

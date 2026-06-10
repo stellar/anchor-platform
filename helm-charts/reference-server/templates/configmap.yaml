@@ -13,11 +13,9 @@ data:
       distributionWalletMemo:
       distributionWalletMemoType:
       enableTest: true
-      custodyEnabled: false
-      rpcEnabled: false
 
     auth:
-      type: NONE
+      type: {{ .Values.config.auth.type | default "NONE" }}
 
     data:
       database: postgres

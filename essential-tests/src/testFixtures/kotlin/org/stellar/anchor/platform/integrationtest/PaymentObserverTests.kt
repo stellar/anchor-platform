@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -65,7 +66,7 @@ class PaymentObserverTests {
 
       // the wasmId is the wasm hash of the contract under soroban/contracts/account.
       // https://stellar.expert/explorer/testnet/contract/CAYXY6QGTPOCZ676MLGT5JFESVROJ6OJF7VW3LLXMTC2RQIZTP5JYNEL
-      val wasmId = "ae95eb9d4bab6a01022af3bda941cf7603809adb173f82d46f70bd22b005c068"
+      val wasmId = "05c37b331d977a07bb77c002b970c40baa3875d3bfb5039a82aab368a2896fd3"
       walletContractId =
         createContractWithWasmIdAndGetContractId(
           stellarRpc,
@@ -301,9 +302,11 @@ class PaymentObserverTests {
     fromEvent: List<PaymentTransferEvent>?,
     toEvent: List<PaymentTransferEvent>?,
   ) {
-    assertEquals(1, fromEvent?.size)
-    assertEquals(1, toEvent?.size)
-    assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
+    assertNotNull(fromEvent) { "Observer did not capture a fromEvent within timeout" }
+    assertNotNull(toEvent) { "Observer did not capture a toEvent within timeout" }
+    assertEquals(1, fromEvent!!.size)
+    assertEquals(1, toEvent!!.size)
+    assertEquals(fromKeyPair.accountId, fromEvent[0].from)
     assertEquals(toKeyPair.accountId, fromEvent[0].to)
     val paymentOperation: PaymentOperation = txn.operations[0] as PaymentOperation
     assertEquals(
@@ -322,9 +325,11 @@ class PaymentObserverTests {
     fromEvent: List<PaymentTransferEvent>?,
     toEvent: List<PaymentTransferEvent>?,
   ) {
-    assertEquals(1, fromEvent?.size)
-    assertEquals(1, toEvent?.size)
-    assertEquals(fromKeyPair.accountId, fromEvent!![0].from)
+    assertNotNull(fromEvent) { "Observer did not capture a fromEvent within timeout" }
+    assertNotNull(toEvent) { "Observer did not capture a toEvent within timeout" }
+    assertEquals(1, fromEvent!!.size)
+    assertEquals(1, toEvent!!.size)
+    assertEquals(fromKeyPair.accountId, fromEvent[0].from)
     assertEquals(toKeyPair.accountId, fromEvent[0].to)
     val paymentOperation: PathPaymentStrictSendOperation =
       txn.operations[0] as PathPaymentStrictSendOperation
@@ -342,7 +347,7 @@ class PaymentObserverTests {
   private suspend fun waitForEventsCoroutine(
     fromAccountId: String,
     listener: EventCapturingListener,
-    timeout: Long = 10000L,
+    timeout: Long = 60000L,
   ) {
     val startTime = System.currentTimeMillis()
     while (System.currentTimeMillis() - startTime <= timeout) {
@@ -353,7 +358,9 @@ class PaymentObserverTests {
       }
       delay(1000)
     }
-    info("Timeout waiting for event for account: $fromAccountId")
+    throw AssertionError(
+      "Timed out after ${timeout}ms waiting for event from account $fromAccountId"
+    )
   }
 
   private fun sendTestPayment(fromKeyPair: KeyPair, toKeyPair: KeyPair): Transaction {

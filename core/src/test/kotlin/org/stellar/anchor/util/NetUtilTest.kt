@@ -4,6 +4,7 @@ package org.stellar.anchor.util
 
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
+import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.net.MalformedURLException
 import okhttp3.Response
@@ -43,7 +44,8 @@ internal class NetUtilTest {
     every { mockCall.execute() } returns mockResponse
     every { mockResponse.isSuccessful } returns true
     every { mockResponse.body } returns mockResponseBody
-    every { mockResponseBody.string() } returns "result"
+    every { mockResponseBody.contentType() } returns null
+    every { mockResponseBody.byteStream() } returns ByteArrayInputStream("result".toByteArray())
 
     val result = fetch("http://hello")
     assertEquals("result", result)
@@ -71,6 +73,19 @@ internal class NetUtilTest {
     every { mockCall.execute() } returns mockResponse
     every { mockResponse.isSuccessful } returns true
     every { mockResponse.body } returns null
+
+    assertThrows(IOException::class.java) { NetUtil.fetch("http://hello") }
+  }
+
+  @Test
+  @LockAndMockStatic([NetUtil::class])
+  fun `test fetch oversized response body`() {
+    every { getCall(any()) } returns mockCall
+    every { mockCall.execute() } returns mockResponse
+    every { mockResponse.isSuccessful } returns true
+    every { mockResponse.body } returns mockResponseBody
+    every { mockResponseBody.contentType() } returns null
+    every { mockResponseBody.byteStream() } returns ByteArrayInputStream(ByteArray(100 * 1024 + 1))
 
     assertThrows(IOException::class.java) { NetUtil.fetch("http://hello") }
   }

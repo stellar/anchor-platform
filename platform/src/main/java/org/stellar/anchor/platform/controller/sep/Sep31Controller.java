@@ -61,10 +61,11 @@ public class Sep31Controller {
       produces = {MediaType.APPLICATION_JSON_VALUE},
       method = {RequestMethod.GET})
   public Sep31GetTransactionResponse getTransaction(
-      HttpServletRequest ignoredServletRequest, @PathVariable(name = "id") String txnId)
+      HttpServletRequest servletRequest, @PathVariable(name = "id") String txnId)
       throws AnchorException {
+    WebAuthJwt webAuthJwt = SepRequestHelper.getToken(servletRequest);
     debugF("GET /transactions id={}", txnId);
-    return sep31Service.getTransaction(txnId);
+    return sep31Service.getTransaction(webAuthJwt, txnId);
   }
 
   @CrossOrigin(origins = "*")
@@ -75,12 +76,16 @@ public class Sep31Controller {
       produces = {MediaType.APPLICATION_JSON_VALUE},
       method = {RequestMethod.PATCH})
   public Sep31GetTransactionResponse patchTransaction(
-      HttpServletRequest ignoredServletRequest,
+      HttpServletRequest servletRequest,
       @PathVariable(name = "id") String txnId,
       @RequestBody Sep31PatchTransactionRequest request)
       throws AnchorException {
+    WebAuthJwt webAuthJwt = SepRequestHelper.getToken(servletRequest);
+    if (request != null) {
+      request.setId(txnId);
+    }
     debugF("PATCH /transactions id={} request={}", txnId, request);
-    return sep31Service.patchTransaction(request);
+    return sep31Service.patchTransaction(webAuthJwt, request);
   }
 
   @ExceptionHandler(Sep31MissingFieldException.class)

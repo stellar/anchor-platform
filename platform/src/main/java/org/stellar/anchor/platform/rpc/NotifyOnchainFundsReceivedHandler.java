@@ -182,7 +182,9 @@ public class NotifyOnchainFundsReceivedHandler
     } catch (LedgerException ex) {
       errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
       throw new InternalErrorException(
-          String.format("Failed to retrieve Stellar transaction by ID[%s]", stellarTxnId), ex);
+          String.format(
+              "Failed to retrieve Stellar transaction by ID[%s]: %s",
+              stellarTxnId, ex.getMessage()));
     }
 
     if (request.getAmountIn() != null) {

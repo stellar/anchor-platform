@@ -28,7 +28,6 @@ import org.stellar.anchor.api.shared.Amount
 import org.stellar.anchor.api.shared.Customers
 import org.stellar.anchor.api.shared.StellarId
 import org.stellar.anchor.asset.AssetService
-import org.stellar.anchor.config.CustodyConfig
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
 import org.stellar.anchor.event.EventService.Session
@@ -60,8 +59,6 @@ class RequestTrustlineHandlerTest {
 
   @MockK(relaxed = true) private lateinit var assetService: AssetService
 
-  @MockK(relaxed = true) private lateinit var custodyConfig: CustodyConfig
-
   @MockK(relaxed = true) private lateinit var eventService: EventService
 
   @MockK(relaxed = true) private lateinit var metricsService: MetricsService
@@ -83,7 +80,6 @@ class RequestTrustlineHandlerTest {
         txn31Store,
         requestValidator,
         assetService,
-        custodyConfig,
         eventService,
         metricsService
       )
@@ -108,28 +104,6 @@ class RequestTrustlineHandlerTest {
       "RPC method[request_trust] is not supported. Status[pending_anchor], kind[null], protocol[38], funds received[true]",
       ex.message
     )
-
-    verify(exactly = 0) { txn6Store.save(any()) }
-    verify(exactly = 0) { txn24Store.save(any()) }
-    verify(exactly = 0) { txn31Store.save(any()) }
-    verify(exactly = 0) { sepTransactionCounter.increment() }
-  }
-
-  @Test
-  fun test_handle_custodyIntegrationEnabled() {
-    val request = RequestTrustRequest.builder().transactionId(TX_ID).build()
-    val txn24 = JdbcSep24Transaction()
-    txn24.status = PENDING_ANCHOR.toString()
-    txn24.kind = DEPOSIT.kind
-    txn24.transferReceivedAt = Instant.now()
-    every { custodyConfig.isCustodyIntegrationEnabled } returns true
-
-    every { txn6Store.findByTransactionId(any()) } returns null
-    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
-    every { txn31Store.findByTransactionId(any()) } returns null
-
-    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
-    assertEquals("RPC method[request_trust] requires disabled custody integration", ex.message)
 
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
@@ -166,7 +140,6 @@ class RequestTrustlineHandlerTest {
     val txn24 = JdbcSep24Transaction()
     txn24.status = PENDING_ANCHOR.toString()
     txn24.kind = DEPOSIT.kind
-    every { custodyConfig.isCustodyIntegrationEnabled } returns false
 
     every { txn6Store.findByTransactionId(any()) } returns null
     every { txn24Store.findByTransactionId(TX_ID) } returns txn24
@@ -228,7 +201,6 @@ class RequestTrustlineHandlerTest {
     every { txn24Store.findByTransactionId(TX_ID) } returns txn24
     every { txn31Store.findByTransactionId(any()) } returns null
     every { txn24Store.save(capture(sep24TxnCapture)) } returns null
-    every { custodyConfig.isCustodyIntegrationEnabled } returns false
     every { eventSession.publish(capture(anchorEventCapture)) } just Runs
     every { metricsService.counter(AnchorMetrics.PLATFORM_RPC_TRANSACTION, "SEP", "sep24") } returns
       sepTransactionCounter
@@ -295,7 +267,6 @@ class RequestTrustlineHandlerTest {
     val txn6 = JdbcSep6Transaction()
     txn6.status = PENDING_ANCHOR.toString()
     txn6.kind = kind
-    every { custodyConfig.isCustodyIntegrationEnabled } returns false
 
     every { txn6Store.findByTransactionId(TX_ID) } returns txn6
     every { txn24Store.findByTransactionId(any()) } returns null
@@ -379,7 +350,6 @@ class RequestTrustlineHandlerTest {
     every { txn24Store.findByTransactionId(any()) } returns null
     every { txn31Store.findByTransactionId(any()) } returns null
     every { txn6Store.save(capture(sep6TxnCapture)) } returns null
-    every { custodyConfig.isCustodyIntegrationEnabled } returns false
     every { eventSession.publish(capture(anchorEventCapture)) } just Runs
     every { metricsService.counter(AnchorMetrics.PLATFORM_RPC_TRANSACTION, "SEP", "sep6") } returns
       sepTransactionCounter

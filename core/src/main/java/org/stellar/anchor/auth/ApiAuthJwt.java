@@ -31,14 +31,4 @@ public class ApiAuthJwt extends AbstractJwt {
       super(jwt);
     }
   }
-
-  public static class CustodyAuthJwt extends ApiAuthJwt {
-    public CustodyAuthJwt(long iat, long exp) {
-      super(iat, exp);
-    }
-
-    public CustodyAuthJwt(Jwt jwt) {
-      super(jwt);
-    }
-  }
 }

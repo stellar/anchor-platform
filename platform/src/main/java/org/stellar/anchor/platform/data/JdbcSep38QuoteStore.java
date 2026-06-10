@@ -30,4 +30,9 @@ public class JdbcSep38QuoteStore implements Sep38QuoteStore {
     }
     return quoteRepo.save((JdbcSep38Quote) sep38Quote);
   }
+
+  @Override
+  public boolean bindToTransaction(@NonNull String quoteId, @NonNull String transactionId) {
+    return quoteRepo.bindToTransaction(quoteId, transactionId) > 0;
+  }
 }

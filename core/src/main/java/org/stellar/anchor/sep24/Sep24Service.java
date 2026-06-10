@@ -25,6 +25,7 @@ import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.micrometer.core.instrument.Counter;
+import jakarta.transaction.Transactional;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
@@ -49,7 +50,6 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.client.CustodialClient;
-import org.stellar.anchor.config.CustodyConfig;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.config.StellarNetworkConfig;
@@ -77,7 +77,6 @@ public class Sep24Service {
   final EventService.Session eventSession;
   final InteractiveUrlConstructor interactiveUrlConstructor;
   final MoreInfoUrlConstructor moreInfoUrlConstructor;
-  final CustodyConfig custodyConfig;
   final ExchangeAmountsCalculator exchangeAmountsCalculator;
   final Counter sep24TransactionRequestedCounter =
       counter(MetricConstants.SEP24_TRANSACTION_REQUESTED);
@@ -106,7 +105,6 @@ public class Sep24Service {
       EventService eventService,
       InteractiveUrlConstructor interactiveUrlConstructor,
       MoreInfoUrlConstructor moreInfoUrlConstructor,
-      CustodyConfig custodyConfig,
       ExchangeAmountsCalculator exchangeAmountsCalculator) {
     debug("appConfig:", stellarNetworkConfig);
     debug("sep24Config:", sep24Config);
@@ -122,11 +120,17 @@ public class Sep24Service {
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.interactiveUrlConstructor = interactiveUrlConstructor;
     this.moreInfoUrlConstructor = moreInfoUrlConstructor;
-    this.custodyConfig = custodyConfig;
     this.exchangeAmountsCalculator = exchangeAmountsCalculator;
     info("Sep24Service initialized.");
   }
 
+  @Transactional(
+      rollbackOn = {
+        AnchorException.class,
+        MalformedURLException.class,
+        URISyntaxException.class,
+        RuntimeException.class
+      })
   public InteractiveTransactionResponse withdraw(
       WebAuthJwt token, Map<String, String> withdrawRequest)
       throws AnchorException, MalformedURLException, URISyntaxException {
@@ -213,7 +217,7 @@ public class Sep24Service {
                 sep24Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep24Config.getInitialUserDeadlineSeconds()))
-            .webAuthAccount(token.getAccount())
+            .webAuthAccount(Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount()))
             .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .toAccount(asset.getDistributionAccount())
@@ -223,15 +227,6 @@ public class Sep24Service {
 
     if (memo != null) {
       debug("transaction memo detected.", memo);
-
-      if (!CustodyUtils.isMemoTypeSupported(
-          custodyConfig.getType(), memoTypeString(memoType(memo)))) {
-        throw new SepValidationException(
-            String.format(
-                "Memo type[%s] is not supported for custody type[%s]",
-                memoTypeString(memoType(memo)), custodyConfig.getType()));
-      }
-
       debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
@@ -239,14 +234,6 @@ public class Sep24Service {
 
     if (refundMemo != null) {
       debug("refund memo detected.", refundMemo);
-
-      if (!CustodyUtils.isMemoTypeSupported(
-          custodyConfig.getType(), memoTypeString(memoType(refundMemo)))) {
-        throw new SepValidationException(
-            String.format(
-                "Refund memo type[%s] is not supported for custody type[%s]",
-                memoTypeString(memoType(refundMemo)), custodyConfig.getType()));
-      }
 
       builder.refundMemo(refundMemo.toString());
       builder.refundMemoType(memoTypeString(memoType(refundMemo)));
@@ -266,6 +253,10 @@ public class Sep24Service {
 
     Sep24Transaction txn = builder.build();
     txnStore.save(txn);
+
+    if (quoteId != null) {
+      exchangeAmountsCalculator.bindQuoteToTransaction(quoteId, txn.getTransactionId());
+    }
 
     eventSession.publish(
         AnchorEvent.builder()
@@ -292,6 +283,13 @@ public class Sep24Service {
     return response;
   }
 
+  @Transactional(
+      rollbackOn = {
+        AnchorException.class,
+        MalformedURLException.class,
+        URISyntaxException.class,
+        RuntimeException.class
+      })
   public InteractiveTransactionResponse deposit(
       WebAuthJwt token, Map<String, String> depositRequest)
       throws AnchorException, MalformedURLException, URISyntaxException {
@@ -412,7 +410,7 @@ public class Sep24Service {
                 sep24Config.getInitialUserDeadlineSeconds() == null
                     ? null
                     : Instant.now().plusSeconds(sep24Config.getInitialUserDeadlineSeconds()))
-            .webAuthAccount(token.getAccount())
+            .webAuthAccount(Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount()))
             .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
@@ -433,14 +431,6 @@ public class Sep24Service {
 
     Memo memo = makeMemo(depositRequest.get("memo"), depositRequest.get("memo_type"));
     if (memo != null) {
-      if (!CustodyUtils.isMemoTypeSupported(
-          custodyConfig.getType(), memoTypeString(memoType(memo)))) {
-        throw new SepValidationException(
-            String.format(
-                "Memo type[%s] is not supported for custody type[%s]",
-                memoTypeString(memoType(memo)), custodyConfig.getType()));
-      }
-
       debug("Set the transaction memo.", memo);
       builder.memo(memo.toString());
       builder.memoType(memoTypeString(memoType(memo)));
@@ -460,6 +450,10 @@ public class Sep24Service {
 
     Sep24Transaction txn = builder.build();
     txnStore.save(txn);
+
+    if (quoteId != null) {
+      exchangeAmountsCalculator.bindQuoteToTransaction(quoteId, txn.getTransactionId());
+    }
 
     eventSession.publish(
         AnchorEvent.builder()
@@ -513,8 +507,9 @@ public class Sep24Service {
           (txReq.getAssetCode() == null) ? "null" : txReq.getAssetCode());
       throw new SepValidationException("asset code not supported");
     }
+    String tokenAccount = Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
     List<Sep24Transaction> txns =
-        txnStore.findTransactions(token.getAccount(), token.getAccountMemo(), txReq);
+        txnStore.findTransactions(tokenAccount, token.getAccountMemo(), txReq);
     GetTransactionsResponse result = new GetTransactionsResponse();
     List<TransactionResponse> list = new ArrayList<>();
     debugF("found {} transactions", txns.size());
@@ -559,16 +554,19 @@ public class Sep24Service {
           "One of id, stellar_transaction_id or external_transaction_id is required.");
     }
 
-    // We should not return the transaction that belongs to other accounts.
-    if (txn == null || !txn.getWebAuthAccount().equals(token.getAccount())) {
+    // Match the stored web_auth_account against the requesting token. To preserve
+    // access to transactions created before muxed-aware storage was introduced
+    // (where muxed customers had their sub-id collapsed to the underlying G), we
+    // branch on the stored value: M-prefixed values require exact muxed match
+    // (post-fix isolation); non-muxed values fall back to comparing the underlying
+    // G-account. The listing endpoint is kept strict, so legacy rows are reachable
+    // by direct ID only — they are not enumerable.
+    if (txn == null || !webAuthAccountMatches(txn.getWebAuthAccount(), token)) {
       infoF("no transactions found with account:{}", token.getAccount());
       throw new SepNotFoundException("transaction not found");
     }
 
-    // If the token has a memo, make sure the transaction belongs to the account
-    // with the same memo.
-    if (token.getAccountMemo() != null
-        && txn.getWebAuthAccount().equals(token.getAccount() + ":" + token.getAccountMemo())) {
+    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
       infoF(
           "no transactions found with account:{} memo:{}",
           token.getAccount(),
@@ -631,5 +629,21 @@ public class Sep24Service {
     builder.amountOut(quote.getBuyAmount());
     builder.amountOutAsset(quote.getBuyAsset());
     builder.feeDetails(quote.getFee());
+  }
+
+  /**
+   * Whether the stored web_auth_account belongs to the requesting token. M-prefixed stored values
+   * (post-fix muxed-aware storage) require an exact muxed match; non-muxed stored values fall back
+   * to the underlying G so that legacy rows predating muxed-aware storage remain reachable by their
+   * original creator.
+   */
+  private static boolean webAuthAccountMatches(String storedAccount, WebAuthJwt token) {
+    if (storedAccount == null) {
+      return false;
+    }
+    if (storedAccount.startsWith("M")) {
+      return storedAccount.equals(token.getMuxedAccount());
+    }
+    return storedAccount.equals(token.getAccount());
   }
 }

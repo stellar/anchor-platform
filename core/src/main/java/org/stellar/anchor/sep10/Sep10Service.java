@@ -2,6 +2,7 @@ package org.stellar.anchor.sep10;
 
 import static java.lang.String.format;
 import static org.stellar.anchor.util.Log.*;
+import static org.stellar.anchor.util.MemoHelper.makeMemoId;
 import static org.stellar.anchor.util.MetricConstants.SEP10_CHALLENGE_CREATED;
 import static org.stellar.anchor.util.MetricConstants.SEP10_CHALLENGE_VALIDATED;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
@@ -199,15 +200,10 @@ public class Sep10Service implements ISep10Service {
 
   @Override
   public Memo validateChallengeRequestMemo(ChallengeRequest request) throws SepException {
-    // Validate memo. It should be 64-bit positive integer if not null.
+    // Validate memo. It should be a positive uint64 integer if not null.
     try {
       if (request.getMemo() != null) {
-        long memoLong = Long.parseUnsignedLong(request.getMemo());
-        if (memoLong <= 0) {
-          infoF("Invalid memo value: {}", request.getMemo());
-          throw new SepValidationException(format("Invalid memo value: %s", request.getMemo()));
-        }
-        return new MemoId(memoLong);
+        return makeMemoId(request.getMemo());
       } else {
         return null;
       }
@@ -511,8 +507,12 @@ public class Sep10Service implements ISep10Service {
 
   ChallengeTransaction parseChallenge(ValidationRequest request) throws SepValidationException {
 
-    if (request == null || request.getTransaction() == null) {
+    if (request == null || isEmpty(request.getTransaction())) {
       throw new SepValidationException("{transaction} is required.");
+    }
+
+    if (request.getTransaction().length() > 50_000) {
+      throw new SepValidationException("transaction exceeds maximum allowed size");
     }
 
     String transaction = request.getTransaction();

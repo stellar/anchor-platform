@@ -9,6 +9,7 @@ public enum AnchorMetrics {
   SEP6_TRANSACTION_DB("sep6.transaction.db"),
   PAYMENT_RECEIVED("payment.received"),
   PAYMENT_SENT("payment.sent"),
+  PAYMENT_OBSERVER_AMBIGUOUS_ROUTING("payment_observer.ambiguous_routing"),
   LOGGER("logger"),
 
   PLATFORM_RPC_TRANSACTION("platform_server.rpc_transaction"),

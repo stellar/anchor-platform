@@ -30,11 +30,6 @@ public class ServiceRunner {
         anyServerStarted = true;
       }
 
-      if (cmd.hasOption("custody-server") || cmd.hasOption("all")) {
-        startCustodyServer(null);
-        anyServerStarted = true;
-      }
-
       if (cmd.hasOption("platform-server") || cmd.hasOption("all")) {
         startPlatformServer(null);
         anyServerStarted = true;
@@ -86,7 +81,6 @@ public class ServiceRunner {
     options.addOption("h", "help", false, "Print this message.");
     options.addOption("a", "all", false, "Start all servers.");
     options.addOption("s", "sep-server", false, "Start SEP endpoint server.");
-    options.addOption("c", "custody-server", false, "Start Custody server.");
     options.addOption("p", "platform-server", false, "Start Platform API endpoint server.");
     options.addOption(
         "o", "stellar-observer", false, "Start Observer that streams from the Stellar blockchain.");
@@ -105,11 +99,6 @@ public class ServiceRunner {
   public static ConfigurableApplicationContext startPlatformServer(Map<String, String> env) {
     info("Starting platform server...");
     return new PlatformServer().start(env);
-  }
-
-  public static ConfigurableApplicationContext startCustodyServer(Map<String, String> env) {
-    info("Starting custody server...");
-    return new CustodyServer().start(env);
   }
 
   public static ConfigurableApplicationContext startStellarObserver(Map<String, String> env) {

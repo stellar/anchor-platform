@@ -56,12 +56,8 @@ class ClientFinderTest {
     every { sep10Config.allowedClientDomains } returns nonCustodialClient.domains.toList()
     every { sep10Config.allowedClientNames } returns
       listOf(custodialClient.name, nonCustodialClient.name)
-    every {
-      clientService.getClientConfigByDomain(ExchangeAmountsCalculatorTest.token.clientDomain)
-    } returns nonCustodialClient
-    every {
-      clientService.getClientConfigBySigningKey(ExchangeAmountsCalculatorTest.token.account)
-    } returns custodialClient
+    every { clientService.getClientConfigByDomain(token.clientDomain) } returns nonCustodialClient
+    every { clientService.getClientConfigBySigningKey(token.account) } returns custodialClient
 
     clientFinder = ClientFinder(sep10Config, clientService)
   }
