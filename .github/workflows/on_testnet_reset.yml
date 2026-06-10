@@ -1,0 +1,43 @@
+name: Testnet Reset
+
+on:
+  workflow_dispatch:
+
+jobs:
+  testnet_reset:
+    name: Run Testnet Reset
+    runs-on: ubuntu-latest
+    env:
+      SECRET_SEP10_SIGNING_SEED: ${{ vars.SECRET_SEP10_SIGNING_SEED }}
+      TEST_CLIENT_WALLET_SECRET: ${{ vars.TEST_CLIENT_WALLET_SECRET }}
+      TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET: ${{ vars.TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET }}
+      TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET: ${{ vars.TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET }}
+      OTHER_SEP10_SIGNING_SECRET: ${{ secrets.OTHER_SEP10_SIGNING_SECRET }}
+      TEST_WITHDRAW_FUND_CLIENT_SECRET_1: ${{ vars.TEST_WITHDRAW_FUND_CLIENT_SECRET_1 }}
+      TEST_WITHDRAW_FUND_CLIENT_SECRET_2: ${{ vars.TEST_WITHDRAW_FUND_CLIENT_SECRET_2 }}
+      TEST_DEPOSIT_FUND_CLIENT_SECRET_1: ${{ vars.TEST_DEPOSIT_FUND_CLIENT_SECRET_1 }}
+      TEST_DEPOSIT_FUND_CLIENT_SECRET_2: ${{ vars.TEST_DEPOSIT_FUND_CLIENT_SECRET_2 }}
+      USDC_ISSUER_SECRET: ${{ secrets.USDC_ISSUER_SECRET }}
+      SRT_ISSUER_SECRET: ${{ secrets.SRT_ISSUER_SECRET }}
+      TESTANCHOR_DISTRIBUTION_SECRET: ${{ secrets.TESTANCHOR_DISTRIBUTION_SECRET }}
+      TESTANCHOR_RECEIVE_SECRET: ${{ secrets.TESTANCHOR_RECEIVE_SECRET }}
+      SECRET__KEY: ${{ vars.SECRET__KEY }}
+      CLIENT_WALLET_PK_BYTES: ${{ vars.CLIENT_WALLET_PK_BYTES }}
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli --features opt
+
+      - name: Install stellar-sdk Python package
+        run: pip install stellar-sdk
+
+      - name: Run testnet reset
+        working-directory: scripts
+        run: bash testnet_reset.sh
