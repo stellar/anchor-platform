@@ -52,6 +52,11 @@ public_key() {
   python3 -c "from stellar_sdk import Keypair; print(Keypair.from_secret('$1').public_key)"
 }
 
+# Derive the raw ed25519 public key bytes (hex) from a secret key (S...)
+pk_bytes() {
+  python3 -c "from stellar_sdk import Keypair; print(Keypair.from_secret('$1').raw_public_key().hex())"
+}
+
 fund_account() {
   local public_key=$1
   log_info "Funding: $public_key"
@@ -262,7 +267,7 @@ deploy_contracts() {
     --salt 616e63686f722d706c6174666f726d \
     -- \
     --admin "$deployer_public" \
-    --signer "$CLIENT_WALLET_PK_BYTES" 2>&1)
+    --signer "$(pk_bytes "$deployer_secret")" 2>&1)
 
   if [[ $? -eq 0 ]]; then
     local account_contract_id

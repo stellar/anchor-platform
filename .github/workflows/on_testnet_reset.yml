@@ -25,7 +25,6 @@ jobs:
       TESTANCHOR_DISTRIBUTION_SECRET: ${{ secrets.TESTANCHOR_DISTRIBUTION_SECRET }}
       TESTANCHOR_RECEIVE_SECRET: ${{ secrets.TESTANCHOR_RECEIVE_SECRET }}
       SECRET__KEY: ${{ vars.SECRET__KEY }}
-      CLIENT_WALLET_PK_BYTES: ${{ vars.CLIENT_WALLET_PK_BYTES }}
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v4
