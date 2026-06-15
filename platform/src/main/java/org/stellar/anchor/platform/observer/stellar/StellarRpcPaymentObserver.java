@@ -37,6 +37,7 @@ import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.SorobanServer;
+import org.stellar.sdk.TOID;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType;
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest;
@@ -170,11 +171,31 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  private void processTransferEvent(ShouldProcessResult result) {
+  void processTransferEvent(ShouldProcessResult result) {
     debug("Processing transfer event: {}", GsonUtils.getInstance().toJson(result.event));
     try {
       LedgerTransaction txn = stellarRpc.getTransaction(result.event.getTransactionHash());
-      LedgerOperation op = txn.getOperations().get(result.event.getOperationIndex().intValue());
+      String wantedOpId =
+          String.valueOf(
+              new TOID(
+                      txn.getSequenceNumber().intValue(),
+                      txn.getApplicationOrder(),
+                      result.event.getOperationIndex().intValue() + 1)
+                  .toInt64());
+      LedgerOperation op =
+          txn.getOperations().stream()
+              .filter(o -> wantedOpId.equals(getOperationId(o)))
+              .findFirst()
+              .orElse(null);
+      if (op == null) {
+        errorF(
+            "No creditable operation found for transfer event: txHash={}, operationIndex={}."
+                + " The operation may be a contract sub-invocation with no direct representation"
+                + " in the filtered operation list. Skipping.",
+            result.event.getTransactionHash(),
+            result.event.getOperationIndex());
+        return;
+      }
       processOperation(txn, op);
     } catch (Exception ex) {
       warnF(
@@ -182,6 +203,14 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           GsonUtils.getInstance().toJson(result.event),
           ex.getMessage());
     }
+  }
+
+  String getOperationId(LedgerOperation op) {
+    if (op.getPaymentOperation() != null) return op.getPaymentOperation().getId();
+    if (op.getPathPaymentOperation() != null) return op.getPathPaymentOperation().getId();
+    if (op.getInvokeHostFunctionOperation() != null)
+      return op.getInvokeHostFunctionOperation().getId();
+    return null;
   }
 
   @Builder

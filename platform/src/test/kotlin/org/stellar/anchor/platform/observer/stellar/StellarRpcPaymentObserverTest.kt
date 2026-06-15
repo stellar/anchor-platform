@@ -5,6 +5,7 @@ import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.spyk
+import io.mockk.verify
 import java.io.IOException
 import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
@@ -26,6 +27,7 @@ import org.stellar.sdk.Address
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.SorobanServer
+import org.stellar.sdk.TOID
 import org.stellar.sdk.exception.NetworkException
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest
@@ -498,6 +500,113 @@ class StellarRpcPaymentObserverTest {
 
     assertEquals(ObserverStatus.RUNNING, observer.getStatus())
     assertEquals("POISON_CUR", observer.cursor)
+  }
+
+  @Test
+  fun `processTransferEvent credits single-op transaction at operationIndex 0`() {
+    val seqNum = 1L
+    val appOrder = 1
+    val (txn, event) =
+      setupTransferEvent(seqNum = seqNum, appOrder = appOrder, opIndex = 0, numOps = 1)
+    every { stellarRpc.getTransaction(any()) } returns txn
+
+    val capturedEvent = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
+
+    observer.processTransferEvent(
+      StellarRpcPaymentObserver.ShouldProcessResult.builder()
+        .event(event)
+        .shouldProcess(true)
+        .build()
+    )
+
+    verify(exactly = 1) { observer["handleEvent"](any<PaymentTransferEvent>()) }
+    assertEquals(
+      TOID(seqNum.toInt(), appOrder, 1).toInt64().toString(),
+      capturedEvent.captured.operationId
+    )
+  }
+
+  @Test
+  fun `processTransferEvent credits payment at operationIndex 1 via TOID lookup`() {
+    val seqNum = 1L
+    val appOrder = 1
+    val (txn, event) =
+      setupTransferEvent(seqNum = seqNum, appOrder = appOrder, opIndex = 1, numOps = 2)
+    every { stellarRpc.getTransaction(any()) } returns txn
+
+    val capturedEvent = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
+
+    observer.processTransferEvent(
+      StellarRpcPaymentObserver.ShouldProcessResult.builder()
+        .event(event)
+        .shouldProcess(true)
+        .build()
+    )
+
+    verify(exactly = 1) { observer["handleEvent"](any<PaymentTransferEvent>()) }
+    assertEquals(
+      TOID(seqNum.toInt(), appOrder, 2).toInt64().toString(),
+      capturedEvent.captured.operationId
+    )
+  }
+
+  @Test
+  fun `processTransferEvent skips sub-invocation event when no operation matches`() {
+    val event = mockk<GetEventsResponse.EventInfo>(relaxed = true)
+    every { event.transactionHash } returns "txhash"
+    every { event.operationIndex } returns 0L
+
+    val txn = mockk<LedgerTransaction>()
+    every { txn.sequenceNumber } returns 100L
+    every { txn.applicationOrder } returns 1
+    every { txn.operations } returns emptyList()
+    every { stellarRpc.getTransaction(any()) } returns txn
+
+    observer.processTransferEvent(
+      StellarRpcPaymentObserver.ShouldProcessResult.builder()
+        .event(event)
+        .shouldProcess(true)
+        .build()
+    )
+
+    verify(exactly = 0) { observer["handleEvent"](any<PaymentTransferEvent>()) }
+  }
+
+  private fun setupTransferEvent(
+    seqNum: Long,
+    appOrder: Int,
+    opIndex: Long,
+    numOps: Int,
+  ): Pair<LedgerTransaction, GetEventsResponse.EventInfo> {
+    val ops =
+      (0 until numOps).map { i ->
+        val paymentOp =
+          LedgerTransaction.LedgerPaymentOperation().apply {
+            from = KeyPair.random().accountId
+            to = KeyPair.random().accountId
+            asset = Asset.createNativeAsset().toXdr()
+            amount = BigInteger.valueOf(100)
+            id = TOID(seqNum.toInt(), appOrder, (i + 1)).toInt64().toString()
+          }
+        LedgerOperation().apply {
+          type = OperationType.PAYMENT
+          paymentOperation = paymentOp
+        }
+      }
+
+    val txn = mockk<LedgerTransaction>()
+    every { txn.sequenceNumber } returns seqNum
+    every { txn.applicationOrder } returns appOrder
+    every { txn.operations } returns ops
+    every { txn.hash } returns "txhash"
+
+    val event = mockk<GetEventsResponse.EventInfo>(relaxed = true)
+    every { event.transactionHash } returns "txhash"
+    every { event.operationIndex } returns opIndex
+
+    return Pair(txn, event)
   }
 
   private fun mockPoisonResponse(
