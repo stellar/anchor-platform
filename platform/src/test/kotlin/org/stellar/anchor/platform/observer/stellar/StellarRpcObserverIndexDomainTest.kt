@@ -337,7 +337,7 @@ class StellarRpcObserverIndexDomainTest {
 }
 
 private class LocalCursorStore : StellarPaymentStreamerCursorStore {
-  private var stellarRpcCursor = ""
+  @Volatile private var stellarRpcCursor = ""
 
   override fun saveHorizonCursor(cursor: String) {}
 
