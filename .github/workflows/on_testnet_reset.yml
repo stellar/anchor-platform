@@ -3,6 +3,9 @@ name: Testnet Reset
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   testnet_reset:
     name: Run Testnet Reset
