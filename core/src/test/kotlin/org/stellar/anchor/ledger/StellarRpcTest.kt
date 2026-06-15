@@ -7,16 +7,21 @@ import okhttp3.Request
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.stellar.anchor.api.exception.AccountNotFoundException
 import org.stellar.anchor.config.RpcAuthConfig
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.sdk.KeyPair
 import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.StrKey
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
+import org.stellar.sdk.xdr.LedgerEntry
+import org.stellar.sdk.xdr.LedgerEntryType
 import org.stellar.sdk.xdr.LedgerKey
 import org.stellar.sdk.xdr.OperationType
 
@@ -107,6 +112,71 @@ class StellarRpcTest {
       "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
       StrKey.encodeEd25519PublicKey(key.account?.accountID?.accountID?.ed25519?.uint256),
     )
+  }
+
+  @Test
+  fun `getAccount throws AccountNotFoundException when account does not exist`() {
+    val emptyResponse = mockk<GetLedgerEntriesResponse>()
+    every { emptyResponse.entries } returns emptyList()
+    every { sorobanServer.getLedgerEntries(any()) } returns emptyResponse
+
+    assertThrows<AccountNotFoundException> {
+      stellarRpc.getAccount("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG")
+    }
+  }
+
+  @Test
+  fun `getAccount encodes non-ed25519 signers without NPE`() {
+    val accountId = "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+    val hashXBytes = ByteArray(32) { it.toByte() }
+
+    val signerKey =
+      org.stellar.sdk.xdr.SignerKey().apply {
+        discriminant = org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_HASH_X
+        hashX = org.stellar.sdk.xdr.Uint256().apply { uint256 = hashXBytes }
+      }
+    val xdrSigner =
+      org.stellar.sdk.xdr.Signer().apply {
+        key = signerKey
+        weight = org.stellar.sdk.xdr.Uint32(org.stellar.sdk.xdr.XdrUnsignedInteger(1))
+      }
+    val seqNum =
+      org.stellar.sdk.xdr.SequenceNumber().apply {
+        sequenceNumber = org.stellar.sdk.xdr.Int64().apply { int64 = 0L }
+      }
+    val accountEntry =
+      org.stellar.sdk.xdr.AccountEntry.builder()
+        .accountID(KeyPair.fromAccountId(accountId).xdrAccountId)
+        .balance(org.stellar.sdk.xdr.Int64().apply { int64 = 1_000_000L })
+        .seqNum(seqNum)
+        .numSubEntries(org.stellar.sdk.xdr.Uint32(org.stellar.sdk.xdr.XdrUnsignedInteger(1)))
+        .inflationDest(null)
+        .flags(org.stellar.sdk.xdr.Uint32(org.stellar.sdk.xdr.XdrUnsignedInteger(0)))
+        .homeDomain(
+          org.stellar.sdk.xdr.String32().apply { string32 = org.stellar.sdk.xdr.XdrString("") }
+        )
+        .thresholds(org.stellar.sdk.xdr.Thresholds().apply { thresholds = byteArrayOf(0, 1, 1, 1) })
+        .signers(arrayOf(xdrSigner))
+        .ext(org.stellar.sdk.xdr.AccountEntry.AccountEntryExt.builder().discriminant(0).build())
+        .build()
+    val ledgerEntryData =
+      LedgerEntry.LedgerEntryData.builder()
+        .discriminant(LedgerEntryType.ACCOUNT)
+        .account(accountEntry)
+        .build()
+    val xdrBase64 = ledgerEntryData.toXdrBase64()
+    val response =
+      GetLedgerEntriesResponse(
+        listOf(GetLedgerEntriesResponse.LedgerEntryResult("", xdrBase64, 12345L, null)),
+        12345L,
+      )
+    every { sorobanServer.getLedgerEntries(any()) } returns response
+
+    val result = stellarRpc.getAccount(accountId)
+
+    assertEquals(accountId, result.accountId)
+    assertTrue(result.signers.any { it.key == StrKey.encodeSha256Hash(hashXBytes) })
+    assertTrue(result.signers.any { it.key == accountId })
   }
 
   @Test
