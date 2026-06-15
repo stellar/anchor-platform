@@ -332,7 +332,9 @@ class StellarRpcObserverIndexDomainTest {
       if (cursorStore.loadStellarRpcCursor() == expected) return
       Thread.sleep(100)
     }
-    throw AssertionError("Timed out waiting for cursor '$expected' (last='${cursorStore.loadStellarRpcCursor()}')")
+    throw AssertionError(
+      "Timed out waiting for cursor '$expected' (last='${cursorStore.loadStellarRpcCursor()}')"
+    )
   }
 }
 
