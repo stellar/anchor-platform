@@ -188,7 +188,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
               .findFirst()
               .orElse(null);
       if (op == null) {
-        errorF(
+        warnF(
             "No creditable operation found for transfer event: txHash={}, operationIndex={}."
                 + " The operation may be a contract sub-invocation with no direct representation"
                 + " in the filtered operation list. Skipping.",

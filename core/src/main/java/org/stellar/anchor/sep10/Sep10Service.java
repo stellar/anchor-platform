@@ -436,7 +436,7 @@ public class Sep10Service implements ISep10Service {
       sep10ChallengeValidatedCounter.increment();
       return account;
     } catch (AccountNotFoundException ex) {
-      infoF("Account {} does not exist in the Stellar Network");
+      infoF("Account {} does not exist in the Stellar Network", challenge.getClientAccountId());
       Set<String> signers = new HashSet<>();
       signers.add(challenge.getClientAccountId());
 
@@ -479,7 +479,7 @@ public class Sep10Service implements ISep10Service {
               sep10Config.getWebAuthDomain(),
               signers);
     } catch (LedgerException ex) {
-      throw new SepValidationException("Failed to fetch account: " + ex.getMessage());
+      throw new SepValidationException("Failed to fetch account: " + ex.getMessage(), ex);
     }
     sep10ChallengeValidatedCounter.increment();
     return null;
