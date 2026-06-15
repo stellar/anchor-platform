@@ -5,6 +5,7 @@ import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.spyk
+import io.mockk.verify
 import java.io.IOException
 import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
@@ -26,6 +27,7 @@ import org.stellar.sdk.Address
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.SorobanServer
+import org.stellar.sdk.TOID
 import org.stellar.sdk.exception.NetworkException
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest
@@ -498,6 +500,168 @@ class StellarRpcPaymentObserverTest {
 
     assertEquals(ObserverStatus.RUNNING, observer.getStatus())
     assertEquals("POISON_CUR", observer.cursor)
+  }
+
+  private fun setupTransferEvent(
+    fromAccount: String,
+    toAccount: String,
+    amount: BigInteger,
+    txHash: String,
+    operationIndex: Long,
+    cursorValue: String = "CURSOR",
+  ): GetEventsResponse.EventInfo {
+    val topics =
+      listOf(
+        Scv.toSymbol("transfer").toXdrBase64(),
+        Scv.toAddress(fromAccount).toXdrBase64(),
+        Scv.toAddress(toAccount).toXdrBase64(),
+        Scv.toString("native").toXdrBase64(),
+      )
+    val event = mockk<GetEventsResponse.EventInfo>(relaxed = true)
+    every { event.topic } returns topics
+    every { event.value } returns Scv.toInt128(amount).toXdrBase64()
+    every { event.transactionHash } returns txHash
+    every { event.operationIndex } returns operationIndex
+
+    every { paymentObservingAccountsManager.lookupAndUpdate(toAccount) } returns true
+    every { paymentObservingAccountsManager.lookupAndUpdate(fromAccount) } returns false
+
+    val response = mockk<GetEventsResponse>()
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } returns response
+    every { response.events } returns listOf(event)
+    every { response.latestLedger } returns 100L
+    every { response.cursor } returns cursorValue
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+
+    return event
+  }
+
+  @Test
+  fun `processTransferEvent credits payment at operationIndex=0 in single-op transaction`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val amount = BigInteger.valueOf(1_000_000L)
+    val txHash = "txHashSingleOp"
+    val seqNum = 100L
+    val appOrder = 1
+    val paymentOpId = TOID(seqNum.toInt(), appOrder, 1).toInt64().toString()
+
+    setupTransferEvent(fromAccount, toAccount, amount, txHash, operationIndex = 0L)
+
+    val paymentOp =
+      LedgerTransaction.LedgerPaymentOperation().apply {
+        from = fromAccount
+        to = toAccount
+        asset = Asset.createNativeAsset().toXdr()
+        this.amount = amount
+        id = paymentOpId
+      }
+    val op =
+      LedgerOperation().apply {
+        type = OperationType.PAYMENT
+        paymentOperation = paymentOp
+      }
+    val txn =
+      LedgerTransaction.builder()
+        .hash(txHash)
+        .sequenceNumber(seqNum)
+        .applicationOrder(appOrder)
+        .operations(listOf(op))
+        .build()
+    every { stellarRpc.getTransaction(txHash) } returns txn
+
+    val capturedEvent = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
+
+    observer.fetchEvents()
+
+    assertEquals(txHash, capturedEvent.captured.txHash)
+    assertEquals(fromAccount, capturedEvent.captured.from)
+    assertEquals(toAccount, capturedEvent.captured.to)
+    assertEquals(amount, capturedEvent.captured.amount)
+    assertEquals(paymentOpId, capturedEvent.captured.operationId)
+  }
+
+  @Test
+  fun `processTransferEvent correctly credits payment at operationIndex=1 when a non-payment op precedes it`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val amount = BigInteger.valueOf(2_000_000L)
+    val txHash = "txHashMultiOp"
+    val seqNum = 200L
+    val appOrder = 1
+    val paymentOpId = TOID(seqNum.toInt(), appOrder, 2).toInt64().toString()
+
+    setupTransferEvent(fromAccount, toAccount, amount, txHash, operationIndex = 1L, "CURSOR_MULTI")
+
+    val paymentOp =
+      LedgerTransaction.LedgerPaymentOperation().apply {
+        from = fromAccount
+        to = toAccount
+        asset = Asset.createNativeAsset().toXdr()
+        this.amount = amount
+        id = paymentOpId
+      }
+    val op =
+      LedgerOperation().apply {
+        type = OperationType.PAYMENT
+        paymentOperation = paymentOp
+      }
+    val txn =
+      LedgerTransaction.builder()
+        .hash(txHash)
+        .sequenceNumber(seqNum)
+        .applicationOrder(appOrder)
+        .operations(listOf(op))
+        .build()
+    every { stellarRpc.getTransaction(txHash) } returns txn
+
+    val capturedEvent = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
+
+    observer.fetchEvents()
+
+    assertEquals(txHash, capturedEvent.captured.txHash)
+    assertEquals(fromAccount, capturedEvent.captured.from)
+    assertEquals(toAccount, capturedEvent.captured.to)
+    assertEquals(amount, capturedEvent.captured.amount)
+    assertEquals(paymentOpId, capturedEvent.captured.operationId)
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("CURSOR_MULTI", observer.cursor)
+  }
+
+  @Test
+  fun `processTransferEvent skips and logs error when no creditable op matches operationIndex`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val txHash = "txHashSubInvocation"
+    val seqNum = 300L
+    val appOrder = 1
+
+    setupTransferEvent(
+      fromAccount,
+      toAccount,
+      BigInteger.valueOf(500_000L),
+      txHash,
+      operationIndex = 0L,
+      "CURSOR_SUBINVOKE",
+    )
+
+    val txn =
+      LedgerTransaction.builder()
+        .hash(txHash)
+        .sequenceNumber(seqNum)
+        .applicationOrder(appOrder)
+        .operations(emptyList())
+        .build()
+    every { stellarRpc.getTransaction(txHash) } returns txn
+
+    assertDoesNotThrow { observer.fetchEvents() }
+
+    verify(exactly = 0) { observer["handleEvent"](any<PaymentTransferEvent>()) }
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("CURSOR_SUBINVOKE", observer.cursor)
   }
 
   private fun mockPoisonResponse(
