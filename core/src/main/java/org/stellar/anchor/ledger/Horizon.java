@@ -97,6 +97,8 @@ public class Horizon implements LedgerClient {
           .build();
     } catch (org.stellar.sdk.exception.AccountNotFoundException e) {
       throw new AccountNotFoundException(account);
+    } catch (BadRequestException e) {
+      throw new AccountNotFoundException(account);
     } catch (Exception e) {
       throw new LedgerException("Error getting account: " + account, e);
     }
