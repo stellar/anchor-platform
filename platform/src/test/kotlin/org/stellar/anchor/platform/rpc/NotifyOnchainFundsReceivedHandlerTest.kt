@@ -8,6 +8,7 @@ import java.math.BigInteger
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -823,6 +824,130 @@ class NotifyOnchainFundsReceivedHandlerTest {
     handler.handle(request)
 
     assertEquals("sender", sep31TxnCapture.captured.fromAccount)
+    assertEquals(PENDING_RECEIVER.toString(), sep31TxnCapture.captured.status)
+    verify(exactly = 1) { txn31Store.save(any()) }
+  }
+
+  @Test
+  fun `test_handle_sep31_null_toAccount_leaves_fromAccount_unset`() {
+    val request =
+      NotifyOnchainFundsReceivedRequest.builder()
+        .transactionId(TX_ID)
+        .stellarTransactionId(STELLAR_TX_ID)
+        .build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_SENDER.toString()
+    txn31.toAccount = null
+    val sep31TxnCapture = slot<JdbcSep31Transaction>()
+
+    val ledgerTxn =
+      LedgerTransaction.builder()
+        .hash(STELLAR_TX_ID)
+        .ledger(1L)
+        .applicationOrder(1)
+        .memo(MemoHelper.toXdr(Memo.id(12345)))
+        .sourceAccount("sender")
+        .createdAt(Instant.parse(STELLAR_PAYMENT_DATE))
+        .fee(100)
+        .envelopeXdr("testEnvelopeXdr")
+        .operations(
+          listOf(
+            LedgerOperation.builder()
+              .type(OperationType.PAYMENT)
+              .paymentOperation(
+                LedgerPaymentOperation.builder()
+                  .id("11111")
+                  .amount(BigInteger.valueOf(150000000))
+                  .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
+                  .from("sender")
+                  .to(null)
+                  .build()
+              )
+              .build()
+          )
+        )
+        .build()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(TX_ID) } returns txn31
+    every { txn31Store.save(capture(sep31TxnCapture)) } returns null
+    every { ledgerClient.getTransaction(STELLAR_TX_ID) } returns ledgerTxn
+    every { eventSession.publish(any()) } just Runs
+    every { metricsService.counter(PLATFORM_RPC_TRANSACTION, "SEP", "sep31") } returns
+      sepTransactionCounter
+
+    handler.handle(request)
+
+    assertNull(sep31TxnCapture.captured.fromAccount)
+    assertEquals(PENDING_RECEIVER.toString(), sep31TxnCapture.captured.status)
+  }
+
+  @Test
+  fun `test_handle_sep31_path_payment_is_the_matching_op_credits_correct_from_account`() {
+    val request =
+      NotifyOnchainFundsReceivedRequest.builder()
+        .transactionId(TX_ID)
+        .stellarTransactionId(STELLAR_TX_ID)
+        .build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_SENDER.toString()
+    txn31.toAccount = "distAccount"
+    val sep31TxnCapture = slot<JdbcSep31Transaction>()
+
+    val twoOpLedgerTxn =
+      LedgerTransaction.builder()
+        .hash(STELLAR_TX_ID)
+        .ledger(1L)
+        .applicationOrder(1)
+        .memo(MemoHelper.toXdr(Memo.id(12345)))
+        .sourceAccount("pathSender")
+        .createdAt(Instant.parse(STELLAR_PAYMENT_DATE))
+        .fee(100)
+        .envelopeXdr("testEnvelopeXdr")
+        .operations(
+          listOf(
+            LedgerOperation.builder()
+              .type(OperationType.PAYMENT)
+              .paymentOperation(
+                LedgerPaymentOperation.builder()
+                  .id("11111")
+                  .amount(BigInteger.ONE)
+                  .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
+                  .from("decoy")
+                  .to("someoneElse")
+                  .build()
+              )
+              .build(),
+            LedgerOperation.builder()
+              .type(OperationType.PATH_PAYMENT_STRICT_SEND)
+              .pathPaymentOperation(
+                LedgerPathPaymentOperation.builder()
+                  .id("22222")
+                  .type(OperationType.PATH_PAYMENT_STRICT_SEND)
+                  .amount(BigInteger.valueOf(150000000))
+                  .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
+                  .from("pathSender")
+                  .to("distAccount")
+                  .build()
+              )
+              .build()
+          )
+        )
+        .build()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(TX_ID) } returns txn31
+    every { txn31Store.save(capture(sep31TxnCapture)) } returns null
+    every { ledgerClient.getTransaction(STELLAR_TX_ID) } returns twoOpLedgerTxn
+    every { eventSession.publish(any()) } just Runs
+    every { metricsService.counter(PLATFORM_RPC_TRANSACTION, "SEP", "sep31") } returns
+      sepTransactionCounter
+
+    handler.handle(request)
+
+    assertEquals("pathSender", sep31TxnCapture.captured.fromAccount)
     assertEquals(PENDING_RECEIVER.toString(), sep31TxnCapture.captured.status)
     verify(exactly = 1) { txn31Store.save(any()) }
   }

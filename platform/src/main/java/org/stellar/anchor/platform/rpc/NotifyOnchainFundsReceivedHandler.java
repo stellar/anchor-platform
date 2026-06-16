@@ -177,7 +177,7 @@ public class NotifyOnchainFundsReceivedHandler
             ledgerTxn.getOperations().stream()
                 .map(op -> getLedgerPayment(op))
                 .filter(Objects::nonNull)
-                .filter(p -> Objects.equals(p.getTo(), txn31.getToAccount()))
+                .filter(p -> txn31.getToAccount() != null && txn31.getToAccount().equals(p.getTo()))
                 .findFirst()
                 .orElse(null);
         if (payment != null) txn31.setFromAccount(payment.getFrom());
