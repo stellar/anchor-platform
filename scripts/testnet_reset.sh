@@ -184,14 +184,22 @@ issue_and_fund_usdc() {
     if [[ -n "$account_secret" ]]; then
       local recipient_public
       recipient_public="$(public_key "$account_secret")"
-      log_info "Sending 10000 USDC to $account_var ($recipient_public)..."
+      local amount amount_human
+      if [[ "$account_var" == "TESTANCHOR_DISTRIBUTION_SECRET" ]]; then
+        amount=100000000000  # 10000 USDC in stroops
+        amount_human="10000"
+      else
+        amount=1000000  # 0.1 USDC in stroops
+        amount_human="0.1"
+      fi
+      log_info "Sending $amount_human USDC to $account_var ($recipient_public)..."
       if stellar tx new payment \
         --source-account "$usdc_issuer_secret" \
         --destination "$recipient_public" \
         --asset "USDC:$usdc_issuer_public" \
-        --amount 10000000000 \
+        --amount "$amount" \
         --network testnet; then
-        log_success "Sent 10000 USDC to $account_var"
+        log_success "Sent $amount_human USDC to $account_var"
       else
         log_warning "Failed to send USDC to $account_var"
       fi
