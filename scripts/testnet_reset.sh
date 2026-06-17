@@ -49,18 +49,20 @@ load_env() {
 
 # Derive the Stellar public key (G...) from a secret key (S...)
 public_key() {
-  python3 -c "from stellar_sdk import Keypair; print(Keypair.from_secret('$1').public_key)"
+  python3 -W ignore -c "import sys; from stellar_sdk import Keypair; print(Keypair.from_secret(sys.stdin.read().strip()).public_key)" <<<"$1"
 }
 
 # Derive the raw ed25519 public key bytes (hex) from a secret key (S...)
 pk_bytes() {
-  python3 -c "from stellar_sdk import Keypair; print(Keypair.from_secret('$1').raw_public_key().hex())"
+  python3 -W ignore -c "import sys; from stellar_sdk import Keypair; print(Keypair.from_secret(sys.stdin.read().strip()).raw_public_key().hex())" <<<"$1"
 }
 
 fund_account() {
   local public_key=$1
   log_info "Funding: $public_key"
-  curl -s "https://friendbot.stellar.org/?addr=$public_key" >/dev/null
+  if ! curl -fsS "https://friendbot.stellar.org/?addr=$public_key" >/dev/null 2>&1; then
+    log_warning "Friendbot funding failed for $public_key (may already be funded)"
+  fi
 }
 
 fund_test_accounts() {
@@ -260,16 +262,14 @@ deploy_contracts() {
 
   log_info "Deploying account contract..."
   local account_contract_result
-  account_contract_result=$(stellar contract deploy \
-    --wasm target/wasm32-unknown-unknown/release/account.wasm \
+  if account_contract_result=$(stellar contract deploy \
+    --wasm target/wasm32v1-none/release/account.wasm \
     --source-account "$deployer_secret" \
     --network testnet \
     --salt 616e63686f722d706c6174666f726d \
     -- \
     --admin "$deployer_public" \
-    --signer "$(pk_bytes "$deployer_secret")" 2>&1)
-
-  if [[ $? -eq 0 ]]; then
+    --signer "$(pk_bytes "$deployer_secret")" 2>&1); then
     local account_contract_id
     account_contract_id=$(echo "$account_contract_result" | tail -1)
     log_success "Account contract deployed: $account_contract_id"
@@ -283,15 +283,13 @@ deploy_contracts() {
   webauth_deployer_public="$(public_key "$webauth_deployer_secret")"
 
   local webauth_contract_result
-  webauth_contract_result=$(stellar contract deploy \
-    --wasm target/wasm32-unknown-unknown/release/web_auth.wasm \
+  if webauth_contract_result=$(stellar contract deploy \
+    --wasm target/wasm32v1-none/release/web_auth.wasm \
     --source-account "$webauth_deployer_secret" \
     --network testnet \
     --salt 616e63686f722d706c6174666f726d \
     -- \
-    --admin "$webauth_deployer_public" 2>&1)
-
-  if [[ $? -eq 0 ]]; then
+    --admin "$webauth_deployer_public" 2>&1); then
     local webauth_contract_id
     webauth_contract_id=$(echo "$webauth_contract_result" | tail -1)
     log_success "Web auth contract deployed: $webauth_contract_id"
