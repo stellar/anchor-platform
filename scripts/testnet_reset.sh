@@ -302,7 +302,12 @@ deploy_contracts() {
     webauth_contract_id=$(echo "$webauth_contract_result" | tail -1)
     log_success "Web auth contract deployed: $webauth_contract_id"
   else
-    log_warning "Web auth contract deployment skipped (already exists)"
+    if echo "$webauth_contract_result" | grep -qi "contract already exists"; then
+      log_warning "Web auth contract deployment skipped (already exists)"
+    else
+      log_error "Web auth contract deployment failed: $webauth_contract_result"
+      exit 1
+    fi
   fi
 
   local usdc_issuer_public
