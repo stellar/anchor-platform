@@ -38,7 +38,7 @@ jobs:
         run: cargo install --locked stellar-cli --features opt
 
       - name: Install stellar-sdk Python package
-        run: pip install stellar-sdk
+        run: python3 -m pip install stellar-sdk
 
       - name: Run testnet reset
         working-directory: scripts
