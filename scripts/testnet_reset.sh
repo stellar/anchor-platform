@@ -60,7 +60,7 @@ pk_bytes() {
 fund_account() {
   local public_key=$1
   log_info "Funding: $public_key"
-  if ! curl -fsS "https://friendbot.stellar.org/?addr=$public_key" >/dev/null 2>&1; then
+  if ! curl -s "https://friendbot.stellar.org/?addr=$public_key" >/dev/null 2>&1; then
     log_warning "Friendbot funding failed for $public_key (may already be funded)"
   fi
 }
