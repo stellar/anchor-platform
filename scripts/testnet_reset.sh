@@ -171,12 +171,7 @@ issue_and_fund_usdc() {
   local recipient_vars=(
     "TEST_CLIENT_WALLET_SECRET"
     "TEST_WITHDRAW_FUND_CLIENT_SECRET_1"
-    "TEST_WITHDRAW_FUND_CLIENT_SECRET_2"
-    "TEST_DEPOSIT_FUND_CLIENT_SECRET_1"
-    "TEST_DEPOSIT_FUND_CLIENT_SECRET_2"
     "TESTANCHOR_DISTRIBUTION_SECRET"
-    "TESTANCHOR_RECEIVE_SECRET"
-    "OTHER_SEP10_SIGNING_SECRET"
   )
 
   for account_var in "${recipient_vars[@]}"; do
@@ -188,6 +183,9 @@ issue_and_fund_usdc() {
       if [[ "$account_var" == "TESTANCHOR_DISTRIBUTION_SECRET" ]]; then
         amount=100000000000  # 10000 USDC in stroops
         amount_human="10000"
+      elif [[ "$account_var" == "TEST_CLIENT_WALLET_SECRET" ]]; then
+        amount=1000000000  # 100 USDC in stroops
+        amount_human="100"
       else
         amount=1000000  # 0.1 USDC in stroops
         amount_human="0.1"
