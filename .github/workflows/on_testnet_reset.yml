@@ -35,7 +35,7 @@ jobs:
           targets: wasm32v1-none
 
       - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli --features opt
+        run: cargo install --locked stellar-cli
 
       - name: Install stellar-sdk Python package
         run: python3 -m pip install stellar-sdk
