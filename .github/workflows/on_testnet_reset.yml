@@ -29,13 +29,39 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo bin
+        uses: actions/cache@v3
         with:
-          targets: wasm32v1-none
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-${{ hashFiles('anchor-platform/soroban/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bin-
+
+      - name: Cache rustup
+        uses: actions/cache@v3
+        with:
+          path: ~/.rustup
+          key: ${{ runner.os }}-rustup-${{ hashFiles('anchor-platform/soroban/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rustup-
+
+      - name: Setup Rust
+        run: |
+          rustup self update || true
+          if ! rustup update stable 2>&1; then
+            echo "rustup update failed, cleaning and reinstalling..."
+            rustup toolchain uninstall stable || true
+            rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
+            rustup toolchain install stable
+          fi
+          rustup default stable
+          rustup target add wasm32v1-none
+
+      - name: Cache Rust dependencies
+        uses: stellar/actions/rust-cache@main
 
       - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli
+        uses: stellar/stellar-cli@v27.0.0
 
       - name: Install stellar-sdk Python package
         run: python3 -m pip install stellar-sdk
