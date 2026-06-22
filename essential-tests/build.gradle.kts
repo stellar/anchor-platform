@@ -43,3 +43,24 @@ tasks.test {
   exclude("**/org/stellar/anchor/platform/integrationtest/**")
   exclude("**/org/stellar/anchor/platform/e2etest/**")
 }
+
+mapOf(
+    "testInfrastructure" to "org.stellar.anchor.platform.suite.InfrastructureSuite",
+    "testSep10" to "org.stellar.anchor.platform.suite.Sep10Suite",
+    "testSep12" to "org.stellar.anchor.platform.suite.Sep12Suite",
+    "testSep38" to "org.stellar.anchor.platform.suite.Sep38Suite",
+    "testSep6" to "org.stellar.anchor.platform.suite.Sep6Suite",
+    "testSep24" to "org.stellar.anchor.platform.suite.Sep24Suite",
+    "testSep31" to "org.stellar.anchor.platform.suite.Sep31Suite",
+    "testSep45" to "org.stellar.anchor.platform.suite.Sep45Suite",
+    "testPlatform" to "org.stellar.anchor.platform.suite.PlatformSuite",
+).forEach { (taskName, suiteClass) ->
+  tasks.register<Test>(taskName) {
+    description = "Run $suiteClass."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching(suiteClass) }
+  }
+}
