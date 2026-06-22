@@ -436,7 +436,7 @@ public class Sep10Service implements ISep10Service {
       sep10ChallengeValidatedCounter.increment();
       return account;
     } catch (LedgerException ex) {
-      infoF("Account {} does not exist in the Stellar Network");
+      infoF("Account {} does not exist in the Stellar Network", challenge.getClientAccountId());
       // account not found
       // The client account does not exist, using the client's master key to verify.
       Set<String> signers = new HashSet<>();
