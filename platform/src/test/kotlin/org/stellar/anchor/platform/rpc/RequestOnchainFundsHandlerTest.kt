@@ -49,7 +49,6 @@ import org.stellar.anchor.sep31.Sep31TransactionStore
 import org.stellar.anchor.sep6.Sep6Transaction
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
-import org.stellar.anchor.util.SepRequestValidator
 
 class RequestOnchainFundsHandlerTest {
 
@@ -101,8 +100,6 @@ class RequestOnchainFundsHandlerTest {
 
   @MockK(relaxed = true) private lateinit var sepTransactionCounter: Counter
 
-  @MockK(relaxed = true) private lateinit var sepRequestValidator: SepRequestValidator
-
   private lateinit var handler: RequestOnchainFundsHandler
 
   @BeforeEach
@@ -123,7 +120,6 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
-        sepRequestValidator,
       )
   }
 
@@ -691,7 +687,6 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
-        sepRequestValidator,
       )
 
     val request =
@@ -1012,7 +1007,6 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
-        sepRequestValidator,
       )
 
     val request =
@@ -1194,7 +1188,6 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
-        sepRequestValidator,
       )
 
     val request =
@@ -1247,7 +1240,6 @@ class RequestOnchainFundsHandlerTest {
     expectedSep6Txn.memo = ID_MEMO
     expectedSep6Txn.memoType = ID_MEMO_TYPE
     expectedSep6Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT_2
-    expectedSep6Txn.toAccount = DESTINATION_ACCOUNT_2
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
@@ -1266,7 +1258,6 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
     expectedResponse.memo = ID_MEMO
     expectedResponse.memoType = ID_MEMO_TYPE
-    expectedResponse.destinationAccount = DESTINATION_ACCOUNT_2
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
     expectedResponse.creator = StellarId(null, null, null)
 
@@ -1346,7 +1337,6 @@ class RequestOnchainFundsHandlerTest {
     expectedSep6Txn.memo = ID_MEMO
     expectedSep6Txn.memoType = ID_MEMO_TYPE
     expectedSep6Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT
-    expectedSep6Txn.toAccount = DESTINATION_ACCOUNT
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
@@ -1365,7 +1355,6 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
     expectedResponse.memo = ID_MEMO
     expectedResponse.memoType = ID_MEMO_TYPE
-    expectedResponse.destinationAccount = DESTINATION_ACCOUNT
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
     expectedResponse.creator = StellarId(null, null, null)
 
@@ -1449,7 +1438,6 @@ class RequestOnchainFundsHandlerTest {
     expectedSep6Txn.memo = ID_MEMO
     expectedSep6Txn.memoType = ID_MEMO_TYPE
     expectedSep6Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT
-    expectedSep6Txn.toAccount = DESTINATION_ACCOUNT
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
@@ -1468,7 +1456,6 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
     expectedResponse.memo = ID_MEMO
     expectedResponse.memoType = ID_MEMO_TYPE
-    expectedResponse.destinationAccount = DESTINATION_ACCOUNT
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
     expectedResponse.creator = StellarId(null, null, null)
 
@@ -1513,7 +1500,6 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
-        sepRequestValidator,
       )
 
     val request =
@@ -1610,7 +1596,6 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
-        sepRequestValidator,
       )
 
     val request =
@@ -1909,7 +1894,6 @@ class RequestOnchainFundsHandlerTest {
         paymentObservingAccountsManager,
         eventService,
         metricsService,
-        sepRequestValidator,
       )
 
     val request =

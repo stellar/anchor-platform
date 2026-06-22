@@ -130,7 +130,6 @@ public class Sep6Controller {
   public StartWithdrawResponse withdraw(
       HttpServletRequest request,
       @RequestParam(value = "asset_code") String assetCode,
-      @RequestParam(value = "account", required = false) String account,
       @RequestParam(value = "funding_method", required = false) String fundingMethod,
       @RequestParam(value = "type", required = false) String type,
       @RequestParam(value = "amount", required = false) String amount,
@@ -143,7 +142,6 @@ public class Sep6Controller {
     StartWithdrawRequest startWithdrawRequest =
         StartWithdrawRequest.builder()
             .assetCode(assetCode)
-            .account(account)
             .fundingMethod(fundingMethod)
             .type(type)
             .amount(amount)
@@ -166,7 +164,6 @@ public class Sep6Controller {
       @RequestParam(value = "destination_asset") String destinationAsset,
       @RequestParam(value = "quote_id", required = false) String quoteId,
       @RequestParam(value = "amount") String amount,
-      @RequestParam(value = "account", required = false) String account,
       @RequestParam(value = "funding_method", required = false) String fundingMethod,
       @RequestParam(value = "type", required = false) String type,
       @RequestParam(value = "country_code", required = false) String countryCode,
@@ -181,7 +178,6 @@ public class Sep6Controller {
             .destinationAsset(destinationAsset)
             .quoteId(quoteId)
             .amount(amount)
-            .account(account)
             .fundingMethod(fundingMethod)
             .type(type)
             .countryCode(countryCode)

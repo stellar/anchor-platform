@@ -127,8 +127,8 @@ public class SepBeans {
 
   @Bean
   @OnAnySepsEnabled(seps = {"sep6", "sep24"})
-  SepRequestValidator sepRequestValidator(AssetService assetService, ClientService clientService) {
-    return new SepRequestValidator(assetService, clientService);
+  SepRequestValidator sepRequestValidator(AssetService assetService) {
+    return new SepRequestValidator(assetService);
   }
 
   @Bean
