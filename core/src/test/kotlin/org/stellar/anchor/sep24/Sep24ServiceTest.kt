@@ -129,7 +129,7 @@ internal class Sep24ServiceTest {
     secretConfig.setupMock()
     every { txnStore.newInstance() } returns PojoSep24Transaction()
 
-    requestValidator = spyk(SepRequestValidator(assetService))
+    requestValidator = spyk(SepRequestValidator(assetService, clientService))
     jwtService = spyk(JwtService(secretConfig))
     testInteractiveUrlJwt = createTestInteractiveJwt(null)
     val strToken = jwtService.encode(testInteractiveUrlJwt)

@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.stellar.anchor.api.callback.CustomerIntegration;
 import org.stellar.anchor.asset.AssetService;
+import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.metrics.MetricsService;
@@ -25,10 +26,16 @@ import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.sep6.Sep6DepositInfoGenerator;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
+import org.stellar.anchor.util.SepRequestValidator;
 
 @Configuration
 @Import(ApiClientBeans.class)
 public class RpcActionBeans {
+
+  @Bean
+  SepRequestValidator sepRequestValidator(AssetService assetService, ClientService clientService) {
+    return new SepRequestValidator(assetService, clientService);
+  }
 
   @Bean
   RpcService rpcService(List<RpcMethodHandler<?>> rpcMethodHandlers, RpcConfig rpcConfig) {
@@ -399,7 +406,8 @@ public class RpcActionBeans {
       Sep31DepositInfoGenerator sep31DepositInfoGenerator,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
       EventService eventService,
-      MetricsService metricsService) {
+      MetricsService metricsService,
+      SepRequestValidator sepRequestValidator) {
     return new RequestOnchainFundsHandler(
         txn6Store,
         txn24Store,
@@ -411,7 +419,8 @@ public class RpcActionBeans {
         sep31DepositInfoGenerator,
         paymentObservingAccountsManager,
         eventService,
-        metricsService);
+        metricsService,
+        sepRequestValidator);
   }
 
   @Bean
