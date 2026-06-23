@@ -171,7 +171,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  void processTransferEvent(ShouldProcessResult result) {
+  private void processTransferEvent(ShouldProcessResult result) {
     debug("Processing transfer event: {}", GsonUtils.getInstance().toJson(result.event));
     try {
       LedgerTransaction txn = stellarRpc.getTransaction(result.event.getTransactionHash());
@@ -188,7 +188,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
               .findFirst()
               .orElse(null);
       if (op == null) {
-        warnF(
+        errorF(
             "No creditable operation found for transfer event: txHash={}, operationIndex={}."
                 + " The operation may be a contract sub-invocation with no direct representation"
                 + " in the filtered operation list. Skipping.",
@@ -205,7 +205,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  String getOperationId(LedgerOperation op) {
+  private String getOperationId(LedgerOperation op) {
     if (op.getPaymentOperation() != null) return op.getPaymentOperation().getId();
     if (op.getPathPaymentOperation() != null) return op.getPathPaymentOperation().getId();
     if (op.getInvokeHostFunctionOperation() != null)

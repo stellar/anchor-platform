@@ -502,111 +502,166 @@ class StellarRpcPaymentObserverTest {
     assertEquals("POISON_CUR", observer.cursor)
   }
 
-  @Test
-  fun `processTransferEvent credits single-op transaction at operationIndex 0`() {
-    val seqNum = 1L
-    val appOrder = 1
-    val (txn, event) =
-      setupTransferEvent(seqNum = seqNum, appOrder = appOrder, opIndex = 0, numOps = 1)
-    every { stellarRpc.getTransaction(any()) } returns txn
-
-    val capturedEvent = slot<PaymentTransferEvent>()
-    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
-
-    observer.processTransferEvent(
-      StellarRpcPaymentObserver.ShouldProcessResult.builder()
-        .event(event)
-        .shouldProcess(true)
-        .build()
-    )
-
-    verify(exactly = 1) { observer["handleEvent"](any<PaymentTransferEvent>()) }
-    assertEquals(
-      TOID(seqNum.toInt(), appOrder, 1).toInt64().toString(),
-      capturedEvent.captured.operationId
-    )
-  }
-
-  @Test
-  fun `processTransferEvent credits payment at operationIndex 1 via TOID lookup`() {
-    val seqNum = 1L
-    val appOrder = 1
-    val (txn, event) =
-      setupTransferEvent(seqNum = seqNum, appOrder = appOrder, opIndex = 1, numOps = 2)
-    every { stellarRpc.getTransaction(any()) } returns txn
-
-    val capturedEvent = slot<PaymentTransferEvent>()
-    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
-
-    observer.processTransferEvent(
-      StellarRpcPaymentObserver.ShouldProcessResult.builder()
-        .event(event)
-        .shouldProcess(true)
-        .build()
-    )
-
-    verify(exactly = 1) { observer["handleEvent"](any<PaymentTransferEvent>()) }
-    assertEquals(
-      TOID(seqNum.toInt(), appOrder, 2).toInt64().toString(),
-      capturedEvent.captured.operationId
-    )
-  }
-
-  @Test
-  fun `processTransferEvent skips sub-invocation event when no operation matches`() {
+  private fun setupTransferEvent(
+    fromAccount: String,
+    toAccount: String,
+    amount: BigInteger,
+    txHash: String,
+    operationIndex: Long,
+    cursorValue: String = "CURSOR",
+  ): GetEventsResponse.EventInfo {
+    val topics =
+      listOf(
+        Scv.toSymbol("transfer").toXdrBase64(),
+        Scv.toAddress(fromAccount).toXdrBase64(),
+        Scv.toAddress(toAccount).toXdrBase64(),
+        Scv.toString("native").toXdrBase64(),
+      )
     val event = mockk<GetEventsResponse.EventInfo>(relaxed = true)
-    every { event.transactionHash } returns "txhash"
-    every { event.operationIndex } returns 0L
+    every { event.topic } returns topics
+    every { event.value } returns Scv.toInt128(amount).toXdrBase64()
+    every { event.transactionHash } returns txHash
+    every { event.operationIndex } returns operationIndex
 
-    val txn = mockk<LedgerTransaction>()
-    every { txn.sequenceNumber } returns 100L
-    every { txn.applicationOrder } returns 1
-    every { txn.operations } returns emptyList()
-    every { stellarRpc.getTransaction(any()) } returns txn
+    every { paymentObservingAccountsManager.lookupAndUpdate(toAccount) } returns true
+    every { paymentObservingAccountsManager.lookupAndUpdate(fromAccount) } returns false
 
-    observer.processTransferEvent(
-      StellarRpcPaymentObserver.ShouldProcessResult.builder()
-        .event(event)
-        .shouldProcess(true)
+    val response = mockk<GetEventsResponse>()
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } returns response
+    every { response.events } returns listOf(event)
+    every { response.latestLedger } returns 100L
+    every { response.cursor } returns cursorValue
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+
+    return event
+  }
+
+  @Test
+  fun `processTransferEvent credits payment at operationIndex=0 in single-op transaction`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val amount = BigInteger.valueOf(1_000_000L)
+    val txHash = "txHashSingleOp"
+    val seqNum = 100L
+    val appOrder = 1
+    val paymentOpId = TOID(seqNum.toInt(), appOrder, 1).toInt64().toString()
+
+    setupTransferEvent(fromAccount, toAccount, amount, txHash, operationIndex = 0L)
+
+    val paymentOp =
+      LedgerTransaction.LedgerPaymentOperation().apply {
+        from = fromAccount
+        to = toAccount
+        asset = Asset.createNativeAsset().toXdr()
+        this.amount = amount
+        id = paymentOpId
+      }
+    val op =
+      LedgerOperation().apply {
+        type = OperationType.PAYMENT
+        paymentOperation = paymentOp
+      }
+    val txn =
+      LedgerTransaction.builder()
+        .hash(txHash)
+        .sequenceNumber(seqNum)
+        .applicationOrder(appOrder)
+        .operations(listOf(op))
         .build()
+    every { stellarRpc.getTransaction(txHash) } returns txn
+
+    val capturedEvent = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
+
+    observer.fetchEvents()
+
+    assertEquals(txHash, capturedEvent.captured.txHash)
+    assertEquals(fromAccount, capturedEvent.captured.from)
+    assertEquals(toAccount, capturedEvent.captured.to)
+    assertEquals(amount, capturedEvent.captured.amount)
+    assertEquals(paymentOpId, capturedEvent.captured.operationId)
+  }
+
+  @Test
+  fun `processTransferEvent correctly credits payment at operationIndex=1 when a non-payment op precedes it`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val amount = BigInteger.valueOf(2_000_000L)
+    val txHash = "txHashMultiOp"
+    val seqNum = 200L
+    val appOrder = 1
+    val paymentOpId = TOID(seqNum.toInt(), appOrder, 2).toInt64().toString()
+
+    setupTransferEvent(fromAccount, toAccount, amount, txHash, operationIndex = 1L, "CURSOR_MULTI")
+
+    val paymentOp =
+      LedgerTransaction.LedgerPaymentOperation().apply {
+        from = fromAccount
+        to = toAccount
+        asset = Asset.createNativeAsset().toXdr()
+        this.amount = amount
+        id = paymentOpId
+      }
+    val op =
+      LedgerOperation().apply {
+        type = OperationType.PAYMENT
+        paymentOperation = paymentOp
+      }
+    val txn =
+      LedgerTransaction.builder()
+        .hash(txHash)
+        .sequenceNumber(seqNum)
+        .applicationOrder(appOrder)
+        .operations(listOf(op))
+        .build()
+    every { stellarRpc.getTransaction(txHash) } returns txn
+
+    val capturedEvent = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
+
+    observer.fetchEvents()
+
+    assertEquals(txHash, capturedEvent.captured.txHash)
+    assertEquals(fromAccount, capturedEvent.captured.from)
+    assertEquals(toAccount, capturedEvent.captured.to)
+    assertEquals(amount, capturedEvent.captured.amount)
+    assertEquals(paymentOpId, capturedEvent.captured.operationId)
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("CURSOR_MULTI", observer.cursor)
+  }
+
+  @Test
+  fun `processTransferEvent skips and logs error when no creditable op matches operationIndex`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val txHash = "txHashSubInvocation"
+    val seqNum = 300L
+    val appOrder = 1
+
+    setupTransferEvent(
+      fromAccount,
+      toAccount,
+      BigInteger.valueOf(500_000L),
+      txHash,
+      operationIndex = 0L,
+      "CURSOR_SUBINVOKE",
     )
+
+    val txn =
+      LedgerTransaction.builder()
+        .hash(txHash)
+        .sequenceNumber(seqNum)
+        .applicationOrder(appOrder)
+        .operations(emptyList())
+        .build()
+    every { stellarRpc.getTransaction(txHash) } returns txn
+
+    assertDoesNotThrow { observer.fetchEvents() }
 
     verify(exactly = 0) { observer["handleEvent"](any<PaymentTransferEvent>()) }
-  }
-
-  private fun setupTransferEvent(
-    seqNum: Long,
-    appOrder: Int,
-    opIndex: Long,
-    numOps: Int,
-  ): Pair<LedgerTransaction, GetEventsResponse.EventInfo> {
-    val ops =
-      (0 until numOps).map { i ->
-        val paymentOp =
-          LedgerTransaction.LedgerPaymentOperation().apply {
-            from = KeyPair.random().accountId
-            to = KeyPair.random().accountId
-            asset = Asset.createNativeAsset().toXdr()
-            amount = BigInteger.valueOf(100)
-            id = TOID(seqNum.toInt(), appOrder, (i + 1)).toInt64().toString()
-          }
-        LedgerOperation().apply {
-          type = OperationType.PAYMENT
-          paymentOperation = paymentOp
-        }
-      }
-
-    val txn = mockk<LedgerTransaction>()
-    every { txn.sequenceNumber } returns seqNum
-    every { txn.applicationOrder } returns appOrder
-    every { txn.operations } returns ops
-    every { txn.hash } returns "txhash"
-
-    val event = mockk<GetEventsResponse.EventInfo>(relaxed = true)
-    every { event.transactionHash } returns "txhash"
-    every { event.operationIndex } returns opIndex
-
-    return Pair(txn, event)
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("CURSOR_SUBINVOKE", observer.cursor)
   }
 
   private fun mockPoisonResponse(
