@@ -2,8 +2,10 @@ package org.stellar.anchor.platform.integrationtest
 
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
+import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
@@ -167,6 +169,41 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       JSONCompareMode.LENIENT,
     )
     Assertions.assertNotNull(savedWithdrawTxn.transaction.moreInfoUrl)
+  }
+
+  @Test
+  fun `test sep6 deposit rejects account outside destination policy`() {
+    val attackerAccount = KeyPair.random().accountId
+    val request =
+      mapOf(
+        "asset_code" to "USDC",
+        "account" to attackerAccount,
+        "amount" to "1",
+        "type" to "SWIFT",
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(request) }
+    assert(ex.message!!.contains("'account' does not match the one in the token")) {
+      "Expected policy rejection, got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects account outside destination policy`() {
+    val attackerAccount = KeyPair.random().accountId
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "1",
+        "account" to attackerAccount,
+        "type" to "SWIFT",
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(request, exchange = true) }
+    assert(ex.message!!.contains("'account' does not match the one in the token")) {
+      "Expected policy rejection, got: ${ex.message}"
+    }
   }
 
   private fun postQuote(sellAsset: String, sellAmount: String, buyAsset: String): String {

@@ -194,8 +194,7 @@ public class Sep24Service {
       }
     }
 
-    // Validate sourceAccount
-    requestValidator.validateAccount(sourceAccount);
+    requestValidator.validateDestinationAccount(token, sourceAccount);
 
     if (token.getClientDomain() != null)
       withdrawRequest.put("client_domain", token.getClientDomain());
@@ -370,9 +369,6 @@ public class Sep24Service {
             String.format("amount exceeds asset's maximum limit: %s", strAmount));
       }
     }
-
-    // validate destination account
-    requestValidator.validateAccount(destinationAccount);
 
     if (token.getClientDomain() != null)
       depositRequest.put("client_domain", token.getClientDomain());

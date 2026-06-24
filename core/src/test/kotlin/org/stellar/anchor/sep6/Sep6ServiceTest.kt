@@ -316,6 +316,27 @@ class Sep6ServiceTest {
   }
 
   @Test
+  fun `test deposit rejects account outside destination policy`() {
+    val attacker = "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO"
+    val request =
+      StartDepositRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account(attacker)
+        .fundingMethod("bank_account")
+        .build()
+    every {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        attacker,
+      )
+    } throws SepValidationException("Provided 'account' is not allowed")
+
+    assertThrows<SepValidationException> { sep6Service.deposit(token, request) }
+    verify { txnStore wasNot Called }
+    verify { eventSession wasNot Called }
+  }
+
+  @Test
   fun `test deposit does not send event if transaction fails to save`() {
     every { txnStore.save(any()) } throws RuntimeException("unexpected failure")
 
@@ -934,6 +955,22 @@ class Sep6ServiceTest {
     }
 
     // Verify effects
+    verify { txnStore wasNot Called }
+    verify { eventSession wasNot Called }
+  }
+
+  @Test
+  fun `test withdraw rejects account outside destination policy`() {
+    val attacker = "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO"
+    val request = StartWithdrawRequest.builder().assetCode(TEST_ASSET).account(attacker).build()
+    every {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        attacker,
+      )
+    } throws SepValidationException("Provided 'account' is not allowed")
+
+    assertThrows<SepValidationException> { sep6Service.withdraw(token, request) }
     verify { txnStore wasNot Called }
     verify { eventSession wasNot Called }
   }
