@@ -125,7 +125,7 @@ public class Sep6Service {
           asset.getSep6().getDeposit().getMaxAmount());
     }
     String destinationAccount =
-        request.getAccount() != null ? request.getAccount() : token.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, destinationAccount);
 
     String id = generateSepTransactionId();
@@ -217,7 +217,7 @@ public class Sep6Service {
         buyAsset.getSep6().getDeposit().getMinAmount(),
         buyAsset.getSep6().getDeposit().getMaxAmount());
     String destinationAccount =
-        request.getAccount() != null ? request.getAccount() : token.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, destinationAccount);
 
     Amounts amounts;
@@ -324,7 +324,8 @@ public class Sep6Service {
           asset.getSep6().getWithdraw().getMinAmount(),
           asset.getSep6().getWithdraw().getMaxAmount());
     }
-    String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
+    String sourceAccount =
+        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, sourceAccount);
 
     String id = generateSepTransactionId();
@@ -400,7 +401,8 @@ public class Sep6Service {
         sellAsset.getSignificantDecimals(),
         sellAsset.getSep6().getWithdraw().getMinAmount(),
         sellAsset.getSep6().getWithdraw().getMaxAmount());
-    String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
+    String sourceAccount =
+        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, sourceAccount);
 
     String id = generateSepTransactionId();

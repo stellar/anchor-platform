@@ -4,20 +4,20 @@ import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.TestConstants.Companion.TEST_ASSET
+import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.asset.DepositWithdrawOperation
 import org.stellar.anchor.api.asset.Sep6Info
 import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.asset.AssetService
-import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.client.ClientService
 import org.stellar.anchor.client.CustodialClient
 
@@ -26,9 +26,6 @@ class SepRequestValidatorTest {
   @MockK(relaxed = true) lateinit var clientService: ClientService
 
   private lateinit var requestValidator: SepRequestValidator
-
-  private val TOKEN_ACCOUNT = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-  private val OTHER_ACCOUNT = "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO"
 
   @BeforeEach
   fun setup() {
@@ -216,80 +213,234 @@ class SepRequestValidatorTest {
     SepRequestValidator.validateAmount("", amount, false)
   }
 
-  private fun mockToken(account: String): WebAuthJwt {
-    val token = mockk<WebAuthJwt>()
-    every { token.account } returns account
-    return token
+  @Test
+  fun `test validateDestinationAccount allows destination matching token account`() {
+    val token = TestHelper.createWebAuthJwt()
+    requestValidator.validateDestinationAccount(token, token.account)
   }
 
   @Test
-  fun `validateDestinationAccount passes when destination matches token subject`() {
-    val token = mockToken(TOKEN_ACCOUNT)
-    assertDoesNotThrow { requestValidator.validateDestinationAccount(token, TOKEN_ACCOUNT) }
+  fun `test validateDestinationAccount allows muxed destination whose base account matches token`() {
+    val token = TestHelper.createWebAuthJwt()
+    val muxedDestination =
+      org.stellar.sdk.MuxedAccount(token.account, java.math.BigInteger.valueOf(99L)).address
+    requestValidator.validateDestinationAccount(token, muxedDestination)
   }
 
   @Test
-  fun `validateDestinationAccount rejects when no client config and accounts differ`() {
-    val token = mockToken(TOKEN_ACCOUNT)
-    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns null
+  fun `test validateDestinationAccount allows destination on client allowlist`() {
+    val token = TestHelper.createWebAuthJwt()
+    val allowedAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .destinationAccounts(setOf(allowedAccount))
+        .build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    requestValidator.validateDestinationAccount(token, allowedAccount)
+  }
+
+  @Test
+  fun `test validateDestinationAccount allows destination when allowAnyDestination is true`() {
+    val token = TestHelper.createWebAuthJwt()
+    val anyAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client = CustodialClient.builder().name("test-client").allowAnyDestination(true).build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    requestValidator.validateDestinationAccount(token, anyAccount)
+  }
+
+  @Test
+  fun `test validateDestinationAccount allows destination when allowAnyDestination is true even if destinationAccounts would not contain it`() {
+    val token = TestHelper.createWebAuthJwt()
+    val destination = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .allowAnyDestination(true)
+        .destinationAccounts(setOf("GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGBXT0E4EPJOS2W2YNHH6K"))
+        .build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    requestValidator.validateDestinationAccount(token, destination)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects destination not on allowlist with account-not-allowed message`() {
+    val token = TestHelper.createWebAuthJwt()
+    val attackerAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .destinationAccounts(setOf("GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGBXT0E4EPJOS2W2YNHH6K"))
+        .build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    val ex =
+      assertThrows<SepValidationException> {
+        requestValidator.validateDestinationAccount(token, attackerAccount)
+      }
+    assertEquals("Provided 'account' is not allowed", ex.message)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects empty destinationAccounts with token-mismatch message`() {
+    val token = TestHelper.createWebAuthJwt()
+    val differentAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .allowAnyDestination(false)
+        .destinationAccounts(emptySet())
+        .build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    val ex =
+      assertThrows<SepValidationException> {
+        requestValidator.validateDestinationAccount(token, differentAccount)
+      }
+    assertEquals(SepRequestValidator.ERR_TOKEN_ACCOUNT_MISMATCH, ex.message)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects when client config is null and account differs`() {
+    val token = TestHelper.createWebAuthJwt()
+    val differentAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    every { clientService.getClientConfigBySigningKey(token.account) } returns null
+
+    val ex =
+      assertThrows<SepValidationException> {
+        requestValidator.validateDestinationAccount(token, differentAccount)
+      }
+    assertEquals(SepRequestValidator.ERR_TOKEN_ACCOUNT_MISMATCH, ex.message)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects when client has no allowlist and allowAnyDestination is false`() {
+    val token = TestHelper.createWebAuthJwt()
+    val differentAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client = CustodialClient.builder().name("test-client").allowAnyDestination(false).build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    val ex =
+      assertThrows<SepValidationException> {
+        requestValidator.validateDestinationAccount(token, differentAccount)
+      }
+    assertEquals(SepRequestValidator.ERR_TOKEN_ACCOUNT_MISMATCH, ex.message)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects malformed muxed webAuthAccount`() {
     assertThrows<SepValidationException> {
-      requestValidator.validateDestinationAccount(token, OTHER_ACCOUNT)
+      requestValidator.validateDestinationAccount("MINVALIDMUXEDADDRESS", TestHelper.TEST_ACCOUNT)
     }
   }
 
   @Test
-  fun `validateDestinationAccount allows when allowAnyDestination is true`() {
-    val token = mockToken(TOKEN_ACCOUNT)
-    val clientConfig = mockk<CustodialClient>()
-    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns clientConfig
-    every { clientConfig.isAllowAnyDestination } returns true
-    assertDoesNotThrow { requestValidator.validateDestinationAccount(token, OTHER_ACCOUNT) }
+  fun `test validateDestinationAccount accepts muxed destination when allowlist holds the base address`() {
+    val token = TestHelper.createWebAuthJwt()
+    val allowedBase = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val muxedDestination =
+      org.stellar.sdk.MuxedAccount(allowedBase, java.math.BigInteger.valueOf(42L)).address
+    val client =
+      CustodialClient.builder().name("test-client").destinationAccounts(setOf(allowedBase)).build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
+
+    requestValidator.validateDestinationAccount(token, muxedDestination)
   }
 
   @Test
-  fun `validateDestinationAccount allows when destination is in allowlist`() {
-    val token = mockToken(TOKEN_ACCOUNT)
-    val clientConfig = mockk<CustodialClient>()
-    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns clientConfig
-    every { clientConfig.isAllowAnyDestination } returns false
-    every { clientConfig.destinationAccounts } returns setOf(OTHER_ACCOUNT)
-    assertDoesNotThrow { requestValidator.validateDestinationAccount(token, OTHER_ACCOUNT) }
-  }
+  fun `test validateDestinationAccount rejects muxed destination not on allowlist`() {
+    val token = TestHelper.createWebAuthJwt()
+    val allowedBase = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val muxedDestination =
+      org.stellar.sdk.MuxedAccount(allowedBase, java.math.BigInteger.valueOf(42L)).address
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .destinationAccounts(setOf("GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGBXT0E4EPJOS2W2YNHH6K"))
+        .build()
+    every { clientService.getClientConfigBySigningKey(token.account) } returns client
 
-  @Test
-  fun `validateDestinationAccount rejects when destination is not in allowlist`() {
-    val token = mockToken(TOKEN_ACCOUNT)
-    val clientConfig = mockk<CustodialClient>()
-    val thirdAccount = "GACYKME36AI6UYAV7A5ZUA6MG4C4K2VAPNYMW5YLOM6E7GS6FSHDPV4F"
-    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns clientConfig
-    every { clientConfig.isAllowAnyDestination } returns false
-    every { clientConfig.destinationAccounts } returns setOf(OTHER_ACCOUNT)
     assertThrows<SepValidationException> {
-      requestValidator.validateDestinationAccount(token, thirdAccount)
+      requestValidator.validateDestinationAccount(token, muxedDestination)
     }
   }
 
   @Test
-  fun `validateDestinationAccount rejects when allowlist is empty and allowAnyDestination is false`() {
-    val token = mockToken(TOKEN_ACCOUNT)
-    val clientConfig = mockk<CustodialClient>()
-    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns clientConfig
-    every { clientConfig.isAllowAnyDestination } returns false
-    every { clientConfig.destinationAccounts } returns emptySet()
-    assertThrows<SepValidationException> {
-      requestValidator.validateDestinationAccount(token, OTHER_ACCOUNT)
-    }
+  fun `test validateDestinationAccount allows classic destination when webAuthAccount is muxed`() {
+    val muxedWebAuth =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(7L))
+        .address
+    requestValidator.validateDestinationAccount(muxedWebAuth, TestHelper.TEST_ACCOUNT)
   }
 
   @Test
-  fun `validateDestinationAccount rejects when allowlist is null and allowAnyDestination is false`() {
-    val token = mockToken(TOKEN_ACCOUNT)
-    val clientConfig = mockk<CustodialClient>()
-    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns clientConfig
-    every { clientConfig.isAllowAnyDestination } returns false
-    every { clientConfig.destinationAccounts } returns null
+  fun `test validateDestinationAccount allows muxed destination when webAuthAccount is muxed with same base`() {
+    val muxedWebAuth =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(1L))
+        .address
+    val muxedDestination =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(2L))
+        .address
+    requestValidator.validateDestinationAccount(muxedWebAuth, muxedDestination)
+  }
+
+  @Test
+  fun `test validateDestinationAccount looks up client by base address when webAuthAccount is muxed`() {
+    val muxedWebAuth =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(5L))
+        .address
+    val allowedAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .destinationAccounts(setOf(allowedAccount))
+        .build()
+    every { clientService.getClientConfigBySigningKey(TestHelper.TEST_ACCOUNT) } returns client
+
+    requestValidator.validateDestinationAccount(muxedWebAuth, allowedAccount)
+  }
+
+  @Test
+  fun `test validateDestinationAccount accepts muxed destination whose base is on the allowlist`() {
+    val muxedWebAuth =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(3L))
+        .address
+    val allowedBase = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val muxedDestination =
+      org.stellar.sdk.MuxedAccount(allowedBase, java.math.BigInteger.valueOf(99L)).address
+    val client =
+      CustodialClient.builder().name("test-client").destinationAccounts(setOf(allowedBase)).build()
+    every { clientService.getClientConfigBySigningKey(TestHelper.TEST_ACCOUNT) } returns client
+
+    requestValidator.validateDestinationAccount(muxedWebAuth, muxedDestination)
+  }
+
+  @Test
+  fun `test validateDestinationAccount rejects muxed destination whose base is not on allowlist`() {
+    val muxedWebAuth =
+      org.stellar.sdk
+        .MuxedAccount(TestHelper.TEST_ACCOUNT, java.math.BigInteger.valueOf(4L))
+        .address
+    val attackerBase = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    val muxedAttacker =
+      org.stellar.sdk.MuxedAccount(attackerBase, java.math.BigInteger.valueOf(1L)).address
+    val client =
+      CustodialClient.builder()
+        .name("test-client")
+        .destinationAccounts(setOf("GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGBXT0E4EPJOS2W2YNHH6K"))
+        .build()
+    every { clientService.getClientConfigBySigningKey(TestHelper.TEST_ACCOUNT) } returns client
+
     assertThrows<SepValidationException> {
-      requestValidator.validateDestinationAccount(token, OTHER_ACCOUNT)
+      requestValidator.validateDestinationAccount(muxedWebAuth, muxedAttacker)
     }
   }
 }

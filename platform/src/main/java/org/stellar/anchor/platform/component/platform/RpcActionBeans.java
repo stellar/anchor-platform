@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.stellar.anchor.api.callback.CustomerIntegration;
 import org.stellar.anchor.asset.AssetService;
+import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.metrics.MetricsService;
@@ -30,6 +31,11 @@ import org.stellar.anchor.util.SepRequestValidator;
 @Configuration
 @Import(ApiClientBeans.class)
 public class RpcActionBeans {
+
+  @Bean
+  SepRequestValidator sepRequestValidator(AssetService assetService, ClientService clientService) {
+    return new SepRequestValidator(assetService, clientService);
+  }
 
   @Bean
   RpcService rpcService(List<RpcMethodHandler<?>> rpcMethodHandlers, RpcConfig rpcConfig) {

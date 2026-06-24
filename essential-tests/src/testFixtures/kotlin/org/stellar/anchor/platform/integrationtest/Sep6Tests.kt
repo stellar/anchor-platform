@@ -173,36 +173,81 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
   @Test
   fun `test sep6 deposit rejects account outside destination policy`() {
-    val attackerAccount = KeyPair.random().accountId
-    val request =
-      mapOf(
-        "asset_code" to "USDC",
-        "account" to attackerAccount,
-        "amount" to "1",
-        "type" to "SWIFT",
-      )
-
-    val ex = assertThrows<SepException> { sep6Client.deposit(request) }
+    val freshAccount = KeyPair.random().accountId
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.deposit(
+          mapOf(
+            "asset_code" to "USDC",
+            "account" to freshAccount,
+            "amount" to "1",
+            "type" to "SWIFT"
+          )
+        )
+      }
     assert(ex.message!!.contains("'account' does not match the one in the token")) {
-      "Expected policy rejection, got: ${ex.message}"
+      "Expected destination policy error but got: ${ex.message}"
     }
   }
 
   @Test
   fun `test sep6 deposit-exchange rejects account outside destination policy`() {
-    val attackerAccount = KeyPair.random().accountId
-    val request =
-      mapOf(
-        "destination_asset" to "USDC",
-        "source_asset" to "iso4217:USD",
-        "amount" to "1",
-        "account" to attackerAccount,
-        "type" to "SWIFT",
-      )
-
-    val ex = assertThrows<SepException> { sep6Client.deposit(request, exchange = true) }
+    val freshAccount = KeyPair.random().accountId
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.deposit(
+          mapOf(
+            "destination_asset" to "USDC",
+            "source_asset" to "iso4217:USD",
+            "amount" to "1",
+            "account" to freshAccount,
+            "type" to "SWIFT",
+          ),
+          exchange = true,
+        )
+      }
     assert(ex.message!!.contains("'account' does not match the one in the token")) {
-      "Expected policy rejection, got: ${ex.message}"
+      "Expected destination policy error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 withdraw rejects account outside destination policy`() {
+    val freshAccount = KeyPair.random().accountId
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.withdraw(
+          mapOf(
+            "asset_code" to "USDC",
+            "account" to freshAccount,
+            "amount" to "1",
+            "type" to "bank_account",
+          )
+        )
+      }
+    assert(ex.message!!.contains("'account' does not match the one in the token")) {
+      "Expected destination policy error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects account outside destination policy`() {
+    val freshAccount = KeyPair.random().accountId
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.withdraw(
+          mapOf(
+            "source_asset" to "USDC",
+            "destination_asset" to "iso4217:USD",
+            "amount" to "1",
+            "account" to freshAccount,
+            "type" to "bank_account",
+          ),
+          exchange = true,
+        )
+      }
+    assert(ex.message!!.contains("'account' does not match the one in the token")) {
+      "Expected destination policy error but got: ${ex.message}"
     }
   }
 

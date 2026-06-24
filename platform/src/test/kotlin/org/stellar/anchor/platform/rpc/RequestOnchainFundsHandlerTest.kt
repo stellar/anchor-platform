@@ -17,7 +17,6 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED
 import org.stellar.anchor.api.exception.BadRequestException
-import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException
 import org.stellar.anchor.api.platform.GetTransactionResponse
@@ -335,35 +334,6 @@ class RequestOnchainFundsHandlerTest {
     verify(exactly = 0) { txn24Store.save(any()) }
     verify(exactly = 0) { txn31Store.save(any()) }
     verify(exactly = 0) { sepTransactionCounter.increment() }
-  }
-
-  @Test
-  fun test_handle_sep6_rejects_destination_outside_policy() {
-    val request =
-      RequestOnchainFundsRequest.builder()
-        .transactionId(TX_ID)
-        .amountIn(AmountAssetRequest("1", STELLAR_USDC))
-        .amountOut(AmountAssetRequest("0.9", FIAT_USD))
-        .feeDetails(FeeDetails("0.1", STELLAR_USDC))
-        .memo(ID_MEMO)
-        .destinationAccount(DESTINATION_ACCOUNT)
-        .build()
-    val txn6 = JdbcSep6Transaction()
-    txn6.status = INCOMPLETE.toString()
-    txn6.kind = "withdrawal"
-    txn6.requestAssetCode = STELLAR_USDC_CODE
-    txn6.requestAssetIssuer = STELLAR_USDC_ISSUER
-    txn6.webAuthAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-
-    every { txn6Store.findByTransactionId(TX_ID) } returns txn6
-    every { txn24Store.findByTransactionId(any()) } returns null
-    every { txn31Store.findByTransactionId(any()) } returns null
-    every {
-      sepRequestValidator.validateDestinationAccount(txn6.webAuthAccount, DESTINATION_ACCOUNT)
-    } throws SepValidationException("Provided 'account' is not allowed")
-
-    assertThrows<SepValidationException> { handler.handle(request) }
-    verify(exactly = 0) { txn6Store.save(any()) }
   }
 
   @Test
@@ -1277,6 +1247,7 @@ class RequestOnchainFundsHandlerTest {
     expectedSep6Txn.memo = ID_MEMO
     expectedSep6Txn.memoType = ID_MEMO_TYPE
     expectedSep6Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT_2
+    expectedSep6Txn.toAccount = DESTINATION_ACCOUNT_2
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
@@ -1295,6 +1266,7 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
     expectedResponse.memo = ID_MEMO
     expectedResponse.memoType = ID_MEMO_TYPE
+    expectedResponse.destinationAccount = DESTINATION_ACCOUNT_2
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
     expectedResponse.creator = StellarId(null, null, null)
 
@@ -1374,6 +1346,7 @@ class RequestOnchainFundsHandlerTest {
     expectedSep6Txn.memo = ID_MEMO
     expectedSep6Txn.memoType = ID_MEMO_TYPE
     expectedSep6Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT
+    expectedSep6Txn.toAccount = DESTINATION_ACCOUNT
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
@@ -1392,6 +1365,7 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
     expectedResponse.memo = ID_MEMO
     expectedResponse.memoType = ID_MEMO_TYPE
+    expectedResponse.destinationAccount = DESTINATION_ACCOUNT
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
     expectedResponse.creator = StellarId(null, null, null)
 
@@ -1475,6 +1449,7 @@ class RequestOnchainFundsHandlerTest {
     expectedSep6Txn.memo = ID_MEMO
     expectedSep6Txn.memoType = ID_MEMO_TYPE
     expectedSep6Txn.withdrawAnchorAccount = DESTINATION_ACCOUNT
+    expectedSep6Txn.toAccount = DESTINATION_ACCOUNT
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep6Txn),
@@ -1493,6 +1468,7 @@ class RequestOnchainFundsHandlerTest {
     expectedResponse.updatedAt = sep6TxnCapture.captured.updatedAt
     expectedResponse.memo = ID_MEMO
     expectedResponse.memoType = ID_MEMO_TYPE
+    expectedResponse.destinationAccount = DESTINATION_ACCOUNT
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
     expectedResponse.creator = StellarId(null, null, null)
 

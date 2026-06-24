@@ -6,7 +6,6 @@ import static org.stellar.anchor.util.MathHelper.decimal;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
@@ -23,7 +22,8 @@ import org.stellar.sdk.scval.Scv;
 /** SEP request validations */
 @RequiredArgsConstructor
 public class SepRequestValidator {
-  static final String ERR_TOKEN_ACCOUNT_MISMATCH = "'account' does not match the one in the token";
+  public static final String ERR_TOKEN_ACCOUNT_MISMATCH =
+      "'account' does not match the one in the token";
 
   @NonNull private final AssetService assetService;
   @NonNull private final ClientService clientService;
@@ -274,45 +274,27 @@ public class SepRequestValidator {
             "Failed to demux destination account {}: {}", destinationAccount, ex.getMessage());
       }
     }
-
     if (!destinationBase.equals(webAuthBase)) {
       CustodialClient clientConfig = clientService.getClientConfigBySigningKey(webAuthBase);
-
-      if (clientConfig == null) {
+      if (clientConfig != null && clientConfig.isAllowAnyDestination()) {
+      } else if (clientConfig != null
+          && clientConfig.getDestinationAccounts() != null
+          && !clientConfig.getDestinationAccounts().isEmpty()) {
+        if (!clientConfig.getDestinationAccounts().contains(destinationBase)) {
+          Log.infoF(
+              "The request account:{} for wallet:{} is not in the allowed destination accounts list",
+              destinationAccount,
+              clientConfig.getName());
+          throw new SepValidationException("Provided 'account' is not allowed");
+        }
+      } else {
         Log.infoF(
             "The request account:{} does not match the one in the token:{}",
             destinationAccount,
             webAuthAccount);
-
         throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
       }
-
-      if (clientConfig.isAllowAnyDestination()) {
-        Log.infoF(
-            "The request account:{} for wallet:{} is allowed to use any destination",
-            destinationAccount,
-            webAuthAccount);
-      } else {
-        Set<String> destinationAccounts = clientConfig.getDestinationAccounts();
-        if (destinationAccounts != null && !destinationAccounts.isEmpty()) {
-          if (!destinationAccounts.contains(destinationBase)) {
-            Log.infoF(
-                "The request account:{} for wallet:{} is not in the allowed destination accounts"
-                    + " list",
-                destinationAccount,
-                webAuthAccount);
-            throw new SepValidationException("Provided 'account' is not allowed");
-          }
-        } else {
-          Log.infoF(
-              "The request account:{} does not match the one in the token:{}",
-              destinationAccount,
-              webAuthAccount);
-          throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
-        }
-      }
     }
-
     validateAccount(destinationAccount);
   }
 

@@ -287,13 +287,15 @@ public class RequestOnchainFundsHandler
 
         if (sep6DepositInfoGenerator instanceof Sep6DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
-          sepRequestValidator.validateDestinationAccount(
-              txn6.getWebAuthAccount(), request.getDestinationAccount());
           txn6.setMemo(request.getMemo());
           txn6.setMemoType(memoTypeString(memoType(memo)));
+          sepRequestValidator.validateDestinationAccount(
+              txn6.getWebAuthAccount(), request.getDestinationAccount());
           txn6.setWithdrawAnchorAccount(request.getDestinationAccount());
+          txn6.setToAccount(request.getDestinationAccount());
         } else {
           SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(txn6);
+          txn6.setToAccount(sep6DepositInfo.getStellarAddress());
           txn6.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
           txn6.setMemo(sep6DepositInfo.getMemo());
           txn6.setMemoType("id");
@@ -310,8 +312,6 @@ public class RequestOnchainFundsHandler
 
         if (sep24DepositInfoGenerator instanceof Sep24DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
-          sepRequestValidator.validateDestinationAccount(
-              txn24.getWebAuthAccount(), request.getDestinationAccount());
           txn24.setMemo(request.getMemo());
           txn24.setMemoType(memoTypeString(memoType(memo)));
           txn24.setWithdrawAnchorAccount(request.getDestinationAccount());
@@ -335,10 +335,6 @@ public class RequestOnchainFundsHandler
 
         if (sep31DepositInfoGenerator instanceof Sep31DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
-          String sep31AuthAccount =
-              txn31.getCreator() != null ? txn31.getCreator().getAccount() : null;
-          sepRequestValidator.validateDestinationAccount(
-              sep31AuthAccount, request.getDestinationAccount());
           txn31.setStellarMemo(request.getMemo());
           txn31.setStellarMemoType(memoTypeString(memoType(memo)));
           txn31.setToAccount(request.getDestinationAccount());

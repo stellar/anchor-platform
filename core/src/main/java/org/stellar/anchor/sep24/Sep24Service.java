@@ -194,7 +194,8 @@ public class Sep24Service {
       }
     }
 
-    requestValidator.validateDestinationAccount(token, sourceAccount);
+    // Validate sourceAccount
+    requestValidator.validateAccount(sourceAccount);
 
     if (token.getClientDomain() != null)
       withdrawRequest.put("client_domain", token.getClientDomain());
@@ -329,8 +330,6 @@ public class Sep24Service {
       destinationAccount = token.getAccount();
     }
 
-    requestValidator.validateDestinationAccount(token, destinationAccount);
-
     if (assetService.getAsset(assetCode, assetIssuer) == null) {
       infoF("The asset_code of the deposit request must be set.");
       throw new SepValidationException("The asset_code of the deposit request must be set");
@@ -369,6 +368,8 @@ public class Sep24Service {
             String.format("amount exceeds asset's maximum limit: %s", strAmount));
       }
     }
+
+    requestValidator.validateDestinationAccount(token, destinationAccount);
 
     if (token.getClientDomain() != null)
       depositRequest.put("client_domain", token.getClientDomain());

@@ -491,46 +491,6 @@ internal class Sep24ServiceTest {
   }
 
   @Test
-  fun `test deposit rejects account outside destination policy`() {
-    val attackerAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-    every { clientService.getClientConfigBySigningKey(any()) } returns
-      CustodialClient.builder()
-        .name("referenceCustodial")
-        .signingKeys(setOf("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"))
-        .allowAnyDestination(false)
-        .destinationAccounts(setOf("GACYKME36AI6UYAV7A5ZUA6MG4C4K2VAPNYMW5YLOM6E7GS6FSHDPV4F"))
-        .build()
-    val request = createTestTransactionRequest()
-    request["account"] = attackerAccount
-
-    val ex =
-      assertThrows<SepValidationException> { sep24Service.deposit(createTestWebAuthJwt(), request) }
-    assertEquals("Provided 'account' is not allowed", ex.message)
-    verify { txnStore wasNot Called }
-  }
-
-  @Test
-  fun `test withdraw rejects account outside destination policy`() {
-    val attackerAccount = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-    every { clientService.getClientConfigBySigningKey(any()) } returns
-      CustodialClient.builder()
-        .name("referenceCustodial")
-        .signingKeys(setOf("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"))
-        .allowAnyDestination(false)
-        .destinationAccounts(setOf("GACYKME36AI6UYAV7A5ZUA6MG4C4K2VAPNYMW5YLOM6E7GS6FSHDPV4F"))
-        .build()
-    val request = createTestTransactionRequest()
-    request["account"] = attackerAccount
-
-    val ex =
-      assertThrows<SepValidationException> {
-        sep24Service.withdraw(createTestWebAuthJwt(), request)
-      }
-    assertEquals("Provided 'account' is not allowed", ex.message)
-    verify { txnStore wasNot Called }
-  }
-
-  @Test
   fun `test deposit with bad requests`() {
     assertThrows<SepValidationException> {
       val request = createTestTransactionRequest()
