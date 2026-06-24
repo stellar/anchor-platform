@@ -13,6 +13,9 @@ import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.asset.AssetService;
+import org.stellar.anchor.auth.WebAuthJwt;
+import org.stellar.anchor.client.ClientService;
+import org.stellar.anchor.client.CustodialClient;
 import org.stellar.sdk.Address;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.scval.Scv;
@@ -20,7 +23,10 @@ import org.stellar.sdk.scval.Scv;
 /** SEP request validations */
 @RequiredArgsConstructor
 public class SepRequestValidator {
+  static final String ERR_TOKEN_ACCOUNT_MISMATCH = "'account' does not match the one in the token";
+
   @NonNull private final AssetService assetService;
+  @NonNull private final ClientService clientService;
 
   public static void validateAmount(String amount) throws AnchorException {
     validateAmount("", amount);

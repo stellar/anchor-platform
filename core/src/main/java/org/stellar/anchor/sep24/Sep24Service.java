@@ -49,7 +49,6 @@ import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
-import org.stellar.anchor.client.CustodialClient;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.config.StellarNetworkConfig;
@@ -331,26 +330,7 @@ public class Sep24Service {
       destinationAccount = token.getAccount();
     }
 
-    if (!destinationAccount.equals(token.getAccount())) {
-      CustodialClient clientConfig = clientService.getClientConfigBySigningKey(token.getAccount());
-      if (clientConfig != null && clientConfig.getDestinationAccounts() != null) {
-        if (!clientConfig.getDestinationAccounts().contains(destinationAccount)) {
-          infoF(
-              "The request account:{} for wallet:{} is not in the allowed destination accounts list",
-              destinationAccount,
-              clientConfig.getName());
-          throw new SepValidationException("Provided 'account' is not allowed");
-        }
-      } else {
-        if (clientConfig == null || !clientConfig.isAllowAnyDestination()) {
-          infoF(
-              "The request account:{} does not match the one in the token:{}",
-              destinationAccount,
-              token.getAccount());
-          throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
-        }
-      }
-    }
+    requestValidator.validateDestinationAccount(token, destinationAccount);
 
     if (assetService.getAsset(assetCode, assetIssuer) == null) {
       infoF("The asset_code of the deposit request must be set.");

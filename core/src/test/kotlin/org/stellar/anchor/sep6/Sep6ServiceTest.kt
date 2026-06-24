@@ -134,7 +134,12 @@ class Sep6ServiceTest {
         asset.sep6.deposit.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -189,7 +194,12 @@ class Sep6ServiceTest {
 
     // Verify validations
     verify(exactly = 1) { requestValidator.getDepositAsset(TEST_ASSET) }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -336,7 +346,12 @@ class Sep6ServiceTest {
         asset.sep6.deposit.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -391,7 +406,12 @@ class Sep6ServiceTest {
         asset.sep6.deposit.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) {
@@ -472,7 +492,12 @@ class Sep6ServiceTest {
         asset.sep6.deposit.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -648,7 +673,12 @@ class Sep6ServiceTest {
         asset.sep6.deposit.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -690,7 +720,12 @@ class Sep6ServiceTest {
         asset.sep6.withdraw.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -752,7 +787,12 @@ class Sep6ServiceTest {
 
     // Verify validations
     verify(exactly = 1) { requestValidator.getWithdrawAsset(TEST_ASSET) }
-    verify(exactly = 1) { requestValidator.validateAccount("requested_account") }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        "requested_account"
+      )
+    }
 
     // Verify effects
     assertEquals("requested_account", slotTxn.captured.fromAccount)
@@ -777,7 +817,12 @@ class Sep6ServiceTest {
 
     // Verify validations
     verify(exactly = 1) { requestValidator.getWithdrawAsset(TEST_ASSET) }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -923,7 +968,12 @@ class Sep6ServiceTest {
         asset.sep6.withdraw.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -976,7 +1026,12 @@ class Sep6ServiceTest {
         asset.sep6.withdraw.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) {
@@ -1050,7 +1105,12 @@ class Sep6ServiceTest {
         asset.sep6.withdraw.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }
@@ -1118,7 +1178,12 @@ class Sep6ServiceTest {
 
     // Verify validations
     verify(exactly = 1) { requestValidator.getWithdrawAsset(TEST_ASSET) }
-    verify(exactly = 1) { requestValidator.validateAccount("requested_account") }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        "requested_account"
+      )
+    }
 
     // Verify effects
     assertEquals("requested_account", slotTxn.captured.fromAccount)
@@ -1264,7 +1329,12 @@ class Sep6ServiceTest {
         asset.sep6.withdraw.maxAmount,
       )
     }
-    verify(exactly = 1) { requestValidator.validateAccount(TEST_ACCOUNT) }
+    verify(exactly = 1) {
+      requestValidator.validateDestinationAccount(
+        any<org.stellar.anchor.auth.WebAuthJwt>(),
+        TEST_ACCOUNT
+      )
+    }
 
     // Verify effects
     verify(exactly = 1) { txnStore.save(any()) }

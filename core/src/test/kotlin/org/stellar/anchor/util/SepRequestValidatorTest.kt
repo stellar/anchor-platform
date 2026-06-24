@@ -6,6 +6,7 @@ import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
@@ -16,16 +17,23 @@ import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.asset.AssetService
+import org.stellar.anchor.auth.WebAuthJwt
+import org.stellar.anchor.client.ClientService
+import org.stellar.anchor.client.CustodialClient
 
 class SepRequestValidatorTest {
   @MockK(relaxed = true) lateinit var assetService: AssetService
+  @MockK(relaxed = true) lateinit var clientService: ClientService
 
   private lateinit var requestValidator: SepRequestValidator
+
+  private val TOKEN_ACCOUNT = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+  private val OTHER_ACCOUNT = "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO"
 
   @BeforeEach
   fun setup() {
     MockKAnnotations.init(this, relaxUnitFun = true)
-    requestValidator = SepRequestValidator(assetService)
+    requestValidator = SepRequestValidator(assetService, clientService)
   }
 
   @Test
@@ -206,5 +214,82 @@ class SepRequestValidatorTest {
   )
   fun `test static validateAmount accepts reasonable amounts`(amount: String) {
     SepRequestValidator.validateAmount("", amount, false)
+  }
+
+  private fun mockToken(account: String): WebAuthJwt {
+    val token = mockk<WebAuthJwt>()
+    every { token.account } returns account
+    return token
+  }
+
+  @Test
+  fun `validateDestinationAccount passes when destination matches token subject`() {
+    val token = mockToken(TOKEN_ACCOUNT)
+    assertDoesNotThrow { requestValidator.validateDestinationAccount(token, TOKEN_ACCOUNT) }
+  }
+
+  @Test
+  fun `validateDestinationAccount rejects when no client config and accounts differ`() {
+    val token = mockToken(TOKEN_ACCOUNT)
+    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns null
+    assertThrows<SepValidationException> {
+      requestValidator.validateDestinationAccount(token, OTHER_ACCOUNT)
+    }
+  }
+
+  @Test
+  fun `validateDestinationAccount allows when allowAnyDestination is true`() {
+    val token = mockToken(TOKEN_ACCOUNT)
+    val clientConfig = mockk<CustodialClient>()
+    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns clientConfig
+    every { clientConfig.isAllowAnyDestination } returns true
+    assertDoesNotThrow { requestValidator.validateDestinationAccount(token, OTHER_ACCOUNT) }
+  }
+
+  @Test
+  fun `validateDestinationAccount allows when destination is in allowlist`() {
+    val token = mockToken(TOKEN_ACCOUNT)
+    val clientConfig = mockk<CustodialClient>()
+    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns clientConfig
+    every { clientConfig.isAllowAnyDestination } returns false
+    every { clientConfig.destinationAccounts } returns setOf(OTHER_ACCOUNT)
+    assertDoesNotThrow { requestValidator.validateDestinationAccount(token, OTHER_ACCOUNT) }
+  }
+
+  @Test
+  fun `validateDestinationAccount rejects when destination is not in allowlist`() {
+    val token = mockToken(TOKEN_ACCOUNT)
+    val clientConfig = mockk<CustodialClient>()
+    val thirdAccount = "GACYKME36AI6UYAV7A5ZUA6MG4C4K2VAPNYMW5YLOM6E7GS6FSHDPV4F"
+    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns clientConfig
+    every { clientConfig.isAllowAnyDestination } returns false
+    every { clientConfig.destinationAccounts } returns setOf(OTHER_ACCOUNT)
+    assertThrows<SepValidationException> {
+      requestValidator.validateDestinationAccount(token, thirdAccount)
+    }
+  }
+
+  @Test
+  fun `validateDestinationAccount rejects when allowlist is empty and allowAnyDestination is false`() {
+    val token = mockToken(TOKEN_ACCOUNT)
+    val clientConfig = mockk<CustodialClient>()
+    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns clientConfig
+    every { clientConfig.isAllowAnyDestination } returns false
+    every { clientConfig.destinationAccounts } returns emptySet()
+    assertThrows<SepValidationException> {
+      requestValidator.validateDestinationAccount(token, OTHER_ACCOUNT)
+    }
+  }
+
+  @Test
+  fun `validateDestinationAccount rejects when allowlist is null and allowAnyDestination is false`() {
+    val token = mockToken(TOKEN_ACCOUNT)
+    val clientConfig = mockk<CustodialClient>()
+    every { clientService.getClientConfigBySigningKey(TOKEN_ACCOUNT) } returns clientConfig
+    every { clientConfig.isAllowAnyDestination } returns false
+    every { clientConfig.destinationAccounts } returns null
+    assertThrows<SepValidationException> {
+      requestValidator.validateDestinationAccount(token, OTHER_ACCOUNT)
+    }
   }
 }

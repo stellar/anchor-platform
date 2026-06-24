@@ -48,6 +48,7 @@ import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep6.Sep6DepositInfoGenerator;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
 import org.stellar.anchor.util.Log;
+import org.stellar.anchor.util.SepRequestValidator;
 import org.stellar.sdk.Memo;
 
 public class RequestOnchainFundsHandler
@@ -57,6 +58,7 @@ public class RequestOnchainFundsHandler
   private final Sep24DepositInfoGenerator sep24DepositInfoGenerator;
   private final Sep31DepositInfoGenerator sep31DepositInfoGenerator;
   private final PaymentObservingAccountsManager paymentObservingAccountsManager;
+  private final SepRequestValidator sepRequestValidator;
 
   public RequestOnchainFundsHandler(
       Sep6TransactionStore txn6Store,
@@ -69,7 +71,8 @@ public class RequestOnchainFundsHandler
       Sep31DepositInfoGenerator sep31DepositInfoGenerator,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
       EventService eventService,
-      MetricsService metricsService) {
+      MetricsService metricsService,
+      SepRequestValidator sepRequestValidator) {
     super(
         txn6Store,
         txn24Store,
@@ -83,6 +86,7 @@ public class RequestOnchainFundsHandler
     this.sep24DepositInfoGenerator = sep24DepositInfoGenerator;
     this.sep31DepositInfoGenerator = sep31DepositInfoGenerator;
     this.paymentObservingAccountsManager = paymentObservingAccountsManager;
+    this.sepRequestValidator = sepRequestValidator;
   }
 
   @Override
@@ -283,6 +287,8 @@ public class RequestOnchainFundsHandler
 
         if (sep6DepositInfoGenerator instanceof Sep6DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          sepRequestValidator.validateDestinationAccount(
+              txn6.getWebAuthAccount(), request.getDestinationAccount());
           txn6.setMemo(request.getMemo());
           txn6.setMemoType(memoTypeString(memoType(memo)));
           txn6.setWithdrawAnchorAccount(request.getDestinationAccount());
@@ -304,6 +310,8 @@ public class RequestOnchainFundsHandler
 
         if (sep24DepositInfoGenerator instanceof Sep24DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          sepRequestValidator.validateDestinationAccount(
+              txn24.getWebAuthAccount(), request.getDestinationAccount());
           txn24.setMemo(request.getMemo());
           txn24.setMemoType(memoTypeString(memoType(memo)));
           txn24.setWithdrawAnchorAccount(request.getDestinationAccount());
