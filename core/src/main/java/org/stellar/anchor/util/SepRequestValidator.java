@@ -6,6 +6,7 @@ import static org.stellar.anchor.util.MathHelper.decimal;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
@@ -222,6 +223,90 @@ public class SepRequestValidator {
               "invalid type %s for asset %s, supported types are %s",
               requestType, assetCode, validTypes));
     }
+  }
+
+  /**
+   * Validates that the resolved destination account is permitted by the operator-configured
+   * destination policy (CustodialClient.destinationAccounts / allowAnyDestination), then verifies
+   * the address is syntactically valid. The caller is responsible for resolving the account to the
+   * SEP-10 subject when the request omits it (i.e. pass token.getAccount() when the request field
+   * is empty).
+   *
+   * @param token the SEP-10 JWT of the authenticated client
+   * @param destinationAccount the already-resolved destination account
+   * @throws SepValidationException if the account is not permitted or syntactically invalid
+   */
+  public void validateDestinationAccount(WebAuthJwt token, String destinationAccount)
+      throws AnchorException {
+    validateDestinationAccount(token.getAccount(), destinationAccount);
+  }
+
+  public void validateDestinationAccount(String webAuthAccount, String destinationAccount)
+      throws AnchorException {
+    String webAuthBase = webAuthAccount;
+    try {
+      if (SepHelper.accountType(webAuthAccount) == SepHelper.AccountType.Muxed) {
+        webAuthBase = new MuxedAccount(webAuthAccount).getAccountId();
+      }
+    } catch (RuntimeException ex) {
+      throw new SepValidationException(
+          String.format("invalid token account %s", webAuthAccount), ex);
+    }
+
+    String destinationBase = destinationAccount;
+    SepHelper.AccountType destAccountType;
+    try {
+      destAccountType = SepHelper.accountType(destinationAccount);
+    } catch (IllegalArgumentException ex) {
+      throw new SepValidationException(String.format("invalid account %s", destinationAccount), ex);
+    }
+    if (destAccountType == SepHelper.AccountType.Muxed) {
+      try {
+        destinationBase = new MuxedAccount(destinationAccount).getAccountId();
+      } catch (RuntimeException ex) {
+        Log.warnF(
+            "Failed to demux destination account {}: {}", destinationAccount, ex.getMessage());
+      }
+    }
+
+    if (!destinationBase.equals(webAuthBase)) {
+      CustodialClient clientConfig = clientService.getClientConfigBySigningKey(webAuthBase);
+
+      if (clientConfig == null) {
+        Log.infoF(
+            "The request account:{} does not match the one in the token:{}",
+            destinationAccount,
+            webAuthAccount);
+        throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
+      }
+
+      if (clientConfig.isAllowAnyDestination()) {
+        Log.infoF(
+            "The request account:{} for wallet:{} is allowed to use any destination",
+            destinationAccount,
+            webAuthAccount);
+      } else {
+        Set<String> destinationAccounts = clientConfig.getDestinationAccounts();
+        if (destinationAccounts != null && !destinationAccounts.isEmpty()) {
+          if (!destinationAccounts.contains(destinationBase)) {
+            Log.infoF(
+                "The request account:{} for wallet:{} is not in the allowed destination accounts"
+                    + " list",
+                destinationAccount,
+                webAuthAccount);
+            throw new SepValidationException("Provided 'account' is not allowed");
+          }
+        } else {
+          Log.infoF(
+              "The request account:{} does not match the one in the token:{}",
+              destinationAccount,
+              webAuthAccount);
+          throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
+        }
+      }
+    }
+
+    validateAccount(destinationAccount);
   }
 
   /**
