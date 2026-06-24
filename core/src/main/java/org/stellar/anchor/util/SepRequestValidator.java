@@ -277,6 +277,7 @@ public class SepRequestValidator {
             "The request account:{} does not match the one in the token:{}",
             destinationAccount,
             webAuthAccount);
+
         throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
       }
 
