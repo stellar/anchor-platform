@@ -251,7 +251,10 @@ internal class Sep10ServiceTest {
 
     // Test when the transaction was not signed by the client domain and the client account not
     // exists
-    every { ledgerClient.getAccount(any()) } answers { throw LedgerException("mock error") }
+    every { ledgerClient.getAccount(any()) } answers
+      {
+        throw AccountNotFoundException(clientKeyPair.accountId)
+      }
     vr.transaction = createTestChallenge(TEST_CLIENT_DOMAIN, TEST_HOME_DOMAIN, false)
 
     assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
@@ -264,10 +267,23 @@ internal class Sep10ServiceTest {
 
     every { ledgerClient.getAccount(ofType(String::class)) } answers
       {
-        throw LedgerException("mock error")
+        throw AccountNotFoundException(clientKeyPair.accountId)
       }
 
     sep10Service.validateChallenge(vr)
+  }
+
+  @Test
+  fun `test validate challenge fails closed on ledger lookup error`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
+
+    every { ledgerClient.getAccount(ofType(String::class)) } answers
+      {
+        throw LedgerException("rpc unavailable")
+      }
+
+    assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
   }
 
   @Suppress("CAST_NEVER_SUCCEEDS")

@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.stellar.anchor.api.exception.AccountNotFoundException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.LedgerClientHelper.ParseResult;
@@ -94,6 +95,10 @@ public class Horizon implements LedgerClient {
                               .build())
                   .collect(Collectors.toList()))
           .build();
+    } catch (org.stellar.sdk.exception.AccountNotFoundException e) {
+      throw new AccountNotFoundException(account);
+    } catch (BadRequestException e) {
+      throw new AccountNotFoundException(account);
     } catch (Exception e) {
       throw new LedgerException("Error getting account: " + account, e);
     }
