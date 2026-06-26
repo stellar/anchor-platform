@@ -48,6 +48,7 @@ import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep6.Sep6DepositInfoGenerator;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
 import org.stellar.anchor.util.Log;
+import org.stellar.anchor.util.SepRequestValidator;
 import org.stellar.sdk.Memo;
 
 public class RequestOnchainFundsHandler
@@ -57,6 +58,7 @@ public class RequestOnchainFundsHandler
   private final Sep24DepositInfoGenerator sep24DepositInfoGenerator;
   private final Sep31DepositInfoGenerator sep31DepositInfoGenerator;
   private final PaymentObservingAccountsManager paymentObservingAccountsManager;
+  private final SepRequestValidator sepRequestValidator;
 
   public RequestOnchainFundsHandler(
       Sep6TransactionStore txn6Store,
@@ -69,7 +71,8 @@ public class RequestOnchainFundsHandler
       Sep31DepositInfoGenerator sep31DepositInfoGenerator,
       PaymentObservingAccountsManager paymentObservingAccountsManager,
       EventService eventService,
-      MetricsService metricsService) {
+      MetricsService metricsService,
+      SepRequestValidator sepRequestValidator) {
     super(
         txn6Store,
         txn24Store,
@@ -83,6 +86,7 @@ public class RequestOnchainFundsHandler
     this.sep24DepositInfoGenerator = sep24DepositInfoGenerator;
     this.sep31DepositInfoGenerator = sep31DepositInfoGenerator;
     this.paymentObservingAccountsManager = paymentObservingAccountsManager;
+    this.sepRequestValidator = sepRequestValidator;
   }
 
   @Override
@@ -285,9 +289,13 @@ public class RequestOnchainFundsHandler
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
           txn6.setMemo(request.getMemo());
           txn6.setMemoType(memoTypeString(memoType(memo)));
+          sepRequestValidator.validateDestinationAccount(
+              txn6.getWebAuthAccount(), request.getDestinationAccount());
           txn6.setWithdrawAnchorAccount(request.getDestinationAccount());
+          txn6.setToAccount(request.getDestinationAccount());
         } else {
           SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(txn6);
+          txn6.setToAccount(sep6DepositInfo.getStellarAddress());
           txn6.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
           txn6.setMemo(sep6DepositInfo.getMemo());
           txn6.setMemoType("id");
