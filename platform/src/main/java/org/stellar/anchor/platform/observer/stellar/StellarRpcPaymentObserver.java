@@ -360,7 +360,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
     if (isEmpty(cursor)) {
       long latestLedger = getLatestLedger();
-      return GetEventsRequest.builder().filters(filters).startLedger(latestLedger - 5).build();
+      long startLedger = Math.max(1, latestLedger - 5);
+      return GetEventsRequest.builder().filters(filters).startLedger(startLedger).build();
     } else {
       return GetEventsRequest.builder()
           .filters(filters)
