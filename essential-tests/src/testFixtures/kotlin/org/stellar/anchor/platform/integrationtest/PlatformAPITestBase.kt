@@ -2,6 +2,7 @@ package org.stellar.anchor.platform.integrationtest
 
 import java.math.BigDecimal
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerClientHelper.waitForTransactionAvailable
@@ -21,6 +22,7 @@ import org.stellar.sdk.requests.RequestBuilder
 import org.stellar.sdk.responses.operations.OperationResponse
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus
 import org.stellar.sdk.xdr.OperationType
 import org.stellar.sdk.xdr.TransactionEnvelope
 
@@ -39,8 +41,8 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     const val TEST_PAYMENT_ASSET_CIRCLE_USDC =
       "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
 
-    @Volatile private var sharedTestPaymentValues: List<Pair<String, String>>? = null
-    private val testPaymentLock = Any()
+    private val paymentValuesByClass = ConcurrentHashMap<String, List<Pair<String, String>>>()
+    private val classLocks = ConcurrentHashMap<String, Any>()
   }
 
   fun inject(target: String, vararg replacements: Pair<String, String>): String {
@@ -57,17 +59,19 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
   }
 
   private fun getTestPaymentValues(): List<Pair<String, String>> {
-    sharedTestPaymentValues?.let {
+    val key = this::class.java.simpleName
+    paymentValuesByClass[key]?.let {
       return it
     }
-    synchronized(testPaymentLock) {
-      sharedTestPaymentValues?.let {
+    val lock = classLocks.getOrPut(key) { Any() }
+    synchronized(lock) {
+      paymentValuesByClass[key]?.let {
         return it
       }
       if (isNotEmpty(config.get("stellar_network.rpc_url"))) {
         val ledgerClient = StellarRpc(config.get("stellar_network.rpc_url")!!)
         val ledgerTxn = sendTestPayment(ledgerClient)
-        setTestPaymentsValues(ledgerTxn!!)
+        setTestPaymentsValues(key, ledgerTxn!!)
       } else if (isNotEmpty(config.get("stellar_network.horizon_url"))) {
         val horizonServer = Server(config.get("stellar_network.horizon_url")!!)
         val payment = fetchTestPaymentFromHorizon(horizonServer)
@@ -78,11 +82,11 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
             val ledgerClient = Horizon(config.get("stellar_network.horizon_url")!!)
             sendTestPayment(ledgerClient)
           }
-        setTestPaymentsValues(ledgerTxn!!)
+        setTestPaymentsValues(key, ledgerTxn!!)
       } else {
         throw Exception("None of stellar_network.rpc_url or stellar_network.horizon_url is not set")
       }
-      return sharedTestPaymentValues!!
+      return paymentValuesByClass[key]!!
     }
   }
 
@@ -141,46 +145,54 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
 
   private fun sendTestPayment(ledgerClient: LedgerClient): LedgerTransaction? {
     val destAccount = TEST_PAYMENT_DEST_ACCOUNT
-
-    // send test payment of 1 USDC from distribution account to the test receiver account
     val usdcAsset =
       Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
         as AssetTypeCreditAlphaNum
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
-    info(
-      "Create test payment transaction: 1 USDC from distribution account to the test receiver account"
-    )
     val accountId = sourceKey.accountId
-    val account = ledgerClient.getAccount(accountId)
-    val txn =
-      TransactionBuilder(Account(accountId, account.sequenceNumber), Network.TESTNET)
-        .addOperation(
-          PaymentOperation.builder()
-            .sourceAccount(sourceKey.accountId)
-            .destination(destAccount)
-            .asset(usdcAsset)
-            .amount(BigDecimal("0.0002"))
-            .build()
-        )
-        .addMemo(Memo.text(TEST_PAYMENT_MEMO)) // Add memo
-        .addPreconditions(
-          TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(180)).build()
-        )
-        .setBaseFee(Transaction.MIN_BASE_FEE)
-        .build()
-    // Sign the transaction
-    txn.sign(sourceKey)
 
-    val response = ledgerClient.submitTransaction(txn)
-    return waitForTransactionAvailable(ledgerClient, response.hash, 60, 60)
+    for (attempt in 1..5) {
+      info("sendTestPayment attempt $attempt/5 (class=${this::class.java.simpleName})")
+      val account = ledgerClient.getAccount(accountId)
+      val txn =
+        TransactionBuilder(Account(accountId, account.sequenceNumber), Network.TESTNET)
+          .addOperation(
+            PaymentOperation.builder()
+              .sourceAccount(sourceKey.accountId)
+              .destination(destAccount)
+              .asset(usdcAsset)
+              .amount(BigDecimal("0.0002"))
+              .build()
+          )
+          .addMemo(Memo.text(TEST_PAYMENT_MEMO))
+          .addPreconditions(
+            TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(180)).build()
+          )
+          .setBaseFee(Transaction.MIN_BASE_FEE)
+          .build()
+      txn.sign(sourceKey)
+
+      val response = ledgerClient.submitTransaction(txn)
+      val accepted =
+        response.status == SendTransactionStatus.PENDING ||
+          response.status == SendTransactionStatus.DUPLICATE
+      if (accepted) {
+        val result = waitForTransactionAvailable(ledgerClient, response.hash, 60, 60)
+        if (result != null) return result
+      }
+      info("sendTestPayment attempt $attempt failed (status=${response.status}). Retrying in 3s...")
+      Thread.sleep(3000)
+    }
+    throw Exception(
+      "sendTestPayment failed after 5 attempts (class=${this::class.java.simpleName})"
+    )
   }
 
-  private fun setTestPaymentsValues(ledgerTxn: LedgerTransaction) {
+  private fun setTestPaymentsValues(key: String, ledgerTxn: LedgerTransaction) {
     val txnEnv = TransactionEnvelope.fromXdrBase64(ledgerTxn.envelopeXdr)
     val paymentOp = txnEnv.v1.tx.operations[0].body.paymentOp
     if (paymentOp != null) {
-      // initialize the test payment value pairs for injection
-      sharedTestPaymentValues =
+      paymentValuesByClass[key] =
         listOf(
           Pair(
             "%TESTPAYMENT_ID%",
