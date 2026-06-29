@@ -12,6 +12,7 @@ import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
 import org.stellar.sdk.Auth.authorizeEntry
 import org.stellar.sdk.contract.AssembledTransaction
 import org.stellar.sdk.operations.InvokeHostFunctionOperation
+import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.SCVal
 import org.stellar.sdk.xdr.SCValType
@@ -143,7 +144,7 @@ class WalletClient(
     simulationResponse.results.forEach {
       it.auth.forEach { entryXdr ->
         val entry = SorobanAuthorizationEntry.fromXdrBase64(entryXdr)
-        val validUntilLedgerSeq = simulationResponse.latestLedger + 10
+        val validUntilLedgerSeq = simulationResponse.latestLedger + 60
         val signedEntry = authorizeEntry(entry, keyPair, validUntilLedgerSeq, Network.TESTNET)
         signedAuthEntries.add(signedEntry)
       }
@@ -170,6 +171,11 @@ class WalletClient(
     preparedTransaction.sign(keyPair)
 
     val transactionResponse = rpc.sendTransaction(preparedTransaction)
+    if (transactionResponse.status == SendTransactionResponse.SendTransactionStatus.ERROR) {
+      throw RuntimeException(
+        "sendTransaction rejected: errorResultXdr=${transactionResponse.errorResultXdr}"
+      )
+    }
 
     return transactionResponse.hash
   }
