@@ -6,7 +6,6 @@ import static org.stellar.anchor.api.rpc.method.RpcMethod.NOTIFY_ONCHAIN_FUNDS_R
 import static org.stellar.anchor.api.sep.SepTransactionStatus.*;
 import static org.stellar.anchor.platform.utils.PaymentHelper.addStellarTransaction;
 import static org.stellar.anchor.platform.utils.PaymentHelper.getLedgerPayment;
-import static org.stellar.anchor.util.Log.errorEx;
 
 import com.google.common.collect.ImmutableSet;
 import java.util.HashSet;
@@ -15,7 +14,7 @@ import java.util.Set;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.LedgerException;
-import org.stellar.anchor.api.exception.rpc.InternalErrorException;
+import org.stellar.anchor.api.exception.NotFoundException;
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException;
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind;
@@ -180,11 +179,7 @@ public class NotifyOnchainFundsReceivedHandler
         if (payment != null) txn31.setFromAccount(payment.getFrom());
       }
     } catch (LedgerException ex) {
-      errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
-      throw new InternalErrorException(
-          String.format(
-              "Failed to retrieve Stellar transaction by ID[%s]: %s",
-              stellarTxnId, ex.getMessage()));
+      throw new NotFoundException(String.format("Transaction (hash=%s) not found", stellarTxnId));
     }
 
     if (request.getAmountIn() != null) {
