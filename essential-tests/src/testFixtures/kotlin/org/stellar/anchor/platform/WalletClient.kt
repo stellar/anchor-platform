@@ -144,7 +144,7 @@ class WalletClient(
     simulationResponse.results.forEach {
       it.auth.forEach { entryXdr ->
         val entry = SorobanAuthorizationEntry.fromXdrBase64(entryXdr)
-        val validUntilLedgerSeq = simulationResponse.latestLedger + 60
+        val validUntilLedgerSeq = simulationResponse.latestLedger + 10
         val signedEntry = authorizeEntry(entry, keyPair, validUntilLedgerSeq, Network.TESTNET)
         signedAuthEntries.add(signedEntry)
       }
