@@ -20,7 +20,7 @@ import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.LedgerException
-import org.stellar.anchor.api.exception.rpc.InternalErrorException
+import org.stellar.anchor.api.exception.NotFoundException
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException
 import org.stellar.anchor.api.platform.GetTransactionResponse
@@ -596,11 +596,8 @@ class NotifyOnchainFundsReceivedHandlerTest {
     every { ledgerClient.getTransaction(any()) } throws
       LedgerException("Invalid stellar transaction")
 
-    val ex = assertThrows<InternalErrorException> { handler.handle(request) }
-    assertEquals(
-      "Failed to retrieve Stellar transaction by ID[stellarTxId]: Invalid stellar transaction",
-      ex.message
-    )
+    val ex = assertThrows<NotFoundException> { handler.handle(request) }
+    assertEquals("Transaction (hash=stellarTxId) not found", ex.message)
 
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
@@ -1287,11 +1284,8 @@ class NotifyOnchainFundsReceivedHandlerTest {
     every { ledgerClient.getTransaction(any()) } throws
       LedgerException("Invalid stellar transaction")
 
-    val ex = assertThrows<InternalErrorException> { handler.handle(request) }
-    assertEquals(
-      "Failed to retrieve Stellar transaction by ID[stellarTxId]: Invalid stellar transaction",
-      ex.message
-    )
+    val ex = assertThrows<NotFoundException> { handler.handle(request) }
+    assertEquals("Transaction (hash=stellarTxId) not found", ex.message)
 
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
