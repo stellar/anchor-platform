@@ -177,10 +177,19 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
         response.status == SendTransactionStatus.PENDING ||
           response.status == SendTransactionStatus.DUPLICATE
       if (accepted) {
-        val result = waitForTransactionAvailable(ledgerClient, response.hash, 60, 60)
-        if (result != null) return result
+        try {
+          return waitForTransactionAvailable(ledgerClient, response.hash, 60, 60)
+        } catch (e: Exception) {
+          info(
+            "sendTestPayment attempt $attempt: transaction not confirmed within timeout." +
+              " Retrying in 3s..."
+          )
+        }
+      } else {
+        info(
+          "sendTestPayment attempt $attempt rejected (status=${response.status}). Retrying in 3s..."
+        )
       }
-      info("sendTestPayment attempt $attempt failed (status=${response.status}). Retrying in 3s...")
       Thread.sleep(3000)
     }
     throw Exception(
