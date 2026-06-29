@@ -664,6 +664,53 @@ class StellarRpcPaymentObserverTest {
     assertEquals("CURSOR_SUBINVOKE", observer.cursor)
   }
 
+  @Test
+  fun `processTransferEvent retries getTransaction when RPC events index races ahead of transactions index`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val amount = BigInteger.valueOf(1_000_000L)
+    val txHash = "txHashRaceCondition"
+    val seqNum = 400L
+    val appOrder = 1
+    val paymentOpId = TOID(seqNum.toInt(), appOrder, 1).toInt64().toString()
+
+    setupTransferEvent(fromAccount, toAccount, amount, txHash, operationIndex = 0L, "CURSOR_RACE")
+
+    val paymentOp =
+      LedgerTransaction.LedgerPaymentOperation().apply {
+        from = fromAccount
+        to = toAccount
+        asset = Asset.createNativeAsset().toXdr()
+        this.amount = amount
+        id = paymentOpId
+      }
+    val op =
+      LedgerOperation().apply {
+        type = OperationType.PAYMENT
+        paymentOperation = paymentOp
+      }
+    val txn =
+      LedgerTransaction.builder()
+        .hash(txHash)
+        .sequenceNumber(seqNum)
+        .applicationOrder(appOrder)
+        .operations(listOf(op))
+        .build()
+
+    every { stellarRpc.getTransaction(txHash) } returnsMany listOf(null, txn)
+
+    val capturedEvent = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
+
+    observer.fetchEvents()
+
+    verify(exactly = 2) { stellarRpc.getTransaction(txHash) }
+    assertEquals(txHash, capturedEvent.captured.txHash)
+    assertEquals(fromAccount, capturedEvent.captured.from)
+    assertEquals(toAccount, capturedEvent.captured.to)
+    assertEquals("CURSOR_RACE", observer.cursor)
+  }
+
   private fun mockPoisonResponse(
     valueBase64: String,
     fromAccount: String = KeyPair.random().accountId,
