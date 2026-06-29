@@ -38,9 +38,10 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     const val TEST_PAYMENT_DEST_ACCOUNT = "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
     const val TEST_PAYMENT_ASSET_CIRCLE_USDC =
       "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
-  }
 
-  private lateinit var testPaymentValues: List<Pair<String, String>>
+    @Volatile private var sharedTestPaymentValues: List<Pair<String, String>>? = null
+    private val testPaymentLock = Any()
+  }
 
   fun inject(target: String, vararg replacements: Pair<String, String>): String {
     var result = target
@@ -56,14 +57,19 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
   }
 
   private fun getTestPaymentValues(): List<Pair<String, String>> {
-    if (!::testPaymentValues.isInitialized || testPaymentValues.isEmpty()) {
+    sharedTestPaymentValues?.let {
+      return it
+    }
+    synchronized(testPaymentLock) {
+      sharedTestPaymentValues?.let {
+        return it
+      }
       if (isNotEmpty(config.get("stellar_network.rpc_url"))) {
         val ledgerClient = StellarRpc(config.get("stellar_network.rpc_url")!!)
         val ledgerTxn = sendTestPayment(ledgerClient)
         setTestPaymentsValues(ledgerTxn!!)
       } else if (isNotEmpty(config.get("stellar_network.horizon_url"))) {
         val horizonServer = Server(config.get("stellar_network.horizon_url")!!)
-        // not the most optimized way to do this, but it works
         val payment = fetchTestPaymentFromHorizon(horizonServer)
         val ledgerTxn: LedgerTransaction? =
           if (payment != null) {
@@ -76,8 +82,8 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
       } else {
         throw Exception("None of stellar_network.rpc_url or stellar_network.horizon_url is not set")
       }
+      return sharedTestPaymentValues!!
     }
-    return testPaymentValues
   }
 
   private fun toLedgerTransaction(operationResponse: OperationResponse): LedgerTransaction {
@@ -166,7 +172,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     txn.sign(sourceKey)
 
     val response = ledgerClient.submitTransaction(txn)
-    return waitForTransactionAvailable(ledgerClient, response.hash)
+    return waitForTransactionAvailable(ledgerClient, response.hash, 60, 60)
   }
 
   private fun setTestPaymentsValues(ledgerTxn: LedgerTransaction) {
@@ -174,7 +180,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     val paymentOp = txnEnv.v1.tx.operations[0].body.paymentOp
     if (paymentOp != null) {
       // initialize the test payment value pairs for injection
-      testPaymentValues =
+      sharedTestPaymentValues =
         listOf(
           Pair(
             "%TESTPAYMENT_ID%",
