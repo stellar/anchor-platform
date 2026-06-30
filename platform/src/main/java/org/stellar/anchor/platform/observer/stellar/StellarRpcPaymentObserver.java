@@ -24,6 +24,7 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.asset.AssetService;
+import org.stellar.anchor.ledger.LedgerClientHelper;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation;
@@ -174,7 +175,9 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   private void processTransferEvent(ShouldProcessResult result) {
     debug("Processing transfer event: {}", GsonUtils.getInstance().toJson(result.event));
     try {
-      LedgerTransaction txn = stellarRpc.getTransaction(result.event.getTransactionHash());
+      LedgerTransaction txn =
+          LedgerClientHelper.waitForTransactionAvailable(
+              stellarRpc, result.event.getTransactionHash());
       String wantedOpId =
           String.valueOf(
               new TOID(
@@ -357,7 +360,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
     if (isEmpty(cursor)) {
       long latestLedger = getLatestLedger();
-      return GetEventsRequest.builder().filters(filters).startLedger(latestLedger - 1).build();
+      long startLedger = Math.max(1, latestLedger - 5);
+      return GetEventsRequest.builder().filters(filters).startLedger(startLedger).build();
     } else {
       return GetEventsRequest.builder()
           .filters(filters)
