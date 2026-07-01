@@ -1,0 +1,51 @@
+name: Release Cut
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump type or exact version (e.g. minor, patch, major, 4.6.0)'
+        required: false
+        default: 'minor'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump_version:
+    name: Bump Version and Open PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Run bump-version script
+        run: |
+          chmod +x ./scripts/bump-version.sh
+          VERSION="${{ inputs.bump }}" ./scripts/bump-version.sh
+
+      - name: Read new version
+        id: version
+        run: echo "NEW_VERSION=$(grep -E '^version=' service-runner/src/main/resources/version-info.properties | cut -d'=' -f2)" >> $GITHUB_OUTPUT
+
+      - name: Create branch and open PR
+        run: |
+          BRANCH="chore/bump-version-${{ steps.version.outputs.NEW_VERSION }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add build.gradle.kts README.md service-runner/src/main/resources/version-info.properties
+          git commit -m "chore: bump version to ${{ steps.version.outputs.NEW_VERSION }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --base develop \
+            --head "$BRANCH" \
+            --title "chore: bump version to ${{ steps.version.outputs.NEW_VERSION }}" \
+            --body "Bumps version to \`${{ steps.version.outputs.NEW_VERSION }}\`. DO NOT squash merge." \
+            --label release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
