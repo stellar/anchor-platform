@@ -1,0 +1,33 @@
+name: Release Tag
+
+on:
+  pull_request:
+    types: [ closed ]
+    branches: [ develop ]
+
+permissions:
+  contents: write
+
+jobs:
+  create_tag:
+    name: Create GitHub Release and Tag
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release') && startsWith(github.event.pull_request.title, 'chore: back-merge')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Read version
+        id: version
+        run: echo "VERSION=$(grep -E '^version=' service-runner/src/main/resources/version-info.properties | cut -d'=' -f2)" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub release and tag
+        run: |
+          gh release create ${{ steps.version.outputs.VERSION }} \
+            --target main \
+            --generate-notes \
+            --title "${{ steps.version.outputs.VERSION }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

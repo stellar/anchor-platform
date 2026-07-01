@@ -1,0 +1,50 @@
+name: Release Branch
+
+on:
+  pull_request:
+    types: [ closed ]
+    branches: [ develop ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cut_release_branch:
+    name: Cut Release Branch and Open PR to Main
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        run: echo "VERSION=$(grep -E '^version=' service-runner/src/main/resources/version-info.properties | cut -d'=' -f2)" >> $GITHUB_OUTPUT
+
+      - name: Cut release branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b release/${{ steps.version.outputs.VERSION }}
+          git push origin release/${{ steps.version.outputs.VERSION }}
+
+      - name: Create merge branch from release
+        run: |
+          git checkout release/${{ steps.version.outputs.VERSION }}
+          git checkout -b chore/merge-release-${{ steps.version.outputs.VERSION }}-to-main
+          git push origin chore/merge-release-${{ steps.version.outputs.VERSION }}-to-main
+
+      - name: Open PR to main
+        run: |
+          gh pr create \
+            --base main \
+            --head chore/merge-release-${{ steps.version.outputs.VERSION }}-to-main \
+            --title "Release ${{ steps.version.outputs.VERSION }}" \
+            --body "DO NOT squash merge." \
+            --label release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
