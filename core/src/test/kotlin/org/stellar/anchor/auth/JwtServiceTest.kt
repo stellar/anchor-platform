@@ -1,5 +1,6 @@
 package org.stellar.anchor.auth
 
+import io.jsonwebtoken.JwtException
 import io.jsonwebtoken.MalformedJwtException
 import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -10,6 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.TestConstants.Companion.TEST_CLIENT_NAME
 import org.stellar.anchor.TestConstants.Companion.TEST_HOME_DOMAIN
+import org.stellar.anchor.auth.ApiAuthJwt.PlatformAuthJwt
 import org.stellar.anchor.auth.JwtService.*
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.config.SecretConfig
@@ -121,5 +123,46 @@ internal class JwtServiceTest {
     assertThrows<MalformedJwtException> {
       jwtService.decode("This is a bad cipher", Sep10Jwt::class.java)
     }
+  }
+
+  @Test
+  fun `sep10 token is rejected when decoded as PlatformAuthJwt even when secrets collide`() {
+    val sharedSecret = "shared_secret_collision_test_32_chars__"
+    val collidingService =
+      JwtService(
+        "sep6_more_info_unique_secret_32_chars__",
+        sharedSecret,
+        "sep45_unique_secret_value_32_chars_____",
+        "sep24_interactive_unique_secret_32_chars",
+        "sep24_more_info_unique_secret_32_chars__",
+        "callback_unique_secret_value_32_chars___",
+        sharedSecret,
+      )
+
+    val sep10Token =
+      Sep10Jwt(TEST_ISS, TEST_SUB, TEST_IAT, TEST_EXP, TEST_JTI, TEST_CLIENT_DOMAIN, null)
+    val sep10Cipher = collidingService.encode(sep10Token)
+
+    assertThrows<JwtException> { collidingService.decode(sep10Cipher, PlatformAuthJwt::class.java) }
+  }
+
+  @Test
+  fun `platform token is rejected when decoded as Sep10Jwt even when secrets collide`() {
+    val sharedSecret = "shared_secret_collision_test_32_chars__"
+    val collidingService =
+      JwtService(
+        "sep6_more_info_unique_secret_32_chars__",
+        sharedSecret,
+        "sep45_unique_secret_value_32_chars_____",
+        "sep24_interactive_unique_secret_32_chars",
+        "sep24_more_info_unique_secret_32_chars__",
+        "callback_unique_secret_value_32_chars___",
+        sharedSecret,
+      )
+
+    val platformToken = PlatformAuthJwt(TEST_IAT, TEST_EXP)
+    val platformCipher = collidingService.encode(platformToken)
+
+    assertThrows<JwtException> { collidingService.decode(platformCipher, Sep10Jwt::class.java) }
   }
 }
