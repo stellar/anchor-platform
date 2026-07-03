@@ -6,6 +6,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -74,7 +75,7 @@ class SecretConfigTest {
     config.validate(config, errors)
 
     assertEquals(3, errors.errorCount)
-    assert(errors.allErrors.all { it.code == "secrets.jwt.must_be_unique" })
+    assertTrue(errors.allErrors.all { it.code == "secrets.jwt.must_be_unique" })
   }
 
   @Test

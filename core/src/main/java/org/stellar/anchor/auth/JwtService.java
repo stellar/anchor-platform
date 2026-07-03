@@ -98,7 +98,6 @@ public class JwtService {
             .subject(token.getSub())
             .issuedAt(from(timeIat))
             .expiration(from(timeExp))
-            .subject(token.getSub())
             .audience()
             .add(aud)
             .and();
