@@ -12,13 +12,16 @@ public class JdbcSep31CustomerIdOwnerStore implements Sep31CustomerIdOwnerStore 
 
   @Override
   public boolean verifyOrClaim(String customerId, String creatorAccount, String creatorMemo) {
-    repo.claimIfAbsent(customerId, creatorAccount, creatorMemo);
+    if (repo.claimIfAbsent(customerId, creatorAccount, creatorMemo) == 1) {
+      return true;
+    }
+
     JdbcSep31CustomerIdOwner owner =
         repo.findById(customerId)
             .orElseThrow(
                 () ->
                     new IllegalStateException(
-                        "sep31_customer_id_owner row missing immediately after claim for id="
+                        "sep31_customer_id_owner row missing after a non-inserting claim for id="
                             + customerId));
 
     return Objects.equals(owner.getCreatorAccount(), creatorAccount)

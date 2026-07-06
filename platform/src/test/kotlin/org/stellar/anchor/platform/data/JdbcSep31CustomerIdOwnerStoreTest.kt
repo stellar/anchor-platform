@@ -29,12 +29,12 @@ class JdbcSep31CustomerIdOwnerStoreTest {
     }
 
   @Test
-  fun `first claim of a customer id succeeds`() {
+  fun `first claim of a customer id succeeds without a follow-up lookup`() {
     every { repo.claimIfAbsent("cust-1", "GALICE", "111") } returns 1
-    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
 
     assertTrue(store.verifyOrClaim("cust-1", "GALICE", "111"))
     verify(exactly = 1) { repo.claimIfAbsent("cust-1", "GALICE", "111") }
+    verify(exactly = 0) { repo.findById(any()) }
   }
 
   @Test
@@ -43,6 +43,7 @@ class JdbcSep31CustomerIdOwnerStoreTest {
     every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
 
     assertTrue(store.verifyOrClaim("cust-1", "GALICE", "111"))
+    verify(exactly = 1) { repo.findById("cust-1") }
   }
 
   @Test
@@ -54,10 +55,20 @@ class JdbcSep31CustomerIdOwnerStoreTest {
   }
 
   @Test
-  fun `null memo is compared correctly`() {
-    every { repo.claimIfAbsent("cust-1", "GALICE", null) } returns 1
+  fun `null memo is compared correctly on the conflict path`() {
+    every { repo.claimIfAbsent("cust-1", "GALICE", null) } returns 0
     every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", null))
 
     assertTrue(store.verifyOrClaim("cust-1", "GALICE", null))
+  }
+
+  @Test
+  fun `throws if the row is missing after a non-inserting claim`() {
+    every { repo.claimIfAbsent("cust-1", "GALICE", "111") } returns 0
+    every { repo.findById("cust-1") } returns Optional.empty()
+
+    assertThrows(IllegalStateException::class.java) {
+      store.verifyOrClaim("cust-1", "GALICE", "111")
+    }
   }
 }
