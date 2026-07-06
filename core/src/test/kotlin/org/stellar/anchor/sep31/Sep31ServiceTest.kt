@@ -40,6 +40,7 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.client.ClientConfig.CallbackUrls
+import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.client.ClientService
 import org.stellar.anchor.client.CustodialClient
 import org.stellar.anchor.config.*
@@ -254,6 +255,8 @@ class Sep31ServiceTest {
   @MockK(relaxed = true) lateinit var exchangeAmountsCalculator: ExchangeAmountsCalculator
   @MockK(relaxed = true) lateinit var rateIntegration: RateIntegration
   @MockK(relaxed = true) lateinit var customerIntegration: CustomerIntegration
+  @MockK(relaxed = true) lateinit var customerIdOwnerStore: Sep31CustomerIdOwnerStore
+  @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
   @MockK(relaxed = true) lateinit var eventService: EventService
   @MockK(relaxed = true) lateinit var eventSession: Session
 
@@ -274,6 +277,8 @@ class Sep31ServiceTest {
     every { sep31Config.paymentType } returns STRICT_SEND
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
     every { eventService.createSession(any(), TRANSACTION) } returns eventSession
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    every { clientFinder.getClientName(any()) } returns null
 
     jwtService = spyk(JwtService(secretConfig))
 
@@ -290,6 +295,8 @@ class Sep31ServiceTest {
         eventService,
         Clock.systemUTC(),
         exchangeAmountsCalculator,
+        customerIdOwnerStore,
+        clientFinder,
       )
 
     request = gson.fromJson(requestJson, Sep31PostTransactionRequest::class.java)
@@ -754,6 +761,152 @@ class Sep31ServiceTest {
     assertEquals(wantResponse, gotResponse)
   }
 
+  private fun useQuotesNotSupportedAssetService() {
+    val assetServiceQuotesNotSupported: AssetService =
+      DefaultAssetService.fromJsonResource("test_assets.json.quotes_not_supported")
+    sep31Service =
+      Sep31Service(
+        languageConfig,
+        sep10Config,
+        sep31Config,
+        txnStore,
+        quoteStore,
+        clientService,
+        assetServiceQuotesNotSupported,
+        rateIntegration,
+        eventService,
+        Clock.systemUTC(),
+        exchangeAmountsCalculator,
+        customerIdOwnerStore,
+        clientFinder,
+      )
+    every { rateIntegration.getRate(any()) } returns
+      GetRateResponse(GetRateResponse.Rate.builder().fee(FeeDetails("2", "stellar:USDC")).build())
+  }
+
+  private fun ownershipTestRequest(senderId: String? = null, receiverId: String? = null) =
+    Sep31PostTransactionRequest().apply {
+      amount = "100"
+      assetCode = "USDC"
+      assetIssuer = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+      this.senderId = senderId
+      this.receiverId = receiverId
+      fundingMethod = "SEPA"
+      fields =
+        Sep31TxnFields(
+          hashMapOf(
+            "receiver_account_number" to "1",
+            "type" to "1",
+            "receiver_routing_number" to "SWIFT",
+          )
+        )
+    }
+
+  @Test
+  fun `test postTransaction rejects receiver_id not owned by caller`() {
+    useQuotesNotSupportedAssetService()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns false
+
+    val postTxRequest = ownershipTestRequest(receiverId = "victim-customer-id")
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction verifies ownership of sender_id and receiver_id using caller identity`() {
+    useQuotesNotSupportedAssetService()
+    val postTxRequest =
+      ownershipTestRequest(senderId = "sender-customer-id", receiverId = "receiver-customer-id")
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "sender-customer-id",
+        TestHelper.TEST_ACCOUNT,
+        TestHelper.TEST_MEMO,
+      )
+    }
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "receiver-customer-id",
+        TestHelper.TEST_ACCOUNT,
+        TestHelper.TEST_MEMO,
+      )
+    }
+  }
+
+  @Test
+  fun `test postTransaction resolves ownerMemo from muxed account id, not accountMemo`() {
+    useQuotesNotSupportedAssetService()
+    val postTxRequest = ownershipTestRequest(receiverId = "muxed-receiver-id")
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createMuxedWebAuthJwt(muxedId = 42L)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("muxed-receiver-id", jwtToken.muxedAccount, "42")
+    }
+  }
+
+  @Test
+  fun `test postTransaction binds ownership to client name so key rotation does not lock out the owner`() {
+    useQuotesNotSupportedAssetService()
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken1 = TestHelper.createWebAuthJwt(account = TestHelper.TEST_ACCOUNT)
+    every { clientFinder.getClientName(jwtToken1) } returns "vibrant"
+    sep31Service.postTransaction(jwtToken1, ownershipTestRequest(receiverId = "shared-receiver-id"))
+
+    val secondSigningKey = "GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"
+    val jwtToken2 = TestHelper.createWebAuthJwt(account = secondSigningKey)
+    every { clientFinder.getClientName(jwtToken2) } returns "vibrant"
+    assertDoesNotThrow {
+      sep31Service.postTransaction(
+        jwtToken2,
+        ownershipTestRequest(receiverId = "shared-receiver-id"),
+      )
+    }
+
+    verify(exactly = 2) {
+      customerIdOwnerStore.verifyOrClaim("shared-receiver-id", "vibrant", null)
+    }
+  }
+
+  @Test
+  fun `test postTransaction skips ownership check when sender_id and receiver_id are absent`() {
+    useQuotesNotSupportedAssetService()
+    val postTxRequest = ownershipTestRequest()
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+  }
+
   @Test
   fun `test preValidateQuote rejects already-bound quote`() {
     val tomorrow = Instant.now().plus(1, ChronoUnit.DAYS)
@@ -903,6 +1056,8 @@ class Sep31ServiceTest {
         eventService,
         Clock.systemUTC(),
         exchangeAmountsCalculator,
+        customerIdOwnerStore,
+        clientFinder,
       )
 
     val senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"
