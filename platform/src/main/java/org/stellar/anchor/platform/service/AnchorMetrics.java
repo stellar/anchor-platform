@@ -10,6 +10,7 @@ public enum AnchorMetrics {
   PAYMENT_RECEIVED("payment.received"),
   PAYMENT_SENT("payment.sent"),
   PAYMENT_OBSERVER_AMBIGUOUS_ROUTING("payment_observer.ambiguous_routing"),
+  PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH("payment_observer.amount_asset_mismatch"),
   LOGGER("logger"),
 
   PLATFORM_RPC_TRANSACTION("platform_server.rpc_transaction"),

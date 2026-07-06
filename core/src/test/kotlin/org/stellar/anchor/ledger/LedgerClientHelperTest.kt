@@ -4,6 +4,7 @@ import java.math.BigInteger
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus.*
 import org.stellar.sdk.xdr.*
@@ -26,6 +27,7 @@ internal class LedgerClientHelperTest {
         5,
         1,
         operation,
+        null,
       )
 
     assertEquals(OperationType.PAYMENT, ledgerOperation.type)
@@ -55,6 +57,7 @@ internal class LedgerClientHelperTest {
         5,
         1,
         operation,
+        null,
       )
 
     assertEquals(PATH_PAYMENT_STRICT_RECEIVE, ledgerOperation.type)
@@ -83,6 +86,7 @@ internal class LedgerClientHelperTest {
         5,
         1,
         operation,
+        null,
       )
 
     assertNull(ledgerOperation)
@@ -99,6 +103,7 @@ internal class LedgerClientHelperTest {
         5,
         1,
         operation,
+        null,
       )
 
     assertEquals(OperationType.PAYMENT, ledgerOperation.type)
@@ -119,6 +124,7 @@ internal class LedgerClientHelperTest {
         5,
         1,
         operation,
+        null,
       )
 
     assertEquals(PATH_PAYMENT_STRICT_RECEIVE, ledgerOperation.type)
@@ -138,11 +144,187 @@ internal class LedgerClientHelperTest {
         5,
         1,
         operation,
+        buildStrictSendSuccessResult(1230L),
       )
 
     assertEquals(PATH_PAYMENT_STRICT_SEND, ledgerOperation.type)
     assertNotNull(ledgerOperation.pathPaymentOperation.to)
     assertTrue(ledgerOperation.pathPaymentOperation.to.startsWith("M"))
+    assertEquals(BigInteger.valueOf(1230L), ledgerOperation.pathPaymentOperation.amount)
+  }
+
+  @Test
+  fun `test convert() with path payment strict send uses the operation result amount, not sendAmount`() {
+    // testMuxedPathPaymentStrictSendOpJson has sendAmount=1230; the operation result reports a
+    // completely different received amount to prove sendAmount is never used.
+    val operation =
+      GsonUtils.getInstance().fromJson(testMuxedPathPaymentStrictSendOpJson, Operation::class.java)
+
+    val ledgerOperation =
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        buildStrictSendSuccessResult(42L),
+      )
+
+    assertEquals(BigInteger.valueOf(42L), ledgerOperation.pathPaymentOperation.amount)
+  }
+
+  @Test
+  fun `test convert() with path payment strict send throws LedgerException when operation result is null`() {
+    val operation =
+      GsonUtils.getInstance().fromJson(testMuxedPathPaymentStrictSendOpJson, Operation::class.java)
+
+    assertThrows(LedgerException::class.java) {
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        null,
+      )
+    }
+  }
+
+  @Test
+  fun `test convert() with path payment strict send throws LedgerException when operation result is not success`() {
+    val operation =
+      GsonUtils.getInstance().fromJson(testMuxedPathPaymentStrictSendOpJson, Operation::class.java)
+    val opResult =
+      OperationResult.builder()
+        .discriminant(OperationResultCode.opINNER)
+        .tr(
+          OperationResult.OperationResultTr.builder()
+            .discriminant(PATH_PAYMENT_STRICT_SEND)
+            .pathPaymentStrictSendResult(
+              PathPaymentStrictSendResult.builder()
+                .discriminant(PathPaymentStrictSendResultCode.PATH_PAYMENT_STRICT_SEND_UNDERFUNDED)
+                .build()
+            )
+            .build()
+        )
+        .build()
+
+    assertThrows(LedgerException::class.java) {
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        opResult,
+      )
+    }
+  }
+
+  @Test
+  fun `test convert() with path payment strict send throws LedgerException when operation result is for a different operation type`() {
+    val operation =
+      GsonUtils.getInstance().fromJson(testMuxedPathPaymentStrictSendOpJson, Operation::class.java)
+    val opResult =
+      OperationResult.builder()
+        .discriminant(OperationResultCode.opINNER)
+        .tr(OperationResult.OperationResultTr.builder().discriminant(OperationType.PAYMENT).build())
+        .build()
+
+    assertThrows(LedgerException::class.java) {
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        opResult,
+      )
+    }
+  }
+
+  @Test
+  fun `test parseOperationResults returns results for txSUCCESS`() {
+    val opResults =
+      arrayOf(OperationResult.builder().discriminant(OperationResultCode.opINNER).build())
+    val txResult =
+      TransactionResult.builder()
+        .result(
+          TransactionResult.TransactionResultResult.builder()
+            .discriminant(TransactionResultCode.txSUCCESS)
+            .results(opResults)
+            .build()
+        )
+        .build()
+
+    val result = LedgerClientHelper.parseOperationResults(txResult, "testHash")
+
+    assertArrayEquals(opResults, result)
+  }
+
+  @Test
+  fun `test parseOperationResults unwraps inner result for txFEE_BUMP_INNER_SUCCESS`() {
+    val opResults =
+      arrayOf(OperationResult.builder().discriminant(OperationResultCode.opINNER).build())
+    val txResult =
+      TransactionResult.builder()
+        .result(
+          TransactionResult.TransactionResultResult.builder()
+            .discriminant(TransactionResultCode.txFEE_BUMP_INNER_SUCCESS)
+            .innerResultPair(
+              InnerTransactionResultPair.builder()
+                .result(
+                  InnerTransactionResult.builder()
+                    .result(
+                      InnerTransactionResult.InnerTransactionResultResult.builder()
+                        .discriminant(TransactionResultCode.txSUCCESS)
+                        .results(opResults)
+                        .build()
+                    )
+                    .build()
+                )
+                .build()
+            )
+            .build()
+        )
+        .build()
+
+    val result = LedgerClientHelper.parseOperationResults(txResult, "testHash")
+
+    assertArrayEquals(opResults, result)
+  }
+
+  @Test
+  fun `test parseOperationResults returns null for txFAILED`() {
+    val txResult =
+      TransactionResult.builder()
+        .result(
+          TransactionResult.TransactionResultResult.builder()
+            .discriminant(TransactionResultCode.txFAILED)
+            .build()
+        )
+        .build()
+
+    val result = LedgerClientHelper.parseOperationResults(txResult, "testHash")
+
+    assertNull(result)
+  }
+
+  @Test
+  fun `test getLedgerOperations throws LedgerException when operationResults length does not match operations length`() {
+    val operations = arrayOf(Operation.builder().build(), Operation.builder().build())
+    val parseResult =
+      LedgerClientHelper.ParseResult(
+        operations,
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        null,
+      )
+    val operationResults =
+      arrayOf(OperationResult.builder().discriminant(OperationResultCode.opINNER).build())
+
+    assertThrows(LedgerException::class.java) {
+      LedgerClientHelper.getLedgerOperations(5, 1708638L, parseResult, operationResults)
+    }
   }
 
   @Test
@@ -263,6 +445,38 @@ internal class LedgerClientHelperTest {
     assertEquals(memo, result.memo())
     assertEquals(operations, result.operations())
   }
+}
+
+private fun buildStrictSendSuccessResult(receivedAmount: Long): OperationResult {
+  val destination =
+    AccountID(
+      PublicKey.builder()
+        .discriminant(PublicKeyType.PUBLIC_KEY_TYPE_ED25519)
+        .ed25519(Uint256.fromXdrByteArray(ByteArray(32) { 1 }))
+        .build()
+    )
+  val simplePaymentResult =
+    SimplePaymentResult.builder()
+      .destination(destination)
+      .asset(Asset.builder().discriminant(AssetType.ASSET_TYPE_NATIVE).build())
+      .amount(Int64(receivedAmount))
+      .build()
+  val success =
+    PathPaymentStrictSendResult.PathPaymentStrictSendResultSuccess.builder()
+      .offers(arrayOf())
+      .last(simplePaymentResult)
+      .build()
+  val pathPaymentStrictSendResult =
+    PathPaymentStrictSendResult.builder()
+      .discriminant(PathPaymentStrictSendResultCode.PATH_PAYMENT_STRICT_SEND_SUCCESS)
+      .success(success)
+      .build()
+  val tr =
+    OperationResult.OperationResultTr.builder()
+      .discriminant(PATH_PAYMENT_STRICT_SEND)
+      .pathPaymentStrictSendResult(pathPaymentStrictSendResult)
+      .build()
+  return OperationResult.builder().discriminant(OperationResultCode.opINNER).tr(tr).build()
 }
 
 private const val testPaymentOpJson =

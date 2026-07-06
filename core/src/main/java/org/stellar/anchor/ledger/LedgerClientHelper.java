@@ -38,7 +38,8 @@ public class LedgerClientHelper {
       Long sequenceNumber,
       Integer applicationOrder,
       int opIndex,
-      Operation op)
+      Operation op,
+      OperationResult opResult)
       throws LedgerException {
     if (op == null) {
       throw new LedgerException(
@@ -116,7 +117,7 @@ public class LedgerClientHelper {
               };
         } else {
           asset = op.getBody().getPathPaymentStrictSendOp().getDestAsset();
-          amount = op.getBody().getPathPaymentStrictSendOp().getSendAmount().getInt64();
+          amount = extractStrictSendReceivedAmount(opResult, operationId);
           PathPaymentStrictSendOp payment = op.getBody().getPathPaymentStrictSendOp();
           toAddress =
               switch (payment.getDestination().getDiscriminant()) {
@@ -201,6 +202,66 @@ public class LedgerClientHelper {
     };
   }
 
+  /**
+   * Extract the amount actually received by the destination of a PATH_PAYMENT_STRICT_SEND
+   * operation. This is NOT present in the operation body (that only carries {@code sendAmount}, the
+   * source's debit in a different asset) — it only exists in the operation's execution result.
+   * Fails closed: if the result cannot prove the received amount, an exception is thrown rather
+   * than falling back to {@code sendAmount}, which is attacker-controlled and denominated in a
+   * different asset than the one credited.
+   *
+   * @param opResult the operation's execution result, or null if unavailable
+   * @param operationId the operation id, for error messages
+   * @return the destination-received amount, in the smallest unit of destAsset
+   * @throws LedgerException if the result does not prove a successful strict-send received amount
+   */
+  private static long extractStrictSendReceivedAmount(OperationResult opResult, String operationId)
+      throws LedgerException {
+    if (opResult == null
+        || opResult.getDiscriminant() != OperationResultCode.opINNER
+        || opResult.getTr() == null
+        || opResult.getTr().getDiscriminant() != PATH_PAYMENT_STRICT_SEND
+        || opResult.getTr().getPathPaymentStrictSendResult() == null
+        || opResult.getTr().getPathPaymentStrictSendResult().getDiscriminant()
+            != PathPaymentStrictSendResultCode.PATH_PAYMENT_STRICT_SEND_SUCCESS
+        || opResult.getTr().getPathPaymentStrictSendResult().getSuccess() == null) {
+      throw new LedgerException(
+          "Cannot determine the actual received amount for PATH_PAYMENT_STRICT_SEND operation "
+              + "id="
+              + operationId
+              + ": missing or non-success operation result.");
+    }
+    return opResult
+        .getTr()
+        .getPathPaymentStrictSendResult()
+        .getSuccess()
+        .getLast()
+        .getAmount()
+        .getInt64();
+  }
+
+  /**
+   * Extract the per-operation results from a transaction result, unwrapping the fee-bump inner
+   * result if present.
+   *
+   * @param txResult the transaction result
+   * @param txnHash the transaction hash, for logging
+   * @return the per-operation results, or null if the transaction did not succeed
+   */
+  public static OperationResult[] parseOperationResults(
+      TransactionResult txResult, String txnHash) {
+    TransactionResultCode code = txResult.getResult().getDiscriminant();
+    return switch (code) {
+      case txSUCCESS -> txResult.getResult().getResults();
+      case txFEE_BUMP_INNER_SUCCESS ->
+          txResult.getResult().getInnerResultPair().getResult().getResult().getResults();
+      default -> {
+        debugF("Transaction result code={} has no operation results. tx.hash={}", code, txnHash);
+        yield null;
+      }
+    };
+  }
+
   static String getAddressOrContractId(SCAddress address) throws IOException {
     return switch (address.getDiscriminant()) {
       case SC_ADDRESS_TYPE_ACCOUNT ->
@@ -275,17 +336,30 @@ public class LedgerClientHelper {
   public record ParseResult(Operation[] operations, String sourceAccount, Memo memo) {}
 
   public static List<LedgerOperation> getLedgerOperations(
-      Integer applicationOrder, Long sequenceNumber, ParseResult parseResult)
+      Integer applicationOrder,
+      Long sequenceNumber,
+      ParseResult parseResult,
+      OperationResult[] operationResults)
       throws LedgerException {
+    if (operationResults != null && operationResults.length != parseResult.operations().length) {
+      throw new LedgerException(
+          "Operation/result count mismatch ("
+              + parseResult.operations().length
+              + " operations vs "
+              + operationResults.length
+              + " results); refusing to process to avoid misattributing amounts.");
+    }
     List<LedgerOperation> operations = new ArrayList<>(parseResult.operations().length);
     for (int opIndex = 0; opIndex < parseResult.operations().length; opIndex++) {
+      OperationResult opResult = operationResults == null ? null : operationResults[opIndex];
       LedgerOperation ledgerOp =
           LedgerClientHelper.convert(
               parseResult.sourceAccount(),
               sequenceNumber,
               applicationOrder,
               opIndex + 1, // operation index is 1-based
-              parseResult.operations()[opIndex]);
+              parseResult.operations()[opIndex],
+              opResult);
       if (ledgerOp != null) {
         operations.add(ledgerOp);
       }
