@@ -2,6 +2,10 @@ package org.stellar.anchor.platform.config;
 
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
@@ -105,6 +109,44 @@ public class PropertySecretConfig implements SecretConfig, Validator {
 
     if (!isEmpty(config.getSep45JwtSecretKey())) {
       KeyUtil.rejectWeakJWTSecret(config.getSep45JwtSecretKey(), errors, "secret.sep45.jwt_secret");
+    }
+
+    Map<String, String> jwtSecrets = new LinkedHashMap<>();
+    addSecretIfPresent(jwtSecrets, SECRET_PLATFORM_API_AUTH_SECRET, config.getPlatformAuthSecret());
+    addSecretIfPresent(jwtSecrets, SECRET_CALLBACK_API_AUTH_SECRET, config.getCallbackAuthSecret());
+    addSecretIfPresent(jwtSecrets, SECRET_SEP_10_JWT_SECRET, config.getSep10JwtSecretKey());
+    addSecretIfPresent(jwtSecrets, SECRET_SEP_45_JWT_SECRET, config.getSep45JwtSecretKey());
+    addSecretIfPresent(
+        jwtSecrets,
+        SECRET_SEP_24_INTERACTIVE_URL_JWT_SECRET,
+        config.getSep24InteractiveUrlJwtSecret());
+    addSecretIfPresent(
+        jwtSecrets, SECRET_SEP_24_MORE_INFO_URL_JWT_SECRET, config.getSep24MoreInfoUrlJwtSecret());
+    addSecretIfPresent(
+        jwtSecrets, SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET, config.getSep6MoreInfoUrlJwtSecret());
+
+    List<String> keys = new ArrayList<>(jwtSecrets.keySet());
+    for (int i = 0; i < keys.size(); i++) {
+      for (int j = i + 1; j < keys.size(); j++) {
+        String keyA = keys.get(i);
+        String keyB = keys.get(j);
+
+        if (jwtSecrets.get(keyA).equals(jwtSecrets.get(keyB))) {
+          errors.reject(
+              "secrets.jwt.must_be_unique",
+              String.format(
+                  "JWT secrets must be distinct: [%s] and [%s] share the same value."
+                      + " Colliding secrets collapse the token type boundary and allow"
+                      + " token type confusion attacks.",
+                  keyA, keyB));
+        }
+      }
+    }
+  }
+
+  private static void addSecretIfPresent(Map<String, String> map, String key, String value) {
+    if (!isEmpty(value)) {
+      map.put(key, value);
     }
   }
 }

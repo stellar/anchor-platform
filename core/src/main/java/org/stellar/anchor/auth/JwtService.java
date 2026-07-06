@@ -11,6 +11,7 @@ import java.security.Security;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -37,6 +38,14 @@ public class JwtService {
   public static final String CLIENT_DOMAIN = "client_domain";
   public static final String HOME_DOMAIN = "home_domain";
   public static final String CLIENT_NAME = "client_name";
+
+  public static final String AUD_SEP10 = "sep10";
+  public static final String AUD_SEP45 = "sep45";
+  public static final String AUD_SEP24_INTERACTIVE = "sep24_interactive";
+  public static final String AUD_SEP6_MORE_INFO = "sep6_more_info";
+  public static final String AUD_SEP24_MORE_INFO = "sep24_more_info";
+  public static final String AUD_CALLBACK_API = "callback_api";
+  public static final String AUD_PLATFORM_API = "platform_api";
 
   String sep6MoreInfoUrlJwtSecret;
   String sep10JwtSecret;
@@ -80,6 +89,7 @@ public class JwtService {
   public <T extends WebAuthJwt> String encode(T token) {
     Instant timeExp = Instant.ofEpochSecond(token.getExp());
     Instant timeIat = Instant.ofEpochSecond(token.getIat());
+    String aud = (token instanceof Sep45Jwt) ? AUD_SEP45 : AUD_SEP10;
 
     JwtBuilder builder =
         jwtsBuilder()
@@ -88,7 +98,9 @@ public class JwtService {
             .subject(token.getSub())
             .issuedAt(from(timeIat))
             .expiration(from(timeExp))
-            .subject(token.getSub());
+            .audience()
+            .add(aud)
+            .and();
 
     if (token.getClientDomain() != null) {
       builder.claim(CLIENT_DOMAIN, token.getClientDomain());
@@ -107,10 +119,17 @@ public class JwtService {
 
   public String encode(MoreInfoUrlJwt token) throws InvalidConfigException {
     var secret = getMoreInfoUrlSecret(token);
+    String aud = (token instanceof Sep6MoreInfoUrlJwt) ? AUD_SEP6_MORE_INFO : AUD_SEP24_MORE_INFO;
 
     Instant timeExp = Instant.ofEpochSecond(token.getExp());
     JwtBuilder builder =
-        jwtsBuilder().id(token.getJti()).expiration(from(timeExp)).subject(token.getSub());
+        jwtsBuilder()
+            .id(token.getJti())
+            .expiration(from(timeExp))
+            .subject(token.getSub())
+            .audience()
+            .add(aud)
+            .and();
     for (Map.Entry<String, Object> claim : token.claims.entrySet()) {
       builder.claim(claim.getKey(), claim.getValue());
     }
@@ -136,7 +155,13 @@ public class JwtService {
     }
     Instant timeExp = Instant.ofEpochSecond(token.getExp());
     JwtBuilder builder =
-        jwtsBuilder().id(token.getJti()).expiration(from(timeExp)).subject(token.getSub());
+        jwtsBuilder()
+            .id(token.getJti())
+            .expiration(from(timeExp))
+            .subject(token.getSub())
+            .audience()
+            .add(AUD_SEP24_INTERACTIVE)
+            .and();
     for (Map.Entry<String, Object> claim : token.claims.entrySet()) {
       builder.claim(claim.getKey(), claim.getValue());
     }
@@ -149,14 +174,14 @@ public class JwtService {
   }
 
   public String encode(CallbackAuthJwt token) throws InvalidConfigException {
-    return encode(token, callbackAuthSecret);
+    return encode(token, callbackAuthSecret, AUD_CALLBACK_API);
   }
 
   public String encode(PlatformAuthJwt token) throws InvalidConfigException {
-    return encode(token, platformAuthSecret);
+    return encode(token, platformAuthSecret, AUD_PLATFORM_API);
   }
 
-  private String encode(ApiAuthJwt token, String secret) throws InvalidConfigException {
+  private String encode(ApiAuthJwt token, String secret, String aud) throws InvalidConfigException {
     if (secret == null) {
       throw new InvalidConfigException(
           "Please provide the secret before encoding JWT for API Authentication");
@@ -164,7 +189,8 @@ public class JwtService {
 
     Instant timeExp = Instant.ofEpochSecond(token.getExp());
     Instant timeIat = Instant.ofEpochSecond(token.getIat());
-    JwtBuilder builder = jwtsBuilder().issuedAt(from(timeIat)).expiration(from(timeExp));
+    JwtBuilder builder =
+        jwtsBuilder().issuedAt(from(timeIat)).expiration(from(timeExp)).audience().add(aud).and();
 
     return builder.signWith(KeyUtil.toSecretKeySpecOrNull(secret), Jwts.SIG.HS256).compact();
   }
@@ -177,26 +203,40 @@ public class JwtService {
           InstantiationException,
           IllegalAccessException {
     String secret;
+    String expectedAud;
     if (cls.equals(Sep6MoreInfoUrlJwt.class)) {
       secret = sep6MoreInfoUrlJwtSecret;
+      expectedAud = AUD_SEP6_MORE_INFO;
     } else if (cls.equals(Sep10Jwt.class)) {
       secret = sep10JwtSecret;
+      expectedAud = AUD_SEP10;
     } else if (cls.equals(Sep45Jwt.class)) {
       secret = sep45JwtSecret;
+      expectedAud = AUD_SEP45;
     } else if (cls.equals(Sep24InteractiveUrlJwt.class)) {
       secret = sep24InteractiveUrlJwtSecret;
+      expectedAud = AUD_SEP24_INTERACTIVE;
     } else if (cls.equals(Sep24MoreInfoUrlJwt.class)) {
       secret = sep24MoreInfoUrlJwtSecret;
+      expectedAud = AUD_SEP24_MORE_INFO;
     } else if (cls.equals(CallbackAuthJwt.class)) {
       secret = callbackAuthSecret;
+      expectedAud = AUD_CALLBACK_API;
     } else if (cls.equals(PlatformAuthJwt.class)) {
       secret = platformAuthSecret;
+      expectedAud = AUD_PLATFORM_API;
     } else {
       throw new NotSupportedException(
           String.format("The Jwt class:[%s] is not supported", cls.getName()));
     }
 
     Jwt jwt = jwtsParser().verifyWith(KeyUtil.toSecretKeySpecOrNull(secret)).build().parse(cipher);
+
+    Claims tokenClaims = (Claims) jwt.getBody();
+    Set<String> tokenAudience = tokenClaims.getAudience();
+    if (tokenAudience == null || !tokenAudience.contains(expectedAud)) {
+      throw new JwtException("Invalid token audience: expected " + expectedAud);
+    }
 
     if (cls.equals(Sep6MoreInfoUrlJwt.class)) {
       return (T) Sep6MoreInfoUrlJwt.class.getConstructor(Jwt.class).newInstance(jwt);
