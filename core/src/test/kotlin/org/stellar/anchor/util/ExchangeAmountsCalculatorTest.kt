@@ -57,7 +57,7 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
 
-    val result = calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), "100")
+    val result = calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
     assertEquals(
       Amounts.builder()
         .amountIn("100")
@@ -74,7 +74,7 @@ class ExchangeAmountsCalculatorTest {
   fun `test calculateFromQuote with invalid quote id`() {
     every { sep38QuoteStore.findByQuoteId(any()) } returns null
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote("id", assetService.getAsset("USDC"), "100")
+      calculator.calculateFromQuote("id", assetService.getAsset("USDC"), null, "100")
     }
   }
 
@@ -88,7 +88,7 @@ class ExchangeAmountsCalculatorTest {
       }
 
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), "100")
+      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
     }
   }
 
@@ -97,7 +97,7 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), "99")
+      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "99")
     }
   }
 
@@ -106,7 +106,7 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("JPYC"), "100")
+      calculator.calculateFromQuote(quoteId, assetService.getAsset("JPYC"), null, "100")
     }
   }
 
@@ -115,7 +115,7 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote().apply { fee = null }
     assertThrows<SepValidationException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), "100")
+      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
     }
   }
 
@@ -134,13 +134,51 @@ class ExchangeAmountsCalculatorTest {
   }
 
   @Test
+  fun `test calculateFromQuote with mismatched buy asset throws`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
+    assertThrows<BadRequestException> {
+      calculator.calculateFromQuote(
+        quoteId,
+        assetService.getAsset("USDC"),
+        assetService.getAsset("JPYC"),
+        "100",
+      )
+    }
+  }
+
+  @Test
+  fun `test calculateFromQuote with matching buy asset succeeds`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
+
+    val result =
+      calculator.calculateFromQuote(
+        quoteId,
+        assetService.getAsset("USDC"),
+        assetService.getAsset("USD"),
+        "100",
+      )
+    assertEquals(
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset("iso4217:USD")
+        .feeDetails(FeeDetails("2", "iso4217:USD"))
+        .build(),
+      result,
+    )
+  }
+
+  @Test
   fun `test calculateFromQuote rejects already-bound quote`() {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns
       usdcQuote().apply { transactionId = "existing-txn-id" }
     val ex =
       assertThrows<BadRequestException> {
-        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), "100")
+        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
       }
     assert(ex.message!!.contains("has already been used"))
   }
@@ -179,7 +217,7 @@ class ExchangeAmountsCalculatorTest {
       usdcQuote().apply { transactionId = "T1-cancelled" }
     val ex =
       assertThrows<BadRequestException> {
-        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), "100")
+        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
       }
     assert(ex.message!!.contains("has already been used"))
   }

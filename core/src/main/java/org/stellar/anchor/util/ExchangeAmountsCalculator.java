@@ -27,13 +27,15 @@ public class ExchangeAmountsCalculator {
    *
    * @param quoteId The quote ID
    * @param sellAsset The asset the user is selling
+   * @param buyAsset The asset the user is buying (the request's destination asset)
    * @param sellAmount The amount the user is selling
    * @return The amounts
    * @throws AnchorException if the quote is invalid
    */
-  public Amounts calculateFromQuote(String quoteId, AssetInfo sellAsset, String sellAmount)
+  public Amounts calculateFromQuote(
+      String quoteId, AssetInfo sellAsset, AssetInfo buyAsset, String sellAmount)
       throws AnchorException {
-    Sep38Quote quote = validateQuoteAgainstRequestInfo(quoteId, sellAsset, null, sellAmount);
+    Sep38Quote quote = validateQuoteAgainstRequestInfo(quoteId, sellAsset, buyAsset, sellAmount);
     return Amounts.builder()
         .amountIn(quote.getSellAmount())
         .amountInAsset(quote.getSellAsset())
