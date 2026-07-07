@@ -7,7 +7,6 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.asset.AssetService
@@ -136,12 +135,14 @@ class StellarRpcObserverIndexDomainTest {
   }
 
   @Test
-  fun `sub-invocation transfer event is skipped and observer stays RUNNING via real scheduler`() {
+  fun `sub-invocation transfer event is credited via real scheduler`() {
     val fromAccount = KeyPair.random().accountId
     val toAccount = KeyPair.random().accountId
+    val amount = BigInteger.valueOf(1_000_000L)
     val txHash = "txHashSubInvokeIntegration"
     val seqNum = 500L
     val appOrder = 1
+    val opId = TOID(seqNum.toInt(), appOrder, 1).toInt64().toString()
 
     every { paymentObservingAccountsManager.lookupAndUpdate(toAccount) } returns true
     every { paymentObservingAccountsManager.lookupAndUpdate(fromAccount) } returns false
@@ -161,7 +162,7 @@ class StellarRpcObserverIndexDomainTest {
         if (callCount.incrementAndGet() == 1)
           mockEventBatch(
             listOf(Triple(fromAccount, toAccount, txHash to 0L)),
-            listOf(BigInteger.valueOf(1_000_000L)),
+            listOf(amount),
             "SUB_INVOKE_CUR",
           )
         else emptyBatch("IDLE_CUR")
@@ -170,12 +171,17 @@ class StellarRpcObserverIndexDomainTest {
     observer.start()
     waitForCursor("IDLE_CUR")
 
-    assertNull(listener.getByTo(toAccount))
+    val captured = listener.getByTo(toAccount)
+    assertEquals(1, captured?.size)
+    assertEquals(fromAccount, captured!![0].from)
+    assertEquals(toAccount, captured[0].to)
+    assertEquals(amount, captured[0].amount)
+    assertEquals(opId, captured[0].operationId)
     assertEquals(ObserverStatus.RUNNING, observer.getStatus())
   }
 
   @Test
-  fun `mixed batch credits normal and multi-op events while skipping sub-invocation`() {
+  fun `mixed batch credits normal, multi-op, and sub-invocation events`() {
     val from1 = KeyPair.random().accountId
     val to1 = KeyPair.random().accountId
     val from2 = KeyPair.random().accountId
@@ -197,6 +203,7 @@ class StellarRpcObserverIndexDomainTest {
     val opId2 = TOID((seqNum + 1).toInt(), appOrder, 2).toInt64().toString()
 
     val txHash3 = "txHashSubInvoke"
+    val opId3 = TOID((seqNum + 2).toInt(), appOrder, 1).toInt64().toString()
 
     every { paymentObservingAccountsManager.lookupAndUpdate(to1) } returns true
     every { paymentObservingAccountsManager.lookupAndUpdate(from1) } returns false
@@ -286,7 +293,10 @@ class StellarRpcObserverIndexDomainTest {
     assertEquals(amount2, captured2!![0].amount)
     assertEquals(opId2, captured2[0].operationId)
 
-    assertNull(listener.getByTo(to3))
+    val captured3 = listener.getByTo(to3)
+    assertEquals(1, captured3?.size)
+    assertEquals(amount3, captured3!![0].amount)
+    assertEquals(opId3, captured3[0].operationId)
     assertEquals(ObserverStatus.RUNNING, observer.getStatus())
   }
 

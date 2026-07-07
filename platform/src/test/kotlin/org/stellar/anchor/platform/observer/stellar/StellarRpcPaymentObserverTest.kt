@@ -632,17 +632,19 @@ class StellarRpcPaymentObserverTest {
   }
 
   @Test
-  fun `processTransferEvent skips and logs error when no creditable op matches operationIndex`() {
+  fun `processTransferEvent credits a contract sub-invocation transfer with no matching top-level operation`() {
     val fromAccount = KeyPair.random().accountId
     val toAccount = KeyPair.random().accountId
+    val amount = BigInteger.valueOf(500_000L)
     val txHash = "txHashSubInvocation"
     val seqNum = 300L
     val appOrder = 1
+    val opId = TOID(seqNum.toInt(), appOrder, 1).toInt64().toString()
 
     setupTransferEvent(
       fromAccount,
       toAccount,
-      BigInteger.valueOf(500_000L),
+      amount,
       txHash,
       operationIndex = 0L,
       "CURSOR_SUBINVOKE",
@@ -657,11 +659,66 @@ class StellarRpcPaymentObserverTest {
         .build()
     every { stellarRpc.getTransaction(txHash) } returns txn
 
+    val capturedEvent = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
+
+    assertDoesNotThrow { observer.fetchEvents() }
+
+    verify(exactly = 1) { observer["handleEvent"](any<PaymentTransferEvent>()) }
+    assertEquals(txHash, capturedEvent.captured.txHash)
+    assertEquals(fromAccount, capturedEvent.captured.from)
+    assertEquals(toAccount, capturedEvent.captured.to)
+    assertEquals(amount, capturedEvent.captured.amount)
+    assertEquals(opId, capturedEvent.captured.operationId)
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertEquals("CURSOR_SUBINVOKE", observer.cursor)
+  }
+
+  @Test
+  fun `processTransferEvent skips a sub-invocation transfer when the event asset cannot be parsed`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val txHash = "txHashBadAsset"
+    val seqNum = 301L
+    val appOrder = 1
+
+    val topics =
+      listOf(
+        Scv.toSymbol("transfer").toXdrBase64(),
+        Scv.toAddress(fromAccount).toXdrBase64(),
+        Scv.toAddress(toAccount).toXdrBase64(),
+        Scv.toString("not:a:valid:asset:format").toXdrBase64(),
+      )
+    val event = mockk<GetEventsResponse.EventInfo>(relaxed = true)
+    every { event.topic } returns topics
+    every { event.value } returns Scv.toInt128(BigInteger.valueOf(500_000L)).toXdrBase64()
+    every { event.transactionHash } returns txHash
+    every { event.operationIndex } returns 0L
+    every { paymentObservingAccountsManager.lookupAndUpdate(toAccount) } returns true
+    every { paymentObservingAccountsManager.lookupAndUpdate(fromAccount) } returns false
+
+    val response = mockk<GetEventsResponse>()
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } returns response
+    every { response.events } returns listOf(event)
+    every { response.latestLedger } returns 100L
+    every { response.cursor } returns "CURSOR_BAD_ASSET"
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+
+    val txn =
+      LedgerTransaction.builder()
+        .hash(txHash)
+        .sequenceNumber(seqNum)
+        .applicationOrder(appOrder)
+        .operations(emptyList())
+        .build()
+    every { stellarRpc.getTransaction(txHash) } returns txn
+
     assertDoesNotThrow { observer.fetchEvents() }
 
     verify(exactly = 0) { observer["handleEvent"](any<PaymentTransferEvent>()) }
     assertEquals(ObserverStatus.RUNNING, observer.getStatus())
-    assertEquals("CURSOR_SUBINVOKE", observer.cursor)
+    assertEquals("CURSOR_BAD_ASSET", observer.cursor)
   }
 
   @Test

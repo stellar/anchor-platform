@@ -9,6 +9,7 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -47,6 +48,8 @@ import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse.EventInfo;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.scval.Scv;
+import org.stellar.sdk.xdr.Asset;
+import org.stellar.sdk.xdr.OperationType;
 import org.stellar.sdk.xdr.SCVal;
 import org.stellar.sdk.xdr.SCValType;
 
@@ -191,13 +194,24 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
               .findFirst()
               .orElse(null);
       if (op == null) {
-        errorF(
-            "No creditable operation found for transfer event: txHash={}, operationIndex={}."
-                + " The operation may be a contract sub-invocation with no direct representation"
-                + " in the filtered operation list. Skipping.",
+        op = buildSubInvocationOperation(result, wantedOpId);
+        if (op == null) {
+          errorF(
+              "Cannot credit transfer event as a contract sub-invocation: txHash={},"
+                  + " operationIndex={}. Event data was insufficient to build a synthetic"
+                  + " operation. Skipping.",
+              result.event.getTransactionHash(),
+              result.event.getOperationIndex());
+          return;
+        }
+        infoF(
+            "Crediting contract sub-invocation transfer with no direct top-level operation:"
+                + " txHash={}, operationIndex={}, contractId={}.",
             result.event.getTransactionHash(),
-            result.event.getOperationIndex());
-        return;
+            result.event.getOperationIndex(),
+            result.event.getContractId());
+
+        txn.setOperations(List.of(op));
       }
       processOperation(txn, op);
     } catch (Exception ex) {
@@ -206,6 +220,39 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           GsonUtils.getInstance().toJson(result.event),
           ex.getMessage());
     }
+  }
+
+  /**
+   * Builds a synthetic operation for a contract sub-invocation transfer — one with no direct
+   * top-level representation in the ledger transaction's operation list — from the transfer event's
+   * own already-decoded fields. The event's asset topic already carries the SEP-11 asset string
+   * (CAP-67), so no SAC-to-asset lookup is needed here.
+   */
+  private LedgerOperation buildSubInvocationOperation(
+      ShouldProcessResult result, String operationId) {
+    Asset asset;
+    try {
+      asset = org.stellar.sdk.Asset.create(result.sep11Asset).toXdr();
+    } catch (Exception ex) {
+      warnF(
+          "Cannot parse sep11 asset '{}' from transfer event: {}",
+          result.sep11Asset,
+          ex.getMessage());
+      return null;
+    }
+    LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
+        LedgerTransaction.LedgerInvokeHostFunctionOperation.builder()
+            .id(operationId)
+            .contractId(result.event.getContractId())
+            .from(result.fromAddr)
+            .to(result.toAddr)
+            .amount(BigInteger.valueOf(result.amount))
+            .asset(asset)
+            .build();
+    return LedgerOperation.builder()
+        .type(OperationType.INVOKE_HOST_FUNCTION)
+        .invokeHostFunctionOperation(invokeOp)
+        .build();
   }
 
   private String getOperationId(LedgerOperation op) {
@@ -402,7 +449,9 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           case INVOKE_HOST_FUNCTION -> {
             LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
                 op.getInvokeHostFunctionOperation();
-            invokeOp.setAsset(sacToAssetMapper.getAssetFromSac(invokeOp.getContractId()));
+            if (invokeOp.getAsset(false) == null) {
+              invokeOp.setAsset(sacToAssetMapper.getAssetFromSac(invokeOp.getContractId()));
+            }
             yield PaymentTransferEvent.builder()
                 .from(invokeOp.getFrom())
                 .to(invokeOp.getTo())
