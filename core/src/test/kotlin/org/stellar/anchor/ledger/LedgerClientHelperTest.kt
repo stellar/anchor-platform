@@ -244,6 +244,79 @@ internal class LedgerClientHelperTest {
   }
 
   @Test
+  fun `test convert() with path payment strict send throws LedgerException when success is present but last is missing`() {
+    val operation =
+      GsonUtils.getInstance().fromJson(testMuxedPathPaymentStrictSendOpJson, Operation::class.java)
+    val opResult =
+      OperationResult.builder()
+        .discriminant(OperationResultCode.opINNER)
+        .tr(
+          OperationResult.OperationResultTr.builder()
+            .discriminant(PATH_PAYMENT_STRICT_SEND)
+            .pathPaymentStrictSendResult(
+              PathPaymentStrictSendResult.builder()
+                .discriminant(PathPaymentStrictSendResultCode.PATH_PAYMENT_STRICT_SEND_SUCCESS)
+                .success(
+                  PathPaymentStrictSendResult.PathPaymentStrictSendResultSuccess.builder()
+                    .offers(arrayOf())
+                    .build()
+                )
+                .build()
+            )
+            .build()
+        )
+        .build()
+
+    assertThrows(LedgerException::class.java) {
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        opResult,
+      )
+    }
+  }
+
+  @Test
+  fun `test convert() with path payment strict send throws LedgerException when last is present but amount is missing`() {
+    val operation =
+      GsonUtils.getInstance().fromJson(testMuxedPathPaymentStrictSendOpJson, Operation::class.java)
+    val opResult =
+      OperationResult.builder()
+        .discriminant(OperationResultCode.opINNER)
+        .tr(
+          OperationResult.OperationResultTr.builder()
+            .discriminant(PATH_PAYMENT_STRICT_SEND)
+            .pathPaymentStrictSendResult(
+              PathPaymentStrictSendResult.builder()
+                .discriminant(PathPaymentStrictSendResultCode.PATH_PAYMENT_STRICT_SEND_SUCCESS)
+                .success(
+                  PathPaymentStrictSendResult.PathPaymentStrictSendResultSuccess.builder()
+                    .offers(arrayOf())
+                    .last(SimplePaymentResult.builder().build())
+                    .build()
+                )
+                .build()
+            )
+            .build()
+        )
+        .build()
+
+    assertThrows(LedgerException::class.java) {
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        opResult,
+      )
+    }
+  }
+
+  @Test
   fun `test parseOperationResults returns results for txSUCCESS`() {
     val opResults =
       arrayOf(OperationResult.builder().discriminant(OperationResultCode.opINNER).build())

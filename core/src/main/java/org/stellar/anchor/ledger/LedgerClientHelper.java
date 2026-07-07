@@ -217,27 +217,32 @@ public class LedgerClientHelper {
    */
   private static long extractStrictSendReceivedAmount(OperationResult opResult, String operationId)
       throws LedgerException {
-    if (opResult == null
-        || opResult.getDiscriminant() != OperationResultCode.opINNER
-        || opResult.getTr() == null
-        || opResult.getTr().getDiscriminant() != PATH_PAYMENT_STRICT_SEND
-        || opResult.getTr().getPathPaymentStrictSendResult() == null
-        || opResult.getTr().getPathPaymentStrictSendResult().getDiscriminant()
-            != PathPaymentStrictSendResultCode.PATH_PAYMENT_STRICT_SEND_SUCCESS
-        || opResult.getTr().getPathPaymentStrictSendResult().getSuccess() == null) {
+    PathPaymentStrictSendResult result =
+        (opResult != null
+                && opResult.getDiscriminant() == OperationResultCode.opINNER
+                && opResult.getTr() != null
+                && opResult.getTr().getDiscriminant() == PATH_PAYMENT_STRICT_SEND)
+            ? opResult.getTr().getPathPaymentStrictSendResult()
+            : null;
+
+    PathPaymentStrictSendResult.PathPaymentStrictSendResultSuccess success =
+        (result != null
+                && result.getDiscriminant()
+                    == PathPaymentStrictSendResultCode.PATH_PAYMENT_STRICT_SEND_SUCCESS)
+            ? result.getSuccess()
+            : null;
+
+    SimplePaymentResult last = success == null ? null : success.getLast();
+    Int64 amount = last == null ? null : last.getAmount();
+
+    if (amount == null) {
       throw new LedgerException(
           "Cannot determine the actual received amount for PATH_PAYMENT_STRICT_SEND operation "
               + "id="
               + operationId
               + ": missing or non-success operation result.");
     }
-    return opResult
-        .getTr()
-        .getPathPaymentStrictSendResult()
-        .getSuccess()
-        .getLast()
-        .getAmount()
-        .getInt64();
+    return amount.getInt64();
   }
 
   /**
