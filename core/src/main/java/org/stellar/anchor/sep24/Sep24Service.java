@@ -241,7 +241,14 @@ public class Sep24Service {
     String quoteId = withdrawRequest.get("quote_id");
     AssetInfo buyAsset = assetService.getAssetById(withdrawRequest.get("destination_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
+      Sep38Quote quote =
+          validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
+      requestValidator.validateAmount(
+          quote.getSellAmount(),
+          asset.getCode(),
+          asset.getSignificantDecimals(),
+          minAmount,
+          maxAmount);
     } else {
       builder.amountExpected(strAmount);
       if (buyAsset != null) {
@@ -416,7 +423,14 @@ public class Sep24Service {
     String quoteId = depositRequest.get("quote_id");
     AssetInfo sellAsset = assetService.getAssetById(depositRequest.get("source_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
+      Sep38Quote quote =
+          validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
+      requestValidator.validateAmount(
+          quote.getBuyAmount(),
+          asset.getCode(),
+          asset.getSignificantDecimals(),
+          minAmount,
+          maxAmount);
     } else {
       builder.amountExpected(strAmount);
       if (sellAsset != null) {
@@ -586,7 +600,7 @@ public class Sep24Service {
         .build();
   }
 
-  public void validateAndPopulateQuote(
+  public Sep38Quote validateAndPopulateQuote(
       String quoteId,
       AssetInfo sellAsset,
       AssetInfo buyAsset,
@@ -606,6 +620,7 @@ public class Sep24Service {
     builder.amountOut(quote.getBuyAmount());
     builder.amountOutAsset(quote.getBuyAsset());
     builder.feeDetails(quote.getFee());
+    return quote;
   }
 
   /**
