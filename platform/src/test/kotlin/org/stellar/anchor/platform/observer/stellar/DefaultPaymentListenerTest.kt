@@ -562,13 +562,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.id = "123"
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
-    } answers {}
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+    } returns true
 
     paymentListener.handleSep31Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
     }
 
     verify(exactly = 1) {
@@ -582,6 +582,51 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
+  fun `test checkAssetAmountSufficient rejects a payment smaller than amountExpected and increments the metric`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+    val testPayment = testTxn.operations[0].paymentOperation
+
+    val testJdbcSepTransaction = JdbcSep31Transaction()
+    testJdbcSepTransaction.id = "123"
+    testJdbcSepTransaction.amountInAsset = "stellar:" + getSep11AssetName(testPayment.asset)
+    testJdbcSepTransaction.amountExpected = fromXdrAmount(testPayment.amount + BigInteger.ONE)
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      val sufficient =
+        paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+
+      assertFalse(sufficient)
+      assertEquals(
+        1.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_INSUFFICIENT.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test handleSep31Transaction does not notify onchain funds received when the payment is insufficient`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+
+    val testPayment = testTxn.operations[0].paymentOperation
+    val testJdbcSepTransaction = JdbcSep31Transaction()
+    testJdbcSepTransaction.id = "123"
+
+    every {
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+    } returns false
+
+    paymentListener.handleSep31Transaction(testTxn, testPayment, testJdbcSepTransaction)
+
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+  }
+
+  @Test
   fun `test handleSep24Transaction WITHDRAWAL`() {
     val event = createTestTransferEvent()
     val testTxn = event.ledgerTransaction
@@ -591,13 +636,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.id = "123"
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
-    } answers {}
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+    } returns true
 
     paymentListener.handleSep24Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
     }
     verify(exactly = 1) {
       platformApiClient.notifyOnchainFundsReceived(
@@ -620,13 +665,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
-    } answers {}
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+    } returns true
 
     paymentListener.handleSep24Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
     }
     verify(exactly = 1) { platformApiClient.notifyOnchainFundsSent("123", testTxn.hash, any()) }
   }
@@ -644,13 +689,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
-    } answers {}
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+    } returns true
 
     paymentListener.handleSep6Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
     }
     verify(exactly = 1) {
       platformApiClient.notifyOnchainFundsReceived(
@@ -674,13 +719,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
-    } answers {}
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+    } returns true
 
     paymentListener.handleSep6Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
     }
     verify(exactly = 1) { platformApiClient.notifyOnchainFundsSent("123", testTxn.hash, any()) }
   }

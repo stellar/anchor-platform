@@ -285,7 +285,9 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    if (!checkAssetAmountSufficient(ledgerTransaction, ledgerPayment, sepTransaction)) {
+      return;
+    }
 
     platformApiClient.notifyOnchainFundsReceived(
         sepTransaction.getId(),
@@ -312,7 +314,9 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    if (!checkAssetAmountSufficient(ledgerTransaction, ledgerPayment, sepTransaction)) {
+      return;
+    }
     JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) sepTransaction;
 
     if (DEPOSIT.getKind().equals(sep24Txn.getKind())) {
@@ -349,7 +353,9 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    if (!checkAssetAmountSufficient(ledgerTransaction, ledgerPayment, sepTransaction)) {
+      return;
+    }
 
     JdbcSep6Transaction sep6Txn = (JdbcSep6Transaction) sepTransaction;
     if (DEPOSIT.getKind().equals(sep6Txn.getKind())
@@ -429,7 +435,7 @@ public class DefaultPaymentListener implements PaymentListener {
     return true;
   }
 
-  void checkAndWarnAssetAmountMismatch(
+  boolean checkAssetAmountSufficient(
       LedgerTransaction ledgerTransaction,
       LedgerPayment ledgerPayment,
       JdbcSepTransaction sepTransaction) {
@@ -442,20 +448,26 @@ public class DefaultPaymentListener implements PaymentListener {
           sepTransaction.getAmountInAsset());
     }
 
-    // Check if the payment contains the expected amount (or greater)
     BigDecimal expectedAmount = decimal(sepTransaction.getAmountExpected());
     BigDecimal gotAmount = decimal(AssetHelper.fromXdrAmount(ledgerPayment.getAmount()));
-    if (expectedAmount == null || gotAmount.compareTo(expectedAmount) >= 0) {
-      debugF(
-          "Incoming payment for SEP-{} transaction. sepTxn.id={}, ledgerTxn.id={}",
+    if (expectedAmount != null && gotAmount.compareTo(expectedAmount) < 0) {
+      errorF(
+          "Rejecting incoming payment for SEP-{} transaction: amount was insufficient. "
+              + "sepTxn.id={}, ledgerTxn.id={}, expected={}, received={}",
           sepTransaction.getProtocol(),
           sepTransaction.getId(),
-          ledgerTransaction.getHash());
-    } else {
-      debugF(
-          "The incoming payment amount was insufficient from Expected: {}, Received: {}",
+          ledgerTransaction.getHash(),
           formatAmount(expectedAmount),
           formatAmount(gotAmount));
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_INSUFFICIENT.toString()).increment();
+      return false;
     }
+
+    debugF(
+        "Incoming payment for SEP-{} transaction. sepTxn.id={}, ledgerTxn.id={}",
+        sepTransaction.getProtocol(),
+        sepTransaction.getId(),
+        ledgerTransaction.getHash());
+    return true;
   }
 }
