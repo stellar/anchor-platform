@@ -35,6 +35,14 @@ public abstract class WebAuthJwt extends AbstractJwt {
     return this.jti;
   }
 
+  public String getOwnerMemo() {
+    return muxedAccountId != null ? muxedAccountId.toString() : accountMemo;
+  }
+
+  public String getOwnerAccount() {
+    return muxedAccount != null ? muxedAccount : account;
+  }
+
   public String getIssuer() {
     return this.iss;
   }
