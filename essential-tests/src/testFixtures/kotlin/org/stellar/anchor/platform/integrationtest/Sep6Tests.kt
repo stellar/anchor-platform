@@ -185,7 +185,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
           )
         )
       }
-    assert(ex.message!!.contains("'account' does not match the one in the token")) {
+    assert(ex.message!!.contains("Provided 'account' is not allowed")) {
       "Expected destination policy error but got: ${ex.message}"
     }
   }
@@ -206,7 +206,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
           exchange = true,
         )
       }
-    assert(ex.message!!.contains("'account' does not match the one in the token")) {
+    assert(ex.message!!.contains("Provided 'account' is not allowed")) {
       "Expected destination policy error but got: ${ex.message}"
     }
   }
@@ -225,7 +225,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
           )
         )
       }
-    assert(ex.message!!.contains("'account' does not match the one in the token")) {
+    assert(ex.message!!.contains("Provided 'account' is not allowed")) {
       "Expected destination policy error but got: ${ex.message}"
     }
   }
@@ -246,7 +246,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
           exchange = true,
         )
       }
-    assert(ex.message!!.contains("'account' does not match the one in the token")) {
+    assert(ex.message!!.contains("Provided 'account' is not allowed")) {
       "Expected destination policy error but got: ${ex.message}"
     }
   }

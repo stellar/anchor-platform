@@ -47,6 +47,7 @@ import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.client.ClientConfig;
+import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep10Config;
@@ -74,6 +75,8 @@ public class Sep31Service {
   private final Counter sep31TransactionCreatedCounter = counter(SEP31_TRANSACTION_CREATED);
   private final Counter sep31TransactionPatchedCounter = counter(SEP31_TRANSACTION_PATCHED);
   final ExchangeAmountsCalculator exchangeAmountsCalculator;
+  private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
+  private final ClientFinder clientFinder;
 
   public Sep31Service(
       LanguageConfig languageConfig,
@@ -86,7 +89,9 @@ public class Sep31Service {
       RateIntegration rateIntegration,
       EventService eventService,
       Clock clock,
-      ExchangeAmountsCalculator exchangeAmountsCalculator) {
+      ExchangeAmountsCalculator exchangeAmountsCalculator,
+      Sep31CustomerIdOwnerStore customerIdOwnerStore,
+      ClientFinder clientFinder) {
     debug("sep31Config:", sep31Config);
     this.languageConfig = languageConfig;
     this.sep10Config = sep10Config;
@@ -98,6 +103,8 @@ public class Sep31Service {
     this.rateIntegration = rateIntegration;
     this.clock = clock;
     this.exchangeAmountsCalculator = exchangeAmountsCalculator;
+    this.customerIdOwnerStore = customerIdOwnerStore;
+    this.clientFinder = clientFinder;
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.infoResponse = sep31InfoResponseFromAssetInfoList(assetService.getAssets());
     Log.info("Sep31Service initialized.");
@@ -168,6 +175,23 @@ public class Sep31Service {
                 Objects.requireNonNullElse(webAuthJwt.getMuxedAccount(), webAuthJwt.getAccount()))
             .memo(webAuthJwt.getAccountMemo())
             .build();
+
+    String ownerClientName;
+    try {
+      ownerClientName = clientFinder.getClientName(webAuthJwt);
+    } catch (SepNotAuthorizedException e) {
+      ownerClientName = null;
+    }
+    String ownerAccount = ownerClientName != null ? ownerClientName : webAuthJwt.getOwnerAccount();
+    String ownerMemo = ownerClientName != null ? null : webAuthJwt.getOwnerMemo();
+
+    for (String customerId : Arrays.asList(request.getSenderId(), request.getReceiverId())) {
+      if (customerId != null
+          && !customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
+        throw new SepNotAuthorizedException(
+            "sender_id/receiver_id does not belong to the authenticated client");
+      }
+    }
 
     Sep38Quote quote = Context.get().getQuote();
     FeeDetails feeDetails;

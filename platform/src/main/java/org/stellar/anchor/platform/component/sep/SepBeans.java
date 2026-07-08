@@ -32,6 +32,7 @@ import org.stellar.anchor.sep12.Sep12Service;
 import org.stellar.anchor.sep24.InteractiveUrlConstructor;
 import org.stellar.anchor.sep24.Sep24Service;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.sep31.Sep31Service;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
@@ -186,8 +187,14 @@ public class SepBeans {
       CustomerIntegration customerIntegration,
       PlatformApiClient platformApiClient,
       EventService eventService,
-      ClientFinder clientFinder) {
-    return new Sep12Service(customerIntegration, platformApiClient, eventService, clientFinder);
+      ClientFinder clientFinder,
+      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore) {
+    return new Sep12Service(
+        customerIntegration,
+        platformApiClient,
+        eventService,
+        clientFinder,
+        sep31CustomerIdOwnerStore);
   }
 
   @Bean
@@ -253,7 +260,9 @@ public class SepBeans {
       AssetService assetService,
       RateIntegration rateIntegration,
       Clock clock,
-      EventService eventService) {
+      EventService eventService,
+      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore,
+      ClientFinder clientFinder) {
     return new Sep31Service(
         languageConfig,
         sep10Config,
@@ -265,7 +274,9 @@ public class SepBeans {
         rateIntegration,
         eventService,
         clock,
-        exchangeAmountsCalculator(sep38QuoteStore, clock));
+        exchangeAmountsCalculator(sep38QuoteStore, clock),
+        sep31CustomerIdOwnerStore,
+        clientFinder);
   }
 
   @Bean
