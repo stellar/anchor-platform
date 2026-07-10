@@ -342,6 +342,95 @@ internal class Sep24ServiceTest {
     }
   }
 
+  @Test
+  fun `test withdraw to unknown account`() {
+    val request = createTestTransactionRequest()
+    val unknownAccount = "GC6TP2RCW665CBOTMR5Q2JXNRK77FWV2FCTHNQXS3FNDMWZCGJBJ4QCY"
+    request["account"] = unknownAccount
+
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Service.withdraw(createTestWebAuthJwt(), request)
+      }
+    assertEquals(Sep24Service.ERR_TOKEN_ACCOUNT_MISMATCH, ex.message)
+  }
+
+  @Test
+  fun `test withdraw to whitelisted account`() {
+    val strToken = jwtService.encode(createTestInteractiveJwt(null))
+    every { interactiveUrlConstructor.construct(any(), any(), any(), any()) } returns
+      "${TEST_SEP24_INTERACTIVE_URL}?lang=en&token=$strToken"
+    val slotTxn = slot<Sep24Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+
+    val whitelistedAccount = "GC6TP2RCW665CBOTMR5Q2JXNRK77FWV2FCTHNQXS3FNDMWZCGJBJ4QCY"
+    every { clientService.getClientConfigBySigningKey(any()) } returns
+      CustodialClient.builder()
+        .name("referenceCustodial")
+        .signingKeys(setOf("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"))
+        .allowAnyDestination(false)
+        .destinationAccounts(setOf(whitelistedAccount))
+        .build()
+    val request = createTestTransactionRequest()
+    request["account"] = whitelistedAccount
+
+    val response = sep24Service.withdraw(createTestWebAuthJwt(), request)
+
+    verify(exactly = 1) { txnStore.save(any()) }
+
+    assertEquals(response.type, "interactive_customer_info_needed")
+    assertTrue(response.url.startsWith(TEST_SEP24_INTERACTIVE_URL))
+    assertEquals(response.id, slotTxn.captured.transactionId)
+
+    assertEquals("incomplete", slotTxn.captured.status)
+    assertEquals("withdrawal", slotTxn.captured.kind)
+    assertEquals(whitelistedAccount, slotTxn.captured.fromAccount)
+  }
+
+  @Test
+  fun `test withdraw from non-whitelisted account is rejected`() {
+    val nonWhitelistedAccount = "GC6TP2RCW665CBOTMR5Q2JXNRK77FWV2FCTHNQXS3FNDMWZCGJBJ4QCY"
+    every { clientService.getClientConfigBySigningKey(any()) } returns
+      CustodialClient.builder()
+        .name("referenceCustodial")
+        .signingKeys(setOf("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"))
+        .allowAnyDestination(false)
+        .destinationAccounts(setOf("GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"))
+        .build()
+    val request = createTestTransactionRequest()
+    request["account"] = nonWhitelistedAccount
+
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Service.withdraw(createTestWebAuthJwt(), request)
+      }
+    assertEquals("Provided 'account' is not allowed", ex.message)
+  }
+
+  @Test
+  fun `test withdraw allows any destination when client config permits it`() {
+    val strToken = jwtService.encode(createTestInteractiveJwt(null))
+    every { interactiveUrlConstructor.construct(any(), any(), any(), any()) } returns
+      "${TEST_SEP24_INTERACTIVE_URL}?lang=en&token=$strToken"
+    val slotTxn = slot<Sep24Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+
+    val anyAccount = "GC6TP2RCW665CBOTMR5Q2JXNRK77FWV2FCTHNQXS3FNDMWZCGJBJ4QCY"
+    every { clientService.getClientConfigBySigningKey(any()) } returns
+      CustodialClient.builder()
+        .name("referenceCustodial")
+        .signingKeys(setOf("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"))
+        .allowAnyDestination(true)
+        .build()
+    val request = createTestTransactionRequest()
+    request["account"] = anyAccount
+
+    sep24Service.withdraw(createTestWebAuthJwt(), request)
+
+    verify(exactly = 1) { txnStore.save(any()) }
+    assertEquals(anyAccount, slotTxn.captured.fromAccount)
+  }
+
   @ParameterizedTest
   @ValueSource(strings = ["true", "false"])
   fun `test deposit`(claimableBalanceSupported: String) {

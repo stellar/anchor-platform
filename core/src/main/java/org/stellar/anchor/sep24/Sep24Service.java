@@ -195,7 +195,7 @@ public class Sep24Service {
     }
 
     // Validate sourceAccount
-    requestValidator.validateAccount(sourceAccount);
+    requestValidator.validateDestinationAccount(token, sourceAccount);
 
     if (token.getClientDomain() != null)
       withdrawRequest.put("client_domain", token.getClientDomain());
