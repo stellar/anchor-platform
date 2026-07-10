@@ -224,7 +224,7 @@ public class Sep6Service {
     if (request.getQuoteId() != null) {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
-              request.getQuoteId(), sellAsset, request.getAmount());
+              request.getQuoteId(), sellAsset, buyAsset, request.getAmount());
     } else {
       // TODO(philip): remove this
       // If a quote is not provided, set the fee and out amounts to 0.
@@ -411,7 +411,7 @@ public class Sep6Service {
     if (request.getQuoteId() != null) {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
-              request.getQuoteId(), sellAsset, request.getAmount());
+              request.getQuoteId(), sellAsset, buyAsset, request.getAmount());
     } else {
       // TODO(philip): remove this
       // If a quote is not provided, set the fee and out amounts to 0.
