@@ -135,8 +135,16 @@ public class Horizon implements LedgerClient {
 
     ParseResult result = parseOperationAndSourceAccountAndMemo(txnEnv, txnHash);
     if (result == null) return null;
+
+    TransactionResult txResult;
+    try {
+      txResult = txnResponse.parseResultXdr();
+    } catch (RuntimeException rex) {
+      throw new LedgerException("Unable to parse transaction result for hash=" + txnHash, rex);
+    }
+    OperationResult[] opResults = LedgerClientHelper.parseOperationResults(txResult, txnHash);
     List<LedgerOperation> operations =
-        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, result);
+        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, result, opResults);
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())

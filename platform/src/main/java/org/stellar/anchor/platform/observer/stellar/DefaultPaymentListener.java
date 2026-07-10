@@ -14,6 +14,7 @@ import static org.stellar.anchor.util.StringHelper.isEmpty;
 import io.micrometer.core.instrument.Metrics;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 import org.stellar.anchor.api.exception.AnchorException;
@@ -100,13 +101,40 @@ public class DefaultPaymentListener implements PaymentListener {
       }
     }
     if (ledgerPayment != null) {
-      processAndDispatchLedgerPayment(ledgerTransaction, ledgerPayment);
+      processAndDispatchLedgerPayment(ledgerTransaction, ledgerPayment, paymentTransferEvent);
     }
   }
 
   void processAndDispatchLedgerPayment(
-      LedgerTransaction ledgerTransaction, LedgerPayment ledgerPayment) {
+      LedgerTransaction ledgerTransaction,
+      LedgerPayment ledgerPayment,
+      PaymentTransferEvent paymentTransferEvent) {
     if (!validate(ledgerTransaction, ledgerPayment)) {
+      return;
+    }
+
+    // ledgerPayment's asset/amount are now known to be one of the supported asset types
+    // (validate() above rejects anything else), so it's safe to compute its sep-11 asset name for
+    // this cross-check. paymentTransferEvent's amount/asset are computed independently by the
+    // observer backend (e.g. Horizon's own operation indexing); if they disagree with what was
+    // parsed from the ledger transaction, refuse to process rather than trust either value
+    // silently.
+    String eventAsset = paymentTransferEvent.getSep11Asset();
+    String ledgerAsset = getSep11AssetName(ledgerPayment.getAsset());
+    BigInteger eventAmount = paymentTransferEvent.getAmount();
+    BigInteger ledgerAmount = ledgerPayment.getAmount();
+    if (!Objects.equals(eventAsset, ledgerAsset) || !Objects.equals(eventAmount, ledgerAmount)) {
+      errorF(
+          "Payment observer amount/asset mismatch between independently-computed event data "
+              + "and ledger-parsed data. txHash={}, opId={}, eventAsset={}, ledgerAsset={}, "
+              + "eventAmount={}, ledgerAmount={}. Refusing to process.",
+          ledgerTransaction.getHash(),
+          paymentTransferEvent.getOperationId(),
+          eventAsset,
+          ledgerAsset,
+          eventAmount,
+          ledgerAmount);
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH.toString()).increment();
       return;
     }
 
@@ -257,7 +285,9 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    if (!checkAssetAmountSufficient(ledgerTransaction, ledgerPayment, sepTransaction)) {
+      return;
+    }
 
     platformApiClient.notifyOnchainFundsReceived(
         sepTransaction.getId(),
@@ -284,7 +314,9 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    if (!checkAssetAmountSufficient(ledgerTransaction, ledgerPayment, sepTransaction)) {
+      return;
+    }
     JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) sepTransaction;
 
     if (DEPOSIT.getKind().equals(sep24Txn.getKind())) {
@@ -321,7 +353,9 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    checkAndWarnAssetAmountMismatch(ledgerTransaction, ledgerPayment, sepTransaction);
+    if (!checkAssetAmountSufficient(ledgerTransaction, ledgerPayment, sepTransaction)) {
+      return;
+    }
 
     JdbcSep6Transaction sep6Txn = (JdbcSep6Transaction) sepTransaction;
     if (DEPOSIT.getKind().equals(sep6Txn.getKind())
@@ -401,7 +435,7 @@ public class DefaultPaymentListener implements PaymentListener {
     return true;
   }
 
-  void checkAndWarnAssetAmountMismatch(
+  boolean checkAssetAmountSufficient(
       LedgerTransaction ledgerTransaction,
       LedgerPayment ledgerPayment,
       JdbcSepTransaction sepTransaction) {
@@ -414,20 +448,26 @@ public class DefaultPaymentListener implements PaymentListener {
           sepTransaction.getAmountInAsset());
     }
 
-    // Check if the payment contains the expected amount (or greater)
     BigDecimal expectedAmount = decimal(sepTransaction.getAmountExpected());
     BigDecimal gotAmount = decimal(AssetHelper.fromXdrAmount(ledgerPayment.getAmount()));
-    if (expectedAmount == null || gotAmount.compareTo(expectedAmount) >= 0) {
-      debugF(
-          "Incoming payment for SEP-{} transaction. sepTxn.id={}, ledgerTxn.id={}",
+    if (expectedAmount != null && gotAmount.compareTo(expectedAmount) < 0) {
+      errorF(
+          "Rejecting incoming payment for SEP-{} transaction: amount was insufficient. "
+              + "sepTxn.id={}, ledgerTxn.id={}, expected={}, received={}",
           sepTransaction.getProtocol(),
           sepTransaction.getId(),
-          ledgerTransaction.getHash());
-    } else {
-      debugF(
-          "The incoming payment amount was insufficient from Expected: {}, Received: {}",
+          ledgerTransaction.getHash(),
           formatAmount(expectedAmount),
           formatAmount(gotAmount));
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_INSUFFICIENT.toString()).increment();
+      return false;
     }
+
+    debugF(
+        "Incoming payment for SEP-{} transaction. sepTxn.id={}, ledgerTxn.id={}",
+        sepTransaction.getProtocol(),
+        sepTransaction.getId(),
+        ledgerTransaction.getHash());
+    return true;
   }
 }
