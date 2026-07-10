@@ -341,9 +341,11 @@ internal class Sep24ServiceTest {
 
     val request = createTestTransactionRequest(quote.id)
     request.remove("amount")
-    assertThrows<SepValidationException> {
-      sep24Service.withdraw(createTestWebAuthJwtWithMemo(), request)
-    }
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Service.withdraw(createTestWebAuthJwtWithMemo(), request)
+      }
+    assertEquals("amount exceeds asset's maximum limit: 10001", ex.message)
   }
 
   @Test
@@ -357,9 +359,11 @@ internal class Sep24ServiceTest {
 
     val request = createTestTransactionRequest(quote.id)
     request.remove("amount")
-    assertThrows<SepValidationException> {
-      sep24Service.withdraw(createTestWebAuthJwtWithMemo(), request)
-    }
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Service.withdraw(createTestWebAuthJwtWithMemo(), request)
+      }
+    assertEquals("amount is less than asset's minimum limit: 0.5", ex.message)
   }
 
   @Test
@@ -539,9 +543,11 @@ internal class Sep24ServiceTest {
 
     val request = createTestTransactionRequest(quote.id)
     request.remove("amount")
-    assertThrows<SepValidationException> {
-      sep24Service.deposit(createTestWebAuthJwtWithMemo(), request)
-    }
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Service.deposit(createTestWebAuthJwtWithMemo(), request)
+      }
+    assertEquals("amount exceeds asset's maximum limit: 10001", ex.message)
   }
 
   @Test
@@ -552,9 +558,11 @@ internal class Sep24ServiceTest {
 
     val request = createTestTransactionRequest(quote.id)
     request.remove("amount")
-    assertThrows<SepValidationException> {
-      sep24Service.deposit(createTestWebAuthJwtWithMemo(), request)
-    }
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Service.deposit(createTestWebAuthJwtWithMemo(), request)
+      }
+    assertEquals("amount is less than asset's minimum limit: 0.5", ex.message)
   }
 
   @Test
