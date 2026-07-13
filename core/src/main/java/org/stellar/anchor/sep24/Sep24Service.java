@@ -173,26 +173,11 @@ public class Sep24Service {
       throw new SepValidationException(String.format("invalid operation for asset %s", assetCode));
     }
 
-    // Validate min amount
+    // Validate min/max amount
     DepositWithdrawOperation sep24WithdrawInfo = asset.getSep24().getWithdraw();
     Long minAmount = sep24WithdrawInfo.getMinAmount();
-    if (strAmount != null && minAmount != null) {
-      if (decimal(strAmount).compareTo(decimal(minAmount)) < 0) {
-        infoF("invalid amount {}", strAmount);
-        throw new SepValidationException(
-            String.format("amount is less than asset's minimum limit: %s", strAmount));
-      }
-    }
-
-    // Validate max amount
     Long maxAmount = sep24WithdrawInfo.getMaxAmount();
-    if (strAmount != null && maxAmount != null) {
-      if (decimal(strAmount).compareTo(decimal(maxAmount)) > 0) {
-        infoF("invalid amount {}", strAmount);
-        throw new SepValidationException(
-            String.format("amount exceeds asset's maximum limit: %s", strAmount));
-      }
-    }
+    validateAmountLimits(strAmount, minAmount, maxAmount);
 
     // Validate sourceAccount
     requestValidator.validateDestinationAccount(token, sourceAccount);
@@ -241,7 +226,9 @@ public class Sep24Service {
     String quoteId = withdrawRequest.get("quote_id");
     AssetInfo buyAsset = assetService.getAssetById(withdrawRequest.get("destination_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
+      Sep38Quote quote =
+          validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
+      validateAmountLimits(quote.getSellAmount(), minAmount, maxAmount);
     } else {
       builder.amountExpected(strAmount);
       if (buyAsset != null) {
@@ -348,26 +335,11 @@ public class Sep24Service {
       throw new SepValidationException(String.format("invalid operation for asset %s", assetCode));
     }
 
-    // Validate min amount
+    // Validate min/max amount
     DepositWithdrawOperation sep24DepositInfo = asset.getSep24().getDeposit();
     Long minAmount = sep24DepositInfo.getMinAmount();
-    if (strAmount != null && minAmount != null) {
-      if (decimal(strAmount).compareTo(decimal(minAmount)) < 0) {
-        infoF("invalid amount {}", strAmount);
-        throw new SepValidationException(
-            String.format("amount is less than asset's minimum limit: %s", strAmount));
-      }
-    }
-
-    // Validate max amount
     Long maxAmount = sep24DepositInfo.getMaxAmount();
-    if (strAmount != null && maxAmount != null) {
-      if (decimal(strAmount).compareTo(decimal(maxAmount)) > 0) {
-        infoF("invalid amount {}", strAmount);
-        throw new SepValidationException(
-            String.format("amount exceeds asset's maximum limit: %s", strAmount));
-      }
-    }
+    validateAmountLimits(strAmount, minAmount, maxAmount);
 
     requestValidator.validateDestinationAccount(token, destinationAccount);
 
@@ -416,7 +388,9 @@ public class Sep24Service {
     String quoteId = depositRequest.get("quote_id");
     AssetInfo sellAsset = assetService.getAssetById(depositRequest.get("source_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
+      Sep38Quote quote =
+          validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
+      validateAmountLimits(quote.getBuyAmount(), minAmount, maxAmount);
     } else {
       builder.amountExpected(strAmount);
       if (sellAsset != null) {
@@ -586,7 +560,35 @@ public class Sep24Service {
         .build();
   }
 
-  public void validateAndPopulateQuote(
+  /**
+   * Validates that the given amount is within the asset's configured min/max limits, using the same
+   * error messages for both the explicit-amount and quote_id (quote-derived amount) paths.
+   *
+   * @param amount the amount to validate; if null, validation is skipped
+   * @param minAmount the asset's minimum amount limit, or null if unset
+   * @param maxAmount the asset's maximum amount limit, or null if unset
+   * @throws SepValidationException if the amount is outside the min/max limits
+   */
+  private void validateAmountLimits(String amount, Long minAmount, Long maxAmount)
+      throws SepValidationException {
+    if (amount != null && minAmount != null) {
+      if (decimal(amount).compareTo(decimal(minAmount)) < 0) {
+        infoF("invalid amount {}", amount);
+        throw new SepValidationException(
+            String.format("amount is less than asset's minimum limit: %s", amount));
+      }
+    }
+
+    if (amount != null && maxAmount != null) {
+      if (decimal(amount).compareTo(decimal(maxAmount)) > 0) {
+        infoF("invalid amount {}", amount);
+        throw new SepValidationException(
+            String.format("amount exceeds asset's maximum limit: %s", amount));
+      }
+    }
+  }
+
+  private Sep38Quote validateAndPopulateQuote(
       String quoteId,
       AssetInfo sellAsset,
       AssetInfo buyAsset,
@@ -606,6 +608,7 @@ public class Sep24Service {
     builder.amountOut(quote.getBuyAmount());
     builder.amountOutAsset(quote.getBuyAsset());
     builder.feeDetails(quote.getFee());
+    return quote;
   }
 
   /**
