@@ -68,6 +68,7 @@ public class PaymentObserverBeans {
     }
     AbstractPaymentObserver paymentObserver;
     if (ledgerClient instanceof StellarRpc stellarRpc) {
+      stellarRpc.setSacResolver(sacToAssetMapper::getAssetFromSac);
       paymentObserver =
           new StellarRpcPaymentObserver(
               stellarRpc,

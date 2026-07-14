@@ -6,7 +6,10 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.sdk.KeyPair
+import org.stellar.sdk.StrKey
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus.*
+import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.*
 import org.stellar.sdk.xdr.CryptoKeyType.KEY_TYPE_ED25519
 import org.stellar.sdk.xdr.EnvelopeType.*
@@ -398,6 +401,160 @@ internal class LedgerClientHelperTest {
     assertThrows(LedgerException::class.java) {
       LedgerClientHelper.getLedgerOperations(5, 1708638L, parseResult, operationResults)
     }
+  }
+
+  private fun droppedOperation(): Operation =
+    Operation.builder()
+      .body(Operation.OperationBody.builder().discriminant(OperationType.MANAGE_DATA).build())
+      .build()
+
+  private fun contractEvent(
+    from: String,
+    to: String,
+    assetStr: String,
+    amount: BigInteger,
+  ): ContractEvent {
+    val topics =
+      arrayOf(
+        Scv.toSymbol("transfer"),
+        Scv.toAddress(from),
+        Scv.toAddress(to),
+        Scv.toString(assetStr)
+      )
+    val body =
+      ContractEvent.ContractEventBody.builder()
+        .discriminant(0)
+        .v0(
+          ContractEvent.ContractEventBody.ContractEventV0.builder()
+            .topics(topics)
+            .data(Scv.toInt128(amount))
+            .build()
+        )
+        .build()
+    return ContractEvent.builder().type(ContractEventType.CONTRACT).body(body).build()
+  }
+
+  private fun withContractId(event: ContractEvent, contractIdStrKey: String): ContractEvent {
+    event.contractID = ContractID(Hash(StrKey.decodeContract(contractIdStrKey)))
+    return event
+  }
+
+  @Test
+  fun `test getLedgerOperations synthesizes a sub-invocation transfer from a verified SAC`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val contractId = "CABZBKCMLL4U7ZYF2SJ2VIFZJQQR5LZPL6BH6W7PNSPVXVUT5VMQ27DR"
+    val amount = BigInteger.valueOf(500_000L)
+
+    val operations = arrayOf(droppedOperation())
+    val parseResult = LedgerClientHelper.ParseResult(operations, fromAccount, null)
+    val events = withContractId(contractEvent(fromAccount, toAccount, "native", amount), contractId)
+
+    val nativeAsset = org.stellar.sdk.Asset.createNativeAsset().toXdr()
+    val operationList =
+      LedgerClientHelper.getLedgerOperations(
+        1,
+        1000L,
+        parseResult,
+        null,
+        listOf(listOf(events)),
+      ) { id ->
+        if (id == contractId) nativeAsset else null
+      }
+
+    assertEquals(1, operationList.size)
+    val invokeOp = operationList[0].invokeHostFunctionOperation
+    assertEquals(fromAccount, invokeOp.from)
+    assertEquals(toAccount, invokeOp.to)
+    assertEquals(amount, invokeOp.amount)
+    assertEquals(contractId, invokeOp.contractId)
+  }
+
+  @Test
+  fun `test getLedgerOperations refuses to synthesize when the contract is not a resolvable SAC`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val contractId = "CABZBKCMLL4U7ZYF2SJ2VIFZJQQR5LZPL6BH6W7PNSPVXVUT5VMQ27DR"
+
+    val operations = arrayOf(droppedOperation())
+    val parseResult = LedgerClientHelper.ParseResult(operations, fromAccount, null)
+    val events =
+      withContractId(
+        contractEvent(fromAccount, toAccount, "native", BigInteger.valueOf(500_000L)),
+        contractId,
+      )
+
+    val operationList =
+      LedgerClientHelper.getLedgerOperations(
+        1,
+        1000L,
+        parseResult,
+        null,
+        listOf(listOf(events)),
+      ) {
+        null
+      }
+
+    assertEquals(0, operationList.size)
+  }
+
+  @Test
+  fun `test getLedgerOperations refuses to synthesize when the event asset does not match the contract's canonical asset`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val contractId = "CABZBKCMLL4U7ZYF2SJ2VIFZJQQR5LZPL6BH6W7PNSPVXVUT5VMQ27DR"
+
+    val operations = arrayOf(droppedOperation())
+    val parseResult = LedgerClientHelper.ParseResult(operations, fromAccount, null)
+    val events =
+      withContractId(
+        contractEvent(fromAccount, toAccount, "native", BigInteger.valueOf(500_000L)),
+        contractId,
+      )
+
+    val usdcAsset =
+      org.stellar.sdk.Asset.create("USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP")
+        .toXdr()
+    val operationList =
+      LedgerClientHelper.getLedgerOperations(
+        1,
+        1000L,
+        parseResult,
+        null,
+        listOf(listOf(events)),
+      ) { id ->
+        if (id == contractId) usdcAsset else null
+      }
+
+    assertEquals(0, operationList.size)
+  }
+
+  @Test
+  fun `test getLedgerOperations preserves an i128 amount above Long-MAX_VALUE without wrapping`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val contractId = "CABZBKCMLL4U7ZYF2SJ2VIFZJQQR5LZPL6BH6W7PNSPVXVUT5VMQ27DR"
+    val hugeAmount = BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.valueOf(1_000_000L))
+
+    val operations = arrayOf(droppedOperation())
+    val parseResult = LedgerClientHelper.ParseResult(operations, fromAccount, null)
+    val events =
+      withContractId(contractEvent(fromAccount, toAccount, "native", hugeAmount), contractId)
+
+    val nativeAsset = org.stellar.sdk.Asset.createNativeAsset().toXdr()
+    val operationList =
+      LedgerClientHelper.getLedgerOperations(
+        1,
+        1000L,
+        parseResult,
+        null,
+        listOf(listOf(events)),
+      ) { id ->
+        if (id == contractId) nativeAsset else null
+      }
+
+    assertEquals(1, operationList.size)
+    assertEquals(hugeAmount, operationList[0].invokeHostFunctionOperation.amount)
   }
 
   @Test
