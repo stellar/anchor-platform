@@ -186,17 +186,19 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                       txn.getApplicationOrder(),
                       result.event.getOperationIndex().intValue() + 1)
                   .toInt64());
+      List<LedgerOperation> candidates =
+          txn.getOperations().stream().filter(o -> wantedOpId.equals(getOperationId(o))).toList();
       LedgerOperation op =
-          txn.getOperations().stream()
-              .filter(o -> wantedOpId.equals(getOperationId(o)))
-              .findFirst()
-              .orElse(null);
+          candidates.size() <= 1
+              ? candidates.stream().findFirst().orElse(null)
+              : matchByContent(candidates, result);
       if (op == null) {
         errorF(
             "Cannot credit transfer event: txHash={}, operationIndex={}. No matching top-level"
-                + " or verified sub-invocation operation found. Skipping.",
+                + " or verified sub-invocation operation found among {} candidate(s). Skipping.",
             result.event.getTransactionHash(),
-            result.event.getOperationIndex());
+            result.event.getOperationIndex(),
+            candidates.size());
         return;
       }
       processOperation(txn, op);
@@ -206,6 +208,25 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           GsonUtils.getInstance().toJson(result.event),
           ex.getMessage());
     }
+  }
+
+  private LedgerOperation matchByContent(
+      List<LedgerOperation> candidates, ShouldProcessResult result) {
+    List<LedgerOperation> matches =
+        candidates.stream()
+            .filter(o -> o.getInvokeHostFunctionOperation() != null)
+            .filter(
+                o -> {
+                  LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
+                      o.getInvokeHostFunctionOperation();
+                  return result.fromAddr.equals(invokeOp.getFrom())
+                      && result.toAddr.equals(invokeOp.getTo())
+                      && result.amount.equals(invokeOp.getAmount())
+                      && result.sep11Asset.equals(
+                          AssetHelper.getSep11AssetName(invokeOp.getAsset()));
+                })
+            .toList();
+    return matches.size() == 1 ? matches.get(0) : null;
   }
 
   private String getOperationId(LedgerOperation op) {

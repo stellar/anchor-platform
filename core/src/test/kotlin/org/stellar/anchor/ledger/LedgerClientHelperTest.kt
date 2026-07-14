@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.sdk.Address
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.StrKey
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus.*
@@ -555,6 +556,108 @@ internal class LedgerClientHelperTest {
 
     assertEquals(1, operationList.size)
     assertEquals(hugeAmount, operationList[0].invokeHostFunctionOperation.amount)
+  }
+
+  private fun invokeContractOperation(
+    functionName: String,
+    contractIdStrKey: String,
+    fromAddr: String,
+    toAddr: String,
+    amount: BigInteger,
+  ): Operation {
+    val args = arrayOf(Scv.toAddress(fromAddr), Scv.toAddress(toAddr), Scv.toInt128(amount))
+    val hostFunction =
+      HostFunction.builder()
+        .discriminant(HostFunctionType.HOST_FUNCTION_TYPE_INVOKE_CONTRACT)
+        .invokeContract(
+          InvokeContractArgs.builder()
+            .contractAddress(Address(contractIdStrKey).toSCAddress())
+            .functionName(SCSymbol(XdrString(functionName)))
+            .args(args)
+            .build()
+        )
+        .build()
+    val invokeOp = InvokeHostFunctionOp.builder().hostFunction(hostFunction).auth(arrayOf()).build()
+    return Operation.builder()
+      .body(
+        Operation.OperationBody.builder()
+          .discriminant(OperationType.INVOKE_HOST_FUNCTION)
+          .invokeHostFunctionOp(invokeOp)
+          .build()
+      )
+      .build()
+  }
+
+  @Test
+  fun `test getLedgerOperations discards an unverified top-level transfer-named invocation in favor of a verified sub-invocation`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val fakeContractId = "CABZBKCMLL4U7ZYF2SJ2VIFZJQQR5LZPL6BH6W7PNSPVXVUT5VMQ27DR"
+    val realSacContractId = "CAOVNOZGTFE7HD64O3HYG2TFJBUUPVHAGINDZLTKTS6P2TY6LZWZGIWS"
+    val fakeAmount = BigInteger.valueOf(999_999L)
+    val realAmount = BigInteger.valueOf(500_000L)
+
+    val operations =
+      arrayOf(
+        invokeContractOperation("transfer", fakeContractId, fromAccount, toAccount, fakeAmount)
+      )
+    val parseResult = LedgerClientHelper.ParseResult(operations, fromAccount, null)
+    val events =
+      withContractId(contractEvent(fromAccount, toAccount, "native", realAmount), realSacContractId)
+
+    val nativeAsset = org.stellar.sdk.Asset.createNativeAsset().toXdr()
+    val operationList =
+      LedgerClientHelper.getLedgerOperations(
+        1,
+        1000L,
+        parseResult,
+        null,
+        listOf(listOf(events)),
+      ) { id ->
+        if (id == realSacContractId) nativeAsset else null
+      }
+
+    assertEquals(1, operationList.size)
+    val invokeOp = operationList[0].invokeHostFunctionOperation
+    assertEquals(realSacContractId, invokeOp.contractId)
+    assertEquals(realAmount, invokeOp.amount)
+  }
+
+  @Test
+  fun `test getLedgerOperations returns every verified transfer emitted by one operation, not just the first`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount1 = KeyPair.random().accountId
+    val toAccount2 = KeyPair.random().accountId
+    val contractId = "CABZBKCMLL4U7ZYF2SJ2VIFZJQQR5LZPL6BH6W7PNSPVXVUT5VMQ27DR"
+    val amount1 = BigInteger.valueOf(100_000L)
+    val amount2 = BigInteger.valueOf(200_000L)
+
+    val operations = arrayOf(droppedOperation())
+    val parseResult = LedgerClientHelper.ParseResult(operations, fromAccount, null)
+    val event1 =
+      withContractId(contractEvent(fromAccount, toAccount1, "native", amount1), contractId)
+    val event2 =
+      withContractId(contractEvent(fromAccount, toAccount2, "native", amount2), contractId)
+
+    val nativeAsset = org.stellar.sdk.Asset.createNativeAsset().toXdr()
+    val operationList =
+      LedgerClientHelper.getLedgerOperations(
+        1,
+        1000L,
+        parseResult,
+        null,
+        listOf(listOf(event1, event2)),
+      ) { id ->
+        if (id == contractId) nativeAsset else null
+      }
+
+    assertEquals(2, operationList.size)
+    val amounts = operationList.map { it.invokeHostFunctionOperation.amount }.toSet()
+    assertEquals(setOf(amount1, amount2), amounts)
+    assertEquals(
+      operationList[0].invokeHostFunctionOperation.id,
+      operationList[1].invokeHostFunctionOperation.id,
+    )
   }
 
   @Test

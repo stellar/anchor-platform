@@ -381,17 +381,22 @@ public class LedgerClientHelper {
               opIndex + 1, // operation index is 1-based
               parseResult.operations()[opIndex],
               opResult);
-      if (ledgerOp == null
-          && perOperationContractEvents != null
-          && opIndex < perOperationContractEvents.size()) {
-        ledgerOp =
-            synthesizeSubInvocationTransfer(
+      List<ContractEvent> contractEvents =
+          perOperationContractEvents != null && opIndex < perOperationContractEvents.size()
+              ? perOperationContractEvents.get(opIndex)
+              : null;
+      if (contractEvents != null
+          && (ledgerOp == null || ledgerOp.getType() == INVOKE_HOST_FUNCTION)) {
+        List<LedgerOperation> verifiedTransfers =
+            synthesizeVerifiedTransfers(
                 parseResult.sourceAccount(),
                 sequenceNumber,
                 applicationOrder,
                 opIndex + 1,
-                perOperationContractEvents.get(opIndex),
+                contractEvents,
                 sacResolver);
+        operations.addAll(verifiedTransfers);
+        continue;
       }
       if (ledgerOp != null) {
         operations.add(ledgerOp);
@@ -400,16 +405,19 @@ public class LedgerClientHelper {
     return operations;
   }
 
-  private static LedgerOperation synthesizeSubInvocationTransfer(
+  private static List<LedgerOperation> synthesizeVerifiedTransfers(
       String sourceAccount,
       Long sequenceNumber,
       Integer applicationOrder,
       int opIndex,
       List<ContractEvent> contractEvents,
       Function<String, Asset> sacResolver) {
+    List<LedgerOperation> verified = new ArrayList<>();
     if (contractEvents == null || sacResolver == null) {
-      return null;
+      return verified;
     }
+    String operationId =
+        String.valueOf(new TOID(sequenceNumber.intValue(), applicationOrder, opIndex).toInt64());
     for (ContractEvent event : contractEvents) {
       TransferEventData data = parseTransferEvent(event);
       if (data == null) {
@@ -429,24 +437,23 @@ public class LedgerClientHelper {
       if (!canonicalSep11Asset.equals(data.sep11Asset())) {
         continue;
       }
-      String operationId =
-          String.valueOf(new TOID(sequenceNumber.intValue(), applicationOrder, opIndex).toInt64());
-      return LedgerOperation.builder()
-          .type(INVOKE_HOST_FUNCTION)
-          .invokeHostFunctionOperation(
-              LedgerInvokeHostFunctionOperation.builder()
-                  .id(operationId)
-                  .contractId(contractId)
-                  .hostFunction("transfer")
-                  .from(data.fromAddr())
-                  .to(data.toAddr())
-                  .amount(data.amount())
-                  .asset(canonicalAsset)
-                  .sourceAccount(sourceAccount)
-                  .build())
-          .build();
+      verified.add(
+          LedgerOperation.builder()
+              .type(INVOKE_HOST_FUNCTION)
+              .invokeHostFunctionOperation(
+                  LedgerInvokeHostFunctionOperation.builder()
+                      .id(operationId)
+                      .contractId(contractId)
+                      .hostFunction("transfer")
+                      .from(data.fromAddr())
+                      .to(data.toAddr())
+                      .amount(data.amount())
+                      .asset(canonicalAsset)
+                      .sourceAccount(sourceAccount)
+                      .build())
+              .build());
     }
-    return null;
+    return verified;
   }
 
   public record TransferEventData(
