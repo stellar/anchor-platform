@@ -194,24 +194,12 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
               .findFirst()
               .orElse(null);
       if (op == null) {
-        op = buildSubInvocationOperation(result, wantedOpId);
-        if (op == null) {
-          errorF(
-              "Cannot credit transfer event as a contract sub-invocation: txHash={},"
-                  + " operationIndex={}. Event data was insufficient to build a synthetic"
-                  + " operation. Skipping.",
-              result.event.getTransactionHash(),
-              result.event.getOperationIndex());
-          return;
-        }
-        infoF(
-            "Crediting contract sub-invocation transfer with no direct top-level operation:"
-                + " txHash={}, operationIndex={}, contractId={}.",
+        errorF(
+            "Cannot credit transfer event: txHash={}, operationIndex={}. No matching top-level"
+                + " or verified sub-invocation operation found. Skipping.",
             result.event.getTransactionHash(),
-            result.event.getOperationIndex(),
-            result.event.getContractId());
-
-        txn.setOperations(List.of(op));
+            result.event.getOperationIndex());
+        return;
       }
       processOperation(txn, op);
     } catch (Exception ex) {
@@ -220,39 +208,6 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           GsonUtils.getInstance().toJson(result.event),
           ex.getMessage());
     }
-  }
-
-  /**
-   * Builds a synthetic operation for a contract sub-invocation transfer — one with no direct
-   * top-level representation in the ledger transaction's operation list — from the transfer event's
-   * own already-decoded fields. The event's asset topic already carries the SEP-11 asset string
-   * (CAP-67), so no SAC-to-asset lookup is needed here.
-   */
-  private LedgerOperation buildSubInvocationOperation(
-      ShouldProcessResult result, String operationId) {
-    Asset asset;
-    try {
-      asset = org.stellar.sdk.Asset.create(result.sep11Asset).toXdr();
-    } catch (Exception ex) {
-      warnF(
-          "Cannot parse sep11 asset '{}' from transfer event: {}",
-          result.sep11Asset,
-          ex.getMessage());
-      return null;
-    }
-    LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
-        LedgerTransaction.LedgerInvokeHostFunctionOperation.builder()
-            .id(operationId)
-            .contractId(result.event.getContractId())
-            .from(result.fromAddr)
-            .to(result.toAddr)
-            .amount(BigInteger.valueOf(result.amount))
-            .asset(asset)
-            .build();
-    return LedgerOperation.builder()
-        .type(OperationType.INVOKE_HOST_FUNCTION)
-        .invokeHostFunctionOperation(invokeOp)
-        .build();
   }
 
   private String getOperationId(LedgerOperation op) {
