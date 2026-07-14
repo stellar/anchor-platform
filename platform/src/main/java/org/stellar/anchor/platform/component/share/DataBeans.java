@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.stellar.anchor.platform.data.*;
 import org.stellar.anchor.platform.observer.stellar.JdbcStellarPaymentStreamerCursorStore;
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountStore;
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 
 @Configuration
@@ -27,6 +28,11 @@ public class DataBeans {
   @Bean
   Sep38QuoteStore sep38QuoteStore(JdbcSep38QuoteRepo quoteRepo) {
     return new JdbcSep38QuoteStore(quoteRepo);
+  }
+
+  @Bean
+  Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore(JdbcSep31CustomerIdOwnerRepo repo) {
+    return new JdbcSep31CustomerIdOwnerStore(repo);
   }
 
   @Bean

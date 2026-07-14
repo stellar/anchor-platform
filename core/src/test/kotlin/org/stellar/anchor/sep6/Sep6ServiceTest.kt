@@ -20,6 +20,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_ASSET_SEP38_FORMAT
 import org.stellar.anchor.TestConstants.Companion.TEST_MEMO
 import org.stellar.anchor.TestConstants.Companion.TEST_QUOTE_ID
 import org.stellar.anchor.TestHelper
+import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.BadRequestException
@@ -482,7 +483,9 @@ class Sep6ServiceTest {
     val slotEvent = slot<AnchorEvent>()
     every { eventSession.publish(capture(slotEvent)) } returns Unit
 
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } returns
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
       Amounts.builder()
         .amountIn("100")
         .amountInAsset(sourceAsset)
@@ -520,7 +523,7 @@ class Sep6ServiceTest {
 
     // Verify effects
     verify(exactly = 1) {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), "100")
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100")
     }
     verify(exactly = 1) { txnStore.save(any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
@@ -559,6 +562,45 @@ class Sep6ServiceTest {
       gson.toJson(response),
       JSONCompareMode.LENIENT,
     )
+  }
+
+  @Test
+  fun `test deposit-exchange with quote passes the resolved destination asset as buyAsset`() {
+    val sourceAsset = "iso4217:USD"
+    val destinationAsset = TEST_ASSET
+
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val slotBuyAsset = slot<AssetInfo>()
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(
+        TEST_QUOTE_ID,
+        any(),
+        capture(slotBuyAsset),
+        any(),
+      )
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(sourceAsset)
+        .amountOut("98")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("2", TEST_ASSET_SEP38_FORMAT))
+        .build()
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(destinationAsset)
+        .sourceAsset(sourceAsset)
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+    sep6Service.depositExchange(token, request)
+
+    assertEquals(asset, slotBuyAsset.captured)
   }
 
   @Test
@@ -1066,7 +1108,9 @@ class Sep6ServiceTest {
     val slotEvent = slot<AnchorEvent>()
     every { eventSession.publish(capture(slotEvent)) } returns Unit
 
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } returns
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
       Amounts.builder()
         .amountIn("100")
         .amountInAsset(TEST_ASSET_SEP38_FORMAT)
@@ -1105,7 +1149,7 @@ class Sep6ServiceTest {
 
     // Verify effects
     verify(exactly = 1) {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), "100")
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100")
     }
     verify(exactly = 1) { txnStore.save(any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
@@ -1135,6 +1179,44 @@ class Sep6ServiceTest {
       gson.toJson(response),
       JSONCompareMode.LENIENT,
     )
+  }
+
+  @Test
+  fun `test withdraw-exchange with quote passes the resolved destination asset as buyAsset`() {
+    val sourceAsset = TEST_ASSET
+    val destinationAsset = "iso4217:USD"
+
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val slotBuyAsset = slot<AssetInfo>()
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(
+        TEST_QUOTE_ID,
+        any(),
+        capture(slotBuyAsset),
+        any(),
+      )
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset(destinationAsset)
+        .feeDetails(FeeDetails("2", destinationAsset))
+        .build()
+
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(sourceAsset)
+        .destinationAsset(destinationAsset)
+        .quoteId(TEST_QUOTE_ID)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+    sep6Service.withdrawExchange(token, request)
+
+    assertEquals(assetService.getAssetById(destinationAsset), slotBuyAsset.captured)
   }
 
   @Test
@@ -1708,8 +1790,9 @@ class Sep6ServiceTest {
 
   @Test
   fun `test depositExchange rejects already-bound quote`() {
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } throws
-      BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } throws BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
     val request =
       StartDepositExchangeRequest.builder()
         .destinationAsset(TEST_ASSET)
@@ -1725,7 +1808,9 @@ class Sep6ServiceTest {
 
   @Test
   fun `test depositExchange bind failure rejects second use`() {
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } returns
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
       Amounts.builder()
         .amountIn("100")
         .amountInAsset("iso4217:USD")
@@ -1751,8 +1836,9 @@ class Sep6ServiceTest {
 
   @Test
   fun `test withdrawExchange rejects already-bound quote`() {
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } throws
-      BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } throws BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
     val request =
       StartWithdrawExchangeRequest.builder()
         .sourceAsset(TEST_ASSET)
@@ -1767,7 +1853,9 @@ class Sep6ServiceTest {
 
   @Test
   fun `test withdrawExchange bind failure rejects second use`() {
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } returns
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
       Amounts.builder()
         .amountIn("100")
         .amountInAsset(TEST_ASSET_SEP38_FORMAT)

@@ -252,8 +252,19 @@ public class StellarRpc implements LedgerClient {
     LedgerClientHelper.ParseResult parseResult =
         LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txnResponse.getTxHash());
     if (parseResult == null) return null;
+
+    TransactionResult txResult;
+    try {
+      txResult = txnResponse.parseResultXdr();
+    } catch (RuntimeException rex) {
+      throw new LedgerException(
+          "Unable to parse transaction result for hash=" + txnResponse.getTxHash(), rex);
+    }
+    OperationResult[] opResults =
+        LedgerClientHelper.parseOperationResults(txResult, txnResponse.getTxHash());
     List<LedgerTransaction.LedgerOperation> operations =
-        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
+        LedgerClientHelper.getLedgerOperations(
+            applicationOrder, sequenceNumber, parseResult, opResults);
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getTxHash())

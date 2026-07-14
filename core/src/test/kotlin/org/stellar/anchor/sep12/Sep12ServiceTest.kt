@@ -36,6 +36,7 @@ import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.event.EventService
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
 import org.stellar.anchor.util.StringHelper.json
 
 class Sep12ServiceTest {
@@ -103,6 +104,7 @@ class Sep12ServiceTest {
   @MockK(relaxed = true) private lateinit var eventService: EventService
   @MockK(relaxed = true) private lateinit var eventSession: EventService.Session
   @MockK(relaxed = true) private lateinit var clientFinder: ClientFinder
+  @MockK(relaxed = true) private lateinit var customerIdOwnerStore: Sep31CustomerIdOwnerStore
 
   @BeforeEach
   fun setup() {
@@ -113,8 +115,16 @@ class Sep12ServiceTest {
 
     every { assetService.getAssets() } returns assets
     every { eventService.createSession(any(), any()) } returns eventSession
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
 
-    sep12Service = Sep12Service(customerIntegration, platformApiClient, eventService, clientFinder)
+    sep12Service =
+      Sep12Service(
+        customerIntegration,
+        platformApiClient,
+        eventService,
+        clientFinder,
+        customerIdOwnerStore,
+      )
   }
 
   @ValueSource(strings = [TEST_ACCOUNT, TEST_CONTRACT_ACCOUNT, TEST_MUXED_ACCOUNT])
@@ -425,6 +435,112 @@ class Sep12ServiceTest {
     verify(exactly = 1) { customerIntegration.putCustomer(any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
     assertEquals(TEST_ACCOUNT, mockPutRequest.account)
+  }
+
+  @Test
+  fun `test put customer creating a new sep31-receiver claims ownership of the new id`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("new-receiver-id").status(Sep12Status.ACCEPTED.name).build()
+    every { clientFinder.getClientName(any<WebAuthJwt>()) } returns null
+
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .type("sep31-receiver")
+        .memo(TEST_MEMO)
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-receiver-id", TEST_ACCOUNT, TEST_MEMO)
+    }
+  }
+
+  @Test
+  fun `test put customer creating a new sep31-receiver via a muxed account claims ownership using the muxed id`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder()
+        .id("new-muxed-receiver-id")
+        .status(Sep12Status.ACCEPTED.name)
+        .build()
+    every { clientFinder.getClientName(any<WebAuthJwt>()) } returns null
+
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .type("sep31-receiver")
+        .memo(TEST_MEMO)
+        .memoType("id")
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken(TEST_MUXED_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-muxed-receiver-id", TEST_MUXED_ACCOUNT, TEST_MEMO)
+    }
+  }
+
+  @Test
+  fun `test put customer rejects creation when the returned id is already claimed by another client`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("colliding-id").status(Sep12Status.ACCEPTED.name).build()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns false
+
+    val request = Sep12PutCustomerRequest.builder().type("sep31-sender").firstName("John").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    val ex: SepException = assertThrows { sep12Service.putCustomer(jwtToken, request) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+  }
+
+  @Test
+  fun `test put customer does not claim ownership when updating an existing customer`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("existing-id").status(Sep12Status.ACCEPTED.name).build()
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("existing-id").build()
+
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .id("existing-id")
+        .type("sep31-receiver")
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+  }
+
+  @Test
+  fun `test put customer does not claim ownership for non-sep31 customer types`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("sep24-id").status(Sep12Status.ACCEPTED.name).build()
+
+    val request = Sep12PutCustomerRequest.builder().account(TEST_ACCOUNT).firstName("Jane").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+  }
+
+  @Test
+  fun `test put customer claims ownership by client name when one resolves`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("new-sender-id").status(Sep12Status.ACCEPTED.name).build()
+    every { clientFinder.getClientName(any<WebAuthJwt>()) } returns "vibrant"
+
+    val request = Sep12PutCustomerRequest.builder().type("sep31-sender").firstName("John").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 1) { customerIdOwnerStore.verifyOrClaim("new-sender-id", "vibrant", null) }
   }
 
   @Test
