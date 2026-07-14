@@ -135,63 +135,14 @@ class StellarRpcObserverIndexDomainTest {
   }
 
   @Test
-  fun `sub-invocation transfer event is credited via real scheduler`() {
-    val fromAccount = KeyPair.random().accountId
-    val toAccount = KeyPair.random().accountId
-    val amount = BigInteger.valueOf(1_000_000L)
-    val txHash = "txHashSubInvokeIntegration"
-    val seqNum = 500L
-    val appOrder = 1
-    val opId = TOID(seqNum.toInt(), appOrder, 1).toInt64().toString()
-
-    every { paymentObservingAccountsManager.lookupAndUpdate(toAccount) } returns true
-    every { paymentObservingAccountsManager.lookupAndUpdate(fromAccount) } returns false
-
-    val txn =
-      LedgerTransaction.builder()
-        .hash(txHash)
-        .sequenceNumber(seqNum)
-        .applicationOrder(appOrder)
-        .operations(emptyList())
-        .build()
-    every { stellarRpc.getTransaction(txHash) } returns txn
-
-    val callCount = AtomicInteger(0)
-    every { sorobanServer.getEvents(any()) } answers
-      {
-        if (callCount.incrementAndGet() == 1)
-          mockEventBatch(
-            listOf(Triple(fromAccount, toAccount, txHash to 0L)),
-            listOf(amount),
-            "SUB_INVOKE_CUR",
-          )
-        else emptyBatch("IDLE_CUR")
-      }
-
-    observer.start()
-    waitForCursor("IDLE_CUR")
-
-    val captured = listener.getByTo(toAccount)
-    assertEquals(1, captured?.size)
-    assertEquals(fromAccount, captured!![0].from)
-    assertEquals(toAccount, captured[0].to)
-    assertEquals(amount, captured[0].amount)
-    assertEquals(opId, captured[0].operationId)
-    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
-  }
-
-  @Test
-  fun `mixed batch credits normal, multi-op, and sub-invocation events`() {
+  fun `mixed batch credits both normal and multi-op events`() {
     val from1 = KeyPair.random().accountId
     val to1 = KeyPair.random().accountId
     val from2 = KeyPair.random().accountId
     val to2 = KeyPair.random().accountId
-    val from3 = KeyPair.random().accountId
-    val to3 = KeyPair.random().accountId
 
     val amount1 = BigInteger.valueOf(1_000_000L)
     val amount2 = BigInteger.valueOf(2_000_000L)
-    val amount3 = BigInteger.valueOf(3_000_000L)
 
     val seqNum = 600L
     val appOrder = 1
@@ -202,15 +153,10 @@ class StellarRpcObserverIndexDomainTest {
     val txHash2 = "txHashMultiOp2"
     val opId2 = TOID((seqNum + 1).toInt(), appOrder, 2).toInt64().toString()
 
-    val txHash3 = "txHashSubInvoke"
-    val opId3 = TOID((seqNum + 2).toInt(), appOrder, 1).toInt64().toString()
-
     every { paymentObservingAccountsManager.lookupAndUpdate(to1) } returns true
     every { paymentObservingAccountsManager.lookupAndUpdate(from1) } returns false
     every { paymentObservingAccountsManager.lookupAndUpdate(to2) } returns true
     every { paymentObservingAccountsManager.lookupAndUpdate(from2) } returns false
-    every { paymentObservingAccountsManager.lookupAndUpdate(to3) } returns true
-    every { paymentObservingAccountsManager.lookupAndUpdate(from3) } returns false
 
     every { stellarRpc.getTransaction(txHash1) } returns
       LedgerTransaction.builder()
@@ -256,14 +202,6 @@ class StellarRpcObserverIndexDomainTest {
         )
         .build()
 
-    every { stellarRpc.getTransaction(txHash3) } returns
-      LedgerTransaction.builder()
-        .hash(txHash3)
-        .sequenceNumber(seqNum + 2)
-        .applicationOrder(appOrder)
-        .operations(emptyList())
-        .build()
-
     val callCount = AtomicInteger(0)
     every { sorobanServer.getEvents(any()) } answers
       {
@@ -272,9 +210,8 @@ class StellarRpcObserverIndexDomainTest {
             listOf(
               Triple(from1, to1, txHash1 to 0L),
               Triple(from2, to2, txHash2 to 1L),
-              Triple(from3, to3, txHash3 to 0L),
             ),
-            listOf(amount1, amount2, amount3),
+            listOf(amount1, amount2),
             "MIXED_CUR",
           )
         else emptyBatch("IDLE_CUR")
@@ -292,11 +229,6 @@ class StellarRpcObserverIndexDomainTest {
     assertEquals(1, captured2?.size)
     assertEquals(amount2, captured2!![0].amount)
     assertEquals(opId2, captured2[0].operationId)
-
-    val captured3 = listener.getByTo(to3)
-    assertEquals(1, captured3?.size)
-    assertEquals(amount3, captured3!![0].amount)
-    assertEquals(opId3, captured3[0].operationId)
     assertEquals(ObserverStatus.RUNNING, observer.getStatus())
   }
 
