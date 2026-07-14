@@ -679,6 +679,135 @@ class StellarRpcPaymentObserverTest {
   }
 
   @Test
+  fun `processTransferEvent disambiguates by content when multiple synthesized operations share the same TOID`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount1 = KeyPair.random().accountId
+    val toAccount2 = KeyPair.random().accountId
+    val amount1 = BigInteger.valueOf(111_000L)
+    val amount2 = BigInteger.valueOf(222_000L)
+    val txHash = "txHashSharedToid"
+    val seqNum = 500L
+    val appOrder = 1
+    val sharedOpId = TOID(seqNum.toInt(), appOrder, 1).toInt64().toString()
+
+    setupTransferEvent(
+      fromAccount,
+      toAccount2,
+      amount2,
+      txHash,
+      operationIndex = 0L,
+      "CURSOR_DISAMBIGUATE",
+    )
+
+    val nativeAsset = Asset.createNativeAsset().toXdr()
+    val op1 =
+      LedgerOperation().apply {
+        type = OperationType.INVOKE_HOST_FUNCTION
+        invokeHostFunctionOperation =
+          LedgerTransaction.LedgerInvokeHostFunctionOperation().apply {
+            from = fromAccount
+            to = toAccount1
+            asset = nativeAsset
+            amount = amount1
+            id = sharedOpId
+            contractId = "contractIdA"
+          }
+      }
+    val op2 =
+      LedgerOperation().apply {
+        type = OperationType.INVOKE_HOST_FUNCTION
+        invokeHostFunctionOperation =
+          LedgerTransaction.LedgerInvokeHostFunctionOperation().apply {
+            from = fromAccount
+            to = toAccount2
+            asset = nativeAsset
+            amount = amount2
+            id = sharedOpId
+            contractId = "contractIdB"
+          }
+      }
+    val txn =
+      LedgerTransaction.builder()
+        .hash(txHash)
+        .sequenceNumber(seqNum)
+        .applicationOrder(appOrder)
+        .operations(listOf(op1, op2))
+        .build()
+    every { stellarRpc.getTransaction(txHash) } returns txn
+
+    val capturedEvent = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(capturedEvent)) } answers {}
+
+    observer.fetchEvents()
+
+    assertEquals(fromAccount, capturedEvent.captured.from)
+    assertEquals(toAccount2, capturedEvent.captured.to)
+    assertEquals(amount2, capturedEvent.captured.amount)
+    assertEquals(sharedOpId, capturedEvent.captured.operationId)
+  }
+
+  @Test
+  fun `processTransferEvent skips when multiple operations share the same TOID and none matches the event content`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val eventAmount = BigInteger.valueOf(300_000L)
+    val txHash = "txHashSharedToidNoMatch"
+    val seqNum = 501L
+    val appOrder = 1
+    val sharedOpId = TOID(seqNum.toInt(), appOrder, 1).toInt64().toString()
+
+    setupTransferEvent(
+      fromAccount,
+      toAccount,
+      eventAmount,
+      txHash,
+      operationIndex = 0L,
+      "CURSOR_NO_MATCH",
+    )
+
+    val nativeAsset = Asset.createNativeAsset().toXdr()
+    val op1 =
+      LedgerOperation().apply {
+        type = OperationType.INVOKE_HOST_FUNCTION
+        invokeHostFunctionOperation =
+          LedgerTransaction.LedgerInvokeHostFunctionOperation().apply {
+            from = fromAccount
+            to = toAccount
+            asset = nativeAsset
+            amount = BigInteger.valueOf(111_000L)
+            id = sharedOpId
+            contractId = "contractIdA"
+          }
+      }
+    val op2 =
+      LedgerOperation().apply {
+        type = OperationType.INVOKE_HOST_FUNCTION
+        invokeHostFunctionOperation =
+          LedgerTransaction.LedgerInvokeHostFunctionOperation().apply {
+            from = fromAccount
+            to = toAccount
+            asset = nativeAsset
+            amount = BigInteger.valueOf(222_000L)
+            id = sharedOpId
+            contractId = "contractIdB"
+          }
+      }
+    val txn =
+      LedgerTransaction.builder()
+        .hash(txHash)
+        .sequenceNumber(seqNum)
+        .applicationOrder(appOrder)
+        .operations(listOf(op1, op2))
+        .build()
+    every { stellarRpc.getTransaction(txHash) } returns txn
+
+    assertDoesNotThrow { observer.fetchEvents() }
+
+    verify(exactly = 0) { observer["handleEvent"](any<PaymentTransferEvent>()) }
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+  }
+
+  @Test
   fun `processTransferEvent retries getTransaction when RPC events index races ahead of transactions index`() {
     val fromAccount = KeyPair.random().accountId
     val toAccount = KeyPair.random().accountId

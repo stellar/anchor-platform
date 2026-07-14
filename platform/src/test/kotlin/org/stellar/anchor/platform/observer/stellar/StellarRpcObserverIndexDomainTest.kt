@@ -17,13 +17,37 @@ import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
 import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.ObserverStatus
+import org.stellar.sdk.Account
+import org.stellar.sdk.Address
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.Network
 import org.stellar.sdk.SorobanServer
+import org.stellar.sdk.StrKey
 import org.stellar.sdk.TOID
+import org.stellar.sdk.TransactionBuilder
+import org.stellar.sdk.operations.InvokeHostFunctionOperation
+import org.stellar.sdk.responses.sorobanrpc.Events
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse
+import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
 import org.stellar.sdk.scval.Scv
+import org.stellar.sdk.xdr.ContractEvent
+import org.stellar.sdk.xdr.ContractEventType
+import org.stellar.sdk.xdr.ContractID
+import org.stellar.sdk.xdr.ExtensionPoint
+import org.stellar.sdk.xdr.Hash
+import org.stellar.sdk.xdr.HostFunction
+import org.stellar.sdk.xdr.HostFunctionType
+import org.stellar.sdk.xdr.InvokeContractArgs
+import org.stellar.sdk.xdr.InvokeHostFunctionResult
+import org.stellar.sdk.xdr.InvokeHostFunctionResultCode
+import org.stellar.sdk.xdr.OperationResult
+import org.stellar.sdk.xdr.OperationResultCode
 import org.stellar.sdk.xdr.OperationType
+import org.stellar.sdk.xdr.SCSymbol
+import org.stellar.sdk.xdr.TransactionResult
+import org.stellar.sdk.xdr.TransactionResultCode
+import org.stellar.sdk.xdr.XdrString
 
 class StellarRpcObserverIndexDomainTest {
   private lateinit var config: StellarPaymentObserverConfig
@@ -230,6 +254,177 @@ class StellarRpcObserverIndexDomainTest {
     assertEquals(amount2, captured2!![0].amount)
     assertEquals(opId2, captured2[0].operationId)
     assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+  }
+
+  @Test
+  fun `sub-invocation transfer from a verified SAC is credited via real scheduler and real resolver wiring`() {
+    val fromAccount = KeyPair.random()
+    val toAccount = KeyPair.random().accountId
+    val routerContractId = "CABZBKCMLL4U7ZYF2SJ2VIFZJQQR5LZPL6BH6W7PNSPVXVUT5VMQ27DR"
+    val sacContractId = "CAOVNOZGTFE7HD64O3HYG2TFJBUUPVHAGINDZLTKTS6P2TY6LZWZGIWS"
+    val amount = BigInteger.valueOf(750_000L)
+    val seqNum = 900L
+    val appOrder = 1
+    val opId = TOID(seqNum.toInt(), appOrder, 1).toInt64().toString()
+    val txHash = "txHashSubInvocationRealWiring"
+
+    val realStellarRpc = StellarRpc("https://fake-rpc.invalid")
+    val mockSorobanServer = mockk<SorobanServer>(relaxed = true)
+    val sorobanServerField = StellarRpc::class.java.getDeclaredField("sorobanServer")
+    sorobanServerField.isAccessible = true
+    sorobanServerField.set(realStellarRpc, mockSorobanServer)
+    val nativeAsset = Asset.createNativeAsset().toXdr()
+    realStellarRpc.setSacResolver { id -> if (id == sacContractId) nativeAsset else null }
+    every { mockSorobanServer.getLatestLedger() } returns mockk { every { sequence } returns 10 }
+
+    // Top-level operation invokes a router contract's own function (not "transfer"), so
+    // convert() drops it; the genuine transfer only shows up as a sub-invocation contract event.
+    val hostFunction =
+      HostFunction.builder()
+        .discriminant(HostFunctionType.HOST_FUNCTION_TYPE_INVOKE_CONTRACT)
+        .invokeContract(
+          InvokeContractArgs.builder()
+            .contractAddress(Address(routerContractId).toSCAddress())
+            .functionName(SCSymbol(XdrString("swap")))
+            .args(arrayOf())
+            .build()
+        )
+        .build()
+    val invokeOp = InvokeHostFunctionOperation.builder().hostFunction(hostFunction).build()
+    val account = Account(fromAccount.accountId, 1L)
+    val network = Network("Test SDF Network ; September 2015")
+    val tx =
+      TransactionBuilder(account, network)
+        .addOperation(invokeOp)
+        .setBaseFee(100)
+        .setTimeout(300)
+        .build()
+    tx.sign(fromAccount)
+    val envelopeXdr = tx.toEnvelopeXdrBase64()
+
+    val invokeResult =
+      OperationResult.builder()
+        .discriminant(OperationResultCode.opINNER)
+        .tr(
+          OperationResult.OperationResultTr.builder()
+            .discriminant(OperationType.INVOKE_HOST_FUNCTION)
+            .invokeHostFunctionResult(
+              InvokeHostFunctionResult.builder()
+                .discriminant(InvokeHostFunctionResultCode.INVOKE_HOST_FUNCTION_SUCCESS)
+                .success(Hash(ByteArray(32)))
+                .build()
+            )
+            .build()
+        )
+        .build()
+    val resultXdr =
+      TransactionResult.builder()
+        .feeCharged(org.stellar.sdk.xdr.Int64(100L))
+        .result(
+          TransactionResult.TransactionResultResult.builder()
+            .discriminant(TransactionResultCode.txSUCCESS)
+            .results(arrayOf(invokeResult))
+            .build()
+        )
+        .ext(TransactionResult.TransactionResultExt.builder().discriminant(0).build())
+        .build()
+        .toXdrBase64()
+
+    val transferEventXdr =
+      ContractEvent.builder()
+        .ext(ExtensionPoint.builder().discriminant(0).build())
+        .contractID(ContractID(Hash(StrKey.decodeContract(sacContractId))))
+        .type(ContractEventType.CONTRACT)
+        .body(
+          ContractEvent.ContractEventBody.builder()
+            .discriminant(0)
+            .v0(
+              ContractEvent.ContractEventBody.ContractEventV0.builder()
+                .topics(
+                  arrayOf(
+                    Scv.toSymbol("transfer"),
+                    Scv.toAddress(fromAccount.accountId),
+                    Scv.toAddress(toAccount),
+                    Scv.toString("native"),
+                  )
+                )
+                .data(Scv.toInt128(amount))
+                .build()
+            )
+            .build()
+        )
+        .build()
+        .toXdrBase64()
+
+    val txnResponse =
+      GetTransactionResponse(
+        GetTransactionResponse.GetTransactionStatus.SUCCESS,
+        txHash,
+        1000L,
+        0L,
+        1L,
+        0L,
+        appOrder,
+        false,
+        envelopeXdr,
+        resultXdr,
+        null,
+        seqNum,
+        1_700_000_000L,
+        null,
+        Events(null, listOf(listOf(transferEventXdr))),
+      )
+    every { mockSorobanServer.getTransaction(txHash) } returns txnResponse
+
+    every { paymentObservingAccountsManager.lookupAndUpdate(toAccount) } returns true
+    every { paymentObservingAccountsManager.lookupAndUpdate(fromAccount.accountId) } returns false
+
+    val callCount = AtomicInteger(0)
+    every { mockSorobanServer.getEvents(any()) } answers
+      {
+        if (callCount.incrementAndGet() == 1)
+          mockEventBatch(
+            listOf(Triple(fromAccount.accountId, toAccount, txHash to 0L)),
+            listOf(amount),
+            "SUBINV_CUR",
+          )
+        else emptyBatch("SUBINV_IDLE_CUR")
+      }
+
+    val localListener = CaptureListener()
+    val localCursorStore = LocalCursorStore()
+    val realObserver =
+      StellarRpcPaymentObserver(
+        realStellarRpc,
+        config,
+        listOf(localListener),
+        paymentObservingAccountsManager,
+        localCursorStore,
+        MockSacToAssetMapper(),
+        assetService,
+      )
+
+    try {
+      realObserver.start()
+      val deadline = System.currentTimeMillis() + 6000
+      while (
+        System.currentTimeMillis() < deadline &&
+          localCursorStore.loadStellarRpcCursor() != "SUBINV_IDLE_CUR"
+      ) {
+        Thread.sleep(100)
+      }
+      assertEquals("SUBINV_IDLE_CUR", localCursorStore.loadStellarRpcCursor())
+
+      val captured = localListener.getByTo(toAccount)
+      assertEquals(1, captured?.size)
+      assertEquals(fromAccount.accountId, captured!![0].from)
+      assertEquals(toAccount, captured[0].to)
+      assertEquals(amount, captured[0].amount)
+      assertEquals(opId, captured[0].operationId)
+      assertEquals(ObserverStatus.RUNNING, realObserver.getStatus())
+    } finally {
+      runCatching { realObserver.shutdown() }
+    }
   }
 
   private fun mockEventBatch(
