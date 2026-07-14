@@ -183,7 +183,7 @@ public class Sep31Service {
       ownerClientName = null;
     }
     String ownerAccount = ownerClientName != null ? ownerClientName : webAuthJwt.getOwnerAccount();
-    String ownerMemo = ownerClientName != null ? null : webAuthJwt.getOwnerMemo();
+    String ownerMemo = webAuthJwt.getOwnerMemo();
 
     for (String customerId : Arrays.asList(request.getSenderId(), request.getReceiverId())) {
       if (customerId != null
