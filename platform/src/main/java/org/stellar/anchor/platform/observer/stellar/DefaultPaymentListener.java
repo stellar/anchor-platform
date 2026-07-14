@@ -285,7 +285,7 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    if (!checkAssetAmountSufficient(ledgerTransaction, ledgerPayment, sepTransaction)) {
+    if (!checkAssetAmountSufficient(ledgerTransaction, ledgerPayment, sepTransaction, true)) {
       return;
     }
 
@@ -314,10 +314,12 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    if (!checkAssetAmountSufficient(ledgerTransaction, ledgerPayment, sepTransaction)) {
+    JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) sepTransaction;
+    boolean isWithdrawal = WITHDRAWAL.getKind().equals(sep24Txn.getKind());
+    if (!checkAssetAmountSufficient(
+        ledgerTransaction, ledgerPayment, sepTransaction, isWithdrawal)) {
       return;
     }
-    JdbcSep24Transaction sep24Txn = (JdbcSep24Transaction) sepTransaction;
 
     if (DEPOSIT.getKind().equals(sep24Txn.getKind())) {
       platformApiClient.notifyOnchainFundsSent(
@@ -353,11 +355,15 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSepTransaction sepTransaction)
       throws AnchorException, IOException {
 
-    if (!checkAssetAmountSufficient(ledgerTransaction, ledgerPayment, sepTransaction)) {
+    JdbcSep6Transaction sep6Txn = (JdbcSep6Transaction) sepTransaction;
+    boolean isWithdrawal =
+        WITHDRAWAL.getKind().equals(sep6Txn.getKind())
+            || WITHDRAWAL_EXCHANGE.getKind().equals(sep6Txn.getKind());
+    if (!checkAssetAmountSufficient(
+        ledgerTransaction, ledgerPayment, sepTransaction, isWithdrawal)) {
       return;
     }
 
-    JdbcSep6Transaction sep6Txn = (JdbcSep6Transaction) sepTransaction;
     if (DEPOSIT.getKind().equals(sep6Txn.getKind())
         || DEPOSIT_EXCHANGE.getKind().equals(sep6Txn.getKind())) {
       platformApiClient.notifyOnchainFundsSent(
@@ -438,10 +444,23 @@ public class DefaultPaymentListener implements PaymentListener {
   boolean checkAssetAmountSufficient(
       LedgerTransaction ledgerTransaction,
       LedgerPayment ledgerPayment,
-      JdbcSepTransaction sepTransaction) {
-    // Compare asset code
+      JdbcSepTransaction sepTransaction,
+      boolean enforceAssetMatch) {
     String paymentAssetName = "stellar:" + getSep11AssetName(ledgerPayment.getAsset());
     if (!sepTransaction.getAmountInAsset().equals(paymentAssetName)) {
+      if (enforceAssetMatch) {
+        errorF(
+            "Rejecting incoming payment for SEP-{} transaction: asset did not match. "
+                + "sepTxn.id={}, ledgerTxn.id={}, expected={}, received={}",
+            sepTransaction.getProtocol(),
+            sepTransaction.getId(),
+            ledgerTransaction.getHash(),
+            sepTransaction.getAmountInAsset(),
+            paymentAssetName);
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH.toString())
+            .increment();
+        return false;
+      }
       debugF(
           "Payment asset {} does not match the expected asset {}.",
           paymentAssetName,

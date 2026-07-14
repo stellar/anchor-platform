@@ -7,6 +7,7 @@ import io.mockk.impl.annotations.MockK
 import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.platform.PlatformTransactionData
@@ -562,13 +563,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.id = "123"
 
     every {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
     } returns true
 
     paymentListener.handleSep31Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
     }
 
     verify(exactly = 1) {
@@ -596,7 +597,12 @@ class DefaultPaymentListenerTest {
     Metrics.addRegistry(registry)
     try {
       val sufficient =
-        paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+        paymentListener.checkAssetAmountSufficient(
+          testTxn,
+          testPayment,
+          testJdbcSepTransaction,
+          true,
+        )
 
       assertFalse(sufficient)
       assertEquals(
@@ -609,6 +615,61 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
+  fun `test checkAssetAmountSufficient rejects a withdrawal paid in the wrong asset even when the amount is sufficient`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+    val testPayment = testTxn.operations[0].paymentOperation
+
+    val testJdbcSepTransaction = JdbcSep31Transaction()
+    testJdbcSepTransaction.id = "123"
+    testJdbcSepTransaction.amountInAsset = "stellar:SRT:GISSUER"
+    testJdbcSepTransaction.amountExpected = fromXdrAmount(testPayment.amount)
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      val sufficient =
+        paymentListener.checkAssetAmountSufficient(
+          testTxn,
+          testPayment,
+          testJdbcSepTransaction,
+          true,
+        )
+
+      assertFalse(sufficient)
+      assertEquals(
+        1.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test checkAssetAmountSufficient does not reject a deposit despite the on-chain vs off-chain asset representations differing`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+    val testPayment = testTxn.operations[0].paymentOperation
+
+    val testJdbcSepTransaction = JdbcSep24Transaction()
+    testJdbcSepTransaction.id = "123"
+    testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
+    testJdbcSepTransaction.amountInAsset = "iso4217:USD"
+    testJdbcSepTransaction.amountExpected = fromXdrAmount(testPayment.amount)
+
+    val sufficient =
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false
+      )
+
+    assertTrue(sufficient)
+  }
+
+  @Test
   fun `test handleSep31Transaction does not notify onchain funds received when the payment is insufficient`() {
     val event = createTestTransferEvent()
     val testTxn = event.ledgerTransaction
@@ -618,7 +679,7 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.id = "123"
 
     every {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
     } returns false
 
     paymentListener.handleSep31Transaction(testTxn, testPayment, testJdbcSepTransaction)
@@ -636,13 +697,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.id = "123"
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
     every {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
     } returns true
 
     paymentListener.handleSep24Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
     }
     verify(exactly = 1) {
       platformApiClient.notifyOnchainFundsReceived(
@@ -665,13 +726,23 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
 
     every {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false,
+      )
     } returns true
 
     paymentListener.handleSep24Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false,
+      )
     }
     verify(exactly = 1) { platformApiClient.notifyOnchainFundsSent("123", testTxn.hash, any()) }
   }
@@ -685,17 +756,16 @@ class DefaultPaymentListenerTest {
     val testJdbcSepTransaction = JdbcSep6Transaction()
     testJdbcSepTransaction.id = "123"
 
-    // Test WITHDRAWAL
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
 
     every {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
     } returns true
 
     paymentListener.handleSep6Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
     }
     verify(exactly = 1) {
       platformApiClient.notifyOnchainFundsReceived(
@@ -715,17 +785,26 @@ class DefaultPaymentListenerTest {
     val testJdbcSepTransaction = JdbcSep6Transaction()
     testJdbcSepTransaction.id = "123"
 
-    // Test WITHDRAWAL
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
 
     every {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false,
+      )
     } returns true
 
     paymentListener.handleSep6Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false,
+      )
     }
     verify(exactly = 1) { platformApiClient.notifyOnchainFundsSent("123", testTxn.hash, any()) }
   }
