@@ -12,8 +12,12 @@ import java.math.BigInteger;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
+import java.util.function.Function;
 import org.stellar.anchor.api.exception.LedgerException;
+import org.stellar.anchor.util.AssetHelper;
+import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.TOID;
 import org.stellar.sdk.exception.BadRequestException;
@@ -346,6 +350,18 @@ public class LedgerClientHelper {
       ParseResult parseResult,
       OperationResult[] operationResults)
       throws LedgerException {
+    return getLedgerOperations(
+        applicationOrder, sequenceNumber, parseResult, operationResults, null, null);
+  }
+
+  public static List<LedgerOperation> getLedgerOperations(
+      Integer applicationOrder,
+      Long sequenceNumber,
+      ParseResult parseResult,
+      OperationResult[] operationResults,
+      List<List<ContractEvent>> perOperationContractEvents,
+      Function<String, Asset> sacResolver)
+      throws LedgerException {
     if (operationResults != null && operationResults.length != parseResult.operations().length) {
       throw new LedgerException(
           "Operation/result count mismatch ("
@@ -365,11 +381,152 @@ public class LedgerClientHelper {
               opIndex + 1, // operation index is 1-based
               parseResult.operations()[opIndex],
               opResult);
+      if (ledgerOp == null
+          && perOperationContractEvents != null
+          && opIndex < perOperationContractEvents.size()) {
+        ledgerOp =
+            synthesizeSubInvocationTransfer(
+                parseResult.sourceAccount(),
+                sequenceNumber,
+                applicationOrder,
+                opIndex + 1,
+                perOperationContractEvents.get(opIndex),
+                sacResolver);
+      }
       if (ledgerOp != null) {
         operations.add(ledgerOp);
       }
     }
     return operations;
+  }
+
+  private static LedgerOperation synthesizeSubInvocationTransfer(
+      String sourceAccount,
+      Long sequenceNumber,
+      Integer applicationOrder,
+      int opIndex,
+      List<ContractEvent> contractEvents,
+      Function<String, Asset> sacResolver) {
+    if (contractEvents == null || sacResolver == null) {
+      return null;
+    }
+    for (ContractEvent event : contractEvents) {
+      TransferEventData data = parseTransferEvent(event);
+      if (data == null) {
+        continue;
+      }
+      String contractId;
+      try {
+        contractId = StrKey.encodeContract(event.getContractID().toXdrByteArray());
+      } catch (IOException ioex) {
+        continue;
+      }
+      Asset canonicalAsset = sacResolver.apply(contractId);
+      if (canonicalAsset == null) {
+        continue;
+      }
+      String canonicalSep11Asset = AssetHelper.getSep11AssetName(canonicalAsset);
+      if (!canonicalSep11Asset.equals(data.sep11Asset())) {
+        continue;
+      }
+      String operationId =
+          String.valueOf(new TOID(sequenceNumber.intValue(), applicationOrder, opIndex).toInt64());
+      return LedgerOperation.builder()
+          .type(INVOKE_HOST_FUNCTION)
+          .invokeHostFunctionOperation(
+              LedgerInvokeHostFunctionOperation.builder()
+                  .id(operationId)
+                  .contractId(contractId)
+                  .hostFunction("transfer")
+                  .from(data.fromAddr())
+                  .to(data.toAddr())
+                  .amount(data.amount())
+                  .asset(canonicalAsset)
+                  .sourceAccount(sourceAccount)
+                  .build())
+          .build();
+    }
+    return null;
+  }
+
+  public record TransferEventData(
+      String fromAddr, String toAddr, BigInteger amount, String sep11Asset, String eventMemo) {}
+
+  public static TransferEventData parseTransferEvent(ContractEvent event) {
+    if (event.getType() != ContractEventType.CONTRACT || event.getBody().getV0() == null) {
+      return null;
+    }
+    SCVal[] topics = event.getBody().getV0().getTopics();
+    if (topics == null || topics.length != 4) {
+      return null;
+    }
+
+    SCVal function = topics[0];
+    SCVal from = topics[1];
+    SCVal to = topics[2];
+    SCVal asset = topics[3];
+
+    if (function.getDiscriminant() != SCValType.SCV_SYMBOL
+        || !function.getSym().getSCSymbol().toString().equals("transfer")) {
+      return null;
+    }
+    if (from.getDiscriminant() != SCValType.SCV_ADDRESS
+        || to.getDiscriminant() != SCValType.SCV_ADDRESS
+        || asset.getDiscriminant() != SCValType.SCV_STRING) {
+      return null;
+    }
+
+    String fromAddr;
+    String toAddr;
+    try {
+      fromAddr = Scv.fromAddress(from).toString();
+      toAddr = Scv.fromAddress(to).toString();
+    } catch (RuntimeException ex) {
+      return null;
+    }
+
+    BigInteger amount;
+    String eventMemo = null;
+    SCVal scValue = event.getBody().getV0().getData();
+    if (scValue.getDiscriminant() == SCValType.SCV_I128) {
+      amount = Scv.fromInt128(scValue);
+    } else if (scValue.getDiscriminant() == SCValType.SCV_MAP) {
+      var entries = scValue.getMap() == null ? null : scValue.getMap().getSCMap();
+      if (entries == null || entries.length < 2) {
+        return null;
+      }
+      SCVal amountVal = entries[0].getVal();
+      SCVal memoVal = entries[1].getVal();
+      if (amountVal.getDiscriminant() != SCValType.SCV_I128) {
+        return null;
+      }
+      amount = Scv.fromInt128(amountVal);
+      eventMemo =
+          switch (memoVal.getDiscriminant()) {
+            case SCV_STRING -> memoVal.getStr().getSCString().toString();
+            case SCV_U64 -> memoVal.getU64().toString();
+            case SCV_BYTES ->
+                new String(Base64.getEncoder().encode(memoVal.getBytes().getSCBytes()));
+            default -> null;
+          };
+      if (memoVal.getDiscriminant() == SCValType.SCV_U64) {
+        try {
+          toAddr =
+              new MuxedAccount(Scv.fromAddress(to).toString(), Scv.fromUint64(memoVal))
+                  .getAddress();
+        } catch (IllegalArgumentException iae) {
+          warnF(
+              "Cannot build MuxedAccount for address '{}', using unmuxed value. ex={}",
+              toAddr,
+              iae.getMessage());
+        }
+      }
+    } else {
+      return null;
+    }
+
+    return new TransferEventData(
+        fromAddr, toAddr, amount, asset.getStr().getSCString().toString(), eventMemo);
   }
 
   public static LedgerTransaction waitForTransactionAvailable(
