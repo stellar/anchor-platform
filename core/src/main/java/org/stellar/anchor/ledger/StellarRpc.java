@@ -1,5 +1,6 @@
 package org.stellar.anchor.ledger;
 
+import static org.stellar.anchor.util.Log.debugF;
 import static org.stellar.sdk.xdr.LedgerEntry.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
@@ -33,6 +34,12 @@ import org.stellar.sdk.xdr.LedgerKey.LedgerKeyTrustLine;
 public class StellarRpc implements LedgerClient {
   String rpcServerUrl;
   @Getter SorobanServer sorobanServer;
+  java.util.function.Function<String, org.stellar.sdk.xdr.Asset> sacResolver = contractId -> null;
+
+  public void setSacResolver(
+      java.util.function.Function<String, org.stellar.sdk.xdr.Asset> sacResolver) {
+    this.sacResolver = sacResolver;
+  }
 
   public StellarRpc(String rpcServerUrl) {
     this.rpcServerUrl = rpcServerUrl;
@@ -170,7 +177,7 @@ public class StellarRpc implements LedgerClient {
     return switch (txn.getStatus()) {
       case NOT_FOUND -> null;
       case FAILED -> throw new LedgerException("Error getting transaction: " + txnHash);
-      case SUCCESS -> fromGetTransactionResponse(txn);
+      case SUCCESS -> fromGetTransactionResponse(txn, sacResolver);
     };
   }
 
@@ -241,6 +248,13 @@ public class StellarRpc implements LedgerClient {
    */
   public static LedgerTransaction fromGetTransactionResponse(GetTransactionResponse txnResponse)
       throws LedgerException {
+    return fromGetTransactionResponse(txnResponse, contractId -> null);
+  }
+
+  public static LedgerTransaction fromGetTransactionResponse(
+      GetTransactionResponse txnResponse,
+      java.util.function.Function<String, org.stellar.sdk.xdr.Asset> sacResolver)
+      throws LedgerException {
     TransactionEnvelope txnEnv;
     try {
       txnEnv = TransactionEnvelope.fromXdrBase64(txnResponse.getEnvelopeXdr());
@@ -262,9 +276,25 @@ public class StellarRpc implements LedgerClient {
     }
     OperationResult[] opResults =
         LedgerClientHelper.parseOperationResults(txResult, txnResponse.getTxHash());
+    List<List<ContractEvent>> perOperationContractEvents = null;
+    if (txnResponse.getEvents() != null) {
+      try {
+        perOperationContractEvents = txnResponse.getEvents().parseContractEventsXdr();
+      } catch (RuntimeException rex) {
+        debugF(
+            "Unable to parse contract events for hash={}: {}",
+            txnResponse.getTxHash(),
+            rex.getMessage());
+      }
+    }
     List<LedgerTransaction.LedgerOperation> operations =
         LedgerClientHelper.getLedgerOperations(
-            applicationOrder, sequenceNumber, parseResult, opResults);
+            applicationOrder,
+            sequenceNumber,
+            parseResult,
+            opResults,
+            perOperationContractEvents,
+            sacResolver);
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getTxHash())
