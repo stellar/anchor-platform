@@ -20,5 +20,5 @@ SELECT DISTINCT ON (customer_id)
      WHERE sender_id IS NOT NULL
   ) refs
  WHERE COALESCE(client_name, creator::jsonb ->> 'account') IS NOT NULL
- ORDER BY customer_id, started_at ASC, id ASC
+ ORDER BY customer_id, started_at ASC NULLS LAST, id ASC
 ON CONFLICT (customer_id) DO NOTHING;

@@ -24,7 +24,7 @@ public class V30__backfill_muxed_sep31_customer_id_owner extends BaseJavaMigrati
             + "    FROM sep31_transaction WHERE sender_id IS NOT NULL "
             + ") refs "
             + "WHERE creator ->> 'account' LIKE 'M%' "
-            + "ORDER BY customer_id, started_at ASC, id ASC";
+            + "ORDER BY customer_id, started_at ASC NULLS LAST, id ASC";
 
     String repairMemo =
         "UPDATE sep31_customer_id_owner SET creator_memo = ? "
