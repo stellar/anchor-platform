@@ -225,6 +225,12 @@ public class Sep6Service {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
               request.getQuoteId(), sellAsset, buyAsset, request.getAmount());
+      requestValidator.validateAmount(
+          amounts.getAmountOut(),
+          buyAsset.getCode(),
+          buyAsset.getSignificantDecimals(),
+          buyAsset.getSep6().getDeposit().getMinAmount(),
+          buyAsset.getSep6().getDeposit().getMaxAmount());
     } else {
       // TODO(philip): remove this
       // If a quote is not provided, set the fee and out amounts to 0.

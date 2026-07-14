@@ -1976,4 +1976,96 @@ class Sep6ServiceTest {
     assertNotNull(response.id)
     verify(exactly = 1) { txnStore.save(any()) }
   }
+
+  @Test
+  fun `test depositExchange rejects a quote whose credited amount exceeds max_amount`() {
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset("iso4217:USD")
+        .amountOut("1000000")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("0", TEST_ASSET_SEP38_FORMAT))
+        .build()
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6ServiceWithRealValidator.depositExchange(token, request)
+      }
+    assert(ex.message!!.contains("invalid amount 1000000 for asset $TEST_ASSET"))
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test depositExchange rejects a quote whose credited amount is below min_amount`() {
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset("iso4217:USD")
+        .amountOut("0.5")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("0", TEST_ASSET_SEP38_FORMAT))
+        .build()
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6ServiceWithRealValidator.depositExchange(token, request)
+      }
+    assert(ex.message!!.contains("invalid amount 0.5 for asset $TEST_ASSET"))
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test depositExchange succeeds when the credited amount is within limits`() {
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset("iso4217:USD")
+        .amountOut("98")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("2", TEST_ASSET_SEP38_FORMAT))
+        .build()
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+
+    val response = sep6ServiceWithRealValidator.depositExchange(token, request)
+    assertNotNull(response.id)
+    verify(exactly = 1) { txnStore.save(any()) }
+  }
 }
