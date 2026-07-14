@@ -272,7 +272,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     String toAddr;
     String eventMemo;
     String sep11Asset;
-    Long amount;
+    BigInteger amount;
   }
 
   private ShouldProcessResult shouldProcess(EventInfo event) {
@@ -300,13 +300,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
       String fromAddr = Scv.fromAddress(from).toString();
       String toAddr = Scv.fromAddress(to).toString();
-      long amount = 0L;
+      BigInteger amount = BigInteger.ZERO;
       String eventMemo = null;
       SCVal scValue = SCVal.fromXdrBase64(event.getValue());
       // Reference:
       // https://github.com/stellar/stellar-protocol/blob/master/core/cap-0067.md#emit-a-map-as-the-data-field-in-the-transfer-and-mint-event-if-muxed-information-is-being-emitted-for-the-destination
       if (scValue.getDiscriminant() == SCValType.SCV_I128) {
-        amount = Scv.fromInt128(scValue).longValue();
+        amount = Scv.fromInt128(scValue);
       } else if (scValue.getDiscriminant() == SCValType.SCV_MAP) {
         var entries = scValue.getMap() == null ? null : scValue.getMap().getSCMap();
         if (entries == null || entries.length < 2) {
@@ -317,7 +317,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
         if (amountVal.getDiscriminant() != SCValType.SCV_I128) {
           return builder.build();
         }
-        amount = Scv.fromInt128(amountVal).longValue();
+        amount = Scv.fromInt128(amountVal);
         eventMemo =
             switch (memoVal.getDiscriminant()) {
               case SCV_STRING -> memoVal.getStr().getSCString().toString();
