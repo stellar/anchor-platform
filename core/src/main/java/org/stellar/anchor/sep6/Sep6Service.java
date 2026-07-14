@@ -211,11 +211,7 @@ public class Sep6Service {
     requestValidator.validateTypes(
         fundingMethod, buyAsset.getCode(), buyAsset.getSep6().getDeposit().getMethods());
     requestValidator.validateAmount(
-        request.getAmount(),
-        buyAsset.getCode(),
-        buyAsset.getSignificantDecimals(),
-        buyAsset.getSep6().getDeposit().getMinAmount(),
-        buyAsset.getSep6().getDeposit().getMaxAmount());
+        request.getAmount(), sellAsset.getCode(), sellAsset.getSignificantDecimals(), null, null);
     String destinationAccount =
         StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, destinationAccount);

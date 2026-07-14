@@ -503,6 +503,7 @@ class Sep6ServiceTest {
         .account(TEST_ACCOUNT)
         .fundingMethod("SWIFT")
         .build()
+    val usdAsset = assetService.getAssetById(sourceAsset)
     val response = sep6Service.depositExchange(token, request)
 
     // Verify validations
@@ -513,10 +514,10 @@ class Sep6ServiceTest {
     verify(exactly = 1) {
       requestValidator.validateAmount(
         "100",
-        asset.code,
-        asset.significantDecimals,
-        asset.sep6.deposit.minAmount,
-        asset.sep6.deposit.maxAmount,
+        usdAsset.code,
+        usdAsset.significantDecimals,
+        null,
+        null
       )
     }
     verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
@@ -623,6 +624,7 @@ class Sep6ServiceTest {
         .account(TEST_ACCOUNT)
         .fundingMethod("SWIFT")
         .build()
+    val usdAsset = assetService.getAssetById(sourceAsset)
     val response = sep6Service.depositExchange(token, request)
 
     // Verify validations
@@ -633,10 +635,10 @@ class Sep6ServiceTest {
     verify(exactly = 1) {
       requestValidator.validateAmount(
         "100",
-        asset.code,
-        asset.significantDecimals,
-        asset.sep6.deposit.minAmount,
-        asset.sep6.deposit.maxAmount,
+        usdAsset.code,
+        usdAsset.significantDecimals,
+        null,
+        null
       )
     }
     verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
@@ -749,6 +751,7 @@ class Sep6ServiceTest {
     val sourceAsset = "iso4217:USD"
     val destinationAsset = TEST_ASSET
     val badAmount = "100"
+    val usdAsset = assetService.getAssetById(sourceAsset)
 
     val request =
       StartDepositExchangeRequest.builder()
@@ -758,7 +761,7 @@ class Sep6ServiceTest {
         .account(TEST_ACCOUNT)
         .fundingMethod("SWIFT")
         .build()
-    every { requestValidator.validateAmount(badAmount, TEST_ASSET, any(), any(), any()) } throws
+    every { requestValidator.validateAmount(badAmount, usdAsset.code, any(), any(), any()) } throws
       SepValidationException("bad amount")
 
     assertThrows<SepValidationException> { sep6Service.depositExchange(token, request) }
@@ -771,10 +774,10 @@ class Sep6ServiceTest {
     verify(exactly = 1) {
       requestValidator.validateAmount(
         badAmount,
-        TEST_ASSET,
-        asset.significantDecimals,
-        asset.sep6.deposit.minAmount,
-        asset.sep6.deposit.maxAmount,
+        usdAsset.code,
+        usdAsset.significantDecimals,
+        null,
+        null,
       )
     }
 
@@ -791,14 +794,16 @@ class Sep6ServiceTest {
     val slotEvent = slot<AnchorEvent>()
     every { eventSession.publish(capture(slotEvent)) } returns Unit
 
+    val sourceAsset = "iso4217:USD"
     val request =
       StartDepositExchangeRequest.builder()
         .destinationAsset(TEST_ASSET)
-        .sourceAsset("iso4217:USD")
+        .sourceAsset(sourceAsset)
         .amount("100")
         .account(TEST_ACCOUNT)
         .fundingMethod("SWIFT")
         .build()
+    val usdAsset = assetService.getAssetById(sourceAsset)
     assertThrows<java.lang.RuntimeException> { sep6Service.depositExchange(token, request) }
 
     // Verify validations
@@ -809,10 +814,10 @@ class Sep6ServiceTest {
     verify(exactly = 1) {
       requestValidator.validateAmount(
         "100",
-        asset.code,
-        asset.significantDecimals,
-        asset.sep6.deposit.minAmount,
-        asset.sep6.deposit.maxAmount,
+        usdAsset.code,
+        usdAsset.significantDecimals,
+        null,
+        null
       )
     }
     verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
@@ -2041,13 +2046,16 @@ class Sep6ServiceTest {
 
   @Test
   fun `test depositExchange succeeds when the credited amount is within limits`() {
+    // The source amount (10001) is outside the destination asset's [1, 10000] deposit range, but
+    // the request is denominated in the source asset, and the quoted, credited destination amount
+    // (98) is within range — this must succeed, not be rejected on the source/destination mismatch.
     every { txnStore.save(any()) } returns null
     every { eventSession.publish(any()) } returns Unit
     every {
       exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
     } returns
       Amounts.builder()
-        .amountIn("100")
+        .amountIn("10001")
         .amountInAsset("iso4217:USD")
         .amountOut("98")
         .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
@@ -2059,7 +2067,7 @@ class Sep6ServiceTest {
         .destinationAsset(TEST_ASSET)
         .sourceAsset("iso4217:USD")
         .quoteId(TEST_QUOTE_ID)
-        .amount("100")
+        .amount("10001")
         .account(TEST_ACCOUNT)
         .fundingMethod("SWIFT")
         .build()
