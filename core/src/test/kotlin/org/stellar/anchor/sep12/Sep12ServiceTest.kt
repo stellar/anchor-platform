@@ -565,6 +565,31 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test put customer keeps muxed id distinct per sub-user even when a client name resolves`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder()
+        .id("new-muxed-receiver-id")
+        .status(Sep12Status.ACCEPTED.name)
+        .build()
+    every { clientFinder.getClientName(any<WebAuthJwt>()) } returns "vibrant"
+
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .type("sep31-receiver")
+        .memo(TEST_MEMO)
+        .memoType("id")
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken(TEST_MUXED_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-muxed-receiver-id", "vibrant", TEST_MEMO)
+    }
+  }
+
+  @Test
   fun `Test put customer publishes event with null clientName and logs warning when client is not authorized`() {
     val kycUpdateEventSlot = slot<AnchorEvent>()
     every { customerIntegration.putCustomer(any()) } returns
