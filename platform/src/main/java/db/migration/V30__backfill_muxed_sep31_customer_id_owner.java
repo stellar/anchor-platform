@@ -14,32 +14,33 @@ public class V30__backfill_muxed_sep31_customer_id_owner extends BaseJavaMigrati
   public void migrate(Context context) throws Exception {
     Connection connection = context.getConnection();
 
-    String findWinningMuxedReferences =
-        "SELECT DISTINCT ON (customer_id) customer_id, creator ->> 'account' AS muxed_account "
+    String findWinningReferences =
+        "SELECT DISTINCT ON (customer_id) customer_id, creator ->> 'account' AS winning_account "
             + "FROM ("
-            + "  SELECT receiver_id AS customer_id, creator::jsonb AS creator, started_at, id "
+            + "  SELECT receiver_id AS customer_id, creator::jsonb AS creator, client_name, started_at, id "
             + "    FROM sep31_transaction WHERE receiver_id IS NOT NULL "
             + "  UNION ALL "
-            + "  SELECT sender_id AS customer_id, creator::jsonb AS creator, started_at, id "
+            + "  SELECT sender_id AS customer_id, creator::jsonb AS creator, client_name, started_at, id "
             + "    FROM sep31_transaction WHERE sender_id IS NOT NULL "
             + ") refs "
-            + "WHERE creator ->> 'account' LIKE 'M%' "
+            + "WHERE COALESCE(client_name, creator ->> 'account') IS NOT NULL "
             + "ORDER BY customer_id, started_at ASC NULLS LAST, id ASC";
 
     String repairMemo =
         "UPDATE sep31_customer_id_owner SET creator_memo = ? "
             + "WHERE customer_id = ? AND creator_memo IS NULL";
 
-    try (PreparedStatement select = connection.prepareStatement(findWinningMuxedReferences);
+    try (PreparedStatement select = connection.prepareStatement(findWinningReferences);
         ResultSet rs = select.executeQuery();
         PreparedStatement update = connection.prepareStatement(repairMemo)) {
       while (rs.next()) {
         String customerId = rs.getString("customer_id");
-        String muxedAddress = rs.getString("muxed_account");
+        String winningAccount = rs.getString("winning_account");
+        if (winningAccount == null || !winningAccount.startsWith("M")) continue;
 
         String muxedId;
         try {
-          BigInteger id = new MuxedAccount(muxedAddress).getMuxedId();
+          BigInteger id = new MuxedAccount(winningAccount).getMuxedId();
           if (id == null) continue;
           muxedId = id.toString();
         } catch (RuntimeException e) {
