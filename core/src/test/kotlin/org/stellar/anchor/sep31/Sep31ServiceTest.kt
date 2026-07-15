@@ -892,6 +892,34 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test postTransaction keeps memo distinct per sub-user even when a client name resolves`() {
+    useQuotesNotSupportedAssetService()
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val subUserA =
+      TestHelper.createWebAuthJwt(
+        account = TestHelper.TEST_ACCOUNT,
+        accountMemo = TestHelper.TEST_MEMO,
+      )
+    every { clientFinder.getClientName(subUserA) } returns "vibrant"
+    sep31Service.postTransaction(subUserA, ownershipTestRequest(receiverId = "sub-user-a-id"))
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("sub-user-a-id", "vibrant", TestHelper.TEST_MEMO)
+    }
+
+    val subUserB = TestHelper.createMuxedWebAuthJwt(muxedId = 99L)
+    every { clientFinder.getClientName(subUserB) } returns "vibrant"
+    sep31Service.postTransaction(subUserB, ownershipTestRequest(receiverId = "sub-user-b-id"))
+
+    verify(exactly = 1) { customerIdOwnerStore.verifyOrClaim("sub-user-b-id", "vibrant", "99") }
+  }
+
+  @Test
   fun `test postTransaction skips ownership check when sender_id and receiver_id are absent`() {
     useQuotesNotSupportedAssetService()
     val postTxRequest = ownershipTestRequest()

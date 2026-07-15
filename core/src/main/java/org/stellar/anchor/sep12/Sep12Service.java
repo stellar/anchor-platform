@@ -138,9 +138,7 @@ public class Sep12Service {
 
       boolean owned =
           customerIdOwnerStore.verifyOrClaim(
-              updatedCustomer.getId(),
-              clientName != null ? clientName : ownerAccount,
-              clientName != null ? null : ownerMemo);
+              updatedCustomer.getId(), clientName != null ? clientName : ownerAccount, ownerMemo);
 
       if (!owned) {
         throw new SepNotAuthorizedException(
