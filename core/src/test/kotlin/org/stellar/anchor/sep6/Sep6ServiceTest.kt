@@ -20,6 +20,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_ASSET_SEP38_FORMAT
 import org.stellar.anchor.TestConstants.Companion.TEST_MEMO
 import org.stellar.anchor.TestConstants.Companion.TEST_QUOTE_ID
 import org.stellar.anchor.TestHelper
+import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.BadRequestException
@@ -482,7 +483,9 @@ class Sep6ServiceTest {
     val slotEvent = slot<AnchorEvent>()
     every { eventSession.publish(capture(slotEvent)) } returns Unit
 
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } returns
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
       Amounts.builder()
         .amountIn("100")
         .amountInAsset(sourceAsset)
@@ -500,6 +503,7 @@ class Sep6ServiceTest {
         .account(TEST_ACCOUNT)
         .fundingMethod("SWIFT")
         .build()
+    val usdAsset = assetService.getAssetById(sourceAsset)
     val response = sep6Service.depositExchange(token, request)
 
     // Verify validations
@@ -510,17 +514,17 @@ class Sep6ServiceTest {
     verify(exactly = 1) {
       requestValidator.validateAmount(
         "100",
-        asset.code,
-        asset.significantDecimals,
-        asset.sep6.deposit.minAmount,
-        asset.sep6.deposit.maxAmount,
+        usdAsset.code,
+        usdAsset.significantDecimals,
+        null,
+        null
       )
     }
     verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
 
     // Verify effects
     verify(exactly = 1) {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), "100")
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100")
     }
     verify(exactly = 1) { txnStore.save(any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
@@ -562,6 +566,45 @@ class Sep6ServiceTest {
   }
 
   @Test
+  fun `test deposit-exchange with quote passes the resolved destination asset as buyAsset`() {
+    val sourceAsset = "iso4217:USD"
+    val destinationAsset = TEST_ASSET
+
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val slotBuyAsset = slot<AssetInfo>()
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(
+        TEST_QUOTE_ID,
+        any(),
+        capture(slotBuyAsset),
+        any(),
+      )
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(sourceAsset)
+        .amountOut("98")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("2", TEST_ASSET_SEP38_FORMAT))
+        .build()
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(destinationAsset)
+        .sourceAsset(sourceAsset)
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+    sep6Service.depositExchange(token, request)
+
+    assertEquals(asset, slotBuyAsset.captured)
+  }
+
+  @Test
   fun `test deposit-exchange without quote`() {
     val sourceAsset = "iso4217:USD"
     val destinationAsset = TEST_ASSET
@@ -581,6 +624,7 @@ class Sep6ServiceTest {
         .account(TEST_ACCOUNT)
         .fundingMethod("SWIFT")
         .build()
+    val usdAsset = assetService.getAssetById(sourceAsset)
     val response = sep6Service.depositExchange(token, request)
 
     // Verify validations
@@ -591,10 +635,10 @@ class Sep6ServiceTest {
     verify(exactly = 1) {
       requestValidator.validateAmount(
         "100",
-        asset.code,
-        asset.significantDecimals,
-        asset.sep6.deposit.minAmount,
-        asset.sep6.deposit.maxAmount,
+        usdAsset.code,
+        usdAsset.significantDecimals,
+        null,
+        null
       )
     }
     verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
@@ -707,6 +751,7 @@ class Sep6ServiceTest {
     val sourceAsset = "iso4217:USD"
     val destinationAsset = TEST_ASSET
     val badAmount = "100"
+    val usdAsset = assetService.getAssetById(sourceAsset)
 
     val request =
       StartDepositExchangeRequest.builder()
@@ -716,7 +761,7 @@ class Sep6ServiceTest {
         .account(TEST_ACCOUNT)
         .fundingMethod("SWIFT")
         .build()
-    every { requestValidator.validateAmount(badAmount, TEST_ASSET, any(), any(), any()) } throws
+    every { requestValidator.validateAmount(badAmount, usdAsset.code, any(), any(), any()) } throws
       SepValidationException("bad amount")
 
     assertThrows<SepValidationException> { sep6Service.depositExchange(token, request) }
@@ -729,10 +774,10 @@ class Sep6ServiceTest {
     verify(exactly = 1) {
       requestValidator.validateAmount(
         badAmount,
-        TEST_ASSET,
-        asset.significantDecimals,
-        asset.sep6.deposit.minAmount,
-        asset.sep6.deposit.maxAmount,
+        usdAsset.code,
+        usdAsset.significantDecimals,
+        null,
+        null,
       )
     }
 
@@ -749,14 +794,16 @@ class Sep6ServiceTest {
     val slotEvent = slot<AnchorEvent>()
     every { eventSession.publish(capture(slotEvent)) } returns Unit
 
+    val sourceAsset = "iso4217:USD"
     val request =
       StartDepositExchangeRequest.builder()
         .destinationAsset(TEST_ASSET)
-        .sourceAsset("iso4217:USD")
+        .sourceAsset(sourceAsset)
         .amount("100")
         .account(TEST_ACCOUNT)
         .fundingMethod("SWIFT")
         .build()
+    val usdAsset = assetService.getAssetById(sourceAsset)
     assertThrows<java.lang.RuntimeException> { sep6Service.depositExchange(token, request) }
 
     // Verify validations
@@ -767,10 +814,10 @@ class Sep6ServiceTest {
     verify(exactly = 1) {
       requestValidator.validateAmount(
         "100",
-        asset.code,
-        asset.significantDecimals,
-        asset.sep6.deposit.minAmount,
-        asset.sep6.deposit.maxAmount,
+        usdAsset.code,
+        usdAsset.significantDecimals,
+        null,
+        null
       )
     }
     verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
@@ -1066,7 +1113,9 @@ class Sep6ServiceTest {
     val slotEvent = slot<AnchorEvent>()
     every { eventSession.publish(capture(slotEvent)) } returns Unit
 
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } returns
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
       Amounts.builder()
         .amountIn("100")
         .amountInAsset(TEST_ASSET_SEP38_FORMAT)
@@ -1105,7 +1154,7 @@ class Sep6ServiceTest {
 
     // Verify effects
     verify(exactly = 1) {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), "100")
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100")
     }
     verify(exactly = 1) { txnStore.save(any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
@@ -1135,6 +1184,44 @@ class Sep6ServiceTest {
       gson.toJson(response),
       JSONCompareMode.LENIENT,
     )
+  }
+
+  @Test
+  fun `test withdraw-exchange with quote passes the resolved destination asset as buyAsset`() {
+    val sourceAsset = TEST_ASSET
+    val destinationAsset = "iso4217:USD"
+
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val slotBuyAsset = slot<AssetInfo>()
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(
+        TEST_QUOTE_ID,
+        any(),
+        capture(slotBuyAsset),
+        any(),
+      )
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset(destinationAsset)
+        .feeDetails(FeeDetails("2", destinationAsset))
+        .build()
+
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(sourceAsset)
+        .destinationAsset(destinationAsset)
+        .quoteId(TEST_QUOTE_ID)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+    sep6Service.withdrawExchange(token, request)
+
+    assertEquals(assetService.getAssetById(destinationAsset), slotBuyAsset.captured)
   }
 
   @Test
@@ -1708,8 +1795,9 @@ class Sep6ServiceTest {
 
   @Test
   fun `test depositExchange rejects already-bound quote`() {
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } throws
-      BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } throws BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
     val request =
       StartDepositExchangeRequest.builder()
         .destinationAsset(TEST_ASSET)
@@ -1725,7 +1813,9 @@ class Sep6ServiceTest {
 
   @Test
   fun `test depositExchange bind failure rejects second use`() {
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } returns
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
       Amounts.builder()
         .amountIn("100")
         .amountInAsset("iso4217:USD")
@@ -1751,8 +1841,9 @@ class Sep6ServiceTest {
 
   @Test
   fun `test withdrawExchange rejects already-bound quote`() {
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } throws
-      BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } throws BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
     val request =
       StartWithdrawExchangeRequest.builder()
         .sourceAsset(TEST_ASSET)
@@ -1767,7 +1858,9 @@ class Sep6ServiceTest {
 
   @Test
   fun `test withdrawExchange bind failure rejects second use`() {
-    every { exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any()) } returns
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
       Amounts.builder()
         .amountIn("100")
         .amountInAsset(TEST_ASSET_SEP38_FORMAT)
@@ -1885,6 +1978,101 @@ class Sep6ServiceTest {
         .build()
 
     val response = sep6ServiceWithRealValidator.deposit(token, request)
+    assertNotNull(response.id)
+    verify(exactly = 1) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test depositExchange rejects a quote whose credited amount exceeds max_amount`() {
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset("iso4217:USD")
+        .amountOut("1000000")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("0", TEST_ASSET_SEP38_FORMAT))
+        .build()
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6ServiceWithRealValidator.depositExchange(token, request)
+      }
+    assert(ex.message!!.contains("invalid amount 1000000 for asset $TEST_ASSET"))
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test depositExchange rejects a quote whose credited amount is below min_amount`() {
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset("iso4217:USD")
+        .amountOut("0.5")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("0", TEST_ASSET_SEP38_FORMAT))
+        .build()
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6ServiceWithRealValidator.depositExchange(token, request)
+      }
+    assert(ex.message!!.contains("invalid amount 0.5 for asset $TEST_ASSET"))
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test depositExchange succeeds when the credited amount is within limits`() {
+    // The source amount (10001) is outside the destination asset's [1, 10000] deposit range, but
+    // the request is denominated in the source asset, and the quoted, credited destination amount
+    // (98) is within range — this must succeed, not be rejected on the source/destination mismatch.
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+    } returns
+      Amounts.builder()
+        .amountIn("10001")
+        .amountInAsset("iso4217:USD")
+        .amountOut("98")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("2", TEST_ASSET_SEP38_FORMAT))
+        .build()
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("10001")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+
+    val response = sep6ServiceWithRealValidator.depositExchange(token, request)
     assertNotNull(response.id)
     verify(exactly = 1) { txnStore.save(any()) }
   }

@@ -7,6 +7,7 @@ import io.mockk.impl.annotations.MockK
 import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.platform.PlatformTransactionData
@@ -18,6 +19,7 @@ import org.stellar.anchor.platform.config.RpcConfig
 import org.stellar.anchor.platform.data.*
 import org.stellar.anchor.platform.service.AnchorMetrics
 import org.stellar.anchor.util.AssetHelper.fromXdrAmount
+import org.stellar.anchor.util.AssetHelper.getSep11AssetName
 import org.stellar.anchor.util.Log
 import org.stellar.sdk.TOID
 import org.stellar.sdk.xdr.Asset
@@ -271,10 +273,138 @@ class DefaultPaymentListenerTest {
       .from("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
       .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
       .amount(BigInteger.valueOf(1))
+      .sep11Asset(getSep11AssetName(testAssetFoo.toXdr()))
       .txHash("1ad62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af30")
       .operationId(testTOID.toInt64().toString())
       .ledgerTransaction(ledgerTransaction)
       .build()
+  }
+
+  private fun createTestPathPaymentTransferEvent(
+    eventAmount: BigInteger,
+    ledgerAmount: BigInteger,
+    eventAsset: String? = "native",
+  ): PaymentTransferEvent {
+    val nativeAsset = Asset()
+    nativeAsset.discriminant = org.stellar.sdk.xdr.AssetType.ASSET_TYPE_NATIVE
+
+    val ledgerTransaction =
+      LedgerTransaction.builder()
+        .hash("2bd62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af31")
+        .memo(xdrMemoText)
+        .ledger(ledgerSequence.toLong())
+        .operations(
+          listOf(
+            LedgerOperation.builder()
+              .type(OperationType.PATH_PAYMENT_STRICT_SEND)
+              .pathPaymentOperation(
+                LedgerTransaction.LedgerPathPaymentOperation.builder()
+                  .type(OperationType.PATH_PAYMENT_STRICT_SEND)
+                  .id(testTOID.toInt64().toString())
+                  .asset(nativeAsset)
+                  .amount(ledgerAmount)
+                  .sourceAccount("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
+                  .from("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
+                  .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
+                  .build()
+              )
+              .build()
+          )
+        )
+        .build()
+
+    return PaymentTransferEvent.builder()
+      .from("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
+      .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
+      .amount(eventAmount)
+      .sep11Asset(eventAsset)
+      .txHash("2bd62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af31")
+      .operationId(testTOID.toInt64().toString())
+      .ledgerTransaction(ledgerTransaction)
+      .build()
+  }
+
+  @Test
+  fun `test onReceived() processes PATH_PAYMENT_STRICT_SEND when event and ledger amounts and assets agree`() {
+    val event =
+      createTestPathPaymentTransferEvent(
+        eventAmount = BigInteger.valueOf(42),
+        ledgerAmount = BigInteger.valueOf(42)
+      )
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("my_memo_1")
+    ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      listOf(JdbcSep31Transaction())
+    every { paymentListener.handleSep31Transaction(any(), any(), any()) } answers {}
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 1) { paymentListener.handleSep31Transaction(ledgerTransaction, any(), any()) }
+  }
+
+  @Test
+  fun `test onReceived() blocks PATH_PAYMENT_STRICT_SEND when ledger amount reflects attacker sendAmount instead of the true received amount`() {
+    // Regression test for the PATH_PAYMENT_STRICT_SEND amount-spoofing vulnerability: the
+    // ledger-parsed amount (what LedgerClientHelper resolved) claims the full expected amount,
+    // but the independently-computed event amount (what the anchor actually received) is dust.
+    val event =
+      createTestPathPaymentTransferEvent(
+        eventAmount = BigInteger.valueOf(1),
+        ledgerAmount = BigInteger.valueOf(100_000_000_000L),
+      )
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("my_memo_1")
+    ledgerTransaction.memo = xdrMemoText
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      verify { sep31TransactionStore wasNot Called }
+      verify { sep24TransactionStore wasNot Called }
+      verify { sep6TransactionStore wasNot Called }
+      verify(exactly = 0) {
+        platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any())
+      }
+      assertEquals(
+        1.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test onReceived() blocks PATH_PAYMENT_STRICT_SEND when event and ledger assets disagree`() {
+    val event =
+      createTestPathPaymentTransferEvent(
+        eventAmount = BigInteger.valueOf(42),
+        ledgerAmount = BigInteger.valueOf(42),
+        eventAsset = "USD:GISSUERXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      )
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("my_memo_1")
+    ledgerTransaction.memo = xdrMemoText
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      verify { sep31TransactionStore wasNot Called }
+      verify { sep24TransactionStore wasNot Called }
+      verify { sep6TransactionStore wasNot Called }
+      assertEquals(
+        1.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
   }
 
   @Test
@@ -433,13 +563,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.id = "123"
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
-    } answers {}
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
+    } returns true
 
     paymentListener.handleSep31Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
     }
 
     verify(exactly = 1) {
@@ -453,6 +583,111 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
+  fun `test checkAssetAmountSufficient rejects a payment smaller than amountExpected and increments the metric`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+    val testPayment = testTxn.operations[0].paymentOperation
+
+    val testJdbcSepTransaction = JdbcSep31Transaction()
+    testJdbcSepTransaction.id = "123"
+    testJdbcSepTransaction.amountInAsset = "stellar:" + getSep11AssetName(testPayment.asset)
+    testJdbcSepTransaction.amountExpected = fromXdrAmount(testPayment.amount + BigInteger.ONE)
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      val sufficient =
+        paymentListener.checkAssetAmountSufficient(
+          testTxn,
+          testPayment,
+          testJdbcSepTransaction,
+          true,
+        )
+
+      assertFalse(sufficient)
+      assertEquals(
+        1.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_INSUFFICIENT.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test checkAssetAmountSufficient rejects a withdrawal paid in the wrong asset even when the amount is sufficient`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+    val testPayment = testTxn.operations[0].paymentOperation
+
+    val testJdbcSepTransaction = JdbcSep31Transaction()
+    testJdbcSepTransaction.id = "123"
+    testJdbcSepTransaction.amountInAsset = "stellar:SRT:GISSUER"
+    testJdbcSepTransaction.amountExpected = fromXdrAmount(testPayment.amount)
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      val sufficient =
+        paymentListener.checkAssetAmountSufficient(
+          testTxn,
+          testPayment,
+          testJdbcSepTransaction,
+          true,
+        )
+
+      assertFalse(sufficient)
+      assertEquals(
+        1.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test checkAssetAmountSufficient does not reject a deposit despite the on-chain vs off-chain asset representations differing`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+    val testPayment = testTxn.operations[0].paymentOperation
+
+    val testJdbcSepTransaction = JdbcSep24Transaction()
+    testJdbcSepTransaction.id = "123"
+    testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
+    testJdbcSepTransaction.amountInAsset = "iso4217:USD"
+    testJdbcSepTransaction.amountExpected = fromXdrAmount(testPayment.amount)
+
+    val sufficient =
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false
+      )
+
+    assertTrue(sufficient)
+  }
+
+  @Test
+  fun `test handleSep31Transaction does not notify onchain funds received when the payment is insufficient`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+
+    val testPayment = testTxn.operations[0].paymentOperation
+    val testJdbcSepTransaction = JdbcSep31Transaction()
+    testJdbcSepTransaction.id = "123"
+
+    every {
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
+    } returns false
+
+    paymentListener.handleSep31Transaction(testTxn, testPayment, testJdbcSepTransaction)
+
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+  }
+
+  @Test
   fun `test handleSep24Transaction WITHDRAWAL`() {
     val event = createTestTransferEvent()
     val testTxn = event.ledgerTransaction
@@ -462,13 +697,13 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.id = "123"
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
-    } answers {}
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
+    } returns true
 
     paymentListener.handleSep24Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
     }
     verify(exactly = 1) {
       platformApiClient.notifyOnchainFundsReceived(
@@ -491,13 +726,23 @@ class DefaultPaymentListenerTest {
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
-    } answers {}
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false,
+      )
+    } returns true
 
     paymentListener.handleSep24Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false,
+      )
     }
     verify(exactly = 1) { platformApiClient.notifyOnchainFundsSent("123", testTxn.hash, any()) }
   }
@@ -511,17 +756,16 @@ class DefaultPaymentListenerTest {
     val testJdbcSepTransaction = JdbcSep6Transaction()
     testJdbcSepTransaction.id = "123"
 
-    // Test WITHDRAWAL
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL.kind
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
-    } answers {}
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
+    } returns true
 
     paymentListener.handleSep6Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
     }
     verify(exactly = 1) {
       platformApiClient.notifyOnchainFundsReceived(
@@ -541,19 +785,123 @@ class DefaultPaymentListenerTest {
     val testJdbcSepTransaction = JdbcSep6Transaction()
     testJdbcSepTransaction.id = "123"
 
-    // Test WITHDRAWAL
     testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT.kind
 
     every {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
-    } answers {}
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false,
+      )
+    } returns true
 
     paymentListener.handleSep6Transaction(testTxn, testPayment, testJdbcSepTransaction)
 
     verify(exactly = 1) {
-      paymentListener.checkAndWarnAssetAmountMismatch(testTxn, testPayment, testJdbcSepTransaction)
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false,
+      )
     }
     verify(exactly = 1) { platformApiClient.notifyOnchainFundsSent("123", testTxn.hash, any()) }
+  }
+
+  @Test
+  fun `test handleSep6Transaction WITHDRAWAL_EXCHANGE`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+
+    val testPayment = testTxn.operations[0].paymentOperation
+    val testJdbcSepTransaction = JdbcSep6Transaction()
+    testJdbcSepTransaction.id = "123"
+
+    testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL_EXCHANGE.kind
+
+    every {
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
+    } returns true
+
+    paymentListener.handleSep6Transaction(testTxn, testPayment, testJdbcSepTransaction)
+
+    verify(exactly = 1) {
+      paymentListener.checkAssetAmountSufficient(testTxn, testPayment, testJdbcSepTransaction, true)
+    }
+    verify(exactly = 1) {
+      platformApiClient.notifyOnchainFundsReceived(
+        "123",
+        testTxn.hash,
+        fromXdrAmount(testPayment.amount).toString(),
+        any(),
+      )
+    }
+  }
+
+  @Test
+  fun `test handleSep6Transaction DEPOSIT_EXCHANGE`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+    val testPayment = testTxn.operations[0].paymentOperation
+    val testJdbcSepTransaction = JdbcSep6Transaction()
+    testJdbcSepTransaction.id = "123"
+
+    testJdbcSepTransaction.kind = PlatformTransactionData.Kind.DEPOSIT_EXCHANGE.kind
+
+    every {
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false,
+      )
+    } returns true
+
+    paymentListener.handleSep6Transaction(testTxn, testPayment, testJdbcSepTransaction)
+
+    verify(exactly = 1) {
+      paymentListener.checkAssetAmountSufficient(
+        testTxn,
+        testPayment,
+        testJdbcSepTransaction,
+        false,
+      )
+    }
+    verify(exactly = 1) { platformApiClient.notifyOnchainFundsSent("123", testTxn.hash, any()) }
+  }
+
+  @Test
+  fun `test checkAssetAmountSufficient rejects a withdrawal exchange paid in the wrong asset even when the amount is sufficient`() {
+    val event = createTestTransferEvent()
+    val testTxn = event.ledgerTransaction
+    val testPayment = testTxn.operations[0].paymentOperation
+
+    val testJdbcSepTransaction = JdbcSep6Transaction()
+    testJdbcSepTransaction.id = "123"
+    testJdbcSepTransaction.kind = PlatformTransactionData.Kind.WITHDRAWAL_EXCHANGE.kind
+    testJdbcSepTransaction.amountInAsset = "stellar:SRT:GISSUER"
+    testJdbcSepTransaction.amountExpected = fromXdrAmount(testPayment.amount)
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      val sufficient =
+        paymentListener.checkAssetAmountSufficient(
+          testTxn,
+          testPayment,
+          testJdbcSepTransaction,
+          true,
+        )
+
+      assertFalse(sufficient)
+      assertEquals(
+        1.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
   }
 
   @Test
