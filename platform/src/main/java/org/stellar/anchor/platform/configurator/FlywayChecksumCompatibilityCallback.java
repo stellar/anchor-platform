@@ -8,7 +8,6 @@ import java.sql.SQLException;
 import org.flywaydb.core.api.callback.BaseCallback;
 import org.flywaydb.core.api.callback.Context;
 import org.flywaydb.core.api.callback.Event;
-import org.springframework.stereotype.Component;
 
 /**
  * V29 shipped in 4.6.0 with an inline backfill INSERT, then was reverted to its originally released
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Component;
  * Flyway validates, so both histories are accepted regardless of which checksum a given database
  * recorded.
  */
-@Component
 public class FlywayChecksumCompatibilityCallback extends BaseCallback {
 
   private static final int ORIGINAL_V29_CHECKSUM = 1190516276;
@@ -52,7 +50,8 @@ public class FlywayChecksumCompatibilityCallback extends BaseCallback {
   private boolean schemaHistoryTableExists(Connection connection) throws SQLException {
     DatabaseMetaData metaData = connection.getMetaData();
     try (ResultSet tables =
-        metaData.getTables(null, null, "flyway_schema_history", new String[] {"TABLE"})) {
+        metaData.getTables(
+            null, connection.getSchema(), "flyway_schema_history", new String[] {"TABLE"})) {
       return tables.next();
     }
   }
