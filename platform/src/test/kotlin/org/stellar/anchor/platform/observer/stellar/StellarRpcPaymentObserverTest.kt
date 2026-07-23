@@ -8,9 +8,12 @@ import io.mockk.spyk
 import io.mockk.verify
 import java.io.IOException
 import java.math.BigInteger
+import java.util.concurrent.RejectedExecutionException
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.asset.StellarAssetInfo
@@ -248,6 +251,65 @@ class StellarRpcPaymentObserverTest {
     assertEquals("txHashInvoke", event.txHash)
     assertEquals(opId, event.operationId)
     assertEquals(ledgerTxn, event.ledgerTransaction)
+  }
+
+  @Test
+  fun `startInternal recreates the executor after shutdown instead of throwing RejectedExecutionException`() {
+    observer.startInternal()
+    assertFalse(observer.executorService.isShutdown)
+
+    observer.shutdownInternal()
+    assertTrue(observer.executorService.isShutdown)
+
+    assertDoesNotThrow { observer.startInternal() }
+
+    assertFalse(observer.executorService.isShutdown)
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+
+    observer.shutdownInternal()
+  }
+
+  @Test
+  fun `restartInternal resumes polling after the executor was shut down`() {
+    val response = mockk<GetEventsResponse>()
+    every { observer.buildEventRequest(any()) } returns mockk()
+    every { response.events } returns emptyList()
+    every { response.latestLedger } returns 1L
+    every { response.cursor } returns "CUR"
+    every { sorobanServer.getEvents(any()) } returns response
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+
+    observer.startInternal()
+    observer.shutdownInternal()
+    assertTrue(observer.executorService.isShutdown)
+
+    assertDoesNotThrow { observer.restartInternal() }
+
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    assertFalse(observer.executorService.isShutdown)
+    verify(timeout = 2000, atLeast = 1) { sorobanServer.getEvents(any()) }
+
+    observer.shutdownInternal()
+  }
+
+  @Test
+  fun `restartInternal swallows a failed restart instead of propagating it to the supervisor`() {
+    observer.setStatus(ObserverStatus.RUNNING)
+    every { observer.startInternal() } throws RejectedExecutionException("executor terminated")
+
+    assertDoesNotThrow { observer.restartInternal() }
+  }
+
+  @Test
+  fun `checkStatus never lets an unexpected exception kill the supervisor task`() {
+    observer.setStatus(ObserverStatus.NEEDS_SHUTDOWN)
+    every { observer.shutdownInternal() } throws IllegalStateException("unexpected bug")
+
+    assertDoesNotThrow { observer.checkStatus() }
+
+    assertEquals(ObserverStatus.NEEDS_SHUTDOWN, observer.getStatus())
+
+    assertDoesNotThrow { observer.checkStatus() }
   }
 
   @Test

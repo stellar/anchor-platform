@@ -75,6 +75,9 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Override
   void startInternal() {
     info("Starting Soroban RPC payment observer");
+    if (executorService == null || executorService.isShutdown()) {
+      executorService = Executors.newSingleThreadScheduledExecutor();
+    }
     task =
         executorService.scheduleAtFixedRate(
             this::fetchEvents, 0, 1, java.util.concurrent.TimeUnit.SECONDS);
