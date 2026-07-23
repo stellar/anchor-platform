@@ -295,9 +295,12 @@ class StellarRpcPaymentObserverTest {
   @Test
   fun `restartInternal swallows a failed restart instead of propagating it to the supervisor`() {
     observer.setStatus(ObserverStatus.RUNNING)
+    justRun { observer.shutdownInternal() }
     every { observer.startInternal() } throws RejectedExecutionException("executor terminated")
 
     assertDoesNotThrow { observer.restartInternal() }
+
+    verify { observer.startInternal() }
   }
 
   @Test

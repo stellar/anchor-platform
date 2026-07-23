@@ -77,8 +77,20 @@ class StellarRpcPaymentObserverRecoveryE2ETest {
       val baselinePolls = pollCount.get()
       assertTrue(baselinePolls > 0, "observer never polled successfully before the induced outage")
 
+      val executorBeforeOutage = observer.executorService
       outageActive.set(true)
-      Thread.sleep(6000)
+
+      val deadline = System.currentTimeMillis() + 10_000
+      while (
+        observer.executorService === executorBeforeOutage && System.currentTimeMillis() < deadline
+      ) {
+        Thread.sleep(200)
+      }
+      assertTrue(
+        observer.executorService !== executorBeforeOutage,
+        "restartInternal() never replaced the executor - the observer's own recovery path never ran",
+      )
+      assertTrue(executorBeforeOutage.isShutdown, "the original executor was never shut down")
 
       outageActive.set(false)
       val pollsAtRecoveryStart = pollCount.get()
@@ -86,7 +98,7 @@ class StellarRpcPaymentObserverRecoveryE2ETest {
 
       assertTrue(
         pollCount.get() > pollsAtRecoveryStart,
-        "observer never resumed polling after the outage ended - permanently dead, exactly report 3857031",
+        "observer never resumed polling on the new executor after the outage ended",
       )
       assertTrue(
         observer.check().status == HealthCheckStatus.GREEN,
