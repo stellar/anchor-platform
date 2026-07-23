@@ -402,6 +402,39 @@ internal class Sep10ServiceTest {
   }
 
   @Test
+  @LockAndMockStatic([ClientDomainHelper::class])
+  fun `test validateChallengeRequestClient rejects client_domain outside the allow list without fetching it`() {
+    every { sep10Config.isClientAttributionRequired } returns false
+    every { sep10Config.allowedClientDomains } returns listOf("known-wallet.example.com")
+
+    val cr =
+      ChallengeRequest.builder()
+        .account(TEST_ACCOUNT)
+        .homeDomain(TEST_HOME_DOMAIN)
+        .clientDomain("attacker.example.com")
+        .build()
+
+    assertThrows<SepNotAuthorizedException> { sep10Service.validateChallengeRequestClient(cr) }
+
+    verify(exactly = 0) { ClientDomainHelper.fetchSigningKeyFromClientDomain(any(), any()) }
+  }
+
+  @Test
+  fun `test validateChallengeRequestClient allows any client_domain when no clients are configured`() {
+    every { sep10Config.isClientAttributionRequired } returns false
+    every { sep10Config.allowedClientDomains } returns emptyList()
+
+    val cr =
+      ChallengeRequest.builder()
+        .account(TEST_ACCOUNT)
+        .homeDomain(TEST_HOME_DOMAIN)
+        .clientDomain("anything.example.com")
+        .build()
+
+    assertDoesNotThrow { sep10Service.validateChallengeRequestClient(cr) }
+  }
+
+  @Test
   fun `test createChallenge() with bad account`() {
     every { sep10Config.isClientAttributionRequired } returns false
     val cr =
