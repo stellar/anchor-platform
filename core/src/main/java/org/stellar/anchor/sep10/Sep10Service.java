@@ -239,9 +239,12 @@ public class Sep10Service implements ISep10Service {
             request.getClientDomain());
         throw new SepNotAuthorizedException("unable to process");
       }
-    } else if (!custodialWallet && request.getClientDomain() != null) {
+    } else if (!custodialWallet
+        && request.getClientDomain() != null
+        && sep10Config.getClientAllowList() != null
+        && !sep10Config.getClientAllowList().isEmpty()) {
       List<String> allowList = sep10Config.getAllowedClientDomains();
-      if (!allowList.isEmpty() && !allowList.contains(request.getClientDomain())) {
+      if (!allowList.contains(request.getClientDomain())) {
         infoF(
             "client_domain provided ({}) is not in the configured allow list",
             request.getClientDomain());

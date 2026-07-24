@@ -64,6 +64,13 @@ public interface Sep10Config {
   boolean isClientAttributionRequired();
 
   /**
+   * Get the explicitly configured `sep10.client_allow_list`.
+   *
+   * @return the explicitly configured client allow list, or null/empty if none was set.
+   */
+  List<String> getClientAllowList();
+
+  /**
    * Get the list of allowed client domains.
    *
    * @return the list of allowed client domains.
