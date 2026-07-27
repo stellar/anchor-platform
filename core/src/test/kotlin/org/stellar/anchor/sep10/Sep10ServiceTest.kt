@@ -402,6 +402,57 @@ internal class Sep10ServiceTest {
   }
 
   @Test
+  @LockAndMockStatic([ClientDomainHelper::class])
+  fun `test validateChallengeRequestClient rejects client_domain outside an explicit allow list without fetching it`() {
+    every { sep10Config.isClientAttributionRequired } returns false
+    every { sep10Config.clientAllowList } returns listOf("known-wallet")
+    every { sep10Config.allowedClientDomains } returns listOf("known-wallet.example.com")
+
+    val cr =
+      ChallengeRequest.builder()
+        .account(TEST_ACCOUNT)
+        .homeDomain(TEST_HOME_DOMAIN)
+        .clientDomain("attacker.example.com")
+        .build()
+
+    assertThrows<SepNotAuthorizedException> { sep10Service.validateChallengeRequestClient(cr) }
+
+    verify(exactly = 0) { ClientDomainHelper.fetchSigningKeyFromClientDomain(any(), any()) }
+  }
+
+  @Test
+  fun `test validateChallengeRequestClient allows any client_domain when no explicit allow list is configured`() {
+    every { sep10Config.isClientAttributionRequired } returns false
+    every { sep10Config.clientAllowList } returns null
+    every { sep10Config.allowedClientDomains } returns emptyList()
+
+    val cr =
+      ChallengeRequest.builder()
+        .account(TEST_ACCOUNT)
+        .homeDomain(TEST_HOME_DOMAIN)
+        .clientDomain("anything.example.com")
+        .build()
+
+    assertDoesNotThrow { sep10Service.validateChallengeRequestClient(cr) }
+  }
+
+  @Test
+  fun `test validateChallengeRequestClient allows an unlisted client_domain when clients exist only for unrelated config`() {
+    every { sep10Config.isClientAttributionRequired } returns false
+    every { sep10Config.clientAllowList } returns null
+    every { sep10Config.allowedClientDomains } returns listOf("wallet-server:8092")
+
+    val cr =
+      ChallengeRequest.builder()
+        .account(TEST_ACCOUNT)
+        .homeDomain(TEST_HOME_DOMAIN)
+        .clientDomain("localhost:8092")
+        .build()
+
+    assertDoesNotThrow { sep10Service.validateChallengeRequestClient(cr) }
+  }
+
+  @Test
   fun `test createChallenge() with bad account`() {
     every { sep10Config.isClientAttributionRequired } returns false
     val cr =
