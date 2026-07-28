@@ -2,6 +2,7 @@ package org.stellar.anchor.util
 
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.exception.SepException
@@ -69,6 +70,18 @@ class ClientDomainHelperTest {
   @Test
   fun `test public address is accepted`() {
     assertDoesNotThrow { ClientDomainHelper.validateDomainNotPrivateNetwork("8.8.8.8") }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain does not leak the attempted URL on failure`() {
+    val domain = "this-domain-does-not-exist-xyz123.invalid"
+    val ex =
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.fetchSigningKeyFromClientDomain(domain, true)
+      }
+
+    assertFalse(ex.message.orEmpty().contains(domain))
+    assertFalse(ex.message.orEmpty().contains("http"))
   }
 
   @Test
