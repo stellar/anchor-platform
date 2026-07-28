@@ -198,7 +198,7 @@ public class SepBeans {
   }
 
   @Bean
-  @OnAllSepsEnabled(seps = {"sep6", "sep24", "sep31"})
+  @OnAnySepsEnabled(seps = {"sep6", "sep24", "sep31"})
   ExchangeAmountsCalculator exchangeAmountsCalculator(
       Sep38QuoteStore sep38QuoteStore, Clock clock) {
     return new ExchangeAmountsCalculator(sep38QuoteStore, clock);
