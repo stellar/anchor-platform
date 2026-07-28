@@ -121,7 +121,7 @@ public class SepBeans {
   }
 
   @Bean
-  @OnAnySepsEnabled(seps = {"sep6", "sep10", "sep24"})
+  @OnAnySepsEnabled(seps = {"sep6", "sep10", "sep24", "sep31"})
   ClientFinder clientFinder(Sep10Config sep10Config, ClientService clientService) {
     return new ClientFinder(sep10Config, clientService);
   }
