@@ -5,10 +5,14 @@ import static org.stellar.anchor.util.StringHelper.isNotEmpty;
 
 import jakarta.annotation.PostConstruct;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import lombok.Data;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
+import org.stellar.anchor.client.ClientService;
+import org.stellar.anchor.client.NonCustodialClient;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
 import org.stellar.anchor.config.StellarNetworkConfig;
@@ -24,12 +28,18 @@ public class PropertySep45Config implements Sep45Config, Validator {
   private List<String> homeDomains;
   private Integer jwtTimeout;
   private Integer authTimeout;
+  private List<String> clientAllowList = null;
   private StellarNetworkConfig stellarNetworkConfig;
   private SecretConfig secretConfig;
+  private final ClientService clientService;
 
-  public PropertySep45Config(StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
+  public PropertySep45Config(
+      StellarNetworkConfig stellarNetworkConfig,
+      SecretConfig secretConfig,
+      ClientService clientService) {
     this.stellarNetworkConfig = stellarNetworkConfig;
     this.secretConfig = secretConfig;
+    this.clientService = clientService;
   }
 
   @PostConstruct
@@ -116,5 +126,32 @@ public class PropertySep45Config implements Sep45Config, Validator {
       errors.rejectValue(
           "sep45-auth-timeout-invalid", "The sep45.auth_timeout must be greater than 0");
     }
+
+    if (clientAllowList != null && !clientAllowList.isEmpty()) {
+      for (String clientName : clientAllowList) {
+        if (clientService.getClientConfigByName(clientName) == null) {
+          errors.reject(
+              "sep45-client-allow-list-invalid",
+              String.format("Invalid client name:%s in sep45.client_allow_list", clientName));
+        }
+      }
+    }
+  }
+
+  @Override
+  public List<String> getAllowedClientDomains() {
+    if (clientAllowList == null || clientAllowList.isEmpty()) {
+      return clientService.getNonCustodialClients().stream()
+          .flatMap(cfg -> cfg.getDomains().stream())
+          .collect(Collectors.toList());
+    }
+
+    return clientAllowList.stream()
+        .map(clientService::getClientConfigByName)
+        .filter(Objects::nonNull)
+        .filter(config -> config instanceof NonCustodialClient)
+        .filter(config -> ((NonCustodialClient) config).getDomains() != null)
+        .flatMap(config -> ((NonCustodialClient) config).getDomains().stream())
+        .collect(Collectors.toList());
   }
 }

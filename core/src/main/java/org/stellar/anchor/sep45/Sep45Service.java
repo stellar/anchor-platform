@@ -133,12 +133,13 @@ public class Sep45Service {
         KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed()).getAccountId());
     argsMap.put(KEY_WEB_AUTH_DOMAIN, sep45Config.getWebAuthDomain());
     if (!isEmpty(request.getClientDomain())) {
+      validateClientDomainAllowed(request.getClientDomain());
       boolean allowHttpRetry =
           !stellarNetworkConfig
               .getStellarNetworkPassphrase()
               .equals(Network.PUBLIC.getNetworkPassphrase());
       String clientDomainSigner =
-          ClientDomainHelper.fetchSigningKeyFromClientDomain(
+          ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(
               request.getClientDomain(), allowHttpRetry);
       argsMap.put(KEY_CLIENT_DOMAIN, request.getClientDomain());
       argsMap.put(KEY_CLIENT_DOMAIN_ACCOUNT, clientDomainSigner);
@@ -395,15 +396,26 @@ public class Sep45Service {
     }
 
     if (argsMap.containsKey(KEY_CLIENT_DOMAIN)) {
+      validateClientDomainAllowed(argsMap.get(KEY_CLIENT_DOMAIN));
       boolean allowHttpRetry =
           !stellarNetworkConfig
               .getStellarNetworkPassphrase()
               .equals(Network.PUBLIC.getNetworkPassphrase());
       String clientDomainSigner =
-          ClientDomainHelper.fetchSigningKeyFromClientDomain(
+          ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(
               argsMap.get(KEY_CLIENT_DOMAIN), allowHttpRetry);
       if (!clientDomainSigner.equals(argsMap.get(KEY_CLIENT_DOMAIN_ACCOUNT))) {
         throw new BadRequestException("Invalid client domain address");
+      }
+    }
+  }
+
+  private void validateClientDomainAllowed(String clientDomain) throws SepNotAuthorizedException {
+    List<String> clientAllowList = sep45Config.getClientAllowList();
+    if (clientAllowList != null && !clientAllowList.isEmpty()) {
+      List<String> allowList = sep45Config.getAllowedClientDomains();
+      if (!allowList.contains(clientDomain)) {
+        throw new SepNotAuthorizedException("unable to process");
       }
     }
   }
