@@ -1,9 +1,12 @@
 package org.stellar.anchor.util
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.exception.SepException
 
@@ -82,6 +85,45 @@ class ClientDomainHelperTest {
 
     assertFalse(ex.message.orEmpty().contains(domain))
     assertFalse(ex.message.orEmpty().contains("http"))
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomainBounded still fails normally when the pool is not saturated`() {
+    val domain = "this-domain-does-not-exist-xyz123.invalid"
+    val ex =
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(domain, true)
+      }
+    assertEquals("Unable to read client_domain's SIGNING_KEY", ex.message)
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomainBounded rejects fast when the bounded pool is saturated`() {
+    val executor = ClientDomainHelper.CLIENT_DOMAIN_EXECUTOR
+    val release = CountDownLatch(1)
+    val started = CountDownLatch(executor.maximumPoolSize)
+    val blockers =
+      (1..executor.maximumPoolSize).map {
+        executor.submit {
+          started.countDown()
+          release.await()
+        }
+      }
+    try {
+      assertTrue(started.await(2, TimeUnit.SECONDS))
+
+      val start = System.currentTimeMillis()
+      val ex =
+        assertThrows(SepException::class.java) {
+          ClientDomainHelper.fetchSigningKeyFromClientDomainBounded("8.8.8.8", false)
+        }
+      assertEquals("client_domain resolution unavailable", ex.message)
+      val elapsedMs = System.currentTimeMillis() - start
+      assertTrue(elapsedMs < 2_500, "expected fast rejection, took ${elapsedMs}ms")
+    } finally {
+      release.countDown()
+      blockers.forEach { it.get(5, TimeUnit.SECONDS) }
+    }
   }
 
   @Test

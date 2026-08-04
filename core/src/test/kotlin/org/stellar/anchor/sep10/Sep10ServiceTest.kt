@@ -489,7 +489,8 @@ internal class Sep10ServiceTest {
   fun `Test fetch signing key`() {
     // Given
     sep10Service = spyk(sep10Service)
-    every { sep10Service.fetchSigningKeyFromClientDomain(any()) } returns clientKeyPair.accountId
+    every { sep10Service.fetchSigningKeyFromClientDomainBounded(any()) } returns
+      clientKeyPair.accountId
     // When
     var cr =
       ChallengeRequest.builder()
@@ -502,9 +503,10 @@ internal class Sep10ServiceTest {
     sep10Service.createChallenge(cr)
 
     // Then
-    verify(exactly = 1) { sep10Service.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN) }
+    verify(exactly = 1) { sep10Service.fetchSigningKeyFromClientDomainBounded(TEST_CLIENT_DOMAIN) }
     // Given
-    every { sep10Service.fetchSigningKeyFromClientDomain(any()) } throws IOException("mock error")
+    every { sep10Service.fetchSigningKeyFromClientDomainBounded(any()) } throws
+      IOException("mock error")
     // When
     cr =
       ChallengeRequest.builder()

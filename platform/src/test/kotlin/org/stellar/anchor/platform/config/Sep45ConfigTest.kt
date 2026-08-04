@@ -5,12 +5,15 @@ import io.mockk.mockk
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.validation.BindException
 import org.springframework.validation.Errors
+import org.stellar.anchor.client.ClientService
+import org.stellar.anchor.client.DefaultClientService
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.platform.utils.setupMock
 
@@ -19,16 +22,18 @@ class Sep45ConfigTest {
   lateinit var errors: Errors
   private lateinit var secretConfig: PropertySecretConfig
   private lateinit var stellarNetworkConfig: StellarNetworkConfig
+  private lateinit var clientService: ClientService
 
   @BeforeEach
   fun setup() {
     secretConfig = mockk()
     stellarNetworkConfig = mockk()
+    clientService = DefaultClientService.fromYamlResourceFile("test_clients.yaml")
 
     every { stellarNetworkConfig.rpcUrl } returns "https://soroban-testnet.stellar.org"
     every { secretConfig.sep45JwtSecretKey } returns "some_jwt_secret"
 
-    config = PropertySep45Config(stellarNetworkConfig, secretConfig)
+    config = PropertySep45Config(stellarNetworkConfig, secretConfig, clientService)
     config.enabled = true
     config.webAuthDomain = "stellar.org"
     config.webAuthContractId = "CAASCQKVVBSLREPEUGPOTQZ4BC2NDBY2MW7B2LGIGFUPIY4Z3XUZRVTX"
@@ -96,5 +101,24 @@ class Sep45ConfigTest {
     config.homeDomains = listOf("www.stellar.org")
     config.postConstruct()
     Assertions.assertEquals("localhost:8080", config.webAuthDomain)
+  }
+
+  @Test
+  fun `test when clientAllowList is not defined, allowedClientDomains equals the list of all non-custodial clients`() {
+    assertEquals(listOf("lobstr.co", "circle.com"), config.allowedClientDomains)
+  }
+
+  @Test
+  fun `test when clientAllowList is defined, allowedClientDomains returns correct values`() {
+    config.clientAllowList = listOf("lobstr")
+    assertEquals(listOf("lobstr.co"), config.allowedClientDomains)
+
+    config.clientAllowList = listOf("circle")
+    assertEquals(listOf("circle.com"), config.allowedClientDomains)
+
+    config.clientAllowList = listOf("invalid")
+    config.validate(config, errors)
+    assertEquals("sep45-client-allow-list-invalid", errors.allErrors[0].code)
+    assertTrue(config.allowedClientDomains.isEmpty())
   }
 }
