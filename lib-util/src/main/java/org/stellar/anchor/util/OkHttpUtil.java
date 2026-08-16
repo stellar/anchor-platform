@@ -1,6 +1,7 @@
 package org.stellar.anchor.util;
 
 import java.util.concurrent.TimeUnit;
+import okhttp3.Dns;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -15,6 +16,10 @@ public class OkHttpUtil {
   private static final long DEFAULT_CALL_TIMEOUT_SECONDS = 15;
 
   public static OkHttpClient buildClient() {
+    return buildClient(Dns.SYSTEM);
+  }
+
+  public static OkHttpClient buildClient(Dns dns) {
     return new OkHttpClient.Builder()
         .connectTimeout(DEFAULT_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(DEFAULT_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -22,6 +27,7 @@ public class OkHttpUtil {
         .followRedirects(false)
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
+        .dns(dns)
         .build();
   }
 
