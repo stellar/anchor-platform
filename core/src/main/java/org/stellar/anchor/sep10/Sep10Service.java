@@ -116,8 +116,7 @@ public class Sep10Service implements ISep10Service {
     }
   }
 
-  public ValidationResponse validateChallenge(ValidationRequest request)
-      throws SepValidationException {
+  public ValidationResponse validateChallenge(ValidationRequest request) throws SepException {
     info("Validating SEP-10 challenge.");
 
     ChallengeTransaction challenge = parseChallenge(request);
@@ -550,8 +549,8 @@ public class Sep10Service implements ISep10Service {
     return challenge;
   }
 
-  String generateWebAuthJwt(
-      ChallengeTransaction challenge, String clientDomain, String homeDomain) {
+  String generateWebAuthJwt(ChallengeTransaction challenge, String clientDomain, String homeDomain)
+      throws SepException {
     long issuedAt = challenge.getTransaction().getTimeBounds().getMinTime().longValue();
     Memo memo = challenge.getTransaction().getMemo();
     Sep10Jwt webAuthJwt =
@@ -565,6 +564,10 @@ public class Sep10Service implements ISep10Service {
             challenge.getTransaction().hashHex(),
             clientDomain,
             homeDomain);
+
+    webAuthJwt.setClientName(
+        clientFinder.getClientName(clientDomain, challenge.getClientAccountId()));
+
     debug("jwtToken:", webAuthJwt);
     return jwtService.encode(webAuthJwt);
   }

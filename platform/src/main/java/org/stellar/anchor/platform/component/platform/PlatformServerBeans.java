@@ -1,6 +1,8 @@
 package org.stellar.anchor.platform.component.platform;
 
 import jakarta.servlet.Filter;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,6 +10,7 @@ import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.NonceStore;
+import org.stellar.anchor.config.ClientsConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.config.Sep6Config;
@@ -17,6 +20,7 @@ import org.stellar.anchor.filter.NoneFilter;
 import org.stellar.anchor.filter.PlatformAuthJwtFilter;
 import org.stellar.anchor.platform.config.PlatformApiConfig;
 import org.stellar.anchor.platform.config.PlatformServerConfig;
+import org.stellar.anchor.platform.data.JdbcClientConfigRepo;
 import org.stellar.anchor.platform.job.NonceCleanupJob;
 import org.stellar.anchor.platform.service.*;
 import org.stellar.anchor.sep24.Sep24DepositInfoGenerator;
@@ -134,5 +138,20 @@ public class PlatformServerBeans {
   @Bean
   public NonceCleanupJob nonceCleanupJob(NonceStore nonceStore) {
     return new NonceCleanupJob(nonceStore);
+  }
+
+  @Bean
+  ClientConfigService clientConfigService(JdbcClientConfigRepo jdbcClientConfigRepo) {
+    return new ClientConfigService(jdbcClientConfigRepo);
+  }
+
+  @Bean
+  @ConditionalOnProperty(
+      prefix = "clients",
+      name = "migrate-from-file-on-startup",
+      havingValue = "true")
+  CommandLineRunner clientConfigImportRunner(
+      ClientsConfig clientsConfig, ClientConfigService clientConfigService) {
+    return new ClientConfigImportRunner(clientsConfig, clientConfigService);
   }
 }

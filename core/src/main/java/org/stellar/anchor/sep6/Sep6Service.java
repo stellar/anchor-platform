@@ -27,7 +27,6 @@ import org.stellar.anchor.api.sep.sep6.InfoResponse.*;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.WebAuthJwt;
-import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep6Config;
 import org.stellar.anchor.event.EventService;
@@ -40,7 +39,6 @@ public class Sep6Service {
   private final Sep6Config sep6Config;
   private final AssetService assetService;
   private final SepRequestValidator requestValidator;
-  private final ClientFinder clientFinder;
   private final Sep6TransactionStore txnStore;
   private final ExchangeAmountsCalculator exchangeAmountsCalculator;
   private final EventService.Session eventSession;
@@ -76,7 +74,6 @@ public class Sep6Service {
       Sep6Config sep6Config,
       AssetService assetService,
       SepRequestValidator requestValidator,
-      ClientFinder clientFinder,
       Sep6TransactionStore txnStore,
       ExchangeAmountsCalculator exchangeAmountsCalculator,
       EventService eventService,
@@ -85,7 +82,6 @@ public class Sep6Service {
     this.sep6Config = sep6Config;
     this.assetService = assetService;
     this.requestValidator = requestValidator;
-    this.clientFinder = clientFinder;
     this.txnStore = txnStore;
     this.exchangeAmountsCalculator = exchangeAmountsCalculator;
     this.eventSession =
@@ -148,7 +144,7 @@ public class Sep6Service {
             .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .requestClientIpAddress(request.getRequestClientIpAddress());
 
     if (accountType(token.getAccount()) == Contract) {
@@ -268,7 +264,7 @@ public class Sep6Service {
             .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .quoteId(request.getQuoteId())
             .requestClientIpAddress(request.getRequestClientIpAddress());
 
@@ -353,7 +349,7 @@ public class Sep6Service {
             .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .refundMemo(request.getRefundMemo())
             .refundMemoType(request.getRefundMemoType())
             .requestClientIpAddress(request.getRequestClientIpAddress());
@@ -452,7 +448,7 @@ public class Sep6Service {
             .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .refundMemo(request.getRefundMemo())
             .refundMemoType(request.getRefundMemoType())
             .quoteId(request.getQuoteId())

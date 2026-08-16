@@ -6,6 +6,7 @@ import static org.stellar.anchor.util.Log.error;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -29,6 +30,10 @@ public class PropertyClientsConfig implements ClientsConfig, Validator {
   ClientsConfigType type;
   String value;
   List<RawClient> items = new ArrayList<>();
+
+  @SerializedName("migrate_from_file_on_startup")
+  boolean migrateFromFileOnStartup = false;
+
   Gson gson = GsonUtils.getInstance();
 
   @Override
@@ -129,6 +134,8 @@ public class PropertyClientsConfig implements ClientsConfig, Validator {
       case YAML:
         contentMap = parseYamlStringToMap(this.getValue());
         break;
+      case DB:
+        return;
       default:
         throw new InvalidConfigException(
             String.format("client file type %s is not supported", type));

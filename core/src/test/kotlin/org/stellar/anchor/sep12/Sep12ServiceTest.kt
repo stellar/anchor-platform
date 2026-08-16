@@ -34,7 +34,6 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.WebAuthJwt
-import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
 import org.stellar.anchor.util.StringHelper.json
@@ -103,7 +102,6 @@ class Sep12ServiceTest {
   @MockK(relaxed = true) private lateinit var platformApiClient: PlatformApiClient
   @MockK(relaxed = true) private lateinit var eventService: EventService
   @MockK(relaxed = true) private lateinit var eventSession: EventService.Session
-  @MockK(relaxed = true) private lateinit var clientFinder: ClientFinder
   @MockK(relaxed = true) private lateinit var customerIdOwnerStore: Sep31CustomerIdOwnerStore
 
   @BeforeEach
@@ -122,7 +120,6 @@ class Sep12ServiceTest {
         customerIntegration,
         platformApiClient,
         eventService,
-        clientFinder,
         customerIdOwnerStore,
       )
   }
@@ -441,7 +438,6 @@ class Sep12ServiceTest {
   fun `test put customer creating a new sep31-receiver claims ownership of the new id`() {
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("new-receiver-id").status(Sep12Status.ACCEPTED.name).build()
-    every { clientFinder.getClientName(any<WebAuthJwt>()) } returns null
 
     val request =
       Sep12PutCustomerRequest.builder()
@@ -465,7 +461,6 @@ class Sep12ServiceTest {
         .id("new-muxed-receiver-id")
         .status(Sep12Status.ACCEPTED.name)
         .build()
-    every { clientFinder.getClientName(any<WebAuthJwt>()) } returns null
 
     val request =
       Sep12PutCustomerRequest.builder()
@@ -533,10 +528,9 @@ class Sep12ServiceTest {
   fun `test put customer claims ownership by client name when one resolves`() {
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("new-sender-id").status(Sep12Status.ACCEPTED.name).build()
-    every { clientFinder.getClientName(any<WebAuthJwt>()) } returns "vibrant"
 
     val request = Sep12PutCustomerRequest.builder().type("sep31-sender").firstName("John").build()
-    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val jwtToken = createJwtToken(TEST_ACCOUNT, "vibrant")
 
     assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
 
@@ -547,7 +541,6 @@ class Sep12ServiceTest {
   fun `test put customer keeps memo distinct per sub-user even when a client name resolves`() {
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("new-receiver-id").status(Sep12Status.ACCEPTED.name).build()
-    every { clientFinder.getClientName(any<WebAuthJwt>()) } returns "vibrant"
 
     val request =
       Sep12PutCustomerRequest.builder()
@@ -555,7 +548,7 @@ class Sep12ServiceTest {
         .memo(TEST_MEMO)
         .firstName("Jane")
         .build()
-    val jwtToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
+    val jwtToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO", "vibrant")
 
     assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
 
@@ -571,7 +564,6 @@ class Sep12ServiceTest {
         .id("new-muxed-receiver-id")
         .status(Sep12Status.ACCEPTED.name)
         .build()
-    every { clientFinder.getClientName(any<WebAuthJwt>()) } returns "vibrant"
 
     val request =
       Sep12PutCustomerRequest.builder()
@@ -580,7 +572,7 @@ class Sep12ServiceTest {
         .memoType("id")
         .firstName("Jane")
         .build()
-    val jwtToken = createJwtToken(TEST_MUXED_ACCOUNT)
+    val jwtToken = createJwtToken(TEST_MUXED_ACCOUNT, "vibrant")
 
     assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
 
@@ -590,13 +582,11 @@ class Sep12ServiceTest {
   }
 
   @Test
-  fun `Test put customer publishes event with null clientName and logs warning when client is not authorized`() {
+  fun `Test put customer publishes event with null clientName when the token was never authorized as a client`() {
     val kycUpdateEventSlot = slot<AnchorEvent>()
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("customer-id").build()
     every { eventSession.publish(capture(kycUpdateEventSlot)) } returns Unit
-    every { clientFinder.getClientName(any<WebAuthJwt>()) } throws
-      SepNotAuthorizedException("Client not found")
 
     val jwtToken = createJwtToken(TEST_ACCOUNT)
     assertDoesNotThrow {
@@ -1091,7 +1081,10 @@ class Sep12ServiceTest {
     assertEquals(wantDeleteCustomerId, deleteCustomerIdSlot.captured)
   }
 
-  private fun createJwtToken(subject: String): WebAuthJwt {
-    return Sep10Jwt.of("$TEST_HOST_URL/auth", subject, issuedAt, expiresAt, "", CLIENT_DOMAIN, null)
+  private fun createJwtToken(subject: String, clientName: String? = null): WebAuthJwt {
+    val token =
+      Sep10Jwt.of("$TEST_HOST_URL/auth", subject, issuedAt, expiresAt, "", CLIENT_DOMAIN, null)
+    token.setClientName(clientName)
+    return token
   }
 }

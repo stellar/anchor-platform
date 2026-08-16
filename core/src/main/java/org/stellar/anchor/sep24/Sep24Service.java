@@ -47,8 +47,6 @@ import org.stellar.anchor.api.sep.sep24.TransactionResponse;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.WebAuthJwt;
-import org.stellar.anchor.client.ClientFinder;
-import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.config.StellarNetworkConfig;
@@ -67,11 +65,9 @@ public class Sep24Service {
   final LanguageConfig languageConfig;
   final StellarNetworkConfig stellarNetworkConfig;
   final Sep24Config sep24Config;
-  final ClientService clientService;
   final AssetService assetService;
   final SepRequestValidator requestValidator;
   final JwtService jwtService;
-  final ClientFinder clientFinder;
   final Sep24TransactionStore txnStore;
   final EventService.Session eventSession;
   final InteractiveUrlConstructor interactiveUrlConstructor;
@@ -95,11 +91,9 @@ public class Sep24Service {
       LanguageConfig languageConfig,
       StellarNetworkConfig stellarNetworkConfig,
       Sep24Config sep24Config,
-      ClientService clientsService,
       AssetService assetService,
       SepRequestValidator requestValidator,
       JwtService jwtService,
-      ClientFinder clientFinder,
       Sep24TransactionStore txnStore,
       EventService eventService,
       InteractiveUrlConstructor interactiveUrlConstructor,
@@ -110,11 +104,9 @@ public class Sep24Service {
     this.languageConfig = languageConfig;
     this.stellarNetworkConfig = stellarNetworkConfig;
     this.sep24Config = sep24Config;
-    this.clientService = clientsService;
     this.assetService = assetService;
     this.requestValidator = requestValidator;
     this.jwtService = jwtService;
-    this.clientFinder = clientFinder;
     this.txnStore = txnStore;
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.interactiveUrlConstructor = interactiveUrlConstructor;
@@ -206,7 +198,7 @@ public class Sep24Service {
             .fromAccount(sourceAccount)
             .toAccount(asset.getDistributionAccount())
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .requestClientIpAddress(withdrawRequest.get("clientIpAddress"));
 
     if (memo != null) {
@@ -363,7 +355,7 @@ public class Sep24Service {
             .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .claimableBalanceSupported(claimableSupported)
             .requestClientIpAddress(depositRequest.get("clientIpAddress"));
 

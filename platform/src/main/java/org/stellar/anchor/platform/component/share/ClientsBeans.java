@@ -7,6 +7,8 @@ import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.client.DefaultClientService;
 import org.stellar.anchor.config.ClientsConfig;
 import org.stellar.anchor.platform.config.PropertyClientsConfig;
+import org.stellar.anchor.platform.data.JdbcClientConfigRepo;
+import org.stellar.anchor.platform.data.JdbcClientService;
 
 @Configuration
 public class ClientsBeans {
@@ -17,7 +19,11 @@ public class ClientsBeans {
   }
 
   @Bean
-  ClientService clientService(ClientsConfig clientsConfig) {
+  ClientService clientService(
+      ClientsConfig clientsConfig, JdbcClientConfigRepo jdbcClientConfigRepo) {
+    if (clientsConfig.getType() == ClientsConfig.ClientsConfigType.DB) {
+      return new JdbcClientService(jdbcClientConfigRepo);
+    }
     return DefaultClientService.fromClientsConfig(clientsConfig);
   }
 }
