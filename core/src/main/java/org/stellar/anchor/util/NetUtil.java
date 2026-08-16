@@ -40,7 +40,7 @@ public class NetUtil {
   public static String fetch(String url, long maxSize) throws IOException {
     Request request = OkHttpUtil.buildGetRequest(url);
     try (Response response = getCall(request).execute()) {
-      return readFetchedResponse(response);
+      return readFetchedResponse(response, maxSize);
     }
   }
 
@@ -49,10 +49,6 @@ public class NetUtil {
     try (Response response = getCall(request, dns).execute()) {
       return readFetchedResponse(response, maxSize);
     }
-  }
-
-  private static String readFetchedResponse(Response response) throws IOException {
-    return readFetchedResponse(response, DEFAULT_MAX_RESPONSE_SIZE);
   }
 
   private static String readFetchedResponse(Response response, long maxSize) throws IOException {

@@ -33,7 +33,7 @@ public class ClientDomainHelper {
     Dns dns = null;
     if (!allowHttpRetry) {
       validateDomainNotPrivateNetwork(clientDomain);
-      dns = pinnedValidatingDns();
+      dns = validatingDns();
     }
 
     String clientSigningKey = "";
@@ -156,7 +156,7 @@ public class ClientDomainHelper {
     }
   }
 
-  private static Dns pinnedValidatingDns() {
+  private static Dns validatingDns() {
     return hostname -> {
       List<InetAddress> addresses = Dns.SYSTEM.lookup(hostname);
       for (InetAddress address : addresses) {

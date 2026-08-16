@@ -4,6 +4,7 @@ import static org.stellar.anchor.util.Log.*;
 
 import com.moandjiezana.toml.Toml;
 import java.io.IOException;
+import java.util.List;
 import okhttp3.Dns;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 
@@ -17,14 +18,13 @@ public class Sep1Helper {
     } catch (IOException e) {
       String obfuscatedMessage =
           String.format("An error occurred while fetching the TOML from %s", url);
-      Log.error(e.toString());
-      throw new IOException(obfuscatedMessage); // Preserve the original exception as the cause
+      Log.errorEx(obfuscatedMessage, e);
+      throw new IOException(obfuscatedMessage, e);
     } catch (InvalidConfigException e) {
       String obfuscatedMessage =
           String.format("An error occurred while parsing the TOML from %s", url);
-      Log.error(e.toString());
-      throw new InvalidConfigException(
-          obfuscatedMessage); // Preserve the original exception as the cause
+      Log.errorEx(obfuscatedMessage, e);
+      throw new InvalidConfigException(List.of(obfuscatedMessage), e);
     }
   }
 
@@ -36,14 +36,13 @@ public class Sep1Helper {
     } catch (IOException e) {
       String obfuscatedMessage =
           String.format("An error occurred while fetching the TOML from %s", url);
-      Log.error(e.toString());
-      throw new IOException(obfuscatedMessage); // Preserve the original exception as the cause
+      Log.errorEx(obfuscatedMessage, e);
+      throw new IOException(obfuscatedMessage, e);
     } catch (InvalidConfigException e) {
       String obfuscatedMessage =
           String.format("An error occurred while parsing the TOML from %s", url);
-      Log.error(e.toString());
-      throw new InvalidConfigException(
-          obfuscatedMessage); // Preserve the original exception as the cause
+      Log.errorEx(obfuscatedMessage, e);
+      throw new InvalidConfigException(List.of(obfuscatedMessage), e);
     }
   }
 
