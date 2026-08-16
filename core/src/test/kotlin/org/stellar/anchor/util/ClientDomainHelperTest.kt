@@ -1,6 +1,8 @@
 package org.stellar.anchor.util
 
+import java.net.ServerSocket
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -123,6 +125,26 @@ class ClientDomainHelperTest {
     } finally {
       release.countDown()
       blockers.forEach { it.get(5, TimeUnit.SECONDS) }
+    }
+  }
+
+  @Test
+  fun `test fetch against a tarpit completes quickly, freeing the worker thread`() {
+    val serverSocket = ServerSocket(0)
+    val host = "127.0.0.1:${serverSocket.localPort}"
+    val executor = ClientDomainHelper.CLIENT_DOMAIN_EXECUTOR
+
+    val futures =
+      (1..executor.maximumPoolSize).map {
+        executor.submit<String> { ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true) }
+      }
+
+    try {
+      futures.forEach { future ->
+        assertThrows(ExecutionException::class.java) { future.get(3, TimeUnit.SECONDS) }
+      }
+    } finally {
+      serverSocket.close()
     }
   }
 

@@ -164,6 +164,7 @@ internal class Sep10ServiceTest {
         callOriginal()
       }
     every { NetUtil.fetch(any()) } returns TEST_CLIENT_TOML
+    every { NetUtil.fetch(any(), any(), any()) } returns TEST_CLIENT_TOML
 
     every { sep10Config.isClientAttributionRequired } returns clientAttributionRequired
     every { sep10Config.allowedClientDomains } returns listOf(TEST_CLIENT_DOMAIN)
@@ -335,6 +336,7 @@ internal class Sep10ServiceTest {
         callOriginal()
       }
     every { NetUtil.fetch(any()) } returns TEST_CLIENT_TOML
+    every { NetUtil.fetch(any(), any(), any()) } returns TEST_CLIENT_TOML
     val cr =
       ChallengeRequest.builder()
         .account(TEST_ACCOUNT)
@@ -356,6 +358,7 @@ internal class Sep10ServiceTest {
         callOriginal()
       }
     every { NetUtil.fetch(any()) } returns TEST_CLIENT_TOML
+    every { NetUtil.fetch(any(), any(), any()) } returns TEST_CLIENT_TOML
     val cr =
       ChallengeRequest.builder()
         .account(TEST_ACCOUNT)

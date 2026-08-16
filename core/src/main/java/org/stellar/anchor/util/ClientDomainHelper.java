@@ -19,6 +19,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import okhttp3.OkHttpClient;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.sdk.KeyPair;
@@ -36,6 +37,8 @@ public class ClientDomainHelper {
           new ThreadPoolExecutor.AbortPolicy());
 
   private static final long BOUNDED_FETCH_TIMEOUT_MS = 2_500;
+  private static final long FETCH_CALL_TIMEOUT_MS = 1_000;
+  private static final OkHttpClient FETCH_CLIENT = OkHttpUtil.buildClient(FETCH_CALL_TIMEOUT_MS);
 
   private static class ClientDomainThreadFactory implements ThreadFactory {
     private final AtomicInteger counter = new AtomicInteger();
@@ -122,13 +125,13 @@ public class ClientDomainHelper {
       throws IOException, InvalidConfigException {
     try {
       debugF("Fetching {}", url);
-      return Sep1Helper.readToml(url);
+      return Sep1Helper.readToml(url, FETCH_CLIENT);
     } catch (Exception e) {
       if (allowHttp) {
         try {
           var httpUrl = url.replaceFirst("^https://", "http://");
           debugF("Fetching {}", httpUrl);
-          return Sep1Helper.readToml(httpUrl);
+          return Sep1Helper.readToml(httpUrl, FETCH_CLIENT);
         } catch (Exception ignored) {
         }
       }
