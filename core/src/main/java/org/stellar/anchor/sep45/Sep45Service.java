@@ -415,7 +415,7 @@ public class Sep45Service {
     if (clientAllowList != null && !clientAllowList.isEmpty()) {
       List<String> allowList = sep45Config.getAllowedClientDomains();
       if (!allowList.contains(clientDomain)) {
-        throw new SepNotAuthorizedException("unable to process");
+        throw new SepNotAuthorizedException("client_domain is not allow-listed");
       }
     }
   }

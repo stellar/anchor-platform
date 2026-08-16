@@ -121,4 +121,13 @@ class Sep45ConfigTest {
     assertEquals("sep45-client-allow-list-invalid", errors.allErrors[0].code)
     assertTrue(config.allowedClientDomains.isEmpty())
   }
+
+  @Test
+  fun `test clientAllowList naming a custodial client fails validation instead of silently allowing nothing`() {
+    config.clientAllowList = listOf("some-wallet")
+    assertTrue(config.allowedClientDomains.isEmpty())
+
+    config.validate(config, errors)
+    assertEquals("sep45-client-allow-list-invalid", errors.getFieldError("clientAllowList")?.code)
+  }
 }

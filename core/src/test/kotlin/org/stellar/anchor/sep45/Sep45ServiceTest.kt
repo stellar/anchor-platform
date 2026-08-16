@@ -176,9 +176,12 @@ class Sep45ServiceTest {
         .clientDomain("attacker.example.com")
         .build()
 
-    assertThrows(SepNotAuthorizedException::class.java) {
-      sep45Service.getChallenge(challengeRequest)
-    }
+    val ex =
+      assertThrows(SepNotAuthorizedException::class.java) {
+        sep45Service.getChallenge(challengeRequest)
+      }
+    assertEquals("client_domain is not allow-listed", ex.message)
+    assertFalse(ex.message.orEmpty().contains("attacker.example.com"))
 
     verify(exactly = 0) { ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(any(), any()) }
   }

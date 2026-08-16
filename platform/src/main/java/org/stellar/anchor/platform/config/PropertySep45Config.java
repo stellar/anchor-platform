@@ -129,10 +129,21 @@ public class PropertySep45Config implements Sep45Config, Validator {
 
     if (clientAllowList != null && !clientAllowList.isEmpty()) {
       for (String clientName : clientAllowList) {
-        if (clientService.getClientConfigByName(clientName) == null) {
-          errors.reject(
+        var clientConfig = clientService.getClientConfigByName(clientName);
+        if (clientConfig == null) {
+          errors.rejectValue(
+              "clientAllowList",
               "sep45-client-allow-list-invalid",
               String.format("Invalid client name:%s in sep45.client_allow_list", clientName));
+        } else if (!(clientConfig instanceof NonCustodialClient)
+            || ((NonCustodialClient) clientConfig).getDomains() == null
+            || ((NonCustodialClient) clientConfig).getDomains().isEmpty()) {
+          errors.rejectValue(
+              "clientAllowList",
+              "sep45-client-allow-list-invalid",
+              String.format(
+                  "Client %s in sep45.client_allow_list must be a non-custodial client with at least one domain",
+                  clientName));
         }
       }
     }
