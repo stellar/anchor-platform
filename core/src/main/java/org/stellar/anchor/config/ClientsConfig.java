@@ -16,6 +16,8 @@ public interface ClientsConfig {
 
   List<RawClient> getItems();
 
+  boolean isMigrateFromFileOnStartup();
+
   enum ClientsConfigType {
     @SerializedName("file")
     FILE,
@@ -25,6 +27,8 @@ public interface ClientsConfig {
     JSON,
     @SerializedName("yaml")
     YAML,
+    @SerializedName("db")
+    DB,
   }
 
   @Data
