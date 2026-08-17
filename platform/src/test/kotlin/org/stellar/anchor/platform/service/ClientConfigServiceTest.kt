@@ -3,12 +3,14 @@ package org.stellar.anchor.platform.service
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
+import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import java.util.Optional
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.dao.DataIntegrityViolationException
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.NotFoundException
@@ -21,13 +23,15 @@ import org.stellar.anchor.platform.data.JdbcClientConfigRepo
 class ClientConfigServiceTest {
 
   @MockK(relaxed = true) private lateinit var repo: JdbcClientConfigRepo
+  private lateinit var repoProvider: ObjectProvider<JdbcClientConfigRepo>
 
   private lateinit var service: ClientConfigService
 
   @BeforeEach
   fun setUp() {
     MockKAnnotations.init(this, relaxUnitFun = true)
-    service = ClientConfigService(repo)
+    repoProvider = mockk { every { getObject() } returns repo }
+    service = ClientConfigService(repoProvider)
   }
 
   private fun custodialRequest(signingKeys: Set<String> = setOf("GALICE")) =
@@ -117,13 +121,61 @@ class ClientConfigServiceTest {
   }
 
   @Test
-  fun `upsert translates a unique constraint violation into a clean BadRequestException`() {
+  fun `upsert translates a known unique constraint violation into a clean BadRequestException`() {
     every { repo.findById("MGI") } returns Optional.empty()
-    every { repo.save(any()) } throws DataIntegrityViolationException("duplicate key")
+    every { repo.save(any()) } throws
+      DataIntegrityViolationException(
+        "duplicate key",
+        RuntimeException(
+          "ERROR: duplicate key value violates unique constraint \"idx_client_signing_key_key\""
+        ),
+      )
 
     val ex =
       assertThrows(BadRequestException::class.java) { service.upsert("MGI", custodialRequest()) }
     assertEquals("domain or signing key is already in use by another client", ex.message)
+  }
+
+  @Test
+  fun `upsert rethrows a DataIntegrityViolationException that isn't a known unique constraint`() {
+    every { repo.findById("MGI") } returns Optional.empty()
+    val unrelated =
+      DataIntegrityViolationException("not-null constraint violated on some other column")
+    every { repo.save(any()) } throws unrelated
+
+    val thrown =
+      assertThrows(DataIntegrityViolationException::class.java) {
+        service.upsert("MGI", custodialRequest())
+      }
+    assertSame(unrelated, thrown)
+  }
+
+  @Test
+  fun `upsert clears previously stored callback URLs when the request omits them`() {
+    val existing =
+      JdbcClientConfig().apply {
+        name = "MGI"
+        type = ClientType.CUSTODIAL
+        callbackUrlSep24 = "https://old.example.com/sep24"
+      }
+    every { repo.findById("MGI") } returns Optional.of(existing)
+    val saved = slot<JdbcClientConfig>()
+    every { repo.save(capture(saved)) } answers { saved.captured }
+
+    service.upsert("MGI", custodialRequest())
+
+    assertNull(saved.captured.callbackUrlSep24)
+  }
+
+  @Test
+  fun `upsert rejects a callback URL with a non-http scheme`() {
+    every { repo.findById("VIBRANT") } returns Optional.empty()
+    val request =
+      nonCustodialRequest().apply {
+        callbackUrls = CallbackUrls.builder().sep24("file:///etc/passwd").build()
+      }
+
+    assertThrows(BadRequestException::class.java) { service.upsert("VIBRANT", request) }
   }
 
   @Test

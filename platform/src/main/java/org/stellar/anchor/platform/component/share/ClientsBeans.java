@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.component.share;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,9 +21,10 @@ public class ClientsBeans {
 
   @Bean
   ClientService clientService(
-      ClientsConfig clientsConfig, JdbcClientConfigRepo jdbcClientConfigRepo) {
+      ClientsConfig clientsConfig,
+      ObjectProvider<JdbcClientConfigRepo> jdbcClientConfigRepoProvider) {
     if (clientsConfig.getType() == ClientsConfig.ClientsConfigType.DB) {
-      return new JdbcClientService(jdbcClientConfigRepo);
+      return new JdbcClientService(jdbcClientConfigRepoProvider.getObject());
     }
     return DefaultClientService.fromClientsConfig(clientsConfig);
   }

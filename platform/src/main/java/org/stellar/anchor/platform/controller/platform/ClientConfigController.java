@@ -3,7 +3,6 @@ package org.stellar.anchor.platform.controller.platform;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,7 +21,6 @@ public class ClientConfigController {
     this.clientConfigService = clientConfigService;
   }
 
-  @CrossOrigin(origins = "*")
   @ResponseStatus(code = HttpStatus.OK)
   @RequestMapping(
       value = "/clients/{name}",
@@ -35,7 +33,6 @@ public class ClientConfigController {
     return clientConfigService.upsert(name, request);
   }
 
-  @CrossOrigin(origins = "*")
   @ResponseStatus(code = HttpStatus.OK)
   @RequestMapping(
       value = "/clients/{name}",
@@ -46,7 +43,6 @@ public class ClientConfigController {
     return clientConfigService.get(name);
   }
 
-  @CrossOrigin(origins = "*")
   @ResponseStatus(code = HttpStatus.OK)
   @RequestMapping(
       value = "/clients",
@@ -56,7 +52,6 @@ public class ClientConfigController {
     return clientConfigService.list();
   }
 
-  @CrossOrigin(origins = "*")
   @ResponseStatus(code = HttpStatus.NO_CONTENT)
   @RequestMapping(
       value = "/clients/{name}",

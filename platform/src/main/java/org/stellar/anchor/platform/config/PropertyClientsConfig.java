@@ -135,6 +135,7 @@ public class PropertyClientsConfig implements ClientsConfig, Validator {
         contentMap = parseYamlStringToMap(this.getValue());
         break;
       case DB:
+        items = new ArrayList<>();
         return;
       default:
         throw new InvalidConfigException(

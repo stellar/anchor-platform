@@ -43,4 +43,17 @@ class PropertyClientsConfigTest {
   fun `migrateFromFileOnStartup defaults to false`() {
     assertFalse(config.isMigrateFromFileOnStartup)
   }
+
+  @Test
+  fun `switching from yaml to db clears items parsed from the prior type`() {
+    config.type = ClientsConfig.ClientsConfigType.YAML
+    config.value = "items:\n  - name: client1\n    type: custodial"
+    config.validate(config, errors)
+    assertEquals(1, config.items.size)
+
+    config.type = ClientsConfig.ClientsConfigType.DB
+    config.validate(config, errors)
+
+    assertTrue(config.items.isEmpty())
+  }
 }

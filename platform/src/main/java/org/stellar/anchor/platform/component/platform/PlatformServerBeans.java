@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.component.platform;
 
 import jakarta.servlet.Filter;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -141,8 +142,9 @@ public class PlatformServerBeans {
   }
 
   @Bean
-  ClientConfigService clientConfigService(JdbcClientConfigRepo jdbcClientConfigRepo) {
-    return new ClientConfigService(jdbcClientConfigRepo);
+  ClientConfigService clientConfigService(
+      ObjectProvider<JdbcClientConfigRepo> jdbcClientConfigRepoProvider) {
+    return new ClientConfigService(jdbcClientConfigRepoProvider);
   }
 
   @Bean

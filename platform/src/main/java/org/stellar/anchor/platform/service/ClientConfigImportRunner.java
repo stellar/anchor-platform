@@ -2,6 +2,7 @@ package org.stellar.anchor.platform.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
+import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.config.ClientsConfig;
 import org.stellar.anchor.config.ClientsConfig.RawClient;
 import org.stellar.anchor.platform.controller.platform.ClientConfigRequest;
@@ -19,7 +20,7 @@ public class ClientConfigImportRunner implements CommandLineRunner {
       try {
         clientConfigService.upsert(item.getName(), toRequest(item));
         imported++;
-      } catch (Exception e) {
+      } catch (AnchorException | RuntimeException e) {
         Log.errorEx(
             String.format("Failed to import client [%s] into the database", item.getName()), e);
       }

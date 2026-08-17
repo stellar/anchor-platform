@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.NotFoundException;
@@ -19,50 +20,65 @@ import org.stellar.anchor.platform.data.JdbcClientConfigRepo;
 
 @RequiredArgsConstructor
 public class ClientConfigService {
-  private final JdbcClientConfigRepo repo;
+  private static final Set<String> UNIQUE_CONSTRAINT_NAMES =
+      Set.of("idx_client_domain_domain", "idx_client_signing_key_key");
+
+  private final ObjectProvider<JdbcClientConfigRepo> repoProvider;
+
+  private JdbcClientConfigRepo repo() {
+    return repoProvider.getObject();
+  }
 
   public ClientConfigResponse upsert(String name, ClientConfigRequest request)
       throws BadRequestException {
     validate(name, request);
 
-    JdbcClientConfig entity = repo.findById(name).orElseGet(JdbcClientConfig::new);
+    JdbcClientConfig entity = repo().findById(name).orElseGet(JdbcClientConfig::new);
     entity.setName(name);
     entity.setType(request.getType());
     entity.setAllowAnyDestination(request.isAllowAnyDestination());
     entity.setDomains(nullToEmpty(request.getDomains()));
     entity.setSigningKeys(nullToEmpty(request.getSigningKeys()));
     entity.setDestinationAccounts(nullToEmpty(request.getDestinationAccounts()));
-    if (request.getCallbackUrls() != null) {
-      entity.setCallbackUrlSep6(request.getCallbackUrls().getSep6());
-      entity.setCallbackUrlSep24(request.getCallbackUrls().getSep24());
-      entity.setCallbackUrlSep31(request.getCallbackUrls().getSep31());
-      entity.setCallbackUrlSep12(request.getCallbackUrls().getSep12());
-    }
+    CallbackUrls callbackUrls = request.getCallbackUrls();
+    entity.setCallbackUrlSep6(callbackUrls == null ? null : callbackUrls.getSep6());
+    entity.setCallbackUrlSep24(callbackUrls == null ? null : callbackUrls.getSep24());
+    entity.setCallbackUrlSep31(callbackUrls == null ? null : callbackUrls.getSep31());
+    entity.setCallbackUrlSep12(callbackUrls == null ? null : callbackUrls.getSep12());
 
     try {
-      return toResponse(repo.save(entity));
+      return toResponse(repo().save(entity));
     } catch (DataIntegrityViolationException e) {
-      throw new BadRequestException("domain or signing key is already in use by another client");
+      if (isUniqueConstraintViolation(e)) {
+        throw new BadRequestException("domain or signing key is already in use by another client");
+      }
+      throw e;
     }
   }
 
+  private boolean isUniqueConstraintViolation(DataIntegrityViolationException e) {
+    String message = e.getMostSpecificCause().getMessage();
+    return message != null && UNIQUE_CONSTRAINT_NAMES.stream().anyMatch(message::contains);
+  }
+
   public ClientConfigResponse get(String name) throws NotFoundException {
-    return repo.findById(name)
+    return repo()
+        .findById(name)
         .map(this::toResponse)
         .orElseThrow(() -> new NotFoundException(String.format("Client %s not found", name)));
   }
 
   public List<ClientConfigResponse> list() {
-    return java.util.stream.StreamSupport.stream(repo.findAll().spliterator(), false)
+    return java.util.stream.StreamSupport.stream(repo().findAll().spliterator(), false)
         .map(this::toResponse)
         .toList();
   }
 
   public void delete(String name) throws NotFoundException {
-    if (!repo.existsById(name)) {
+    if (!repo().existsById(name)) {
       throw new NotFoundException(String.format("Client %s not found", name));
     }
-    repo.deleteById(name);
+    repo().deleteById(name);
   }
 
   private void validate(String name, ClientConfigRequest request) throws BadRequestException {
@@ -95,12 +111,21 @@ public class ClientConfigService {
     };
     for (String url : urls) {
       if (StringUtils.isNotEmpty(url)) {
-        try {
-          new URL(url);
-        } catch (MalformedURLException e) {
-          throw new BadRequestException(String.format("Invalid callback URL: %s", url));
-        }
+        validateHttpUrl(url);
       }
+    }
+  }
+
+  private void validateHttpUrl(String url) throws BadRequestException {
+    URL parsed;
+    try {
+      parsed = new URL(url);
+    } catch (MalformedURLException e) {
+      throw new BadRequestException(String.format("Invalid callback URL: %s", url));
+    }
+    if (!"http".equalsIgnoreCase(parsed.getProtocol())
+        && !"https".equalsIgnoreCase(parsed.getProtocol())) {
+      throw new BadRequestException(String.format("Invalid callback URL: %s", url));
     }
   }
 
