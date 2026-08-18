@@ -5,7 +5,7 @@ import static org.stellar.anchor.util.Log.*;
 import com.moandjiezana.toml.Toml;
 import java.io.IOException;
 import java.util.List;
-import okhttp3.Dns;
+import okhttp3.OkHttpClient;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 
 public class Sep1Helper {
@@ -28,10 +28,10 @@ public class Sep1Helper {
     }
   }
 
-  public static TomlContent readToml(String url, Dns dns)
+  public static TomlContent readToml(String url, OkHttpClient client)
       throws IOException, InvalidConfigException {
     try {
-      String tomlValue = NetUtil.fetch(url, DEFAULT_MAX_RESPONSE_SIZE, dns);
+      String tomlValue = NetUtil.fetch(url, DEFAULT_MAX_RESPONSE_SIZE, client);
       return new TomlContent(tomlValue);
     } catch (IOException e) {
       String obfuscatedMessage =

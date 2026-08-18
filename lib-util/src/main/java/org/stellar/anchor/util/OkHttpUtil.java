@@ -33,6 +33,30 @@ public class OkHttpUtil {
         .build();
   }
 
+  public static OkHttpClient buildClient(long callTimeoutMillis) {
+    return new OkHttpClient.Builder()
+        .connectTimeout(DEFAULT_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(DEFAULT_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .callTimeout(callTimeoutMillis, TimeUnit.MILLISECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .retryOnConnectionFailure(false)
+        .build();
+  }
+
+  public static OkHttpClient buildClient(Dns dns, long callTimeoutMillis) {
+    Objects.requireNonNull(dns, "dns must not be null");
+    return new OkHttpClient.Builder()
+        .connectTimeout(DEFAULT_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(DEFAULT_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .callTimeout(callTimeoutMillis, TimeUnit.MILLISECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .retryOnConnectionFailure(false)
+        .dns(dns)
+        .build();
+  }
+
   public static Request buildJsonPostRequest(String url, String requestBody) {
     return new Request.Builder()
         .url(url)

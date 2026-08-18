@@ -8,14 +8,75 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import okhttp3.Dns;
+import okhttp3.OkHttpClient;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.sdk.KeyPair;
 
 public class ClientDomainHelper {
+
+  static final ThreadPoolExecutor CLIENT_DOMAIN_EXECUTOR =
+      new ThreadPoolExecutor(
+          4,
+          8,
+          60L,
+          TimeUnit.SECONDS,
+          new SynchronousQueue<>(),
+          new ClientDomainThreadFactory(),
+          new ThreadPoolExecutor.AbortPolicy());
+
+  private static final long BOUNDED_FETCH_TIMEOUT_MS = 2_500;
+  private static final long FETCH_CALL_TIMEOUT_MS = 1_000;
+  private static final OkHttpClient FETCH_CLIENT = OkHttpUtil.buildClient(FETCH_CALL_TIMEOUT_MS);
+
+  private static class ClientDomainThreadFactory implements ThreadFactory {
+    private final AtomicInteger counter = new AtomicInteger();
+
+    @Override
+    public Thread newThread(Runnable r) {
+      Thread thread = new Thread(r, "client-domain-" + counter.getAndIncrement());
+      thread.setDaemon(true);
+      return thread;
+    }
+  }
+
+  public static String fetchSigningKeyFromClientDomainBounded(
+      String clientDomain, boolean allowHttpRetry) throws SepException {
+    Future<String> future = null;
+    try {
+      future =
+          CLIENT_DOMAIN_EXECUTOR.submit(
+              () -> fetchSigningKeyFromClientDomain(clientDomain, allowHttpRetry));
+      return future.get(BOUNDED_FETCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    } catch (RejectedExecutionException | TimeoutException e) {
+      if (future != null) {
+        future.cancel(true);
+      }
+      infoF("client_domain resolution unavailable (bounded pool saturated or timed out)");
+      throw new SepException("client_domain resolution unavailable");
+    } catch (ExecutionException e) {
+      Throwable cause = e.getCause();
+      if (cause instanceof SepException) {
+        throw (SepException) cause;
+      }
+      throw new SepException("client_domain resolution unavailable", e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new SepException("client_domain resolution interrupted", e);
+    }
+  }
 
   /**
    * Fetch SIGNING_KEY from clint_domain by reading the stellar.toml content.
@@ -30,16 +91,16 @@ public class ClientDomainHelper {
     // allowHttpRetry is true for non-public networks (testnet/dev) and false for mainnet.
     // We only enforce SSRF protection on public network because test/dev environments
     // legitimately use localhost and internal addresses as client_domain.
-    Dns dns = null;
+    OkHttpClient client = FETCH_CLIENT;
     if (!allowHttpRetry) {
       validateDomainNotPrivateNetwork(clientDomain);
-      dns = validatingDns();
+      client = OkHttpUtil.buildClient(validatingDns(), FETCH_CALL_TIMEOUT_MS);
     }
 
     String clientSigningKey = "";
     String url = "https://" + clientDomain + "/.well-known/stellar.toml";
     try {
-      Sep1Helper.TomlContent toml = tryRead(url, allowHttpRetry, dns);
+      Sep1Helper.TomlContent toml = tryRead(url, allowHttpRetry, client);
       clientSigningKey = toml.getString("SIGNING_KEY");
       if (clientSigningKey == null) {
         infoF("SIGNING_KEY not present in 'client_domain' TOML.");
@@ -63,27 +124,22 @@ public class ClientDomainHelper {
     }
   }
 
-  private static Sep1Helper.TomlContent tryRead(String url, boolean allowHttp, Dns dns)
+  private static Sep1Helper.TomlContent tryRead(String url, boolean allowHttp, OkHttpClient client)
       throws IOException, InvalidConfigException {
     try {
       debugF("Fetching {}", url);
-      return readToml(url, dns);
+      return Sep1Helper.readToml(url, client);
     } catch (Exception e) {
       if (allowHttp) {
         try {
           var httpUrl = url.replaceFirst("^https://", "http://");
           debugF("Fetching {}", httpUrl);
-          return readToml(httpUrl, dns);
+          return Sep1Helper.readToml(httpUrl, client);
         } catch (Exception ignored) {
         }
       }
       throw e;
     }
-  }
-
-  private static Sep1Helper.TomlContent readToml(String url, Dns dns)
-      throws IOException, InvalidConfigException {
-    return dns == null ? Sep1Helper.readToml(url) : Sep1Helper.readToml(url, dns);
   }
 
   /**

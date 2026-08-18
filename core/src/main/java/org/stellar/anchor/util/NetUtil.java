@@ -12,8 +12,8 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import okhttp3.Call;
-import okhttp3.Dns;
 import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
@@ -44,9 +44,9 @@ public class NetUtil {
     }
   }
 
-  public static String fetch(String url, long maxSize, Dns dns) throws IOException {
+  public static String fetch(String url, long maxSize, OkHttpClient client) throws IOException {
     Request request = OkHttpUtil.buildGetRequest(url);
-    try (Response response = getCall(request, dns).execute()) {
+    try (Response response = getCall(request, client).execute()) {
       return readFetchedResponse(response, maxSize);
     }
   }
@@ -161,7 +161,7 @@ public class NetUtil {
     return OkHttpUtil.buildClient().newCall(request);
   }
 
-  static Call getCall(Request request, Dns dns) {
-    return OkHttpUtil.buildClient(dns).newCall(request);
+  static Call getCall(Request request, OkHttpClient client) {
+    return client.newCall(request);
   }
 }

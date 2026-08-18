@@ -107,6 +107,7 @@ sep38.auth_enforced:
 sep38.enabled:
 sep38.sep10_enforced:
 sep45.auth_timeout:
+sep45.client_allow_list:
 sep45.enabled:
 sep45.home_domains:
 sep45.jwt_timeout:
