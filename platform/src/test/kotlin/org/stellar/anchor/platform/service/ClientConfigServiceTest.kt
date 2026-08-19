@@ -218,6 +218,42 @@ class ClientConfigServiceTest {
   }
 
   @Test
+  fun `listCustodial returns only custodial clients`() {
+    every { repo.findByType(ClientType.CUSTODIAL) } returns
+      listOf(
+        JdbcClientConfig().apply {
+          name = "MGI"
+          type = ClientType.CUSTODIAL
+        }
+      )
+
+    val result = service.listCustodial()
+
+    assertEquals(1, result.size)
+    assertEquals("MGI", result[0].name)
+    assertEquals(ClientType.CUSTODIAL, result[0].type)
+    verify(exactly = 0) { repo.findByType(ClientType.NONCUSTODIAL) }
+  }
+
+  @Test
+  fun `listNonCustodial returns only noncustodial clients`() {
+    every { repo.findByType(ClientType.NONCUSTODIAL) } returns
+      listOf(
+        JdbcClientConfig().apply {
+          name = "VIBRANT"
+          type = ClientType.NONCUSTODIAL
+        }
+      )
+
+    val result = service.listNonCustodial()
+
+    assertEquals(1, result.size)
+    assertEquals("VIBRANT", result[0].name)
+    assertEquals(ClientType.NONCUSTODIAL, result[0].type)
+    verify(exactly = 0) { repo.findByType(ClientType.CUSTODIAL) }
+  }
+
+  @Test
   fun `delete throws NotFoundException instead of silently no-oping`() {
     every { repo.existsById("UNKNOWN") } returns false
 
