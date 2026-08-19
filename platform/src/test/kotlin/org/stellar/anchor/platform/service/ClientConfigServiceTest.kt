@@ -232,4 +232,166 @@ class ClientConfigServiceTest {
 
     verify(exactly = 1) { repo.deleteById("MGI") }
   }
+
+  @Test
+  fun `addSigningKey adds a key without disturbing the existing ones`() {
+    val existing =
+      JdbcClientConfig().apply {
+        name = "DING"
+        type = ClientType.CUSTODIAL
+        signingKeys = mutableSetOf("GALICE", "GBOB")
+      }
+    every { repo.findById("DING") } returns Optional.of(existing)
+    val saved = slot<JdbcClientConfig>()
+    every { repo.save(capture(saved)) } answers { saved.captured }
+
+    val response = service.addSigningKey("DING", "GCAROL")
+
+    assertEquals(setOf("GALICE", "GBOB", "GCAROL"), saved.captured.signingKeys)
+    assertEquals(setOf("GALICE", "GBOB", "GCAROL"), response.signingKeys)
+  }
+
+  @Test
+  fun `addSigningKey throws NotFoundException when the client does not exist`() {
+    every { repo.findById("UNKNOWN") } returns Optional.empty()
+
+    assertThrows(NotFoundException::class.java) { service.addSigningKey("UNKNOWN", "GALICE") }
+  }
+
+  @Test
+  fun `addSigningKey translates a unique constraint violation into a clean BadRequestException`() {
+    val existing =
+      JdbcClientConfig().apply {
+        name = "DING"
+        type = ClientType.CUSTODIAL
+        signingKeys = mutableSetOf("GALICE")
+      }
+    every { repo.findById("DING") } returns Optional.of(existing)
+    every { repo.save(any()) } throws
+      DataIntegrityViolationException(
+        "duplicate key",
+        RuntimeException(
+          "ERROR: duplicate key value violates unique constraint \"idx_client_signing_key_key\""
+        ),
+      )
+
+    val ex =
+      assertThrows(BadRequestException::class.java) {
+        service.addSigningKey("DING", "GALREADYUSEDBYSOMEONEELSE")
+      }
+    assertEquals("domain or signing key is already in use by another client", ex.message)
+  }
+
+  @Test
+  fun `removeSigningKey removes only the requested key`() {
+    val existing =
+      JdbcClientConfig().apply {
+        name = "DING"
+        type = ClientType.CUSTODIAL
+        signingKeys = mutableSetOf("GALICE", "GBOB")
+      }
+    every { repo.findById("DING") } returns Optional.of(existing)
+    val saved = slot<JdbcClientConfig>()
+    every { repo.save(capture(saved)) } answers { saved.captured }
+
+    service.removeSigningKey("DING", "GALICE")
+
+    assertEquals(setOf("GBOB"), saved.captured.signingKeys)
+  }
+
+  @Test
+  fun `removeSigningKey throws NotFoundException when the client does not exist`() {
+    every { repo.findById("UNKNOWN") } returns Optional.empty()
+
+    assertThrows(NotFoundException::class.java) { service.removeSigningKey("UNKNOWN", "GALICE") }
+  }
+
+  @Test
+  fun `removeSigningKey throws NotFoundException when the key isn't on the client`() {
+    val existing =
+      JdbcClientConfig().apply {
+        name = "DING"
+        type = ClientType.CUSTODIAL
+        signingKeys = mutableSetOf("GALICE")
+      }
+    every { repo.findById("DING") } returns Optional.of(existing)
+
+    assertThrows(NotFoundException::class.java) { service.removeSigningKey("DING", "GNEVERADDED") }
+  }
+
+  @Test
+  fun `removeSigningKey rejects removing the last signing key of a custodial client`() {
+    val existing =
+      JdbcClientConfig().apply {
+        name = "DING"
+        type = ClientType.CUSTODIAL
+        signingKeys = mutableSetOf("GALICE")
+      }
+    every { repo.findById("DING") } returns Optional.of(existing)
+
+    assertThrows(BadRequestException::class.java) { service.removeSigningKey("DING", "GALICE") }
+    verify(exactly = 0) { repo.save(any()) }
+  }
+
+  @Test
+  fun `addDestinationAccount adds an account without disturbing the existing ones`() {
+    val existing =
+      JdbcClientConfig().apply {
+        name = "DING"
+        type = ClientType.CUSTODIAL
+        signingKeys = mutableSetOf("GALICE")
+        destinationAccounts = mutableSetOf("GWALLET1")
+      }
+    every { repo.findById("DING") } returns Optional.of(existing)
+    val saved = slot<JdbcClientConfig>()
+    every { repo.save(capture(saved)) } answers { saved.captured }
+
+    val response = service.addDestinationAccount("DING", "GWALLET2")
+
+    assertEquals(setOf("GWALLET1", "GWALLET2"), saved.captured.destinationAccounts)
+    assertEquals(setOf("GWALLET1", "GWALLET2"), response.destinationAccounts)
+  }
+
+  @Test
+  fun `addDestinationAccount throws NotFoundException when the client does not exist`() {
+    every { repo.findById("UNKNOWN") } returns Optional.empty()
+
+    assertThrows(NotFoundException::class.java) {
+      service.addDestinationAccount("UNKNOWN", "GWALLET1")
+    }
+  }
+
+  @Test
+  fun `removeDestinationAccount removes only the requested account`() {
+    val existing =
+      JdbcClientConfig().apply {
+        name = "DING"
+        type = ClientType.CUSTODIAL
+        signingKeys = mutableSetOf("GALICE")
+        destinationAccounts = mutableSetOf("GWALLET1", "GWALLET2")
+      }
+    every { repo.findById("DING") } returns Optional.of(existing)
+    val saved = slot<JdbcClientConfig>()
+    every { repo.save(capture(saved)) } answers { saved.captured }
+
+    service.removeDestinationAccount("DING", "GWALLET1")
+
+    assertEquals(setOf("GWALLET2"), saved.captured.destinationAccounts)
+  }
+
+  @Test
+  fun `removeDestinationAccount throws NotFoundException when the account isn't on the client`() {
+    val existing =
+      JdbcClientConfig().apply {
+        name = "DING"
+        type = ClientType.CUSTODIAL
+        signingKeys = mutableSetOf("GALICE")
+        destinationAccounts = mutableSetOf("GWALLET1")
+      }
+    every { repo.findById("DING") } returns Optional.of(existing)
+
+    assertThrows(NotFoundException::class.java) {
+      service.removeDestinationAccount("DING", "GNEVERADDED")
+    }
+  }
 }

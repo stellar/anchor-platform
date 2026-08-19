@@ -1,10 +1,12 @@
 package org.stellar.anchor.platform.config
 
+import java.nio.file.Files
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.validation.BindException
 import org.springframework.validation.Errors
+import org.stellar.anchor.client.ClientConfig.ClientType
 import org.stellar.anchor.config.ClientsConfig
 
 class PropertyClientsConfigTest {
@@ -29,31 +31,62 @@ class PropertyClientsConfigTest {
   }
 
   @Test
-  fun `type db with a value set still parses to an empty item list`() {
+  fun `type db with a YAML string left in value migrates its items`() {
     config.type = ClientsConfig.ClientsConfigType.DB
-    config.value = "items:\n  - name: client1\n    type: custodial"
+    config.value = "items:\n  - name: client1\n    type: custodial\n    signing_keys:\n      - GABC"
 
     config.validate(config, errors)
 
-    assertTrue(config.items.isEmpty())
-    assertFalse(errors.hasErrors())
-  }
-
-  @Test
-  fun `migrateFromFileOnStartup defaults to false`() {
-    assertFalse(config.isMigrateFromFileOnStartup)
-  }
-
-  @Test
-  fun `switching from yaml to db clears items parsed from the prior type`() {
-    config.type = ClientsConfig.ClientsConfigType.YAML
-    config.value = "items:\n  - name: client1\n    type: custodial"
-    config.validate(config, errors)
     assertEquals(1, config.items.size)
+    assertEquals("client1", config.items[0].name)
+  }
 
+  @Test
+  fun `type db with a JSON string left in value migrates its items`() {
     config.type = ClientsConfig.ClientsConfigType.DB
+    config.value = """{"items":[{"name":"client1","type":"custodial","signing_keys":["GABC"]}]}"""
+
     config.validate(config, errors)
 
-    assertTrue(config.items.isEmpty())
+    assertEquals(1, config.items.size)
+    assertEquals("client1", config.items[0].name)
+  }
+
+  @Test
+  fun `type db with a file path left in value migrates its items`() {
+    val file = Files.createTempFile("clients", ".yaml")
+    try {
+      Files.writeString(
+        file,
+        "items:\n  - name: client1\n    type: custodial\n    signing_keys:\n      - GABC",
+      )
+      config.type = ClientsConfig.ClientsConfigType.DB
+      config.value = file.toString()
+
+      config.validate(config, errors)
+
+      assertEquals(1, config.items.size)
+      assertEquals("client1", config.items[0].name)
+    } finally {
+      Files.deleteIfExists(file)
+    }
+  }
+
+  @Test
+  fun `type db preserves items already bound directly, e_g_ left over from an inline config`() {
+    config.type = ClientsConfig.ClientsConfigType.DB
+    config.items =
+      listOf(
+        ClientsConfig.RawClient.builder()
+          .name("client1")
+          .type(ClientType.CUSTODIAL)
+          .signingKeys(setOf("GABC"))
+          .build()
+      )
+
+    config.validate(config, errors)
+
+    assertEquals(1, config.items.size)
+    assertEquals("client1", config.items[0].name)
   }
 }
