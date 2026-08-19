@@ -18,6 +18,7 @@ import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Nonce;
 import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep45Jwt;
+import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
 import org.stellar.anchor.config.StellarNetworkConfig;
@@ -46,6 +47,7 @@ public class Sep45Service {
   private final StellarRpc stellarRpc;
   private final NonceManager nonceManager;
   private final JwtService jwtService;
+  private final ClientFinder clientFinder;
 
   public ChallengeResponse getChallenge(ChallengeRequest request) throws AnchorException {
     if (request == null || isEmpty(request.getAccount())) {
@@ -272,6 +274,7 @@ public class Sep45Service {
             hashHex,
             clientDomain,
             homeDomain);
+    jwt.setClientName(clientFinder.getClientName(clientDomain, account));
 
     return ValidationResponse.builder().token(jwtService.encode(jwt)).build();
   }

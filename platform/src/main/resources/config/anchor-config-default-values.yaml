@@ -653,6 +653,14 @@ clients:
   #
   # type: json
   # value: "{\n  \"items\": [\n    {\n      \"name\": \"referenceCustodial\",\n      \"type\": \"custodial\"\n    }\n]\n}"
+  #
+  # Option 4: Store clients in the database, managed via the /clients REST API.
+  # Specify the type as 'db'. If value is also set to an existing file path, or an inline
+  # yaml/json string, its clients are imported into the database once on startup (existing
+  # database rows are left untouched). Leave value empty to skip the import.
+  #
+  # type: db
+  # value: path/to/file.yaml
   type: json
   value:
 

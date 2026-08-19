@@ -65,8 +65,7 @@ public class Sep10Controller {
       produces = {MediaType.APPLICATION_JSON_VALUE},
       method = {RequestMethod.POST})
   public ValidationResponse validateChallenge(
-      @RequestParam(name = "transaction") String transaction)
-      throws SepValidationException, IOException {
+      @RequestParam(name = "transaction") String transaction) throws SepException, IOException {
     debugF("POST /auth transaction={}", transaction);
     return validateChallenge(ValidationRequest.of(transaction));
   }
@@ -79,7 +78,7 @@ public class Sep10Controller {
       method = {RequestMethod.POST})
   public ValidationResponse validateChallenge(
       @RequestBody(required = false) ValidationRequest validationRequest)
-      throws SepValidationException, IOException {
+      throws SepException, IOException {
     debug("POST /auth details:", validationRequest);
     return sep10Service.validateChallenge(validationRequest);
   }
