@@ -1,6 +1,8 @@
 package org.stellar.anchor.util;
 
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import okhttp3.Dns;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -15,6 +17,11 @@ public class OkHttpUtil {
   private static final long DEFAULT_CALL_TIMEOUT_SECONDS = 15;
 
   public static OkHttpClient buildClient() {
+    return buildClient(Dns.SYSTEM);
+  }
+
+  public static OkHttpClient buildClient(Dns dns) {
+    Objects.requireNonNull(dns, "dns must not be null");
     return new OkHttpClient.Builder()
         .connectTimeout(DEFAULT_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(DEFAULT_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -22,6 +29,7 @@ public class OkHttpUtil {
         .followRedirects(false)
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
+        .dns(dns)
         .build();
   }
 
@@ -33,6 +41,19 @@ public class OkHttpUtil {
         .followRedirects(false)
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
+        .build();
+  }
+
+  public static OkHttpClient buildClient(Dns dns, long callTimeoutMillis) {
+    Objects.requireNonNull(dns, "dns must not be null");
+    return new OkHttpClient.Builder()
+        .connectTimeout(DEFAULT_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(DEFAULT_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .callTimeout(callTimeoutMillis, TimeUnit.MILLISECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .retryOnConnectionFailure(false)
+        .dns(dns)
         .build();
   }
 

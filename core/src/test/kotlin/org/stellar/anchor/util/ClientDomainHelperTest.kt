@@ -1,5 +1,7 @@
 package org.stellar.anchor.util
 
+import com.sun.net.httpserver.HttpServer
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
@@ -75,6 +77,81 @@ class ClientDomainHelperTest {
   @Test
   fun `test public address is accepted`() {
     assertDoesNotThrow { ClientDomainHelper.validateDomainNotPrivateNetwork("8.8.8.8") }
+  }
+
+  @Test
+  fun `test public IPv6 address is accepted`() {
+    assertDoesNotThrow {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("2001:4860:4860::8888")
+    }
+  }
+
+  @Test
+  fun `test carrier-grade NAT address is rejected`() {
+    assertThrows(SepException::class.java) {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("100.64.0.1")
+    }
+  }
+
+  @Test
+  fun `test carrier-grade NAT upper boundary is rejected`() {
+    assertThrows(SepException::class.java) {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("100.127.255.255")
+    }
+  }
+
+  @Test
+  fun `test address just below carrier-grade NAT range is accepted`() {
+    assertDoesNotThrow { ClientDomainHelper.validateDomainNotPrivateNetwork("100.63.255.255") }
+  }
+
+  @Test
+  fun `test IPv6 unique local address fc00 is rejected`() {
+    assertThrows(SepException::class.java) {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("fc00::1")
+    }
+  }
+
+  @Test
+  fun `test IPv6 unique local address fd00 is rejected`() {
+    assertThrows(SepException::class.java) {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("fd00::1")
+    }
+  }
+
+  @Test
+  fun `test IETF protocol assignment address is rejected`() {
+    assertThrows(SepException::class.java) {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("192.0.0.1")
+    }
+  }
+
+  @Test
+  fun `test benchmarking range address is rejected`() {
+    assertThrows(SepException::class.java) {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("198.18.0.1")
+    }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain on mainnet is blocked from reaching a loopback server`() {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/.well-known/stellar.toml") { exchange ->
+      val body = "SIGNING_KEY=\"GABC\"".toByteArray()
+      exchange.sendResponseHeaders(200, body.size.toLong())
+      exchange.responseBody.use { it.write(body) }
+    }
+    server.start()
+    try {
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.fetchSigningKeyFromClientDomain(
+          "127.0.0.1:${server.address.port}",
+          false,
+        )
+      }
+    } finally {
+      server.stop(0)
+    }
   }
 
   @Test

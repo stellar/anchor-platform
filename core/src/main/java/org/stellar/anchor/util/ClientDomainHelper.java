@@ -19,6 +19,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import okhttp3.Dns;
 import okhttp3.OkHttpClient;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.exception.SepException;
@@ -90,14 +91,16 @@ public class ClientDomainHelper {
     // allowHttpRetry is true for non-public networks (testnet/dev) and false for mainnet.
     // We only enforce SSRF protection on public network because test/dev environments
     // legitimately use localhost and internal addresses as client_domain.
+    OkHttpClient client = FETCH_CLIENT;
     if (!allowHttpRetry) {
       validateDomainNotPrivateNetwork(clientDomain);
+      client = OkHttpUtil.buildClient(validatingDns(), FETCH_CALL_TIMEOUT_MS);
     }
 
     String clientSigningKey = "";
     String url = "https://" + clientDomain + "/.well-known/stellar.toml";
     try {
-      Sep1Helper.TomlContent toml = tryRead(url, allowHttpRetry);
+      Sep1Helper.TomlContent toml = tryRead(url, allowHttpRetry, client);
       clientSigningKey = toml.getString("SIGNING_KEY");
       if (clientSigningKey == null) {
         infoF("SIGNING_KEY not present in 'client_domain' TOML.");
@@ -121,17 +124,17 @@ public class ClientDomainHelper {
     }
   }
 
-  private static Sep1Helper.TomlContent tryRead(String url, boolean allowHttp)
+  private static Sep1Helper.TomlContent tryRead(String url, boolean allowHttp, OkHttpClient client)
       throws IOException, InvalidConfigException {
     try {
       debugF("Fetching {}", url);
-      return Sep1Helper.readToml(url, FETCH_CLIENT);
+      return Sep1Helper.readToml(url, client);
     } catch (Exception e) {
       if (allowHttp) {
         try {
           var httpUrl = url.replaceFirst("^https://", "http://");
           debugF("Fetching {}", httpUrl);
-          return Sep1Helper.readToml(httpUrl, FETCH_CLIENT);
+          return Sep1Helper.readToml(httpUrl, client);
         } catch (Exception ignored) {
         }
       }
@@ -198,10 +201,7 @@ public class ClientDomainHelper {
     try {
       InetAddress[] addresses = InetAddress.getAllByName(hostname);
       for (InetAddress address : addresses) {
-        if (address.isLoopbackAddress()
-            || address.isSiteLocalAddress()
-            || address.isLinkLocalAddress()
-            || address.isAnyLocalAddress()) {
+        if (isNonPublicAddress(address)) {
           infoF("client_domain {} resolves to non-public address {}", clientDomain, address);
           throw new SepException("client_domain resolves to a non-public address");
         }
@@ -210,6 +210,50 @@ public class ClientDomainHelper {
       infoF("client_domain {} could not be resolved", clientDomain);
       throw new SepException("client_domain could not be resolved");
     }
+  }
+
+  private static Dns validatingDns() {
+    return hostname -> {
+      List<InetAddress> addresses = Dns.SYSTEM.lookup(hostname);
+      for (InetAddress address : addresses) {
+        if (isNonPublicAddress(address)) {
+          throw new UnknownHostException(
+              String.format("%s resolves to a non-public address", hostname));
+        }
+      }
+      return addresses;
+    };
+  }
+
+  private static boolean isNonPublicAddress(InetAddress address) {
+    return address.isLoopbackAddress()
+        || address.isSiteLocalAddress()
+        || address.isLinkLocalAddress()
+        || address.isAnyLocalAddress()
+        || isCarrierGradeNat(address)
+        || isIpv6UniqueLocal(address)
+        || isIetfProtocolAssignment(address)
+        || isBenchmarkingRange(address);
+  }
+
+  private static boolean isCarrierGradeNat(InetAddress address) {
+    byte[] a = address.getAddress();
+    return a.length == 4 && (a[0] & 0xFF) == 100 && (a[1] & 0xC0) == 0x40;
+  }
+
+  private static boolean isIpv6UniqueLocal(InetAddress address) {
+    byte[] a = address.getAddress();
+    return a.length == 16 && (a[0] & 0xFE) == 0xFC;
+  }
+
+  private static boolean isIetfProtocolAssignment(InetAddress address) {
+    byte[] a = address.getAddress();
+    return a.length == 4 && (a[0] & 0xFF) == 192 && (a[1] & 0xFF) == 0 && (a[2] & 0xFF) == 0;
+  }
+
+  private static boolean isBenchmarkingRange(InetAddress address) {
+    byte[] a = address.getAddress();
+    return a.length == 4 && (a[0] & 0xFF) == 198 && (a[1] & 0xFE) == 18;
   }
 
   /**
