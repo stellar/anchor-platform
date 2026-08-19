@@ -11,6 +11,7 @@ import java.util.*
 import kotlinx.coroutines.*
 import org.springframework.context.ConfigurableApplicationContext
 import org.stellar.anchor.util.Log.info
+import org.stellar.anchor.util.Log.warn
 
 const val RUN_DOCKER = "run.docker"
 const val RUN_ALL_SERVERS = "run.all.servers"
@@ -86,7 +87,13 @@ class TestProfileExecutor(val config: TestConfig) {
       if (envMap["clients.value"] != null) {
         // If clients.value not found, try to load it from resources
         if (!File(envMap["clients.value"]!!).exists()) {
-          envMap["clients.value"] = getResourceFile(envMap["clients.value"]!!).absolutePath
+          try {
+            envMap["clients.value"] = getResourceFile(envMap["clients.value"]!!).absolutePath
+          } catch (e: RuntimeException) {
+            warn(
+              "clients.value is not a file path or resource, treating it as inline content: ${e.message}"
+            )
+          }
         }
       }
       if (envMap["sep1.toml.type"] != "url" && envMap["sep1.toml.type"] != "string") {
