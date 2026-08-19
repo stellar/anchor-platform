@@ -148,10 +148,7 @@ public class PlatformServerBeans {
   }
 
   @Bean
-  @ConditionalOnProperty(
-      prefix = "clients",
-      name = "migrate-from-file-on-startup",
-      havingValue = "true")
+  @ConditionalOnProperty(prefix = "clients", name = "type", havingValue = "db")
   CommandLineRunner clientConfigImportRunner(
       ClientsConfig clientsConfig, ClientConfigService clientConfigService) {
     return new ClientConfigImportRunner(clientsConfig, clientConfigService);

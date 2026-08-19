@@ -16,8 +16,6 @@ public interface ClientsConfig {
 
   List<RawClient> getItems();
 
-  boolean isMigrateFromFileOnStartup();
-
   enum ClientsConfigType {
     @SerializedName("file")
     FILE,
