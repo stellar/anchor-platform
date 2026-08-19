@@ -147,18 +147,13 @@ public class PropertyClientsConfig implements ClientsConfig, Validator {
             gson.toJson(contentMap.get("items")), new TypeToken<List<RawClient>>() {}.getType());
   }
 
-  private List<RawClient> parseLegacyValueForMigration(String value) {
+  private List<RawClient> parseLegacyValueForMigration(String value) throws InvalidConfigException {
     debugF("Migrating clients.value to the database, parsing: {}", value);
-    Map<String, List<Object>> contentMap;
-    try {
-      contentMap = looksLikeExistingFile(value) ? parseFileToMap(value) : parseStringToMap(value);
-    } catch (InvalidConfigException e) {
-      error("Could not parse clients.value while migrating to the database", e);
-      return new ArrayList<>();
-    }
+    Map<String, List<Object>> contentMap =
+        looksLikeExistingFile(value) ? parseFileToMap(value) : parseStringToMap(value);
     if (contentMap == null || contentMap.get("items") == null) {
-      debugF("clients.value parsed but had no items key: {}", contentMap);
-      return new ArrayList<>();
+      throw new InvalidConfigException(
+          List.of(String.format("clients.value parsed but had no 'items' key: %s", contentMap)));
     }
     contentMap.get("items").removeIf(Objects::isNull);
     List<RawClient> parsed =

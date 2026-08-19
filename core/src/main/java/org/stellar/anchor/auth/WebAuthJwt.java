@@ -47,6 +47,10 @@ public abstract class WebAuthJwt extends AbstractJwt {
     return muxedAccount != null ? muxedAccount : account;
   }
 
+  public boolean hasClientNameClaim() {
+    return claims.containsKey(CLIENT_NAME);
+  }
+
   public String getIssuer() {
     return this.iss;
   }

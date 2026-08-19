@@ -73,6 +73,28 @@ class PropertyClientsConfigTest {
   }
 
   @Test
+  fun `type db with an unparseable value fails validation instead of silently importing nothing`() {
+    config.type = ClientsConfig.ClientsConfigType.DB
+    config.value = "/typo/path/that/does/not/exist.yaml"
+
+    config.validate(config, errors)
+
+    assertTrue(errors.hasErrors())
+    assertTrue(config.items.isEmpty())
+  }
+
+  @Test
+  fun `type db with a parseable value missing the items key fails validation`() {
+    config.type = ClientsConfig.ClientsConfigType.DB
+    config.value = "not_items: []"
+
+    config.validate(config, errors)
+
+    assertTrue(errors.hasErrors())
+    assertTrue(config.items.isEmpty())
+  }
+
+  @Test
   fun `type db preserves items already bound directly, e_g_ left over from an inline config`() {
     config.type = ClientsConfig.ClientsConfigType.DB
     config.items =
