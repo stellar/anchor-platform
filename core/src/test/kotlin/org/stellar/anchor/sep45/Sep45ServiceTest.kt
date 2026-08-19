@@ -4,6 +4,9 @@ import io.mockk.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.InternalServerErrorException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
@@ -18,6 +21,7 @@ import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep45Config
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.ledger.StellarRpc
+import org.stellar.anchor.util.ClientDomainHelper
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
@@ -28,6 +32,7 @@ import org.stellar.sdk.responses.sorobanrpc.GetNetworkResponse
 import org.stellar.sdk.responses.sorobanrpc.SimulateTransactionResponse
 import org.stellar.sdk.xdr.SorobanAuthorizationEntries
 
+@ExtendWith(LockAndMockTest::class)
 class Sep45ServiceTest {
   private lateinit var stellarNetworkConfig: StellarNetworkConfig
   private lateinit var secretConfig: SecretConfig
@@ -160,6 +165,69 @@ class Sep45ServiceTest {
     val ex =
       assertThrows(BadRequestException::class.java) { sep45Service.getChallenge(challengeRequest) }
     assertEquals("account must be a contract address", ex.message)
+  }
+
+  @Test
+  @LockAndMockStatic([ClientDomainHelper::class])
+  fun `test getChallenge rejects client_domain outside an explicit allow list without fetching it`() {
+    every { sep45Config.clientAllowList } returns listOf("known-wallet")
+    every { sep45Config.allowedClientDomains } returns listOf("known-wallet.example.com")
+
+    val challengeRequest =
+      ChallengeRequest.builder()
+        .account(TEST_CONTRACT_ID)
+        .homeDomain("http://localhost:8080")
+        .clientDomain("attacker.example.com")
+        .build()
+
+    val ex =
+      assertThrows(SepNotAuthorizedException::class.java) {
+        sep45Service.getChallenge(challengeRequest)
+      }
+    assertEquals("client_domain is not allow-listed", ex.message)
+    assertFalse(ex.message.orEmpty().contains("attacker.example.com"))
+
+    verify(exactly = 0) { ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(any(), any()) }
+  }
+
+  @Test
+  @LockAndMockStatic([ClientDomainHelper::class])
+  fun `test getChallenge allows any client_domain when no explicit allow list is configured`() {
+    every { sep45Config.clientAllowList } returns null
+    every { sep45Config.allowedClientDomains } returns emptyList()
+    every { ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(any(), any()) } returns
+      "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+
+    val challengeRequest =
+      ChallengeRequest.builder()
+        .account(TEST_CONTRACT_ID)
+        .homeDomain("http://localhost:8080")
+        .clientDomain("anything.example.com")
+        .build()
+
+    assertDoesNotThrow { sep45Service.getChallenge(challengeRequest) }
+
+    verify(exactly = 1) {
+      ClientDomainHelper.fetchSigningKeyFromClientDomainBounded("anything.example.com", any())
+    }
+  }
+
+  @Test
+  @LockAndMockStatic([ClientDomainHelper::class])
+  fun `test getChallenge allows an unlisted client_domain when clients exist only for unrelated config`() {
+    every { sep45Config.clientAllowList } returns null
+    every { sep45Config.allowedClientDomains } returns listOf("wallet-server:8092")
+    every { ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(any(), any()) } returns
+      "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+
+    val challengeRequest =
+      ChallengeRequest.builder()
+        .account(TEST_CONTRACT_ID)
+        .homeDomain("http://localhost:8080")
+        .clientDomain("localhost:8092")
+        .build()
+
+    assertDoesNotThrow { sep45Service.getChallenge(challengeRequest) }
   }
 
   @Test

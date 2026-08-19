@@ -79,8 +79,11 @@ public class SepBeans {
 
   @Bean
   @ConfigurationProperties(prefix = "sep45")
-  Sep45Config sep45Config(StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
-    return new PropertySep45Config(stellarNetworkConfig, secretConfig);
+  Sep45Config sep45Config(
+      StellarNetworkConfig stellarNetworkConfig,
+      SecretConfig secretConfig,
+      ClientService clientService) {
+    return new PropertySep45Config(stellarNetworkConfig, secretConfig, clientService);
   }
 
   /**

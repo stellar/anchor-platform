@@ -91,7 +91,8 @@ public class Sep10Service implements ISep10Service {
     // Non-custodial case
     if (!isEmpty(request.getClientDomain())) {
       debugF("Fetching SIGNING_KEY from client_domain: {}", request.getClientDomain());
-      String clientDomainSigningKey = fetchSigningKeyFromClientDomain(request.getClientDomain());
+      String clientDomainSigningKey =
+          fetchSigningKeyFromClientDomainBounded(request.getClientDomain());
       debugF("SIGNING_KEY from client_domain fetched: {}", clientDomainSigningKey);
 
       // Check authorization
@@ -286,8 +287,8 @@ public class Sep10Service implements ISep10Service {
     sep10ChallengeValidatedCounter.increment();
   }
 
-  String fetchSigningKeyFromClientDomain(String clientDomain) throws SepException {
-    return ClientDomainHelper.fetchSigningKeyFromClientDomain(
+  String fetchSigningKeyFromClientDomainBounded(String clientDomain) throws SepException {
+    return ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(
         clientDomain,
         !stellarNetworkConfig
             .getStellarNetworkPassphrase()

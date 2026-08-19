@@ -306,7 +306,7 @@ sep10:
   # section of this configuration file. The `domain` field of the client must be provided.
   client_attribution_required: false
   # The list of allowed clients for the SEP-10 authentication.
-  # Each item in the list must match the names of one of the client defined in the `clients` section.
+  # Each item in the list must match the names of one of the clients defined in the `clients` section.
   # If the list is empty, all clients defined in the `clients` section are allowed.
   # Ex: client_allow_list: [circle, lobstr]
   # Ex: client_allow_list: circle,lobstr
@@ -464,6 +464,13 @@ sep45:
   # Ex: home_domains: ap.stellar.org, *.sdp.stellar.org
   #
   home_domains: localhost:8080
+  # The list of allowed clients for the SEP-45 authentication.
+  # Each item in the list must match the names of one of the clients defined in the `clients` section.
+  # If the list is empty, all clients defined in the `clients` section are allowed.
+  # Ex: client_allow_list: [circle, lobstr]
+  # Ex: client_allow_list: circle,lobstr
+  #
+  client_allow_list:
   # Set the authentication challenge transaction timeout in seconds. An expired signed transaction will be rejected.
   # This is the timeout period the client must finish the authentication process. (ie: sign and respond the challenge
   # transaction).
