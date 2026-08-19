@@ -654,18 +654,13 @@ clients:
   # type: json
   # value: "{\n  \"items\": [\n    {\n      \"name\": \"referenceCustodial\",\n      \"type\": \"custodial\"\n    }\n]\n}"
   #
-  # Option 4: Store clients in the database, managed via the /clients PUT/GET/DELETE endpoints.
-  # Specify the type as 'db'. The value field is ignored.
+  # Option 4: Store clients in the database, managed via the /clients REST API.
+  # Specify the type as 'db'. If value is also set to an existing file path, or an inline
+  # yaml/json string, its clients are imported into the database once on startup (existing
+  # database rows are left untouched). Leave value empty to skip the import.
   #
   # type: db
-  #
-  # To migrate existing file/yaml/json clients into the database, temporarily set type back to
-  # file/yaml/json with its value, add migrate_from_file_on_startup: true, start the server once
-  # to perform the one-time import, then switch type back to db.
-  #
-  # type: file
   # value: path/to/file.yaml
-  # migrate_from_file_on_startup: true
   type: json
   value:
 
