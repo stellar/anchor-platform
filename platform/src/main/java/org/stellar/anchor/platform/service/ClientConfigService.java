@@ -46,6 +46,55 @@ public class ClientConfigService {
     entity.setCallbackUrlSep31(callbackUrls == null ? null : callbackUrls.getSep31());
     entity.setCallbackUrlSep12(callbackUrls == null ? null : callbackUrls.getSep12());
 
+    return saveHandlingConflict(entity);
+  }
+
+  public ClientConfigResponse addDestinationAccount(String name, String account)
+      throws NotFoundException, BadRequestException {
+    JdbcClientConfig entity = findOrThrow(name);
+    entity.getDestinationAccounts().add(account);
+    return saveHandlingConflict(entity);
+  }
+
+  public void removeDestinationAccount(String name, String account) throws NotFoundException {
+    JdbcClientConfig entity = findOrThrow(name);
+    if (!entity.getDestinationAccounts().remove(account)) {
+      throw new NotFoundException(
+          String.format("Destination account %s not found on client %s", account, name));
+    }
+    repo().save(entity);
+  }
+
+  public ClientConfigResponse addSigningKey(String name, String signingKey)
+      throws NotFoundException, BadRequestException {
+    JdbcClientConfig entity = findOrThrow(name);
+    entity.getSigningKeys().add(signingKey);
+    return saveHandlingConflict(entity);
+  }
+
+  public void removeSigningKey(String name, String signingKey)
+      throws NotFoundException, BadRequestException {
+    JdbcClientConfig entity = findOrThrow(name);
+    if (entity.getType() == ClientType.CUSTODIAL
+        && entity.getSigningKeys().size() == 1
+        && entity.getSigningKeys().contains(signingKey)) {
+      throw new BadRequestException("Custodial clients must have at least one signing key");
+    }
+    if (!entity.getSigningKeys().remove(signingKey)) {
+      throw new NotFoundException(
+          String.format("Signing key %s not found on client %s", signingKey, name));
+    }
+    repo().save(entity);
+  }
+
+  private JdbcClientConfig findOrThrow(String name) throws NotFoundException {
+    return repo()
+        .findById(name)
+        .orElseThrow(() -> new NotFoundException(String.format("Client %s not found", name)));
+  }
+
+  private ClientConfigResponse saveHandlingConflict(JdbcClientConfig entity)
+      throws BadRequestException {
     try {
       return toResponse(repo().save(entity));
     } catch (DataIntegrityViolationException e) {
