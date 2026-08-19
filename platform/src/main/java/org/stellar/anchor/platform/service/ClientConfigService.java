@@ -123,6 +123,14 @@ public class ClientConfigService {
         .toList();
   }
 
+  public List<ClientConfigResponse> listCustodial() {
+    return repo().findByType(ClientType.CUSTODIAL).stream().map(this::toResponse).toList();
+  }
+
+  public List<ClientConfigResponse> listNonCustodial() {
+    return repo().findByType(ClientType.NONCUSTODIAL).stream().map(this::toResponse).toList();
+  }
+
   public void delete(String name) throws NotFoundException {
     if (!repo().existsById(name)) {
       throw new NotFoundException(String.format("Client %s not found", name));

@@ -52,6 +52,24 @@ public class ClientConfigController {
     return clientConfigService.list();
   }
 
+  @ResponseStatus(code = HttpStatus.OK)
+  @RequestMapping(
+      value = "/clients/custodial",
+      produces = {MediaType.APPLICATION_JSON_VALUE},
+      method = {RequestMethod.GET})
+  public List<ClientConfigResponse> listCustodialClients() {
+    return clientConfigService.listCustodial();
+  }
+
+  @ResponseStatus(code = HttpStatus.OK)
+  @RequestMapping(
+      value = "/clients/non-custodial",
+      produces = {MediaType.APPLICATION_JSON_VALUE},
+      method = {RequestMethod.GET})
+  public List<ClientConfigResponse> listNonCustodialClients() {
+    return clientConfigService.listNonCustodial();
+  }
+
   @ResponseStatus(code = HttpStatus.NO_CONTENT)
   @RequestMapping(
       value = "/clients/{name}",
