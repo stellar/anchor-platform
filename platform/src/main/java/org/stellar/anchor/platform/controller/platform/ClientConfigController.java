@@ -59,4 +59,48 @@ public class ClientConfigController {
   public void deleteClient(@PathVariable(name = "name") String name) throws AnchorException {
     clientConfigService.delete(name);
   }
+
+  @ResponseStatus(code = HttpStatus.OK)
+  @RequestMapping(
+      value = "/clients/{name}/destination-accounts/{account}",
+      produces = {MediaType.APPLICATION_JSON_VALUE},
+      method = {RequestMethod.POST})
+  public ClientConfigResponse addDestinationAccount(
+      @PathVariable(name = "name") String name, @PathVariable(name = "account") String account)
+      throws AnchorException {
+    return clientConfigService.addDestinationAccount(name, account);
+  }
+
+  @ResponseStatus(code = HttpStatus.NO_CONTENT)
+  @RequestMapping(
+      value = "/clients/{name}/destination-accounts/{account}",
+      method = {RequestMethod.DELETE})
+  public void removeDestinationAccount(
+      @PathVariable(name = "name") String name, @PathVariable(name = "account") String account)
+      throws AnchorException {
+    clientConfigService.removeDestinationAccount(name, account);
+  }
+
+  @ResponseStatus(code = HttpStatus.OK)
+  @RequestMapping(
+      value = "/clients/{name}/signing-keys/{signingKey}",
+      produces = {MediaType.APPLICATION_JSON_VALUE},
+      method = {RequestMethod.POST})
+  public ClientConfigResponse addSigningKey(
+      @PathVariable(name = "name") String name,
+      @PathVariable(name = "signingKey") String signingKey)
+      throws AnchorException {
+    return clientConfigService.addSigningKey(name, signingKey);
+  }
+
+  @ResponseStatus(code = HttpStatus.NO_CONTENT)
+  @RequestMapping(
+      value = "/clients/{name}/signing-keys/{signingKey}",
+      method = {RequestMethod.DELETE})
+  public void removeSigningKey(
+      @PathVariable(name = "name") String name,
+      @PathVariable(name = "signingKey") String signingKey)
+      throws AnchorException {
+    clientConfigService.removeSigningKey(name, signingKey);
+  }
 }
