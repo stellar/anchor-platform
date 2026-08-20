@@ -2,6 +2,7 @@ package org.stellar.anchor.auth;
 
 import static org.apache.commons.lang3.ObjectUtils.isNotEmpty;
 import static org.stellar.anchor.auth.JwtService.CLIENT_DOMAIN;
+import static org.stellar.anchor.auth.JwtService.CLIENT_NAME;
 import static org.stellar.anchor.auth.JwtService.HOME_DOMAIN;
 
 import com.google.gson.annotations.SerializedName;
@@ -20,6 +21,9 @@ public abstract class WebAuthJwt extends AbstractJwt {
 
   @SerializedName(value = "home_domain")
   String homeDomain;
+
+  @SerializedName(value = "client_name")
+  String clientName;
 
   String account;
 
@@ -43,6 +47,10 @@ public abstract class WebAuthJwt extends AbstractJwt {
     return muxedAccount != null ? muxedAccount : account;
   }
 
+  public boolean hasClientNameClaim() {
+    return claims.containsKey(CLIENT_NAME);
+  }
+
   public String getIssuer() {
     return this.iss;
   }
@@ -60,6 +68,7 @@ public abstract class WebAuthJwt extends AbstractJwt {
     if (isNotEmpty(claims.get(CLIENT_DOMAIN)))
       this.clientDomain = claims.get(CLIENT_DOMAIN).toString();
     if (isNotEmpty(claims.get(HOME_DOMAIN))) this.homeDomain = claims.get(HOME_DOMAIN).toString();
+    if (isNotEmpty(claims.get(CLIENT_NAME))) this.clientName = claims.get(CLIENT_NAME).toString();
     updateAccountAndMemo();
   }
 

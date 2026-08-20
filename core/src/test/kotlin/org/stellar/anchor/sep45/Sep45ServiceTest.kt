@@ -4,18 +4,24 @@ import io.mockk.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.InternalServerErrorException
+import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest
 import org.stellar.anchor.api.sep.sep45.ValidationRequest
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.Nonce
 import org.stellar.anchor.auth.NonceManager
 import org.stellar.anchor.auth.Sep45Jwt
+import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep45Config
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.ledger.StellarRpc
+import org.stellar.anchor.util.ClientDomainHelper
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
@@ -26,6 +32,7 @@ import org.stellar.sdk.responses.sorobanrpc.GetNetworkResponse
 import org.stellar.sdk.responses.sorobanrpc.SimulateTransactionResponse
 import org.stellar.sdk.xdr.SorobanAuthorizationEntries
 
+@ExtendWith(LockAndMockTest::class)
 class Sep45ServiceTest {
   private lateinit var stellarNetworkConfig: StellarNetworkConfig
   private lateinit var secretConfig: SecretConfig
@@ -33,6 +40,7 @@ class Sep45ServiceTest {
   private lateinit var stellarRpc: StellarRpc
   private lateinit var nonceManager: NonceManager
   private lateinit var jwtService: JwtService
+  private lateinit var clientFinder: ClientFinder
   private lateinit var sep45Service: Sep45Service
 
   private val TEST_CONTRACT_ID = "CAYXY6QGTPOCZ676MLGT5JFESVROJ6OJF7VW3LLXMTC2RQIZTP5JYNEL"
@@ -45,6 +53,7 @@ class Sep45ServiceTest {
     stellarRpc = mockk()
     nonceManager = mockk()
     jwtService = mockk()
+    clientFinder = mockk(relaxed = true)
     sep45Service =
       Sep45Service(
         stellarNetworkConfig,
@@ -53,6 +62,7 @@ class Sep45ServiceTest {
         stellarRpc,
         nonceManager,
         jwtService,
+        clientFinder,
       )
     val signingKp =
       KeyPair.fromSecretSeed("SAX3AH622R2XT6DXWWSRIDCMMUCCMATBZ5U6XKJWDO7M2EJUBFC3AW5X")
@@ -158,6 +168,69 @@ class Sep45ServiceTest {
   }
 
   @Test
+  @LockAndMockStatic([ClientDomainHelper::class])
+  fun `test getChallenge rejects client_domain outside an explicit allow list without fetching it`() {
+    every { sep45Config.clientAllowList } returns listOf("known-wallet")
+    every { sep45Config.allowedClientDomains } returns listOf("known-wallet.example.com")
+
+    val challengeRequest =
+      ChallengeRequest.builder()
+        .account(TEST_CONTRACT_ID)
+        .homeDomain("http://localhost:8080")
+        .clientDomain("attacker.example.com")
+        .build()
+
+    val ex =
+      assertThrows(SepNotAuthorizedException::class.java) {
+        sep45Service.getChallenge(challengeRequest)
+      }
+    assertEquals("client_domain is not allow-listed", ex.message)
+    assertFalse(ex.message.orEmpty().contains("attacker.example.com"))
+
+    verify(exactly = 0) { ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(any(), any()) }
+  }
+
+  @Test
+  @LockAndMockStatic([ClientDomainHelper::class])
+  fun `test getChallenge allows any client_domain when no explicit allow list is configured`() {
+    every { sep45Config.clientAllowList } returns null
+    every { sep45Config.allowedClientDomains } returns emptyList()
+    every { ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(any(), any()) } returns
+      "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+
+    val challengeRequest =
+      ChallengeRequest.builder()
+        .account(TEST_CONTRACT_ID)
+        .homeDomain("http://localhost:8080")
+        .clientDomain("anything.example.com")
+        .build()
+
+    assertDoesNotThrow { sep45Service.getChallenge(challengeRequest) }
+
+    verify(exactly = 1) {
+      ClientDomainHelper.fetchSigningKeyFromClientDomainBounded("anything.example.com", any())
+    }
+  }
+
+  @Test
+  @LockAndMockStatic([ClientDomainHelper::class])
+  fun `test getChallenge allows an unlisted client_domain when clients exist only for unrelated config`() {
+    every { sep45Config.clientAllowList } returns null
+    every { sep45Config.allowedClientDomains } returns listOf("wallet-server:8092")
+    every { ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(any(), any()) } returns
+      "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+
+    val challengeRequest =
+      ChallengeRequest.builder()
+        .account(TEST_CONTRACT_ID)
+        .homeDomain("http://localhost:8080")
+        .clientDomain("localhost:8092")
+        .build()
+
+    assertDoesNotThrow { sep45Service.getChallenge(challengeRequest) }
+  }
+
+  @Test
   fun `test validate function with valid auth entries`() {
     val authEntriesXdr =
       "AAAAAgAAAAEAAAABMXx6BpvcLPv+Ys0+pKSVYuT5yS/rba13ZMWowRmb+pxF2uWzaxsY/AAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAg0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlUAAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAo074x7qA8Iqyn/P1Ewffdh7zMeBtIHvcMhTaUyIBzPEyTx67xLr9pO2AToTSh/VHFki+g3lfEz8eZsh0w0b0BQAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAAAAAAAQAAAAAAAAAAjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0rVNLbc72XYAAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAgjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0AAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAw4WS+M2bdw9HoLBOiFT9DjqU02Z8gm13Mk0/sBS2AIdC7AbxmoWtS/o1A6feb/hNixTaSBArU0SZKx/l3p5TBAAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAA"
@@ -181,6 +254,39 @@ class Sep45ServiceTest {
 
     assertNotNull(response)
     assertEquals(jwtToken, response.token)
+  }
+
+  @Test
+  fun `test validate stamps client_name resolved by ClientFinder onto the jwt before encoding`() {
+    val authEntriesXdr =
+      "AAAAAgAAAAEAAAABMXx6BpvcLPv+Ys0+pKSVYuT5yS/rba13ZMWowRmb+pxF2uWzaxsY/AAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAg0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlUAAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAo074x7qA8Iqyn/P1Ewffdh7zMeBtIHvcMhTaUyIBzPEyTx67xLr9pO2AToTSh/VHFki+g3lfEz8eZsh0w0b0BQAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAAAAAAAQAAAAAAAAAAjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0rVNLbc72XYAAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAgjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0AAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAw4WS+M2bdw9HoLBOiFT9DjqU02Z8gm13Mk0/sBS2AIdC7AbxmoWtS/o1A6feb/hNixTaSBArU0SZKx/l3p5TBAAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAA"
+    val validationRequest = ValidationRequest.builder().authorizationEntries(authEntriesXdr).build()
+    val jwtToken = "header.payload.signature"
+    val jwtSlot = slot<Sep45Jwt>()
+
+    every { jwtService.encode(capture(jwtSlot)) } returns jwtToken
+    every { clientFinder.getClientName(any(), any()) } returns "vibrant"
+
+    val response = sep45Service.validate(validationRequest)
+
+    assertEquals(jwtToken, response.token)
+    assertEquals("vibrant", jwtSlot.captured.clientName)
+    verify(exactly = 1) {
+      clientFinder.getClientName(null, "CAYXY6QGTPOCZ676MLGT5JFESVROJ6OJF7VW3LLXMTC2RQIZTP5JYNEL")
+    }
+  }
+
+  @Test
+  fun `test validate propagates ClientFinder authorization failure instead of issuing a jwt`() {
+    val authEntriesXdr =
+      "AAAAAgAAAAEAAAABMXx6BpvcLPv+Ys0+pKSVYuT5yS/rba13ZMWowRmb+pxF2uWzaxsY/AAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAg0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlUAAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAo074x7qA8Iqyn/P1Ewffdh7zMeBtIHvcMhTaUyIBzPEyTx67xLr9pO2AToTSh/VHFki+g3lfEz8eZsh0w0b0BQAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAAAAAAAQAAAAAAAAAAjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0rVNLbc72XYAAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAgjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0AAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAw4WS+M2bdw9HoLBOiFT9DjqU02Z8gm13Mk0/sBS2AIdC7AbxmoWtS/o1A6feb/hNixTaSBArU0SZKx/l3p5TBAAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAA"
+    val validationRequest = ValidationRequest.builder().authorizationEntries(authEntriesXdr).build()
+
+    every { clientFinder.getClientName(any(), any()) } throws
+      SepNotAuthorizedException("Client not found")
+
+    assertThrows(SepNotAuthorizedException::class.java) { sep45Service.validate(validationRequest) }
+    verify(exactly = 0) { jwtService.encode(any<Sep45Jwt>()) }
   }
 
   @Test

@@ -25,6 +25,8 @@ public interface ClientsConfig {
     JSON,
     @SerializedName("yaml")
     YAML,
+    @SerializedName("db")
+    DB,
   }
 
   @Data

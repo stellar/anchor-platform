@@ -91,6 +91,19 @@ internal class NetUtilTest {
   }
 
   @Test
+  @LockAndMockStatic([NetUtil::class])
+  fun `test fetch with explicit maxSize enforces that limit, not the default`() {
+    every { getCall(any()) } returns mockCall
+    every { mockCall.execute() } returns mockResponse
+    every { mockResponse.isSuccessful } returns true
+    every { mockResponse.body } returns mockResponseBody
+    every { mockResponseBody.contentType() } returns null
+    every { mockResponseBody.byteStream() } returns ByteArrayInputStream(ByteArray(101))
+
+    assertThrows(IOException::class.java) { NetUtil.fetch("http://hello", 100) }
+  }
+
+  @Test
   fun `test getCall()`() {
     val request = OkHttpUtil.buildGetRequest("https://www.stellar.org")
     assertNotNull(getCall(request))

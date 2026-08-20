@@ -8,13 +8,75 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import okhttp3.Dns;
+import okhttp3.OkHttpClient;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.sdk.KeyPair;
 
 public class ClientDomainHelper {
+
+  static final ThreadPoolExecutor CLIENT_DOMAIN_EXECUTOR =
+      new ThreadPoolExecutor(
+          4,
+          8,
+          60L,
+          TimeUnit.SECONDS,
+          new SynchronousQueue<>(),
+          new ClientDomainThreadFactory(),
+          new ThreadPoolExecutor.AbortPolicy());
+
+  private static final long BOUNDED_FETCH_TIMEOUT_MS = 2_500;
+  private static final long FETCH_CALL_TIMEOUT_MS = 1_000;
+  private static final OkHttpClient FETCH_CLIENT = OkHttpUtil.buildClient(FETCH_CALL_TIMEOUT_MS);
+
+  private static class ClientDomainThreadFactory implements ThreadFactory {
+    private final AtomicInteger counter = new AtomicInteger();
+
+    @Override
+    public Thread newThread(Runnable r) {
+      Thread thread = new Thread(r, "client-domain-" + counter.getAndIncrement());
+      thread.setDaemon(true);
+      return thread;
+    }
+  }
+
+  public static String fetchSigningKeyFromClientDomainBounded(
+      String clientDomain, boolean allowHttpRetry) throws SepException {
+    Future<String> future = null;
+    try {
+      future =
+          CLIENT_DOMAIN_EXECUTOR.submit(
+              () -> fetchSigningKeyFromClientDomain(clientDomain, allowHttpRetry));
+      return future.get(BOUNDED_FETCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    } catch (RejectedExecutionException | TimeoutException e) {
+      if (future != null) {
+        future.cancel(true);
+      }
+      infoF("client_domain resolution unavailable (bounded pool saturated or timed out)");
+      throw new SepException("client_domain resolution unavailable");
+    } catch (ExecutionException e) {
+      Throwable cause = e.getCause();
+      if (cause instanceof SepException) {
+        throw (SepException) cause;
+      }
+      throw new SepException("client_domain resolution unavailable", e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new SepException("client_domain resolution interrupted", e);
+    }
+  }
 
   /**
    * Fetch SIGNING_KEY from clint_domain by reading the stellar.toml content.
@@ -29,14 +91,16 @@ public class ClientDomainHelper {
     // allowHttpRetry is true for non-public networks (testnet/dev) and false for mainnet.
     // We only enforce SSRF protection on public network because test/dev environments
     // legitimately use localhost and internal addresses as client_domain.
+    OkHttpClient client = FETCH_CLIENT;
     if (!allowHttpRetry) {
       validateDomainNotPrivateNetwork(clientDomain);
+      client = OkHttpUtil.buildClient(validatingDns(), FETCH_CALL_TIMEOUT_MS);
     }
 
     String clientSigningKey = "";
     String url = "https://" + clientDomain + "/.well-known/stellar.toml";
     try {
-      Sep1Helper.TomlContent toml = tryRead(url, allowHttpRetry);
+      Sep1Helper.TomlContent toml = tryRead(url, allowHttpRetry, client);
       clientSigningKey = toml.getString("SIGNING_KEY");
       if (clientSigningKey == null) {
         infoF("SIGNING_KEY not present in 'client_domain' TOML.");
@@ -60,17 +124,17 @@ public class ClientDomainHelper {
     }
   }
 
-  private static Sep1Helper.TomlContent tryRead(String url, boolean allowHttp)
+  private static Sep1Helper.TomlContent tryRead(String url, boolean allowHttp, OkHttpClient client)
       throws IOException, InvalidConfigException {
     try {
       debugF("Fetching {}", url);
-      return Sep1Helper.readToml(url);
+      return Sep1Helper.readToml(url, client);
     } catch (Exception e) {
       if (allowHttp) {
         try {
           var httpUrl = url.replaceFirst("^https://", "http://");
           debugF("Fetching {}", httpUrl);
-          return Sep1Helper.readToml(httpUrl);
+          return Sep1Helper.readToml(httpUrl, client);
         } catch (Exception ignored) {
         }
       }
@@ -137,10 +201,7 @@ public class ClientDomainHelper {
     try {
       InetAddress[] addresses = InetAddress.getAllByName(hostname);
       for (InetAddress address : addresses) {
-        if (address.isLoopbackAddress()
-            || address.isSiteLocalAddress()
-            || address.isLinkLocalAddress()
-            || address.isAnyLocalAddress()) {
+        if (isNonPublicAddress(address)) {
           infoF("client_domain {} resolves to non-public address {}", clientDomain, address);
           throw new SepException("client_domain resolves to a non-public address");
         }
@@ -149,6 +210,50 @@ public class ClientDomainHelper {
       infoF("client_domain {} could not be resolved", clientDomain);
       throw new SepException("client_domain could not be resolved");
     }
+  }
+
+  private static Dns validatingDns() {
+    return hostname -> {
+      List<InetAddress> addresses = Dns.SYSTEM.lookup(hostname);
+      for (InetAddress address : addresses) {
+        if (isNonPublicAddress(address)) {
+          throw new UnknownHostException(
+              String.format("%s resolves to a non-public address", hostname));
+        }
+      }
+      return addresses;
+    };
+  }
+
+  private static boolean isNonPublicAddress(InetAddress address) {
+    return address.isLoopbackAddress()
+        || address.isSiteLocalAddress()
+        || address.isLinkLocalAddress()
+        || address.isAnyLocalAddress()
+        || isCarrierGradeNat(address)
+        || isIpv6UniqueLocal(address)
+        || isIetfProtocolAssignment(address)
+        || isBenchmarkingRange(address);
+  }
+
+  private static boolean isCarrierGradeNat(InetAddress address) {
+    byte[] a = address.getAddress();
+    return a.length == 4 && (a[0] & 0xFF) == 100 && (a[1] & 0xC0) == 0x40;
+  }
+
+  private static boolean isIpv6UniqueLocal(InetAddress address) {
+    byte[] a = address.getAddress();
+    return a.length == 16 && (a[0] & 0xFE) == 0xFC;
+  }
+
+  private static boolean isIetfProtocolAssignment(InetAddress address) {
+    byte[] a = address.getAddress();
+    return a.length == 4 && (a[0] & 0xFF) == 192 && (a[1] & 0xFF) == 0 && (a[2] & 0xFF) == 0;
+  }
+
+  private static boolean isBenchmarkingRange(InetAddress address) {
+    byte[] a = address.getAddress();
+    return a.length == 4 && (a[0] & 0xFF) == 198 && (a[1] & 0xFE) == 18;
   }
 
   /**

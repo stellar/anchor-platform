@@ -35,7 +35,7 @@ public class PropertySep10Config implements Sep10Config, Validator {
   private Integer jwtTimeout = 86400;
   private List<String> knownCustodialAccountList;
   private StellarNetworkConfig stellarNetworkConfig;
-  private final ClientService clientService;
+  private final transient ClientService clientService;
   private SecretConfig secretConfig;
   private boolean requireAuthHeader = false;
 

@@ -76,6 +76,54 @@ internal class JwtServiceTest {
     assertEquals(webAuthJwt.issuer, token.iss)
     assertEquals(webAuthJwt.issuedAt, token.iat)
     assertEquals(webAuthJwt.expiresAt, token.exp)
+    assertEquals(null, webAuthJwt.clientName)
+    assert(webAuthJwt.hasClientNameClaim())
+  }
+
+  @ValueSource(classes = [Sep10Jwt::class, Sep45Jwt::class])
+  @ParameterizedTest
+  fun `test encoding always carries the client_name claim so a decoded token can tell it apart from one issued before client attribution existed`(
+    clazz: Class<out WebAuthJwt>
+  ) {
+    val jwtService = JwtService(secretConfig)
+    val constructor =
+      clazz.getConstructor(
+        String::class.java,
+        String::class.java,
+        Long::class.java,
+        Long::class.java,
+        String::class.java,
+        String::class.java,
+        String::class.java,
+      )
+    val attributed =
+      constructor.newInstance(
+        TEST_ISS,
+        TEST_SUB,
+        TEST_IAT,
+        TEST_EXP,
+        TEST_JTI,
+        TEST_CLIENT_DOMAIN,
+        null
+      ) as WebAuthJwt
+    attributed.clientName = TEST_CLIENT_NAME
+    val decodedAttributed = jwtService.decode(jwtService.encode(attributed), clazz)
+    assertEquals(TEST_CLIENT_NAME, decodedAttributed.clientName)
+    assert(decodedAttributed.hasClientNameClaim())
+
+    val unattributed =
+      constructor.newInstance(
+        TEST_ISS,
+        TEST_SUB,
+        TEST_IAT,
+        TEST_EXP,
+        TEST_JTI,
+        TEST_CLIENT_DOMAIN,
+        null
+      ) as WebAuthJwt
+    val decodedUnattributed = jwtService.decode(jwtService.encode(unattributed), clazz)
+    assertEquals(null, decodedUnattributed.clientName)
+    assert(decodedUnattributed.hasClientNameClaim())
   }
 
   @Test

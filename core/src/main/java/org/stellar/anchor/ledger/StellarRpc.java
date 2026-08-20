@@ -118,7 +118,7 @@ public class StellarRpc implements LedgerClient {
           Signer.builder()
               .key(account)
               .type(SIGNER_KEY_TYPE_ED25519.name())
-              .weight((long) thresholdsXdr.getThresholds()[0])
+              .weight((long) unsignedByte(thresholdsXdr.getThresholds()[0]))
               .build());
 
       return Account.builder()
@@ -126,9 +126,9 @@ public class StellarRpc implements LedgerClient {
           .sequenceNumber(ae.getSeqNum().getSequenceNumber().getInt64())
           .thresholds(
               new Thresholds(
-                  (int) thresholdsXdr.getThresholds()[1],
-                  (int) thresholdsXdr.getThresholds()[2],
-                  (int) thresholdsXdr.getThresholds()[3]))
+                  unsignedByte(thresholdsXdr.getThresholds()[1]),
+                  unsignedByte(thresholdsXdr.getThresholds()[2]),
+                  unsignedByte(thresholdsXdr.getThresholds()[3])))
           .signers(signers)
           .build();
     } catch (AccountNotFoundException e) {
@@ -136,6 +136,10 @@ public class StellarRpc implements LedgerClient {
     } catch (Exception e) {
       throw new LedgerException("Error getting account: " + account, e);
     }
+  }
+
+  private static int unsignedByte(byte b) {
+    return b & 0xFF;
   }
 
   private static String encodeSignerKey(org.stellar.sdk.xdr.SignerKey key) {

@@ -164,6 +164,7 @@ internal class Sep10ServiceTest {
         callOriginal()
       }
     every { NetUtil.fetch(any()) } returns TEST_CLIENT_TOML
+    every { NetUtil.fetch(any(), any(), any()) } returns TEST_CLIENT_TOML
 
     every { sep10Config.isClientAttributionRequired } returns clientAttributionRequired
     every { sep10Config.allowedClientDomains } returns listOf(TEST_CLIENT_DOMAIN)
@@ -215,6 +216,44 @@ internal class Sep10ServiceTest {
     val response = sep10Service.validateChallenge(vr)
     val jwt = jwtService.decode(response.token, Sep10Jwt::class.java)
     assertEquals("${clientKeyPair.accountId}:$TEST_MEMO", jwt.sub)
+  }
+
+  @Test
+  fun `test validate challenge stamps client_name resolved by ClientFinder onto the jwt`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
+
+    val mockSigners =
+      listOf(TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner())
+    val accountResponse =
+      mockk<LedgerClient.Account> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { signers } returns mockSigners
+        every { thresholds.medium } returns 1
+      }
+
+    every { ledgerClient.getAccount(any()) } returns accountResponse
+    every { clientFinder.getClientName(null, clientKeyPair.accountId) } returns "vibrant"
+
+    val response = sep10Service.validateChallenge(vr)
+    val jwt = jwtService.decode(response.token, Sep10Jwt::class.java)
+    assertEquals("vibrant", jwt.clientName)
+  }
+
+  @Test
+  fun `test validate challenge propagates ClientFinder authorization failure instead of falling back to null`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
+
+    every { ledgerClient.getAccount(ofType(String::class)) } answers
+      {
+        throw AccountNotFoundException(clientKeyPair.accountId)
+      }
+    every { clientFinder.getClientName(any(), any()) } throws
+      SepNotAuthorizedException("Client not found")
+
+    assertThrows<SepNotAuthorizedException> { sep10Service.validateChallenge(vr) }
   }
 
   @Test
@@ -335,6 +374,7 @@ internal class Sep10ServiceTest {
         callOriginal()
       }
     every { NetUtil.fetch(any()) } returns TEST_CLIENT_TOML
+    every { NetUtil.fetch(any(), any(), any()) } returns TEST_CLIENT_TOML
     val cr =
       ChallengeRequest.builder()
         .account(TEST_ACCOUNT)
@@ -356,6 +396,7 @@ internal class Sep10ServiceTest {
         callOriginal()
       }
     every { NetUtil.fetch(any()) } returns TEST_CLIENT_TOML
+    every { NetUtil.fetch(any(), any(), any()) } returns TEST_CLIENT_TOML
     val cr =
       ChallengeRequest.builder()
         .account(TEST_ACCOUNT)
@@ -489,7 +530,8 @@ internal class Sep10ServiceTest {
   fun `Test fetch signing key`() {
     // Given
     sep10Service = spyk(sep10Service)
-    every { sep10Service.fetchSigningKeyFromClientDomain(any()) } returns clientKeyPair.accountId
+    every { sep10Service.fetchSigningKeyFromClientDomainBounded(any()) } returns
+      clientKeyPair.accountId
     // When
     var cr =
       ChallengeRequest.builder()
@@ -502,9 +544,10 @@ internal class Sep10ServiceTest {
     sep10Service.createChallenge(cr)
 
     // Then
-    verify(exactly = 1) { sep10Service.fetchSigningKeyFromClientDomain(TEST_CLIENT_DOMAIN) }
+    verify(exactly = 1) { sep10Service.fetchSigningKeyFromClientDomainBounded(TEST_CLIENT_DOMAIN) }
     // Given
-    every { sep10Service.fetchSigningKeyFromClientDomain(any()) } throws IOException("mock error")
+    every { sep10Service.fetchSigningKeyFromClientDomainBounded(any()) } throws
+      IOException("mock error")
     // When
     cr =
       ChallengeRequest.builder()

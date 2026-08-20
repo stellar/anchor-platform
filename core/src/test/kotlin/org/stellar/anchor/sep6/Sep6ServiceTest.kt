@@ -34,7 +34,6 @@ import org.stellar.anchor.api.shared.RefundPayment
 import org.stellar.anchor.api.shared.Refunds
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
-import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.client.ClientService
 import org.stellar.anchor.client.CustodialClient
 import org.stellar.anchor.config.LanguageConfig
@@ -59,7 +58,6 @@ class Sep6ServiceTest {
   @MockK(relaxed = true) lateinit var sep6Config: Sep6Config
   @MockK(relaxed = true) lateinit var requestValidator: SepRequestValidator
   @MockK(relaxed = true) lateinit var clientService: ClientService
-  @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
   @MockK(relaxed = true) lateinit var txnStore: Sep6TransactionStore
   @MockK(relaxed = true) lateinit var exchangeAmountsCalculator: ExchangeAmountsCalculator
   @MockK(relaxed = true) lateinit var eventService: EventService
@@ -74,7 +72,7 @@ class Sep6ServiceTest {
     MockKAnnotations.init(this, relaxUnitFun = true)
     every { sep6Config.features.isAccountCreation } returns false
     every { sep6Config.features.isClaimableBalances } returns false
-    every { clientFinder.getClientName(token) } returns "vibrant"
+    token.clientName = "vibrant"
     every { txnStore.newInstance() } returns PojoSep6Transaction()
     every { eventService.createSession(any(), any()) } returns eventSession
     every { requestValidator.getDepositAsset(TEST_ASSET) } returns asset
@@ -87,7 +85,6 @@ class Sep6ServiceTest {
         sep6Config,
         assetService,
         requestValidator,
-        clientFinder,
         txnStore,
         exchangeAmountsCalculator,
         eventService,
@@ -102,7 +99,6 @@ class Sep6ServiceTest {
         sep6Config,
         assetService,
         realValidator,
-        clientFinder,
         txnStore,
         exchangeAmountsCalculator,
         eventService,

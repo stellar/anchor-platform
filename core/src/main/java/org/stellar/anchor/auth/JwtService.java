@@ -110,6 +110,8 @@ public class JwtService {
       builder.claim(HOME_DOMAIN, token.getHomeDomain());
     }
 
+    builder.claim(CLIENT_NAME, token.getClientName() != null ? token.getClientName() : "");
+
     if (token instanceof Sep45Jwt) {
       return signJWT(builder, sep45JwtSecret);
     } else {

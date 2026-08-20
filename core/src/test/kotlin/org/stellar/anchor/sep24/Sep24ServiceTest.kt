@@ -142,7 +142,6 @@ internal class Sep24ServiceTest {
   @MockK(relaxed = true) lateinit var secretConfig: SecretConfig
   @MockK(relaxed = true) lateinit var sep24Config: Sep24Config
   @MockK(relaxed = true) lateinit var eventService: EventService
-  @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
   @MockK(relaxed = true) lateinit var txnStore: Sep24TransactionStore
   @MockK(relaxed = true) lateinit var interactiveUrlConstructor: InteractiveUrlConstructor
   @MockK(relaxed = true) lateinit var moreInfoUrlConstructor: MoreInfoUrlConstructor
@@ -191,7 +190,6 @@ internal class Sep24ServiceTest {
         .signingKeys(setOf("GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"))
         .allowAnyDestination(false)
         .build()
-    every { clientFinder.getClientName(any()) } returns TEST_CLIENT_NAME
     calculator = ExchangeAmountsCalculator(sep38QuoteStore, Clock.systemUTC())
 
     sep24Service =
@@ -199,11 +197,9 @@ internal class Sep24ServiceTest {
         languageConfig,
         stellarNetworkConfig,
         sep24Config,
-        clientService,
         assetService,
         requestValidator,
         jwtService,
-        clientFinder,
         txnStore,
         eventService,
         interactiveUrlConstructor,
@@ -1103,15 +1099,17 @@ internal class Sep24ServiceTest {
 
   private fun createTestWebAuthJwt(): WebAuthJwt {
     return TestHelper.createWebAuthJwt(TEST_ACCOUNT, null, TEST_HOME_DOMAIN, TEST_CLIENT_DOMAIN)
+      .apply { clientName = TEST_CLIENT_NAME }
   }
 
   private fun createTestWebAuthJwtWithMemo(): WebAuthJwt {
     return TestHelper.createWebAuthJwt(
-      TEST_ACCOUNT,
-      TEST_MEMO,
-      TEST_HOME_DOMAIN,
-      TEST_CLIENT_DOMAIN,
-    )
+        TEST_ACCOUNT,
+        TEST_MEMO,
+        TEST_HOME_DOMAIN,
+        TEST_CLIENT_DOMAIN,
+      )
+      .apply { clientName = TEST_CLIENT_NAME }
   }
 
   @Test
