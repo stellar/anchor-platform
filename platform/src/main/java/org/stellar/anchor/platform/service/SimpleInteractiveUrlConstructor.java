@@ -134,10 +134,7 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
         }
         PutCustomerResponse forwarded = customerIntegration.putCustomer(putCustomerRequest);
 
-        ClientConfig clientConfig =
-            clientsService.getClientConfigByDomainAndAccount(
-                jwt.getClientDomain(), jwt.getAccount());
-        String owner = clientConfig != null ? clientConfig.getName() : jwt.getOwnerAccount();
+        String owner = jwt.getClientName() != null ? jwt.getClientName() : jwt.getOwnerAccount();
 
         if (!customerIdOwnerStore.verifyOrClaim(forwarded.getId(), owner, jwt.getOwnerMemo())) {
           throw new SepNotAuthorizedException("customer id already claimed by another client");

@@ -149,6 +149,7 @@ class SimpleInteractiveUrlConstructorTest {
     every { webAuthJwt.accountMemo }.returns("123")
     every { webAuthJwt.ownerAccount }.returns("test_account")
     every { webAuthJwt.ownerMemo }.returns("123")
+    every { webAuthJwt.clientName }.returns(null)
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
     assertEquals(capturedPutCustomerRequest.captured.type, FORWARD_KYC_CUSTOMER_TYPE)
     assertEquals(capturedPutCustomerRequest.captured.firstName, request.get("first_name"))
@@ -197,6 +198,7 @@ class SimpleInteractiveUrlConstructorTest {
     every { webAuthJwt.accountMemo }.returns("123")
     every { webAuthJwt.ownerAccount }.returns("test_account")
     every { webAuthJwt.ownerMemo }.returns("123")
+    every { webAuthJwt.clientName }.returns(null)
 
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
 
@@ -226,9 +228,77 @@ class SimpleInteractiveUrlConstructorTest {
     every { webAuthJwt.accountMemo }.returns("123")
     every { webAuthJwt.ownerAccount }.returns("test_account")
     every { webAuthJwt.ownerMemo }.returns("123")
+    every { webAuthJwt.clientName }.returns(null)
 
     assertThrows(SepNotAuthorizedException::class.java) {
       constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+    }
+  }
+
+  @Test
+  fun `when the jwt carries a client_name claim, the forwarded id is claimed under that client name`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns(null)
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns(null)
+    every { webAuthJwt.clientName }.returns("vibrant")
+
+    constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("forwarded-customer-id", "vibrant", null)
+    }
+  }
+
+  @Test
+  fun `when a custodial client authenticates with a muxed account and the jwt carries no client_name, ownership uses the muxed owner account rather than a re-resolved client name`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    val baseAccountRegisteredAsSomeWallet =
+      "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    every { webAuthJwt.account }.returns(baseAccountRegisteredAsSomeWallet)
+    every { webAuthJwt.accountMemo }.returns(null)
+    every { webAuthJwt.ownerAccount }
+      .returns("MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC")
+    every { webAuthJwt.ownerMemo }.returns(null)
+    every { webAuthJwt.clientName }.returns(null)
+
+    constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "forwarded-customer-id",
+        "MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC",
+        null,
+      )
     }
   }
 
