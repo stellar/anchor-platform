@@ -512,7 +512,7 @@ class Sep12ServiceTest {
   }
 
   @Test
-  fun `test put customer does not claim ownership for non-sep31 customer types`() {
+  fun `test put customer claims ownership for a new non-sep31 customer too`() {
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("sep24-id").status(Sep12Status.ACCEPTED.name).build()
 
@@ -521,7 +521,24 @@ class Sep12ServiceTest {
 
     assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
 
-    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+    verify(exactly = 1) { customerIdOwnerStore.verifyOrClaim("sep24-id", TEST_ACCOUNT, null) }
+  }
+
+  @Test
+  fun `test put customer rejects a new non-sep31 customer id already claimed by another client`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder()
+        .id("sep6-colliding-id")
+        .status(Sep12Status.ACCEPTED.name)
+        .build()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns false
+
+    val request =
+      Sep12PutCustomerRequest.builder().type("sep6").account(TEST_ACCOUNT).firstName("Jane").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    val ex: SepException = assertThrows { sep12Service.putCustomer(jwtToken, request) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
   }
 
   @Test

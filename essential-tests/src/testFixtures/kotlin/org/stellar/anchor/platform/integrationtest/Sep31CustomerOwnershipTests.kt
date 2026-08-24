@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.integrationtest
 
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -17,6 +18,8 @@ import org.stellar.anchor.platform.integrationtest.Sep12Tests.Companion.testCust
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.anchor.auth
+import org.stellar.walletsdk.asset.IssuedAssetId
+import org.stellar.walletsdk.auth.AuthToken
 import org.stellar.walletsdk.horizon.SigningKeyPair
 
 class Sep31CustomerOwnershipTests : IntegrationTestBase(TestConfig()) {
@@ -29,6 +32,11 @@ class Sep31CustomerOwnershipTests : IntegrationTestBase(TestConfig()) {
   private fun authenticateNewIdentity(): String {
     val keyPair = SigningKeyPair(KeyPair.random())
     return runBlocking { anchor.auth().authenticate(keyPair) }.token
+  }
+
+  private fun authenticateNewWalletIdentity(): AuthToken {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    return runBlocking { anchor.auth().authenticate(keyPair) }
   }
 
   private fun mkTxnRequest(receiverId: String): Sep31PostTransactionRequest {
@@ -106,7 +114,59 @@ class Sep31CustomerOwnershipTests : IntegrationTestBase(TestConfig()) {
 
     assertNotNull(secondTxn.id)
   }
+
+  @Test
+  fun `test a customer id minted via SEP-24 KYC forwarding cannot be claimed by another caller`() =
+    runBlocking {
+      val victimToken = authenticateNewWalletIdentity()
+      val victimSep12Client = Sep12Client(toml.getString("KYC_SERVER"), victimToken.token)
+
+      val depositRequest =
+        GsonUtils.getInstance()
+          .fromJson(
+            sep24DepositWithKycFieldsJson,
+            object : TypeToken<HashMap<String, String>>() {}.type
+          ) as HashMap<String, String>
+      anchor
+        .sep24()
+        .deposit(
+          IssuedAssetId(depositRequest["asset_code"]!!, depositRequest["asset_issuer"]!!),
+          victimToken,
+          depositRequest,
+        )
+
+      val victimCustomer = victimSep12Client.getCustomer()!!
+
+      val attackerJwt = authenticateNewIdentity()
+      val attackerSep31Client = Sep31Client(toml.getString("DIRECT_PAYMENT_SERVER"), attackerJwt)
+      val attackerSep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), attackerJwt)
+      val quote =
+        attackerSep38Client.postQuote(
+          "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+          "10",
+          "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        )
+      val attackerTxnRequest =
+        gson.fromJson(postTxnRequestTemplate, Sep31PostTransactionRequest::class.java)
+      attackerTxnRequest.receiverId = victimCustomer.id
+      attackerTxnRequest.quoteId = quote.id
+
+      assertThrows<SepNotAuthorizedException> {
+        attackerSep31Client.postTransaction(attackerTxnRequest)
+      }
+    }
 }
+
+private const val sep24DepositWithKycFieldsJson =
+  """{
+    "amount": "10",
+    "asset_code": "USDC",
+    "asset_issuer": "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+    "lang": "en",
+    "first_name": "Alice",
+    "last_name": "Victim",
+    "email_address": "alice-victim@example.com"
+}"""
 
 private const val postTxnRequestTemplate =
   """{

@@ -235,9 +235,15 @@ public class SepBeans {
       ClientService clientService,
       PropertySep24Config sep24Config,
       CustomerIntegration customerIntegration,
-      JwtService jwtService) {
+      JwtService jwtService,
+      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore) {
     return new SimpleInteractiveUrlConstructor(
-        assetService, clientService, sep24Config, customerIntegration, jwtService);
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        sep31CustomerIdOwnerStore);
   }
 
   @Bean

@@ -15,6 +15,7 @@ import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.callback.CustomerIntegration
 import org.stellar.anchor.api.callback.PutCustomerRequest
 import org.stellar.anchor.api.callback.PutCustomerResponse
+import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.JwtService.*
@@ -28,6 +29,7 @@ import org.stellar.anchor.platform.config.PropertySep24Config
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.service.SimpleInteractiveUrlConstructor.FORWARD_KYC_CUSTOMER_TYPE
 import org.stellar.anchor.platform.utils.setupMock
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
 import org.stellar.anchor.util.GsonUtils
 
 @Suppress("UNCHECKED_CAST")
@@ -45,6 +47,7 @@ class SimpleInteractiveUrlConstructorTest {
   @MockK(relaxed = true) private lateinit var customerIntegration: CustomerIntegration
   @MockK(relaxed = true) private lateinit var testAsset: AssetInfo
   @MockK(relaxed = true) private lateinit var webAuthJwt: WebAuthJwt
+  @MockK(relaxed = true) private lateinit var customerIdOwnerStore: Sep31CustomerIdOwnerStore
 
   private lateinit var jwtService: JwtService
   private lateinit var sep24Config: PropertySep24Config
@@ -81,6 +84,7 @@ class SimpleInteractiveUrlConstructorTest {
         testConfig,
         customerIntegration,
         jwtService,
+        customerIdOwnerStore,
       )
 
     var jwt =
@@ -126,9 +130,11 @@ class SimpleInteractiveUrlConstructorTest {
   @Test
   fun `when kycFieldsForwarding is enabled, the customerIntegration should receive the kyc fields`() {
     val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     val capturedPutCustomerRequest = slot<PutCustomerRequest>()
     every { customerIntegration.putCustomer(capture(capturedPutCustomerRequest)) } returns
       PutCustomerResponse()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
     val constructor =
       SimpleInteractiveUrlConstructor(
         assetService,
@@ -136,10 +142,13 @@ class SimpleInteractiveUrlConstructorTest {
         sep24Config,
         customerIntegration,
         jwtService,
+        customerIdOwnerStore,
       )
     sep24Config.kycFieldsForwarding.isEnabled = true
     every { webAuthJwt.account }.returns("test_account")
     every { webAuthJwt.accountMemo }.returns("123")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns("123")
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
     assertEquals(capturedPutCustomerRequest.captured.type, FORWARD_KYC_CUSTOMER_TYPE)
     assertEquals(capturedPutCustomerRequest.captured.firstName, request.get("first_name"))
@@ -160,10 +169,67 @@ class SimpleInteractiveUrlConstructorTest {
         sep24Config,
         customerIntegration,
         jwtService,
+        customerIdOwnerStore,
       )
     sep24Config.kycFieldsForwarding.isEnabled = false
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
     verify(exactly = 0) { customerIntegration.putCustomer(any()) }
+  }
+
+  @Test
+  fun `when kycFieldsForwarding is enabled, the forwarded customer id is claimed for the caller`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns("123")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns("123")
+
+    constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("forwarded-customer-id", "test_account", "123")
+    }
+  }
+
+  @Test
+  fun `when the forwarded customer id is already claimed by another client, construct throws`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns false
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns("123")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns("123")
+
+    assertThrows(SepNotAuthorizedException::class.java) {
+      constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+    }
   }
 
   private fun parseJwtFromUrl(url: String?): Sep24InteractiveUrlJwt {

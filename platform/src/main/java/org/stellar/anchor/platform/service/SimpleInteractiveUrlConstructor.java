@@ -16,7 +16,9 @@ import org.apache.http.client.utils.URIBuilder;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.callback.CustomerIntegration;
 import org.stellar.anchor.api.callback.PutCustomerRequest;
+import org.stellar.anchor.api.callback.PutCustomerResponse;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt;
@@ -26,6 +28,7 @@ import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.platform.config.PropertySep24Config;
 import org.stellar.anchor.sep24.InteractiveUrlConstructor;
 import org.stellar.anchor.sep24.Sep24Transaction;
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.util.GsonUtils;
 
 public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
@@ -35,18 +38,21 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
   private final PropertySep24Config sep24Config;
   private final CustomerIntegration customerIntegration;
   private final JwtService jwtService;
+  private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
 
   public SimpleInteractiveUrlConstructor(
       AssetService assetService,
       ClientService clientsService,
       PropertySep24Config sep24Config,
       CustomerIntegration customerIntegration,
-      JwtService jwtService) {
+      JwtService jwtService,
+      Sep31CustomerIdOwnerStore customerIdOwnerStore) {
     this.assetService = assetService;
     this.clientsService = clientsService;
     this.sep24Config = sep24Config;
     this.customerIntegration = customerIntegration;
     this.jwtService = jwtService;
+    this.customerIdOwnerStore = customerIdOwnerStore;
   }
 
   @Override
@@ -126,8 +132,16 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
           putCustomerRequest.setMemo(jwt.getAccountMemo());
           putCustomerRequest.setMemoType("id");
         }
-        // forward kyc fields to PUT /customer
-        customerIntegration.putCustomer(putCustomerRequest);
+        PutCustomerResponse forwarded = customerIntegration.putCustomer(putCustomerRequest);
+
+        ClientConfig clientConfig =
+            clientsService.getClientConfigByDomainAndAccount(
+                jwt.getClientDomain(), jwt.getAccount());
+        String owner = clientConfig != null ? clientConfig.getName() : jwt.getOwnerAccount();
+
+        if (!customerIdOwnerStore.verifyOrClaim(forwarded.getId(), owner, jwt.getOwnerMemo())) {
+          throw new SepNotAuthorizedException("customer id already claimed by another client");
+        }
       }
     }
   }
