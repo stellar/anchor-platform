@@ -18,16 +18,16 @@ neither one covers.
 
 **Coverage matrix result:**
 
-| SEP | Assertions | Verified | Name-match-only | Gap |
-|---|---|---|---|---|
-| SEP-1 | 5 | 0 | 0 | 5 |
-| SEP-10 | 16 | 3 | 4 | 9 |
-| SEP-12 | 10 | 3 | 0 | 7 |
-| SEP-24 | 40 | 14 | 5 | 21 |
-| SEP-31 (incl. combined) | 14 | 4 | 5 | 5 |
-| SEP-38 | 15 | 2 | 5 | 8 |
-| SEP-6 | 38 | 7 | 8 | 23 |
-| **Total** | **138** | **33 (24%)** | **27 (20%)** | **78 (57%)** |
+| SEP                     | Assertions | Verified     | Name-match-only | Gap          |
+| ----------------------- | ---------- | ------------ | --------------- | ------------ |
+| SEP-1                   | 5          | 0            | 0               | 5            |
+| SEP-10                  | 16         | 3            | 4               | 9            |
+| SEP-12                  | 10         | 3            | 0               | 7            |
+| SEP-24                  | 40         | 14           | 5               | 21           |
+| SEP-31 (incl. combined) | 14         | 4            | 5               | 5            |
+| SEP-38                  | 15         | 2            | 5               | 8            |
+| SEP-6                   | 38         | 7            | 8               | 23           |
+| **Total**               | **138**    | **33 (24%)** | **27 (20%)**    | **78 (57%)** |
 
 **105 of 138 assertions (76%) are not solidly verified in AP's own suite today** — worse than the
 ticket's own ~84-gap estimate, once "name-match-only" cases are checked against real test bodies
@@ -71,45 +71,45 @@ product code first. Items are grouped where one PR would realistically fix sever
 
 These can't be closed by writing tests alone — the product code needs to change first.
 
-| Gap | Why it matters | Effort |
-|---|---|---|
-| SEP-31 `customer_info_needed` (400) is dead code — the exception is wired into the handler but never thrown | The spec's documented recovery flow for incomplete SEP-12 KYC data mid-transaction doesn't exist | Large (multi-day: needs the actual detection-and-throw logic in `Sep31Service`, then a test) |
-| SEP-31 `refund_memo`/`refund_memo_type` missing from the POST /transactions DTO | A sending anchor can never override the refund memo per spec — the feature is absent | Medium (~1 day: DTO fields + wiring + test) |
-| SEP-31 `PATCH /transactions/:id` has no client method and no integration/e2e test at any level | Controller endpoint exists and is spec'd with 3 response codes, but is completely unexercised above the unit-test layer | Medium (~1 day: add client method + tests once confirmed the controller logic is correct) |
+| Gap                                                                                                         | Why it matters                                                                                                          | Effort                                                                                       |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| SEP-31 `customer_info_needed` (400) is dead code — the exception is wired into the handler but never thrown | The spec's documented recovery flow for incomplete SEP-12 KYC data mid-transaction doesn't exist                        | Large (multi-day: needs the actual detection-and-throw logic in `Sep31Service`, then a test) |
+| SEP-31 `refund_memo`/`refund_memo_type` missing from the POST /transactions DTO                             | A sending anchor can never override the refund memo per spec — the feature is absent                                    | Medium (~1 day: DTO fields + wiring + test)                                                  |
+| SEP-31 `PATCH /transactions/:id` has no client method and no integration/e2e test at any level              | Controller endpoint exists and is spec'd with 3 response codes, but is completely unexercised above the unit-test layer | Medium (~1 day: add client method + tests once confirmed the controller logic is correct)    |
 
 ### Tier 1 — Load-bearing, security/correctness-critical (fix before considering a drop)
 
-| Gap | SEP | Why it matters | Effort |
-|---|---|---|---|
-| No replay protection on SEP-10 `/auth` — same signed challenge can mint 2+ JWTs before expiry | 10 | Session-duplication/token-multiplication vector on the auth entry point for every other SEP | Medium-Large (needs a nonce/jti-tracking design, not just a test) |
-| Shared/muxed-account transaction isolation untested on SEP-6 `/transactions` | 6 | Potential cross-user data leak between users sharing one custodial Stellar account | Medium (write the test first to establish current behavior; fix if it's actually broken) |
-| Challenge not signed by `SIGNING_KEY` never rejected in a test | 10 | Core anti-spoofing check for SEP-10 | Small-Medium (~half day, reuses existing challenge-building code) |
-| Signature weight below medium threshold never tested | 10 | Multisig-threshold correctness — under-weighted signatures could authenticate | Small-Medium (~half day, reuses multisig scaffolding) |
-| Duplicate signature from same signer not tested for double-counting | 10 | Known SEP-10 signature-replay pitfall the spec calls out explicitly | Small-Medium (~half day, reuses multisig scaffolding) |
-| SEP-12 DELETE has no cross-account ownership test (only GET/PUT do) | 12 | Same IDOR class the existing GET/PUT test already treats as load-bearing | Small (~2-3h, extend existing IDOR test pattern to DELETE) |
-| SEP-12 GET/PUT/DELETE JWT-required gaps (3 endpoints) | 12 | Auth bypass on a PII-handling endpoint | Small each |
-| SEP-31 `sender_id`/`receiver_id` never validated against real SEP-12 customer records | 31 | A fabricated/garbage UUID never claimed by anyone passes every existing check | Medium (~1 day) |
-| SEP-38 `expires_at` not enforced at consumption time (deposit/withdraw/tx creation) | 38 | A stale price could still be honored — direct money correctness | Medium-Large (needs to confirm/add server-side enforcement, then test) |
-| SEP-38/SEP-24/SEP-6 fee-and-amount math never independently verified (only echoed/compared to stored copy) | 38, 24, 6 | Pricing/fee formulas (`sell_amount`/`total_price`/fee breakdown, Amount Formula for refunds) could silently drift wrong | Medium each (~3 focused test additions, can share fixture/config) |
-| SEP-31 `quotes_required: true` path never configured or tested | 31 | A distinct required-quote enforcement branch is completely unexercised | Medium (~0.5-1 day, needs a second test-config profile) |
-| SEP-12 `PUT /customer/callback` + its signature scheme entirely untested | 12 | No verification the anchor computes callback signatures correctly | Medium (~1 day) |
-| SEP-24/SEP-6 URL callback signature scheme (`Signature: t=..., s=...`) untested | 24, 6 | Same signature-verification gap, cross-SEP | Medium (~1 day, can likely share test infra with SEP-12's) |
+| Gap                                                                                                        | SEP       | Why it matters                                                                                                          | Effort                                                                                   |
+| ---------------------------------------------------------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| No replay protection on SEP-10 `/auth` — same signed challenge can mint 2+ JWTs before expiry              | 10        | Session-duplication/token-multiplication vector on the auth entry point for every other SEP                             | Medium-Large (needs a nonce/jti-tracking design, not just a test)                        |
+| Shared/muxed-account transaction isolation untested on SEP-6 `/transactions`                               | 6         | Potential cross-user data leak between users sharing one custodial Stellar account                                      | Medium (write the test first to establish current behavior; fix if it's actually broken) |
+| Challenge not signed by `SIGNING_KEY` never rejected in a test                                             | 10        | Core anti-spoofing check for SEP-10                                                                                     | Small-Medium (~half day, reuses existing challenge-building code)                        |
+| Signature weight below medium threshold never tested                                                       | 10        | Multisig-threshold correctness — under-weighted signatures could authenticate                                           | Small-Medium (~half day, reuses multisig scaffolding)                                    |
+| Duplicate signature from same signer not tested for double-counting                                        | 10        | Known SEP-10 signature-replay pitfall the spec calls out explicitly                                                     | Small-Medium (~half day, reuses multisig scaffolding)                                    |
+| SEP-12 DELETE has no cross-account ownership test (only GET/PUT do)                                        | 12        | Same IDOR class the existing GET/PUT test already treats as load-bearing                                                | Small (~2-3h, extend existing IDOR test pattern to DELETE)                               |
+| SEP-12 GET/PUT/DELETE JWT-required gaps (3 endpoints)                                                      | 12        | Auth bypass on a PII-handling endpoint                                                                                  | Small each                                                                               |
+| SEP-31 `sender_id`/`receiver_id` never validated against real SEP-12 customer records                      | 31        | A fabricated/garbage UUID never claimed by anyone passes every existing check                                           | Medium (~1 day)                                                                          |
+| SEP-38 `expires_at` not enforced at consumption time (deposit/withdraw/tx creation)                        | 38        | A stale price could still be honored — direct money correctness                                                         | Medium-Large (needs to confirm/add server-side enforcement, then test)                   |
+| SEP-38/SEP-24/SEP-6 fee-and-amount math never independently verified (only echoed/compared to stored copy) | 38, 24, 6 | Pricing/fee formulas (`sell_amount`/`total_price`/fee breakdown, Amount Formula for refunds) could silently drift wrong | Medium each (~3 focused test additions, can share fixture/config)                        |
+| SEP-31 `quotes_required: true` path never configured or tested                                             | 31        | A distinct required-quote enforcement branch is completely unexercised                                                  | Medium (~0.5-1 day, needs a second test-config profile)                                  |
+| SEP-12 `PUT /customer/callback` + its signature scheme entirely untested                                   | 12        | No verification the anchor computes callback signatures correctly                                                       | Medium (~1 day)                                                                          |
+| SEP-24/SEP-6 URL callback signature scheme (`Signature: t=..., s=...`) untested                            | 24, 6     | Same signature-verification gap, cross-SEP                                                                              | Medium (~1 day, can likely share test infra with SEP-12's)                               |
 
 **Rough Tier 1 total: ~10-15 engineer-days**, plus unbounded design time for the SEP-10
 replay-protection fix (that one needs a decision on approach before effort can be sized).
 
 ### Tier 2 — Load-bearing, but "expected REST/endpoint coverage" rather than acute risk
 
-| Gap | SEP | Effort |
-|---|---|---|
-| REST parameter validation on deposit/withdraw (missing JWT/asset_code, invalid account, unsupported asset_code) — 7 gaps | 24 | Small-Medium (~1-2 days, one PR) |
-| Same REST parameter validation class — 8 gaps | 6 | Medium (~1-2 days, may need a new test-asset config for `authentication_required: false`) |
-| Plural `/transactions` endpoint has zero coverage — `Sep6Client` doesn't even implement `getTransactions()` | 6 | Large (~2-3 days: client method + ~8 tests for listing/filters/ordering/empty-list) |
-| `/transactions` filtering & pagination (auth, withdraw-history, limit, no_older_than, kind, bad asset_code, ordering, empty-list) — 11 gaps | 24 | Medium (~2-3 days, needs a small reference-flow generating multiple transactions) |
-| GET /transaction negative paths (auth, 404 for external/stellar id) | 24 | Small (~half day) |
-| Singular /transaction 404s + JWT requirement | 6 | Medium (~1 day) |
-| SEP-1 served-TOML has zero integration coverage (existence, size, passphrase, CURRENCIES schema, HTTPS URLs, CORS header, content-type, SIGNING_KEY format, same-domain ORG_URL check) | 1 | Medium-Large (~2-3 days across several small tests, but all share one new "boot a server, fetch the TOML" harness) |
-| SEP-31/SEP-6 PATCH endpoint semantics (200/404/400) | 31, 6 | Medium (~1 day each, once Tier 0's SEP-31 PATCH client exists) |
+| Gap                                                                                                                                                                                    | SEP   | Effort                                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
+| REST parameter validation on deposit/withdraw (missing JWT/asset_code, invalid account, unsupported asset_code) — 7 gaps                                                               | 24    | Small-Medium (~1-2 days, one PR)                                                                                   |
+| Same REST parameter validation class — 8 gaps                                                                                                                                          | 6     | Medium (~1-2 days, may need a new test-asset config for `authentication_required: false`)                          |
+| Plural `/transactions` endpoint has zero coverage — `Sep6Client` doesn't even implement `getTransactions()`                                                                            | 6     | Large (~2-3 days: client method + ~8 tests for listing/filters/ordering/empty-list)                                |
+| `/transactions` filtering & pagination (auth, withdraw-history, limit, no_older_than, kind, bad asset_code, ordering, empty-list) — 11 gaps                                            | 24    | Medium (~2-3 days, needs a small reference-flow generating multiple transactions)                                  |
+| GET /transaction negative paths (auth, 404 for external/stellar id)                                                                                                                    | 24    | Small (~half day)                                                                                                  |
+| Singular /transaction 404s + JWT requirement                                                                                                                                           | 6     | Medium (~1 day)                                                                                                    |
+| SEP-1 served-TOML has zero integration coverage (existence, size, passphrase, CURRENCIES schema, HTTPS URLs, CORS header, content-type, SIGNING_KEY format, same-domain ORG_URL check) | 1     | Medium-Large (~2-3 days across several small tests, but all share one new "boot a server, fetch the TOML" harness) |
+| SEP-31/SEP-6 PATCH endpoint semantics (200/404/400)                                                                                                                                    | 31, 6 | Medium (~1 day each, once Tier 0's SEP-31 PATCH client exists)                                                     |
 
 **Rough Tier 2 total: ~10-15 engineer-days.**
 
@@ -144,7 +144,7 @@ of a one-shot removal:
    structure — e.g. new destination-policy-style negative tests alongside `Sep6Tests.kt`'s
    existing ones, new multisig scenarios reusing `Sep10ServiceIntegrationTests.kt`'s scaffolding).
    This is the ~4-6 engineer-week body of work sized above.
-3. **Phase C**: once Phase B lands and has proven stable in CI for a bake-in period, *then* write
+3. **Phase C**: once Phase B lands and has proven stable in CI for a bake-in period, _then_ write
    the diff removing the "Pull Stellar Validation Tests Docker Image" and "Run Stellar validation
    tool" steps from `sub_essential_tests.yml` (acceptance criterion 8), and decide the fate of
    `stellar-anchor-tests-sep-config.json` — keep it as a fixture-data reference until Phase B's
@@ -153,7 +153,7 @@ of a one-shot removal:
 **Why not "drop now"**: 76% of `stellar-anchor-tests`' assertions are not solidly Verified in AP's
 own suite today, several of the Gap items are genuinely security- or money-correctness-relevant
 (Tier 1), and the spec cross-check surfaced two more severity-1 candidates that
-`stellar-anchor-tests` itself doesn't even test — meaning AP's own suite is the *only* thing that
+`stellar-anchor-tests` itself doesn't even test — meaning AP's own suite is the _only_ thing that
 could ever catch a regression there, and it doesn't yet. `stellar-anchor-tests` is currently doing
 real, load-bearing work; the ticket's original motivation to drop it (removing an "unnecessary
 cross-repo dependency" now that `anchor-tests.stellar.org`'s hosted UI is down) is a maintenance
@@ -170,9 +170,3 @@ immediately (stops it gating every build) while Phase B is in progress, then ful
 Phase B lands. This trades "always-on safety net" for "faster CI," and is worth raising with the
 team as a fourth option if PR build time is the primary driver behind this ticket rather than the
 cross-repo-dependency framing in the description.
-
-## Next steps
-
-- Step 7 (only once Phase B above is scoped and staffed): write the actual gap-filling Kotlin
-  tests, then the CI diff. Given the ~4-6 week size, this is worth splitting into its own tracked
-  epic/sub-tickets rather than continuing as commits on this audit ticket.
