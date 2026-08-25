@@ -1,8 +1,14 @@
-# ANCHOR-1279: SEP Compliance Test Coverage Audit
+# ANCHOR-1279: SEP Compliance Test Coverage Audit — Detailed Reference
 
 Tracks whether `stellar-anchor-tests` can be dropped from CI without losing SEP-compliance
 coverage. See [ANCHOR-1279](https://stellarorg.atlassian.net/browse/ANCHOR-1279) for the full
 acceptance criteria and execution plan.
+
+This is the detailed evidence trail (steps 1-4: AP's test inventory, `stellar-anchor-tests`'
+assertion inventory, the coverage matrix, and the spec cross-check) — every claim in the
+recommendation doc traces back to a specific line here. For the executive summary, prioritized gap
+list, and the actual recommendation, see
+[ANCHOR-1279-recommendation.md](ANCHOR-1279-recommendation.md).
 
 ## Step 1 — AP's own test inventory (acceptance criterion 1)
 
@@ -805,9 +811,8 @@ Nothing here overturns step 3's per-SEP Verified/NMO/Gap counts (those stand). W
    SEP-10, SEP-24, SEP-6) — these are structurally the same finding (cross-cutting HTTP/callback
    plumbing untested everywhere) rather than 4 separate gaps, worth fixing once if fixed at all.
 
-## Next steps
+## Next
 
-- Step 5: finalize the load-bearing/incidental classification and produce the single prioritized
-  gap list with effort estimates, folding in step 4's findings alongside step 3's (acceptance
-  criteria 5, 6).
-- Step 6: write the drop-now / drop-after-gaps / keep-for-now recommendation (acceptance criterion 7).
+Steps 5 and 6 (prioritized gap list and recommendation) live in
+[ANCHOR-1279-recommendation.md](ANCHOR-1279-recommendation.md), which summarizes and builds on
+everything above.
