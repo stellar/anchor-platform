@@ -222,33 +222,43 @@ public class Sep12Service {
     } else if (requestBase.getId() != null) {
       isIdPath = true;
 
-      try {
-        String tokenAccount =
-            token.getMuxedAccount() != null ? token.getMuxedAccount() : token.getAccount();
-        String tokenMemo =
-            token.getMuxedAccountId() != null
-                ? token.getMuxedAccountId().toString()
-                : token.getAccountMemo();
+      String tokenAccount =
+          token.getMuxedAccount() != null ? token.getMuxedAccount() : token.getAccount();
 
-        GetCustomerResponse owned =
-            customerIntegration.getCustomer(
-                GetCustomerRequest.builder()
-                    .memo(tokenMemo)
-                    .memoType(tokenMemo != null ? "id" : null)
-                    .account(tokenAccount)
-                    .type(requestBase.getType())
-                    .build());
-
-        if (owned == null || !requestBase.getId().equals(owned.getId())) {
+      if (customerIdOwnerStore.isClaimed(requestBase.getId())) {
+        String clientName = token.getClientName();
+        String ownerAccount = clientName != null ? clientName : token.getOwnerAccount();
+        if (!customerIdOwnerStore.verify(requestBase.getId(), ownerAccount, token.getOwnerMemo())) {
           throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
         }
-
         requestBase.setAccount(tokenAccount);
-      } catch (SepNotAuthorizedException e) {
-        throw e;
-      } catch (Exception e) {
-        Log.warnEx(e);
-        throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+      } else {
+        try {
+          String tokenMemo =
+              token.getMuxedAccountId() != null
+                  ? token.getMuxedAccountId().toString()
+                  : token.getAccountMemo();
+
+          GetCustomerResponse owned =
+              customerIntegration.getCustomer(
+                  GetCustomerRequest.builder()
+                      .memo(tokenMemo)
+                      .memoType(tokenMemo != null ? "id" : null)
+                      .account(tokenAccount)
+                      .type(requestBase.getType())
+                      .build());
+
+          if (owned == null || !requestBase.getId().equals(owned.getId())) {
+            throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+          }
+
+          requestBase.setAccount(tokenAccount);
+        } catch (SepNotAuthorizedException e) {
+          throw e;
+        } catch (Exception e) {
+          Log.warnEx(e);
+          throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+        }
       }
     }
 

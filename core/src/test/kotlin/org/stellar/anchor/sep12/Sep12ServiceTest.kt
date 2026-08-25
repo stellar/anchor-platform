@@ -845,6 +845,46 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test id path uses the ownership store when the id is already claimed`() {
+    every { customerIdOwnerStore.isClaimed("claimed-id") } returns true
+    every { customerIdOwnerStore.verify("claimed-id", TEST_ACCOUNT, null) } returns true
+
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("claimed-id").build()
+
+    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test id path rejects via the ownership store when claimed by a different identity`() {
+    every { customerIdOwnerStore.isClaimed("claimed-id") } returns true
+    every { customerIdOwnerStore.verify("claimed-id", any(), any()) } returns false
+
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("claimed-id").build()
+
+    val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test id path falls back to the business server reverse lookup when the id is not yet claimed`() {
+    every { customerIdOwnerStore.isClaimed("unclaimed-id") } returns false
+    val ownedResponse = GetCustomerResponse()
+    ownedResponse.id = "unclaimed-id"
+    every { customerIntegration.getCustomer(any()) } returns ownedResponse
+
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("unclaimed-id").build()
+
+    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    verify(exactly = 1) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
   fun `test id path normalizes error message across all failure modes`() {
     val attackerToken = createJwtToken(TEST_ACCOUNT)
 

@@ -27,4 +27,19 @@ public class JdbcSep31CustomerIdOwnerStore implements Sep31CustomerIdOwnerStore 
     return Objects.equals(owner.getCreatorAccount(), creatorAccount)
         && Objects.equals(owner.getCreatorMemo(), creatorMemo);
   }
+
+  @Override
+  public boolean isClaimed(String customerId) {
+    return repo.findById(customerId).isPresent();
+  }
+
+  @Override
+  public boolean verify(String customerId, String creatorAccount, String creatorMemo) {
+    return repo.findById(customerId)
+        .map(
+            owner ->
+                Objects.equals(owner.getCreatorAccount(), creatorAccount)
+                    && Objects.equals(owner.getCreatorMemo(), creatorMemo))
+        .orElse(false);
+  }
 }
