@@ -703,11 +703,111 @@ these are the highest-risk gaps to backfill before removal.
 - **Singular /transaction 404s + JWT requirement (#13, #19, #20)** — **load-bearing**: only the by-id not-found path has even unit coverage. Effort: medium (~1 day).
 - Schema-completeness and SEP-9/TOML config checks (#10-12, #16, #17) — **incidental**. Effort: small each.
 
+## Step 4 — Cross-check against current spec text
+
+Step 3 compared AP's suite against `stellar-anchor-tests`. That's necessary but not sufficient:
+both suites' assertions are a proxy for "what the spec requires," not the spec itself. This step
+fetched all 7 SEPs fresh (+ SEP-9 for the KYC field catalog, and `stellar-protocol`'s current
+`master`) and checked each spec's server-side requirements against *both* suites combined, looking
+for anything neither one tests at all.
+
+**Important distinction that came out of this pass**: most findings below are test gaps — spec
+behavior AP's code plausibly implements but nothing in CI would catch a regression of. A few are
+not that: the SEP-31 pass found actual missing/dead code, not just missing tests. Those are
+called out explicitly.
+
+### SEP-1
+
+- **CORS header (MUST) untested by anyone.** `Access-Control-Allow-Origin: *` on the served TOML — if AP's server omits it, every browser-based wallet silently breaks and nothing in CI catches it. Same gap as step 3's #1 (served-TOML coverage), just spec-sourced confirmation.
+- **`text/plain` content-type (SHOULD)** — cosmetic, same root cause as above.
+- **SIGNING_KEY format validity** — no test confirms a malformed `SIGNING_KEY` in the TOML is caught; a bad key silently breaks SEP-10/SEP-45 trust.
+- **Same-domain requirement for ORG_URL/attestation URLs** — an anti-spoofing control, currently unverified anywhere (the existing "HTTPS, no trailing slash" check doesn't check domain match).
+- **Linked per-currency TOML files** (`toml="https://DOMAIN/CURRENCY.toml"`) — untested indirection, if AP supports it.
+
+### SEP-10
+
+- **No replay protection on `/auth`.** Spec: "the Server should not provide more than one JWT for a specific challenge transaction." Nothing in AP's code or tests tracks a nonce/jti to prevent the same signed challenge XDR from being POSTed twice to mint two valid JWTs before it expires. **This is the most concerning finding across all 7 SEPs** — a session-duplication/token-multiplication vector on an auth-critical endpoint, and it's not merely untested, it looks unimplemented.
+- **Memo type restriction not enforced.** Spec requires memo type `id` only, and rejects memo+muxed-account combinations. AP's `ChallengeRequest` has no `memo_type` field — memo is unconditionally parsed as `MEMO_ID` with no rejection path for other types.
+- **CORS/OPTIONS preflight** — `@CrossOrigin` is present in code but nothing asserts the header is actually returned, including on error responses.
+- **Challenge time-bounds correctness** — no test decodes a server-*generated* challenge and asserts its real min/max time bounds (`now`/`now+900`); a regression widening the expiration window would go undetected.
+- **400 on client_domain SIGNING_KEY fetch failure** — only the internal exception is tested, not that the controller surfaces HTTP 400 for this specific case.
+- **Wrong-source extra ManageData ops rejection** — this validation lives entirely inside the external Java Stellar SDK's `Sep10Challenge.readChallengeTransaction`; no AP test constructs a malformed challenge to confirm AP actually rejects it.
+
+### SEP-12 (+ SEP-9)
+
+- **DELETE authorization only checks JWT presence, not ownership.** Spec: DELETE "must be authenticated... as coming from the owner of the account." AP's cross-account IDOR test (`Sep12Tests.kt`) covers GET/PUT only — DELETE has no equivalent. An anchor that lets any authenticated user delete an arbitrary customer's PII would pass every existing test.
+- **`account` param vs. JWT `sub` mismatch not tested** — spec says they should match; no test submits a deliberately mismatched pair to confirm rejection.
+- **Shared-account memo consistency over time** — the existing memo test only checks *different* memos differentiate customers, not that an account can't flip between memo'd/memo-less identification later.
+- **Status-payload invariants unverified** — REJECTED must include `message`, NEEDS_INFO requires `fields`, ACCEPTED should have no required fields present; none of this structural contract is asserted.
+- **`type`-based multi-flow disambiguation** — same customer holding independent statuses per `type` value is untested.
+- **`PUT /customer/callback` and its signature scheme** — entirely absent from both suites: no test sets a callback URL, triggers a status-change POST, or verifies the `Signature`/`X-Stellar-Signature` computation.
+
+### SEP-24
+
+- **`postMessage` callback contract untested by either suite** — the actual bridge between the interactive popup and the wallet (`{transaction: {...}}` posted to `window.opener`/`window.parent`, `callback` vs. `on_change_callback` firing rules). Neither suite drives a real browser popup.
+- **URL callback signature scheme** — `Signature: t=<ts>, s=<base64 sig>` over `<ts>.<host>.<body>`, freshness enforcement. Untested.
+- **`on_hold`/`error`/`expired` status semantics** — distinct, spec-mandated statuses with no dedicated coverage in either suite (as opposed to `pending_trust`/`pending_user`, which AP's flow variants do cover).
+- **Claimable Balances flow** — `claimable_balance_supported` param, `features.claimable_balances`, `claimable_balance_id` field, and the create-claimable-balance-instead-of-waiting-for-trustline path. AP's "full-with-trust" variant only covers the trustline-wait fallback.
+- **SEP-38 `quote_id` conflict validation on deposit/withdraw** — anchor must validate asset/amount against the referenced quote and 400 on mismatch; untested.
+- **Amount Formula invariant** — `amount_out = amount_in - amount_fee - refunds.amount_refunded - refunds.amount_fee`, and refund sub-totals must sum correctly. Both suites check schema (field presence/types), neither checks this arithmetic relationship.
+- **Shared/pooled-account memo consistency** — same rule as SEP-12, applied to SEP-24 auth.
+- **CORS on every response including errors, plus OPTIONS preflight** — unmentioned in either suite.
+
+### SEP-31
+
+Two of these are not test gaps — they're missing/dead implementation code, found by reading AP's source directly:
+
+- **`customer_info_needed` (400) is dead code.** `Sep31CustomerInfoNeededException` is declared and wired into the controller's exception handler, but grep across the whole repo shows **zero call sites that throw it** besides the declaration and the handler. The spec's documented recovery flow for incomplete SEP-12 KYC data submitted alongside a transaction is unimplemented, not merely untested.
+- **`refund_memo`/`refund_memo_type` request parameters don't exist on the DTO.** `Sep31PostTransactionRequest` has no such fields (they exist on the SEP-6/24 DTOs, never SEP-31's). A sending anchor can never override the refund memo per spec — the feature is absent, not untested.
+- **`PATCH /transactions/:id` (deprecated) has zero protocol-level coverage.** The controller method exists and is spec'd with three distinct response codes (200/404/400), but `Sep31Client` (used by all essential-tests) has no `patchTransaction` method at all, and only a core-level unit test hits the service method directly — no integration/e2e test exercises the real HTTP endpoint.
+- **`sender_id`/`receiver_id` are never validated against real SEP-12 customer records.** AP's existing test only checks cross-client *ownership* of an id already used in a prior transaction; a fabricated/garbage UUID never claimed by anyone would pass every existing check.
+- **`expired` status / quote-expiry-driven auto-expiration** — `EXPIRED` exists as an enum value in a terminal-status list, but there's no evidence of logic transitioning a transaction to `expired` when its linked SEP-38 quote expires, and no test for it.
+- **`fee_details.details` breakdown array** — optional itemized breakdown, never populated or asserted by either suite.
+
+### SEP-38
+
+- **`expires_at` enforcement at consumption time is untested.** Neither suite checks that a deposit/withdraw/transaction-creation request using an *expired* quote is rejected — AP's own tests only check reuse-across-SEPs and concurrent-same-id races, not staleness. This is a real money-correctness gap for a pricing SEP.
+- **`GET /quote/:id` must stay retrievable past `expires_at`** — spec-mandated, untested by either suite.
+- **`fee.details[]` sum-equals-`fee.total` invariant** — neither suite's amount-math checks are described as validating this fee-decomposition consistency.
+- **`context` value legality per endpoint not validated** — e.g. `sep24` is not a legal context for `GET /price` (only `GET /quote`/`POST /quote` allow it); no test rejects an illegal context value.
+- **`sell_asset`/`buy_asset` and `sell_amount`/`buy_amount` mutual-exclusivity 400s** — untested.
+- **Conditional delivery-method requirement on POST /quote** — stricter than GET /price's "optional" rule; untested.
+- **`expire_after` request parameter** — untested entirely.
+
+### SEP-6
+
+- **`PATCH /transactions/:id` has zero coverage** — same shape of gap as SEP-31's PATCH: submitting corrected fields, the `pending_anchor` transition, 404/400 semantics, all untested by either suite.
+- **`pending_customer_info_update`/`pending_transaction_info_update` semantics** — no test confirms a transaction actually enters either status or that `required_info_updates`/`required_info_message` populate correctly.
+- **`quote_id` conflict validation on deposit-exchange/withdraw-exchange** — same gap as SEP-24's quote_id conflict check.
+- **Fee/amount arithmetic invariant** — same Amount Formula gap as SEP-24, unchecked here too.
+- **Claimable Balance flow** — same gap as SEP-24.
+- **`too_small`/`too_large`/`no_market`/`on_hold` statuses** — not named in either suite's coverage.
+- **Shared/omnibus account isolation — the most concerning SEP-6 finding.** Spec requires that when the SEP-10 JWT `sub` carries a memo (or is an `M...` muxed account), `/transactions` must return *only that user's* transactions, never all transactions for the underlying `G...` account. Neither suite's filtering tests (limit/no_older_than/kind/asset_code) touch memo/muxed-account scoping at all. **This is a potential data-leakage risk between users sharing a custodial account** if it regresses, and nothing in CI would catch it.
+- **Callback signature verification** — same `Signature`/`X-Stellar-Signature` gap as SEP-24.
+- **Account creation for a non-existent account** — the `CreateAccount`/minimum-reserve flow and the 400 when `features.account_creation` is false, distinct from the "account exists but lacks trustline" case AP's existing flow covers.
+- **CORS on all responses** — same as other SEPs.
+
+### What this changes for step 5/6
+
+Nothing here overturns step 3's per-SEP Verified/NMO/Gap counts (those stand). What step 4 adds:
+
+1. **Two genuinely new severity-1 candidates for the load-bearing list**: SEP-10's missing replay
+   protection on `/auth`, and SEP-6's untested shared/muxed-account transaction isolation. Both are
+   security-relevant and neither showed up in step 3 because step 3 only compared AP against
+   `stellar-anchor-tests` — `stellar-anchor-tests` doesn't test either one either.
+2. **A new category the ticket didn't anticipate**: at least 3 SEP-31 findings
+   (`customer_info_needed`, `refund_memo`/`refund_memo_type`, and arguably the untested PATCH
+   endpoint) are implementation gaps, not test gaps. No amount of writing tests in AP's own suite
+   closes these — they need product/engineering work first, then tests. This directly matters for
+   scoping "step 7" (the gap-filling work) if the eventual recommendation is to drop
+   `stellar-anchor-tests`: some of that work is net-new backend code, not just Kotlin test authoring.
+3. A long tail of CORS/callback-signature/status-semantics gaps repeated across every SEP (SEP-1,
+   SEP-10, SEP-24, SEP-6) — these are structurally the same finding (cross-cutting HTTP/callback
+   plumbing untested everywhere) rather than 4 separate gaps, worth fixing once if fixed at all.
+
 ## Next steps
 
-- Step 4: cross-check both suites against the current SEP spec text (fetch the 7 SEPs fresh from
-  `stellar/stellar-protocol`) for anything neither suite covers — this may reclassify some
-  "incidental" calls above to load-bearing.
 - Step 5: finalize the load-bearing/incidental classification and produce the single prioritized
-  gap list with effort estimates (acceptance criteria 5, 6).
+  gap list with effort estimates, folding in step 4's findings alongside step 3's (acceptance
+  criteria 5, 6).
 - Step 6: write the drop-now / drop-after-gaps / keep-for-now recommendation (acceptance criterion 7).
