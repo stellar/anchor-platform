@@ -434,8 +434,280 @@ the ticket, now verified against source rather than taken on faith):
 
 All `sep31And38` test objects are tagged `sep: 31` in source (see runtime-behavior note above).
 
+## Step 3 — Coverage matrix (acceptance criteria 3 and 4)
+
+Each of the 138 `stellar-anchor-tests` assertions resolved against AP's own test bodies (not just
+method names) to one of:
+
+- **Verified** — an AP test actually exercises this exact behavior.
+- **Name-match-only** — an AP test exists in the right shape/area, but its body doesn't confirm
+  this specific assertion when read (e.g. checks a subset of fields, exercises a different branch,
+  or only reaches unit-level mocked logic instead of the real HTTP endpoint).
+- **Gap** — no AP test covers this at all.
+
+Load-bearing/incidental tags and effort estimates below are a first pass done alongside the
+matrix (they fell out of reading the same test bodies) — acceptance criteria 5 and 6 will
+re-confirm these once step 4 (spec cross-check) is done, since spec review can upgrade an
+"incidental" call to load-bearing.
+
+### Summary
+
+| SEP | Assertions | Verified | Name-match-only | Gap |
+|---|---|---|---|---|
+| SEP-1 | 5 | 0 | 0 | 5 |
+| SEP-10 | 16 | 3 | 4 | 9 |
+| SEP-12 | 10 | 3 | 0 | 7 |
+| SEP-24 | 40 | 14 | 5 | 21 |
+| SEP-31 (incl. combined) | 14 | 4 | 5 | 5 |
+| SEP-38 | 15 | 2 | 5 | 8 |
+| SEP-6 | 38 | 7 | 8 | 23 |
+| **Total** | **138** | **33 (24%)** | **27 (20%)** | **78 (57%)** |
+
+**This is worse than the ticket's own rough estimate.** The ticket's investigation guessed ~84
+gaps; reading actual test bodies (not just matching names/shapes) puts confirmed Gaps at 78 *plus*
+27 more Name-match-only assertions that turned out, on inspection, not to actually confirm the
+behavior — 105 assertions total that AP's suite does not currently verify with confidence. Barely
+a quarter of `stellar-anchor-tests`' 138 assertions are solidly Verified in AP's own suite today.
+
+### SEP-1 — 0 Verified / 0 Name-match-only / 5 Gap
+
+| # | Assertion | Verdict | AP test | Justification |
+|---|---|---|---|---|
+| 1 | TOML served at `/.well-known/stellar.toml` (200, correct content-type) | Gap | none | AP tests construct `Sep1Service`/`PropertySep1Config` directly from string/file/URL; none start an HTTP server or fetch the well-known path with status/content-type checks. |
+| 2 | File size < 100KB | Gap | none | No test inspects byte length of the loaded TOML content. |
+| 3 | Valid NETWORK_PASSPHRASE | Gap | none | Neither file parses/asserts on `NETWORK_PASSPHRASE` value; tests only check config-binding validity, not TOML field content. |
+| 4 | Valid CURRENCIES section (schema) | Gap | none | No test parses TOML content or validates a `CURRENCIES` array against any schema. |
+| 5 | All URLs HTTPS, no trailing slash | Gap | none | No test inspects URL-valued TOML fields at all. |
+
+**Gaps:** AP's SEP-1 tests only cover how the TOML *source* is loaded (string/file/URL, config
+validation errors) — never the TOML's actual served content. All 5 are gaps.
+
+- #1 (served TOML, 200/content-type) — **load-bearing** (core SEP-1 MUST). Effort: half day.
+- #2 (size < 100KB) — **incidental** (AP-generated TOML unlikely to approach 100KB). Effort: 1h.
+- #3 (valid NETWORK_PASSPHRASE) — **load-bearing** (wrong passphrase breaks client network detection). Effort: half day.
+- #4 (CURRENCIES schema) — **load-bearing**, partially (malformed entries break wallet asset discovery). Effort: 1 day.
+- #5 (URLs HTTPS, no trailing slash) — **load-bearing** (non-HTTPS endpoint URLs are a real security concern). Effort: half day.
+
+### SEP-10 — 3 Verified / 4 Name-match-only / 9 Gap
+
+| # | Assertion | Verdict | AP test | Justification |
+|---|---|---|---|---|
+| 1 | Valid WEB_AUTH_ENDPOINT in TOML | Gap | none | No AP test checks TOML's `WEB_AUTH_ENDPOINT` for HTTPS/no-trailing-slash. |
+| 2 | Valid SIGNING_KEY in TOML | Gap | none | No AP test validates `SIGNING_KEY` is a well-formed Stellar public key. |
+| 3 | Valid GET /auth response | Name-match-only | `Sep10Tests.kt:67,76` | Only base64-decodes the `transaction` field; never checks status 200, `Content-Type`, or `network_passphrase` correctness. |
+| 4 | Rejects GET /auth with no `account` | Gap | none | No AP test omits `account` and asserts 400 + error schema. |
+| 5 | Rejects GET /auth with invalid `account` | Gap | none | No AP test sends a malformed `account` value. |
+| 6 | Returns valid JWT | Verified | `Sep10Tests.kt:76,109,124` | Full auth round-trip obtains a JWT and asserts `token.account`/`memo`/`clientDomain`. |
+| 7 | POST /auth accepts JSON | Verified | `Sep10Tests.kt:76` (implicit in every flow) | Every successful auth flow POSTs JSON; server acceptance is implicitly required to pass. |
+| 8 | POST /auth fails with no `transaction` key | Gap | none | No AP test posts an empty/keyless body. |
+| 9 | Fails if challenge not signed by client | Verified | `Sep10Tests.kt:98` (`testUnsignedChallenge`) | Gets an unsigned challenge, asserts `SepNotAuthorizedException`. |
+| 10 | Fails if `transaction` value is invalid | Gap | none | No AP test posts a non-XDR/garbage `transaction` value. |
+| 11 | Fails if challenge not signed by SIGNING_KEY | Gap | none | No AP test crafts a self-signed challenge; `testNonCustodialWrongKey` tests a wrong *domain* signer, a different mechanism. |
+| 12 | Fails: nonexistent account + extra client sigs | Name-match-only | `Sep10ServiceIntegrationTests.kt:127` | Same premise, but signs with exactly the required keys and asserts success — never adds an extra signature or asserts rejection. |
+| 13 | Fails if signature weight < medium threshold | Gap | none | Existing multisig test (`Sep10ServiceIntegrationTests.kt:291`) sets signatures that exactly meet threshold; none signs below it. |
+| 14 | Succeeds with non-master-signer-only signature | Name-match-only | `Sep10ServiceIntegrationTests.kt:291`, `Sep10Tests.kt:93` | Both always co-sign with the master key; neither tests master-absent, non-master-only. |
+| 15 | Fails for duplicate signature from same signer | Gap | none | No AP test signs a challenge twice with the same key to check weight isn't double-counted. |
+| 16 | Succeeds with multiple non-master signers (no master) | Name-match-only | same as #14 | Same caveat — master always co-signs. |
+
+**Gaps** (SEP-10 is auth-critical, so most lean load-bearing):
+
+- #1, #2 (TOML format checks) — **incidental** (AP generates its own trusted TOML). Effort: 1h each.
+- #4, #5, #8, #10 (input validation on `/auth`) — **load-bearing**. Effort: small (2-3h each, no new fixtures).
+- #11 (challenge not signed by SIGNING_KEY) — **load-bearing, highest priority**: the anti-spoofing check that a forged/self-signed challenge is rejected. Effort: half day.
+- #13 (signature weight below threshold) — **load-bearing**: core multisig-threshold correctness. Effort: half day (reuses existing multisig scaffolding).
+- #15 (duplicate signature double-counted) — **load-bearing**: a known SEP-10 signature-replay pitfall the spec calls out explicitly. Effort: half day (reuses multisig scaffolding).
+
+### SEP-12 — 3 Verified / 0 Name-match-only / 7 Gap
+
+| # | Assertion | Verdict | AP test | Justification |
+|---|---|---|---|---|
+| 1 | DELETE requires SEP-10 JWT | Gap | none | No AP test calls DELETE without/with invalid auth; all AP calls are authenticated. |
+| 2 | DELETE can delete a customer | Verified | `Sep12Tests.kt:66` | Deletes then asserts subsequent GET throws `ClientRequestException`. |
+| 3 | GET requires SEP-10 JWT | Gap | none | Every AP GET passes a valid token. |
+| 4 | GET has valid schema for new customer | Gap | none | AP's NEEDS_INFO check is on a customer already PUT once; never GETs a never-submitted customer. |
+| 5 | GET can retrieve customer using 'id' | Verified | `Sep12Tests.kt:44,59` | Retrieves by id, asserts `pr.id == gr.id`. |
+| 6 | GET can retrieve customer using SEP-10 token | Gap | none | All AP GETs pass an explicit `id`; none rely on token+memo alone. |
+| 7 | PUT requires SEP-10 JWT | Gap | none | Every AP PUT sends a bearer token; no missing/invalid-JWT case. |
+| 8 | PUT can create a customer | Verified | `Sep12Tests.kt:39,78` | Returns an id; multipart variant also verified. |
+| 9 | PUT memos differentiate customers on same account | Gap | none | No AP test PUTs two customers from the same account with different memos and checks for distinct ids. |
+| 10 | TOML has KYC_SERVER attribute | Gap | none | Read to build the client but never itself asserted present/well-formed; absence would surface as an unrelated NPE. |
+
+**Gaps** (SEP-12 handles KYC/PII, so access-control gaps lean load-bearing):
+
+- #1, #3, #7 (JWT required on DELETE/GET/PUT) — **load-bearing**. Effort: small each.
+- #4 (schema for brand-new customer) — **incidental**. Effort: small.
+- #6 (resolve customer via token+memo, no id) — **load-bearing**: this is SEP-12's core identity-resolution path, currently entirely unexercised. Effort: medium.
+- #9 (memo differentiation) — **load-bearing**: correctness of multi-customer-per-account identity, security-relevant for shared/custodial accounts (e.g. SEP-31 flows). Effort: medium.
+- #10 (KYC_SERVER TOML attribute) — **incidental**. Effort: small.
+
+### SEP-24 — 14 Verified / 5 Name-match-only / 21 Gap
+
+| # | Assertion | Verdict | AP test | Justification |
+|---|---|---|---|---|
+| 1 | Requires SEP-10 JWT for deposit | Gap | none | All AP deposit calls use a valid token. |
+| 2 | Requires 'asset_code' for deposit | Gap | none | No omission test. |
+| 3 | Rejects invalid 'account' param | Gap | none | No malformed-account test. |
+| 4 | Rejects unsupported asset_code (deposit) | Gap | none | AP always uses a supported asset. |
+| 5 | Proper schema for valid deposit request | Verified | `Sep24Tests.kt:111` | Checks `id`/`url`, decodes interactive JWT, asserts claims. |
+| 6 | /info schema compliant | Verified | `Sep24Tests.kt:55` | `JSONAssert.assertEquals(expectedSep24Info,...)`. |
+| 7 | Asset code enabled for deposit | Verified | `Sep24Tests.kt:55` | Asserts `deposit.enabled: true`. |
+| 8 | Asset code enabled for withdraw | Verified | `Sep24Tests.kt:55` | Asserts `withdraw.enabled: true`. |
+| 9 | Valid transfer server URL (TOML) | Gap | none | Never asserted HTTPS/no-trailing-slash. |
+| 10 | Requires SEP-10 JWT on /transaction | Gap | none | No unauthenticated GET test. |
+| 11 | Record on /transaction after deposit | Verified | `Sep24Tests.kt:189` | Fetches deposit txn by id right after creation. |
+| 12 | Record on /transaction after withdraw | Verified | `Sep24Tests.kt:80` | Same for withdraw. |
+| 13 | Incomplete deposit txn schema | Verified | `Sep24Tests.kt:123` | Typed `IncompleteDepositTransaction` + field checks. |
+| 14 | pending_ deposit txn schema | Name-match-only | `Sep24PlatformApiTests.kt` flows | Verifies Platform API shape in pending states, not the wallet-facing SEP-24 GET schema. |
+| 15 | Completed deposit txn schema | Verified | `Sep24End2EndTests.kt:85` | Polls to COMPLETED, typed fetch by stellar id. |
+| 16 | Incomplete withdraw txn schema | Verified | `Sep24Tests.kt:80` | Typed `IncompleteWithdrawalTransaction` + field checks. |
+| 17 | pending_user_transfer_start withdraw schema | Name-match-only | `Sep24PlatformApiTests.kt` flows | Same issue as #14. |
+| 18 | Completed withdraw txn schema | Verified | `Sep24End2EndTests.kt:237` | Polls to COMPLETED, typed fetch + callback asserts. |
+| 19 | Deposit lookup by stellar_transaction_id | Verified | `Sep24End2EndTests.kt:104` | Looks up by stellar id, asserts match. |
+| 20 | Withdraw lookup by stellar_transaction_id | Verified | `Sep24End2EndTests.kt:279` | Same pattern for withdrawal. |
+| 21 | Valid more_info_url | Name-match-only | `Sep24Tests.kt:83,191` | Asserts URL non-null/JWT-decodable, never HTTP-GETs it to confirm it resolves. |
+| 22 | 404 for nonexistent transaction id | Name-match-only | `Sep24Tests.kt:274` | Tests bad ids against the Platform API, not the SEP-24 `/transaction?id=` endpoint. |
+| 23 | 404 for nonexistent external_transaction_id | Gap | none | No test queries with a bad `external_transaction_id`. |
+| 24 | 404 for nonexistent stellar_transaction_id | Gap | none | No test queries with a bad `stellar_transaction_id`. |
+| 25 | Requires SEP-10 JWT on /transactions | Gap | none | No unauthenticated GET test. |
+| 26 | Record on /transactions after deposit | Verified | `Sep24End2EndTests.kt:427` | `getTransactionsForAsset` checked to contain created deposit ids. |
+| 27 | Record on /transactions after withdraw | Gap | none | No equivalent history-listing test for withdrawals. |
+| 28 | Deposit transaction schema on /transactions | Name-match-only | `Sep24End2EndTests.kt:461` | Only checks id containment, no schema assertion. |
+| 29 | Withdraw transaction schema on /transactions | Gap | none | No withdraw-history test exists. |
+| 30 | Empty list for new account | Gap | none | No test authenticates a fresh account and checks empty list. |
+| 31 | 'limit' parameter honored | Gap | none | No test passes `limit=`. |
+| 32 | Descending order of transactions | Gap | none | No ordering assertion anywhere. |
+| 33 | 'no_older_than' parameter honored | Gap | none | No test passes `no_older_than=`. |
+| 34 | kind=withdrawal filter | Gap | none | No test passes `kind=withdrawal`. |
+| 35 | kind=deposit filter | Gap | none | No test passes `kind=deposit`. |
+| 36 | Rejects bad asset_code on /transactions | Gap | none | No test passes an invalid `asset_code=`. |
+| 37 | Requires SEP-10 JWT for withdraw | Gap | none | All AP withdraw calls use a valid token. |
+| 38 | Requires asset_code for withdraw | Gap | none | No omission test. |
+| 39 | Rejects unsupported asset_code (withdraw) | Gap | none | No unsupported-code test. |
+| 40 | Proper schema for valid withdraw request | Verified | `Sep24Tests.kt:63` | Checks `id`, decodes interactive JWT, `from.address`. |
+
+**Gaps** — confirms the ticket's flagged risk directly:
+
+- **REST parameter validation, deposit+withdraw (#1-4, #37-39, 7 gaps)** — **load-bearing**. `Sep24Tests.kt`'s deposit/withdraw tests only exercise the happy path with valid JWT, full params, supported asset codes. Effort: small (1-2 days, one PR of ~7 focused negative tests, no reference-server flow needed).
+- **GET /transaction negative paths (#10, #23, #24)** — **load-bearing**. Effort: small (half day, extends the bad-id pattern already used for #22 to the real SEP-24 endpoint).
+- **/transactions filtering & pagination (#25, #27, #29-36, 11 gaps)** — **load-bearing**, the single largest hole: no auth check, no withdraw-history test, and none of `limit`/`no_older_than`/`kind=`/bad-`asset_code`/empty-list/descending-order is tested anywhere. Effort: medium (2-3 days, needs a small reference-flow generating multiple deposit+withdraw txns then a battery of query-param assertions).
+- **Schema-depth gaps (#14, #17, #21, #22, #28)** — **incidental**. Partial confidence exists via typed deserialization/Platform-API-flow tests; low regression risk. Effort: small, foldable into the parameter-validation PR.
+- **TOML transfer-server-URL check (#9)** — **incidental**. Effort: trivial.
+
+### SEP-31 (incl. combined) — 4 Verified / 5 Name-match-only / 5 Gap
+
+| # | Assertion | Verdict | AP test | Justification |
+|---|---|---|---|---|
+| 1 | GET /info matches expected schema | Verified | `Sep31Tests.kt:56` | STRICT `JSONAssert` enforces full shape. |
+| 2 | Has expected asset enabled | Verified | `Sep31Tests.kt:56` | STRICT compare asserts `enabled: true` for USDC/JPYC. |
+| 3 | Check optional transaction 'fields' | Gap | none | `expectedSep31Info` has no per-asset `fields` object; fields-vs-config consistency never checked. |
+| 4 | Has DIRECT_PAYMENT_SERVER attribute | Name-match-only | `Sep31Tests.kt:47` | Consumed to build the client, but no HTTPS/format assertion. |
+| 5 | Requires a SEP-10 JWT | Gap | none | No AP test posts without/with invalid auth. |
+| 6 | Can create a transaction | Verified | `Sep31Tests.kt:60` | Creates+fetches, asserts `status == PENDING_RECEIVER`. AP always supplies `quote_id` (quotes_supported), unlike the base test which omits it. |
+| 7 | Returns 400 when no amount is given | Gap | none | No omission test. |
+| 8 | Returns 400 when no asset_code is given | Name-match-only | `Sep31Tests.kt:230` (`testBadAsset`) | Tests an *invalid* value, not a *missing* field — different validation branch. |
+| 9 | Can fetch a created transaction | Verified | `Sep31Tests.kt:68` | Retrieves and asserts id/status match. |
+| 10 | GET tx response complies with protocol schema | Name-match-only | `Sep31Tests.kt:69` | LENIENT `JSONAssert` on a hand-picked field subset, not full schema validation. |
+| 11 | Returns 404 for a non-existent transaction | Gap | none | No test requests an unknown id. |
+| 12 | [quotes_required] can create a transaction | Name-match-only | `Sep31Tests.kt:88` | Always posts with `quote_id`, but test config sets `quotes_required: false` — the mandatory-quote-required behavior itself is never exercised. |
+| 13 | [quotes_required] can fetch a created transaction | Name-match-only | `Sep31Tests.kt:68` | Same fetch as #9, again only under quotes_supported (not required) config. |
+| 14 | [quotes_required] response complies with protocol schema | Gap | none | No schema validation anywhere, and the quotes_required config path is never set up. |
+
+**Gaps:**
+
+- #3 (optional 'fields' check) — **incidental**. Effort: small.
+- #5 (requires JWT) — **load-bearing**. Effort: small.
+- #7 (400 on missing amount) — **incidental** (standard validation branch, low regression risk). Effort: small.
+- #11 (404 for non-existent id) — **load-bearing** (explicit SEP-31 MUST, prevents info leakage/wrong-status bugs). Effort: small.
+- **#12/#13 (quotes_required=true path never configured/tested)** — **load-bearing**: a distinct required-quote enforcement branch (e.g. 400 when `quote_id` omitted under `quotes_required: true`) is completely unexercised. Effort: medium (0.5-1 day, needs a second test-config profile with `quotes_required: true`).
+- #14 (no formal JSON-schema validation anywhere) — **incidental** day-to-day, but the biggest systemic gap structurally vs. `stellar-anchor-tests`. Effort: medium (~1 day to port schemas), reusable across #1/#10/#14.
+
+### SEP-38 — 2 Verified / 5 Name-match-only / 8 Gap
+
+| # | Assertion | Verdict | AP test | Justification |
+|---|---|---|---|---|
+| 1 | GET /quote requires SEP-10 auth | Gap | none | `Sep38Client` always sends the bearer token; no unauthenticated case. |
+| 2 | GET /quote can fetch existing quote | Verified | `Sep38Tests.kt:105` | Fetches and asserts `postQuote == getQuote`. |
+| 3 | GET /quote 404 for unknown ID | Gap | none | No bogus-id test. |
+| 4 | GET /info valid info response | Name-match-only | `Sep38Tests.kt:45` | Calls and prints only — no schema/field assertions. |
+| 5 | POST /quote requires SEP-10 auth | Gap | none | Same as #1. |
+| 6 | POST /quote valid response | Name-match-only | `Sep38Tests.kt:78`, `Sep38PlatformApiTests.kt:18` | Only checks amount/asset echo and JSON equality vs. stored copy — no full schema (id format, `expires_at`, `price`, `fee`). |
+| 7 | POST /quote amounts correctly calculated | Gap | none | AP never verifies the fee/price formula, only echoes inputs. |
+| 8 | GET /price valid response | Name-match-only | `Sep38Tests.kt:56` | Only asserts `sellAmount` values; doesn't check `buy_amount`/`price`/`total_price`/`fee` presence/consistency. |
+| 9 | GET /price amounts correctly calculated | Gap | none | Same formula-verification gap as #7, for GET /price. |
+| 10 | GET /price accepts 'buy_amount' param | Gap | none | Both AP calls drive by `sell_amount` only; `buy_amount`-driven path (a distinct calculation branch) is never exercised. |
+| 11 | GET /price delivery method optional | Gap | none | No test compares with/without delivery-method param. |
+| 12 | GET /prices valid response | Name-match-only | `Sep38Tests.kt:50` | Calls and prints only, no schema/list assertions. |
+| 13 | GET /prices allows off-chain 'sell_asset' | Name-match-only | `Sep38Tests.kt:51` | Off-chain asset is used, code path exercised, but no assertion results actually returned for it. |
+| 14 | GET /prices delivery method optional | Gap | none | No test passes a delivery-method param. |
+| 15 | TOML has ANCHOR_QUOTE_SERVER | Verified | `Sep38Tests.kt:31` | Every SEP-38 test depends on it resolving to a working URL; absence fails setup for all of them. |
+
+**Gaps** (SEP-38 involves pricing/money math — amount-calculation and auth gaps lean load-bearing):
+
+- #1, #5 (auth required on GET/POST /quote) — **load-bearing**. Effort: small each.
+- #3 (404 for unknown quote id) — **incidental**. Effort: trivial.
+- **#7, #9, #10 (fee/price formula math and buy_amount-driven pricing)** — **load-bearing**: AP never independently verifies `sell_amount = buy_amount × total_price` or the fee-inclusive formula, and the `buy_amount` calculation branch is completely untested. Effort: medium each (needs a fixture with a known rate/fee config and hand-computed expected amounts).
+- #11, #14 (delivery method optional) — **incidental** (SHOULD-level, optional feature). Effort: small each.
+
+Dropping `stellar-anchor-tests` for SEP-38 now would lose real coverage of auth enforcement and,
+more importantly, of the pricing/fee math formulas that AP's suite never independently verifies —
+these are the highest-risk gaps to backfill before removal.
+
+### SEP-6 — 7 Verified / 8 Name-match-only / 23 Gap
+
+| # | Assertion | Verdict | AP test | Justification |
+|---|---|---|---|---|
+| 1 | Deposit requires JWT if auth required | Gap | none | No AP test omits the token; `Sep6Service.deposit()` has a `token==null` branch but it's unexercised. |
+| 2 | Deposit requires 'asset_code' | Gap | none | No omission test on a real `/deposit` call. |
+| 3 | Deposit requires 'account' if auth not required | Gap | none | AP's fixture always has `authentication_required: true`, so this branch never occurs in any AP test. |
+| 4 | Deposit rejects invalid 'account' if auth not required | Gap | none | Same as #3; existing "outside destination policy" test checks an allowlist rule, not malformed-string rejection. |
+| 5 | Deposit rejects unsupported asset_code | Name-match-only | `Sep6ServiceTest.kt:347` | Unit test asserts `SepValidationException` from mocked service logic, not an HTTP 400 from the real endpoint. |
+| 6 | Deposit success response | Verified | `Sep6Tests.kt:30`, `Sep6End2EndTest.kt:90` | Real `/deposit` call, asserts non-empty id and expected JSON. |
+| 7 | /info schema compliance | Verified | `Sep6Tests.kt:24` | STRICT `JSONAssert` — stricter than a schema check. |
+| 8 | Asset enabled for deposit in /info | Verified | `Sep6Tests.kt:260` | Fixture asserts `deposit.USDC.enabled: true`. |
+| 9 | Asset enabled for withdraw in /info | Verified | `Sep6Tests.kt:323` | Fixture asserts `withdraw.USDC.enabled: true`. |
+| 10 | SEP-9 fields for deposit match config | Gap | none | No SEP-9 KYC field cross-check against config exists. |
+| 11 | SEP-9 fields for withdraw match config | Gap | none | Same as #10. |
+| 12 | TOML has valid transfer server URL | Gap | none | Used to bootstrap clients, never itself asserted valid. |
+| 13 | /transaction requires JWT | Gap | none | No unauthenticated call test. |
+| 14 | Record on /transaction after deposit | Verified | `Sep6Tests.kt:39` | Fetches by id immediately after deposit. |
+| 15 | Record on /transaction after withdraw | Verified | `Sep6Tests.kt:113` | Same pattern for withdraw. |
+| 16 | Deposit transaction schema on /transaction | Name-match-only | `Sep6Tests.kt:44` | LENIENT `JSONAssert` checks only `kind`/`to`, not full schema. |
+| 17 | Withdraw transaction schema on /transaction | Name-match-only | `Sep6Tests.kt:114` | Same partial-field check. |
+| 18 | 404 for nonexistent transaction ID | Name-match-only | `Sep6ServiceTest.kt:1535` | Unit-mocked not-found path; no REST test hits the real endpoint. |
+| 19 | 404 for nonexistent external transaction ID | Gap | none | Only the happy-path lookup is tested. |
+| 20 | 404 for nonexistent Stellar transaction ID | Gap | none | Only a known/completed-transaction lookup is tested; not-found case absent. |
+| 21 | /transactions requires JWT | Gap | none | `Sep6Client` has no `getTransactions` method at all. |
+| 22 | Record on /transactions after deposit | Gap | none | Same — no client/test exercises the plural endpoint. |
+| 23 | Record on /transactions after withdraw | Gap | none | Same. |
+| 24 | Deposit schema on /transactions | Gap | none | Same. |
+| 25 | Withdraw schema on /transactions | Gap | none | Same. |
+| 26 | Empty list for accounts w/o transactions | Gap | none | Same. |
+| 27 | Proper count for 'limit' param | Gap | none | Only tested at the storage-layer (`JdbcSep6TransactionStoreTest.kt:30`) with mocked repo, not "N items returned for limit=N" via REST. |
+| 28 | Descending creation order | Gap | none | No test anywhere checks ordering. |
+| 29 | 'no_older_than' filtering | Gap | none | Storage-layer test only checks malformed-string rejection, not correct filtering by value. |
+| 30 | kind=withdrawal filter | Name-match-only | `Sep6ServiceTest.kt:1612`, storage test | Param is passed through in mocked tests; actual result-set filtering behavior never verified. |
+| 31 | kind=deposit filter | Name-match-only | same as #30 | Same caveat. |
+| 32 | Rejects bad asset_code on /transactions | Name-match-only | `Sep6ServiceTest.kt:1593` | Unit-level exception, not via real HTTP endpoint. |
+| 33 | Withdraw requires JWT if auth required | Gap | none | Mirrors #1. |
+| 34 | Withdraw requires asset_code | Gap | none | Mirrors #2. |
+| 35 | Withdraw requires 'account' if auth not required | Gap | none | Mirrors #3 — scenario never occurs in AP's config. |
+| 36 | Withdraw rejects invalid 'account' if auth not required | Gap | none | Mirrors #4. |
+| 37 | Withdraw rejects unsupported asset_code | Name-match-only | `Sep6ServiceTest.kt:981` | Same caveat as #5. |
+| 38 | Withdraw success response | Verified | `Sep6Tests.kt:106`, `Sep6End2EndTest.kt:406` | Real `/withdraw` call, response and status-flow verified. |
+
+**Gaps** — confirms both of the ticket's flagged clearest gaps for SEP-6:
+
+- **REST parameter validation, deposit+withdraw (#1-4, #33-36)** — **load-bearing**. No AP test hits the real HTTP endpoints without a JWT, without `asset_code`, or with a malformed `account`; the "auth not required" scenarios can't even be exercised under AP's current fixture (always `authentication_required: true`). Effort: medium (~1-2 days; needs new integration tests plus possibly a test-asset config with `authentication_required: false`).
+- Unsupported asset_code rejection (#5, #32, #37) — **load-bearing but partially mitigated** (solid unit coverage exists, just not at HTTP level). Effort: small (~2-4h).
+- **Plural /transactions endpoint, end-to-end (#21-29, 9 gaps)** — **load-bearing**: `Sep6Client` doesn't even implement `getTransactions` — nothing in AP's suite drives the public list endpoint at all. Effort: large (~2-3 days: add client method + ~8 new tests for listing/kind filter/limit/no_older_than/ordering/empty list).
+- **Singular /transaction 404s + JWT requirement (#13, #19, #20)** — **load-bearing**: only the by-id not-found path has even unit coverage. Effort: medium (~1 day).
+- Schema-completeness and SEP-9/TOML config checks (#10-12, #16, #17) — **incidental**. Effort: small each.
+
 ## Next steps
 
-- Step 3: build the coverage matrix, resolving each of the 138 assertions above against the 96
-  AP test methods from step 1 to Verified / Name-match-only / Gap.
-- Step 4: cross-check both suites against the current SEP spec text for anything neither covers.
+- Step 4: cross-check both suites against the current SEP spec text (fetch the 7 SEPs fresh from
+  `stellar/stellar-protocol`) for anything neither suite covers — this may reclassify some
+  "incidental" calls above to load-bearing.
+- Step 5: finalize the load-bearing/incidental classification and produce the single prioritized
+  gap list with effort estimates (acceptance criteria 5, 6).
+- Step 6: write the drop-now / drop-after-gaps / keep-for-now recommendation (acceptance criterion 7).
