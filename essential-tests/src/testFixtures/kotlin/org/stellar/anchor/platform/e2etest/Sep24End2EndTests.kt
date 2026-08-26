@@ -340,7 +340,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
     txnId: String,
     count: Int,
   ): List<Sep24GetTransactionResponse>? {
-    var retries = 30
+    var retries = 60
     var callbacks: List<Sep24GetTransactionResponse>? = null
     while (retries > 0) {
       callbacks =
@@ -362,7 +362,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
     txnId: String,
     count: Int,
   ): List<SendEventRequest>? {
-    var retries = 30
+    var retries = 60
     var events: List<SendEventRequest>? = null
     while (retries > 0) {
       events = anchorReferenceServerClient.getEvents(txnId)

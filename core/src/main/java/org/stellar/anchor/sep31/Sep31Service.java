@@ -46,10 +46,7 @@ import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.WebAuthJwt;
-import org.stellar.anchor.client.ClientConfig;
-import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.LanguageConfig;
-import org.stellar.anchor.config.Sep10Config;
 import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
@@ -61,11 +58,9 @@ import org.stellar.anchor.util.TransactionMapper;
 
 public class Sep31Service {
   private final LanguageConfig languageConfig;
-  private final Sep10Config sep10Config;
   private final Sep31Config sep31Config;
   private final Sep31TransactionStore sep31TransactionStore;
   private final Sep38QuoteStore sep38QuoteStore;
-  private final ClientService clientService;
   private final AssetService assetService;
   private final RateIntegration rateIntegration;
   private final Clock clock;
@@ -74,30 +69,29 @@ public class Sep31Service {
   private final Counter sep31TransactionCreatedCounter = counter(SEP31_TRANSACTION_CREATED);
   private final Counter sep31TransactionPatchedCounter = counter(SEP31_TRANSACTION_PATCHED);
   final ExchangeAmountsCalculator exchangeAmountsCalculator;
+  private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
 
   public Sep31Service(
       LanguageConfig languageConfig,
-      Sep10Config sep10Config,
       Sep31Config sep31Config,
       Sep31TransactionStore sep31TransactionStore,
       Sep38QuoteStore sep38QuoteStore,
-      ClientService clientService,
       AssetService assetService,
       RateIntegration rateIntegration,
       EventService eventService,
       Clock clock,
-      ExchangeAmountsCalculator exchangeAmountsCalculator) {
+      ExchangeAmountsCalculator exchangeAmountsCalculator,
+      Sep31CustomerIdOwnerStore customerIdOwnerStore) {
     debug("sep31Config:", sep31Config);
     this.languageConfig = languageConfig;
-    this.sep10Config = sep10Config;
     this.sep31Config = sep31Config;
     this.sep31TransactionStore = sep31TransactionStore;
     this.sep38QuoteStore = sep38QuoteStore;
-    this.clientService = clientService;
     this.assetService = assetService;
     this.rateIntegration = rateIntegration;
     this.clock = clock;
     this.exchangeAmountsCalculator = exchangeAmountsCalculator;
+    this.customerIdOwnerStore = customerIdOwnerStore;
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.infoResponse = sep31InfoResponseFromAssetInfoList(assetService.getAssets());
     Log.info("Sep31Service initialized.");
@@ -168,6 +162,18 @@ public class Sep31Service {
                 Objects.requireNonNullElse(webAuthJwt.getMuxedAccount(), webAuthJwt.getAccount()))
             .memo(webAuthJwt.getAccountMemo())
             .build();
+
+    String ownerClientName = webAuthJwt.getClientName();
+    String ownerAccount = ownerClientName != null ? ownerClientName : webAuthJwt.getOwnerAccount();
+    String ownerMemo = webAuthJwt.getOwnerMemo();
+
+    for (String customerId : Arrays.asList(request.getSenderId(), request.getReceiverId())) {
+      if (customerId != null
+          && !customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
+        throw new SepNotAuthorizedException(
+            "sender_id/receiver_id does not belong to the authenticated client");
+      }
+    }
 
     Sep38Quote quote = Context.get().getQuote();
     FeeDetails feeDetails;
@@ -570,18 +576,8 @@ public class Sep31Service {
     Context.get().setFee(amountFee);
   }
 
-  String getClientName() throws BadRequestException {
-    return getClientName(Context.get().getWebAuthJwt().getAccount());
-  }
-
-  String getClientName(String account) throws BadRequestException {
-    ClientConfig client = clientService.getClientConfigBySigningKey(account);
-    if (sep10Config.isClientAttributionRequired() && client == null) {
-      throw new BadRequestException("Client not found");
-    }
-    if (client != null && !sep10Config.getAllowedClientNames().contains(client.getName()))
-      client = null;
-    return client == null ? null : client.getName();
+  String getClientName() {
+    return Context.get().getWebAuthJwt().getClientName();
   }
 
   /**

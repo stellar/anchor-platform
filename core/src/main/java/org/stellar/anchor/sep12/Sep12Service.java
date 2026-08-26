@@ -2,7 +2,6 @@ package org.stellar.anchor.sep12;
 
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Sep.SEP_12;
 import static org.stellar.anchor.util.Log.infoF;
-import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.MetricConstants.*;
 import static org.stellar.anchor.util.MetricConstants.SEP12_CUSTOMER;
 
@@ -24,13 +23,16 @@ import org.stellar.anchor.api.sep.sep12.*;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.auth.WebAuthJwt;
-import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.event.EventService;
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.xdr.MemoType;
 
 public class Sep12Service {
+  private static final String TYPE_SEP31_SENDER = "sep31-sender";
+  private static final String TYPE_SEP31_RECEIVER = "sep31-receiver";
+
   private final CustomerIntegration customerIntegration;
   private final Counter sep12GetCustomerCounter =
       Metrics.counter(SEP12_CUSTOMER, TYPE, TV_SEP12_GET_CUSTOMER);
@@ -40,18 +42,18 @@ public class Sep12Service {
       Metrics.counter(SEP12_CUSTOMER, TYPE, TV_SEP12_DELETE_CUSTOMER);
   private final PlatformApiClient platformApiClient;
   private final EventService.Session eventSession;
-  private final ClientFinder clientFinder;
+  private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
 
   public Sep12Service(
       CustomerIntegration customerIntegration,
       PlatformApiClient platformApiClient,
       EventService eventService,
-      ClientFinder clientFinder) {
+      Sep31CustomerIdOwnerStore customerIdOwnerStore) {
     this.customerIntegration = customerIntegration;
     this.platformApiClient = platformApiClient;
     this.eventSession =
         eventService.createSession(this.getClass().getName(), EventService.EventQueue.TRANSACTION);
-    this.clientFinder = clientFinder;
+    this.customerIdOwnerStore = customerIdOwnerStore;
 
     Log.info("Sep12Service initialized.");
   }
@@ -77,6 +79,12 @@ public class Sep12Service {
 
   public Sep12PutCustomerResponse putCustomer(WebAuthJwt token, Sep12PutCustomerRequest request)
       throws AnchorException {
+    boolean isNewSep31Customer =
+        request.getId() == null
+            && request.getTransactionId() == null
+            && (TYPE_SEP31_SENDER.equals(request.getType())
+                || TYPE_SEP31_RECEIVER.equals(request.getType()));
+
     validateGetOrPutRequest(request, token);
 
     if (request.getAccount() == null
@@ -108,15 +116,20 @@ public class Sep12Service {
     PutCustomerResponse updatedCustomer =
         customerIntegration.putCustomer(PutCustomerRequest.from(request));
 
-    String clientName = null;
+    String clientName = token.getClientName();
 
-    try {
-      clientName = clientFinder.getClientName(token);
-    } catch (SepNotAuthorizedException e) {
-      warnF(
-          "Client attribution required but client is not authorized; CUSTOMER_UPDATED event will have no clientName. token={}, reason={}",
-          token.getAccount(),
-          e.getMessage());
+    if (isNewSep31Customer) {
+      String ownerAccount = token.getOwnerAccount();
+      String ownerMemo = token.getOwnerMemo();
+
+      boolean owned =
+          customerIdOwnerStore.verifyOrClaim(
+              updatedCustomer.getId(), clientName != null ? clientName : ownerAccount, ownerMemo);
+
+      if (!owned) {
+        throw new SepNotAuthorizedException(
+            "customer id returned by the business server is already claimed by another client");
+      }
     }
 
     eventSession.publish(

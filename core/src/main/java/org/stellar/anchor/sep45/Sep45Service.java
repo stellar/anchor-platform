@@ -18,6 +18,7 @@ import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Nonce;
 import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep45Jwt;
+import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
 import org.stellar.anchor.config.StellarNetworkConfig;
@@ -46,6 +47,7 @@ public class Sep45Service {
   private final StellarRpc stellarRpc;
   private final NonceManager nonceManager;
   private final JwtService jwtService;
+  private final ClientFinder clientFinder;
 
   public ChallengeResponse getChallenge(ChallengeRequest request) throws AnchorException {
     if (request == null || isEmpty(request.getAccount())) {
@@ -133,12 +135,13 @@ public class Sep45Service {
         KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed()).getAccountId());
     argsMap.put(KEY_WEB_AUTH_DOMAIN, sep45Config.getWebAuthDomain());
     if (!isEmpty(request.getClientDomain())) {
+      validateClientDomainAllowed(request.getClientDomain());
       boolean allowHttpRetry =
           !stellarNetworkConfig
               .getStellarNetworkPassphrase()
               .equals(Network.PUBLIC.getNetworkPassphrase());
       String clientDomainSigner =
-          ClientDomainHelper.fetchSigningKeyFromClientDomain(
+          ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(
               request.getClientDomain(), allowHttpRetry);
       argsMap.put(KEY_CLIENT_DOMAIN, request.getClientDomain());
       argsMap.put(KEY_CLIENT_DOMAIN_ACCOUNT, clientDomainSigner);
@@ -271,6 +274,7 @@ public class Sep45Service {
             hashHex,
             clientDomain,
             homeDomain);
+    jwt.setClientName(clientFinder.getClientName(clientDomain, account));
 
     return ValidationResponse.builder().token(jwtService.encode(jwt)).build();
   }
@@ -395,15 +399,26 @@ public class Sep45Service {
     }
 
     if (argsMap.containsKey(KEY_CLIENT_DOMAIN)) {
+      validateClientDomainAllowed(argsMap.get(KEY_CLIENT_DOMAIN));
       boolean allowHttpRetry =
           !stellarNetworkConfig
               .getStellarNetworkPassphrase()
               .equals(Network.PUBLIC.getNetworkPassphrase());
       String clientDomainSigner =
-          ClientDomainHelper.fetchSigningKeyFromClientDomain(
+          ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(
               argsMap.get(KEY_CLIENT_DOMAIN), allowHttpRetry);
       if (!clientDomainSigner.equals(argsMap.get(KEY_CLIENT_DOMAIN_ACCOUNT))) {
         throw new BadRequestException("Invalid client domain address");
+      }
+    }
+  }
+
+  private void validateClientDomainAllowed(String clientDomain) throws SepNotAuthorizedException {
+    List<String> clientAllowList = sep45Config.getClientAllowList();
+    if (clientAllowList != null && !clientAllowList.isEmpty()) {
+      List<String> allowList = sep45Config.getAllowedClientDomains();
+      if (!allowList.contains(clientDomain)) {
+        throw new SepNotAuthorizedException("client_domain is not allow-listed");
       }
     }
   }

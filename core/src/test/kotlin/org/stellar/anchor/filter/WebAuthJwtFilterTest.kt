@@ -1,5 +1,6 @@
 package org.stellar.anchor.filter
 
+import io.jsonwebtoken.Jwts
 import io.mockk.*
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ServletException
@@ -7,6 +8,8 @@ import jakarta.servlet.ServletRequest
 import jakarta.servlet.ServletResponse
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import java.time.Instant
+import java.util.Date
 import org.apache.hc.core5.http.HttpStatus
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -24,6 +27,8 @@ import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.filter.WebAuthJwtFilter.APPLICATION_JSON_VALUE
 import org.stellar.anchor.filter.WebAuthJwtFilter.JWT_TOKEN
 import org.stellar.anchor.setupMock
+import org.stellar.anchor.util.JwtUtil
+import org.stellar.anchor.util.KeyUtil
 
 @Order(85)
 internal class WebAuthJwtFilterTest {
@@ -163,5 +168,37 @@ internal class WebAuthJwtFilterTest {
     verify { mockFilterChain.doFilter(request, response) }
     verify(exactly = 1) { request.setAttribute(JWT_TOKEN, any()) }
     assertEquals(jwtToken, jwtService.encode(slot.captured))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["GET", "PUT", "POST", "DELETE"])
+  fun `make sure a token issued before client_name existed is rejected`(method: String) {
+    every { request.method } returns method
+
+    val account = createWebAuthJwt(PUBLIC_KEY, null, "stellar.org")
+    val legacyJwt =
+      JwtUtil.jwtsBuilder()
+        .id(account.jti)
+        .issuer(account.iss)
+        .subject(account.sub)
+        .issuedAt(Date.from(Instant.ofEpochSecond(account.iat)))
+        .expiration(Date.from(Instant.ofEpochSecond(account.exp)))
+        .audience()
+        .add(JwtService.AUD_SEP10)
+        .and()
+        .signWith(
+          KeyUtil.toSecretKeySpecOrNull("jwt_secret_sep_10_secret_key_jwt_secret"),
+          Jwts.SIG.HS256,
+        )
+        .compact()
+
+    every { request.getHeader("Authorization") } returns "Bearer $legacyJwt"
+    webAuthJwtFilter.doFilter(request, response, mockFilterChain)
+
+    verify(exactly = 1) {
+      response.setStatus(HttpStatus.SC_FORBIDDEN)
+      response.contentType = APPLICATION_JSON_VALUE
+    }
+    verify { mockFilterChain wasNot Called }
   }
 }

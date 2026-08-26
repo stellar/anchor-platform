@@ -13,6 +13,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import okhttp3.Call;
 import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
@@ -39,24 +40,35 @@ public class NetUtil {
   public static String fetch(String url, long maxSize) throws IOException {
     Request request = OkHttpUtil.buildGetRequest(url);
     try (Response response = getCall(request).execute()) {
-      // Check if response was unsuccessful (ie not status code 2xx) and throw IOException
-      if (!response.isSuccessful()) {
-        throw new IOException(
-            "Unsuccessful response code: " + response.code() + ", message: " + response.message());
-      }
-
-      ResponseBody responseBody = response.body();
-      // Since fetch expects a response body, we will throw IOException if its null
-      if (responseBody == null) {
-        throw new IOException(
-            "Null response body. Response code: "
-                + response.code()
-                + ", message: "
-                + response.message());
-      }
-
-      return readResponseBodyWithLimit(responseBody, maxSize);
+      return readFetchedResponse(response, maxSize);
     }
+  }
+
+  public static String fetch(String url, long maxSize, OkHttpClient client) throws IOException {
+    Request request = OkHttpUtil.buildGetRequest(url);
+    try (Response response = getCall(request, client).execute()) {
+      return readFetchedResponse(response, maxSize);
+    }
+  }
+
+  private static String readFetchedResponse(Response response, long maxSize) throws IOException {
+    // Check if response was unsuccessful (ie not status code 2xx) and throw IOException
+    if (!response.isSuccessful()) {
+      throw new IOException(
+          "Unsuccessful response code: " + response.code() + ", message: " + response.message());
+    }
+
+    ResponseBody responseBody = response.body();
+    // Since fetch expects a response body, we will throw IOException if its null
+    if (responseBody == null) {
+      throw new IOException(
+          "Null response body. Response code: "
+              + response.code()
+              + ", message: "
+              + response.message());
+    }
+
+    return readResponseBodyWithLimit(responseBody, maxSize);
   }
 
   static String readResponseBodyWithLimit(ResponseBody responseBody, long maxSize)
@@ -147,5 +159,9 @@ public class NetUtil {
 
   static Call getCall(Request request) {
     return OkHttpUtil.buildClient().newCall(request);
+  }
+
+  static Call getCall(Request request, OkHttpClient client) {
+    return client.newCall(request);
   }
 }

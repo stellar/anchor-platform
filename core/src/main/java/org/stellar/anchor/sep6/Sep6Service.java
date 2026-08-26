@@ -27,7 +27,6 @@ import org.stellar.anchor.api.sep.sep6.InfoResponse.*;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.WebAuthJwt;
-import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep6Config;
 import org.stellar.anchor.event.EventService;
@@ -40,7 +39,6 @@ public class Sep6Service {
   private final Sep6Config sep6Config;
   private final AssetService assetService;
   private final SepRequestValidator requestValidator;
-  private final ClientFinder clientFinder;
   private final Sep6TransactionStore txnStore;
   private final ExchangeAmountsCalculator exchangeAmountsCalculator;
   private final EventService.Session eventSession;
@@ -76,7 +74,6 @@ public class Sep6Service {
       Sep6Config sep6Config,
       AssetService assetService,
       SepRequestValidator requestValidator,
-      ClientFinder clientFinder,
       Sep6TransactionStore txnStore,
       ExchangeAmountsCalculator exchangeAmountsCalculator,
       EventService eventService,
@@ -85,7 +82,6 @@ public class Sep6Service {
     this.sep6Config = sep6Config;
     this.assetService = assetService;
     this.requestValidator = requestValidator;
-    this.clientFinder = clientFinder;
     this.txnStore = txnStore;
     this.exchangeAmountsCalculator = exchangeAmountsCalculator;
     this.eventSession =
@@ -124,7 +120,9 @@ public class Sep6Service {
           asset.getSep6().getDeposit().getMinAmount(),
           asset.getSep6().getDeposit().getMaxAmount());
     }
-    requestValidator.validateAccount(request.getAccount());
+    String destinationAccount =
+        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+    requestValidator.validateDestinationAccount(token, destinationAccount);
 
     String id = generateSepTransactionId();
     Sep6TransactionBuilder builder =
@@ -144,9 +142,9 @@ public class Sep6Service {
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
             .webAuthAccount(Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount()))
             .webAuthAccountMemo(token.getAccountMemo())
-            .toAccount(request.getAccount())
+            .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .requestClientIpAddress(request.getRequestClientIpAddress());
 
     if (accountType(token.getAccount()) == Contract) {
@@ -209,18 +207,22 @@ public class Sep6Service {
     requestValidator.validateTypes(
         fundingMethod, buyAsset.getCode(), buyAsset.getSep6().getDeposit().getMethods());
     requestValidator.validateAmount(
-        request.getAmount(),
-        buyAsset.getCode(),
-        buyAsset.getSignificantDecimals(),
-        buyAsset.getSep6().getDeposit().getMinAmount(),
-        buyAsset.getSep6().getDeposit().getMaxAmount());
-    requestValidator.validateAccount(request.getAccount());
+        request.getAmount(), sellAsset.getCode(), sellAsset.getSignificantDecimals(), null, null);
+    String destinationAccount =
+        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+    requestValidator.validateDestinationAccount(token, destinationAccount);
 
     Amounts amounts;
     if (request.getQuoteId() != null) {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
-              request.getQuoteId(), sellAsset, request.getAmount());
+              request.getQuoteId(), sellAsset, buyAsset, request.getAmount());
+      requestValidator.validateAmount(
+          amounts.getAmountOut(),
+          buyAsset.getCode(),
+          buyAsset.getSignificantDecimals(),
+          buyAsset.getSep6().getDeposit().getMinAmount(),
+          buyAsset.getSep6().getDeposit().getMaxAmount());
     } else {
       // TODO(philip): remove this
       // If a quote is not provided, set the fee and out amounts to 0.
@@ -260,9 +262,9 @@ public class Sep6Service {
                     : Instant.now().plusSeconds(sep6Config.getInitialUserDeadlineSeconds()))
             .webAuthAccount(Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount()))
             .webAuthAccountMemo(token.getAccountMemo())
-            .toAccount(request.getAccount())
+            .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .quoteId(request.getQuoteId())
             .requestClientIpAddress(request.getRequestClientIpAddress());
 
@@ -320,8 +322,9 @@ public class Sep6Service {
           asset.getSep6().getWithdraw().getMinAmount(),
           asset.getSep6().getWithdraw().getMaxAmount());
     }
-    String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
-    requestValidator.validateAccount(sourceAccount);
+    String sourceAccount =
+        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+    requestValidator.validateDestinationAccount(token, sourceAccount);
 
     String id = generateSepTransactionId();
 
@@ -346,7 +349,7 @@ public class Sep6Service {
             .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .refundMemo(request.getRefundMemo())
             .refundMemoType(request.getRefundMemoType())
             .requestClientIpAddress(request.getRequestClientIpAddress());
@@ -396,8 +399,9 @@ public class Sep6Service {
         sellAsset.getSignificantDecimals(),
         sellAsset.getSep6().getWithdraw().getMinAmount(),
         sellAsset.getSep6().getWithdraw().getMaxAmount());
-    String sourceAccount = request.getAccount() != null ? request.getAccount() : token.getAccount();
-    requestValidator.validateAccount(sourceAccount);
+    String sourceAccount =
+        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+    requestValidator.validateDestinationAccount(token, sourceAccount);
 
     String id = generateSepTransactionId();
 
@@ -405,7 +409,7 @@ public class Sep6Service {
     if (request.getQuoteId() != null) {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
-              request.getQuoteId(), sellAsset, request.getAmount());
+              request.getQuoteId(), sellAsset, buyAsset, request.getAmount());
     } else {
       // TODO(philip): remove this
       // If a quote is not provided, set the fee and out amounts to 0.
@@ -444,7 +448,7 @@ public class Sep6Service {
             .webAuthAccountMemo(token.getAccountMemo())
             .fromAccount(sourceAccount)
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .refundMemo(request.getRefundMemo())
             .refundMemoType(request.getRefundMemoType())
             .quoteId(request.getQuoteId())

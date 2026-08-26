@@ -4,6 +4,7 @@ import static org.stellar.anchor.util.Log.*;
 
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.auth.Sep45Jwt;
@@ -24,6 +25,14 @@ public class WebAuthJwtFilter extends AbstractJwtFilter {
     } catch (Exception ignored) {
       token = jwtService.decode(jwtCipher, Sep45Jwt.class);
     } finally {
+      if (!token.hasClientNameClaim()) {
+        infoF(
+            "Rejecting token issued before client attribution existed. account={} url={}",
+            shorter(token.getAccount()),
+            request.getRequestURL());
+        throw new SepNotAuthorizedException(
+            "Token predates client attribution; please reauthenticate");
+      }
       infoF(
           "token created. account={} url={}", shorter(token.getAccount()), request.getRequestURL());
       debugF("storing token to request {}:", request.getRequestURL(), token);

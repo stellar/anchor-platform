@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.stellar.anchor.api.exception.AccountNotFoundException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.LedgerClientHelper.ParseResult;
@@ -94,6 +95,10 @@ public class Horizon implements LedgerClient {
                               .build())
                   .collect(Collectors.toList()))
           .build();
+    } catch (org.stellar.sdk.exception.AccountNotFoundException e) {
+      throw new AccountNotFoundException(account);
+    } catch (BadRequestException e) {
+      throw new AccountNotFoundException(account);
     } catch (Exception e) {
       throw new LedgerException("Error getting account: " + account, e);
     }
@@ -130,8 +135,16 @@ public class Horizon implements LedgerClient {
 
     ParseResult result = parseOperationAndSourceAccountAndMemo(txnEnv, txnHash);
     if (result == null) return null;
+
+    TransactionResult txResult;
+    try {
+      txResult = txnResponse.parseResultXdr();
+    } catch (RuntimeException rex) {
+      throw new LedgerException("Unable to parse transaction result for hash=" + txnHash, rex);
+    }
+    OperationResult[] opResults = LedgerClientHelper.parseOperationResults(txResult, txnHash);
     List<LedgerOperation> operations =
-        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, result);
+        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, result, opResults);
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getHash())

@@ -29,6 +29,7 @@ public class PropertyClientsConfig implements ClientsConfig, Validator {
   ClientsConfigType type;
   String value;
   List<RawClient> items = new ArrayList<>();
+
   Gson gson = GsonUtils.getInstance();
 
   @Override
@@ -129,6 +130,11 @@ public class PropertyClientsConfig implements ClientsConfig, Validator {
       case YAML:
         contentMap = parseYamlStringToMap(this.getValue());
         break;
+      case DB:
+        if (!isEmpty(this.getValue())) {
+          items = parseLegacyValueForMigration(this.getValue());
+        }
+        return;
       default:
         throw new InvalidConfigException(
             String.format("client file type %s is not supported", type));
@@ -139,6 +145,56 @@ public class PropertyClientsConfig implements ClientsConfig, Validator {
     items =
         gson.fromJson(
             gson.toJson(contentMap.get("items")), new TypeToken<List<RawClient>>() {}.getType());
+  }
+
+  private List<RawClient> parseLegacyValueForMigration(String value) throws InvalidConfigException {
+    debugF("Migrating clients.value to the database, parsing: {}", value);
+    Map<String, List<Object>> contentMap =
+        looksLikeExistingFile(value) ? parseFileToMap(value) : parseStringToMap(value);
+    if (contentMap == null || contentMap.get("items") == null) {
+      throw new InvalidConfigException(
+          List.of(String.format("clients.value parsed but had no 'items' key: %s", contentMap)));
+    }
+    contentMap.get("items").removeIf(Objects::isNull);
+    List<RawClient> parsed =
+        gson.fromJson(
+            gson.toJson(contentMap.get("items")), new TypeToken<List<RawClient>>() {}.getType());
+    debugF("Parsed {} client(s) from clients.value for migration", parsed.size());
+    return parsed;
+  }
+
+  private boolean looksLikeExistingFile(String value) {
+    try {
+      boolean exists = java.nio.file.Files.exists(Path.of(value));
+      debugF("clients.value looksLikeExistingFile check for [{}]: {}", value, exists);
+      return exists;
+    } catch (java.nio.file.InvalidPathException e) {
+      debugF("clients.value is not a valid file path: {}", e.getMessage());
+      return false;
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, List<Object>> parseStringToMap(String value) throws InvalidConfigException {
+    try {
+      Map<String, List<Object>> asJson = parseJsonStringToMap(value);
+      if (asJson != null) {
+        return asJson;
+      }
+    } catch (Exception e) {
+      debugF("clients.value is not valid JSON, trying YAML instead: {}", e.getMessage());
+    }
+    try {
+      Object loaded = new Yaml().load(value);
+      if (loaded instanceof Map) {
+        return (Map<String, List<Object>>) loaded;
+      }
+      debugF("clients.value parsed as YAML but was not a map: {}", loaded);
+    } catch (Exception e) {
+      debugF("clients.value is not valid YAML either: {}", e.getMessage());
+    }
+    throw new InvalidConfigException(
+        List.of("clients.value is not a valid file path, JSON, or YAML string"));
   }
 
   private Map<String, List<Object>> parseFileToMap(String filePath) throws InvalidConfigException {

@@ -24,6 +24,7 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.asset.AssetService;
+import org.stellar.anchor.ledger.LedgerClientHelper;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation;
@@ -37,6 +38,7 @@ import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.SorobanServer;
+import org.stellar.sdk.TOID;
 import org.stellar.sdk.exception.NetworkException;
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType;
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest;
@@ -73,6 +75,9 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Override
   void startInternal() {
     info("Starting Soroban RPC payment observer");
+    if (executorService == null || executorService.isShutdown()) {
+      executorService = Executors.newSingleThreadScheduledExecutor();
+    }
     task =
         executorService.scheduleAtFixedRate(
             this::fetchEvents, 0, 1, java.util.concurrent.TimeUnit.SECONDS);
@@ -173,8 +178,30 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   private void processTransferEvent(ShouldProcessResult result) {
     debug("Processing transfer event: {}", GsonUtils.getInstance().toJson(result.event));
     try {
-      LedgerTransaction txn = stellarRpc.getTransaction(result.event.getTransactionHash());
-      LedgerOperation op = txn.getOperations().get(result.event.getOperationIndex().intValue());
+      LedgerTransaction txn =
+          LedgerClientHelper.waitForTransactionAvailable(
+              stellarRpc, result.event.getTransactionHash());
+      String wantedOpId =
+          String.valueOf(
+              new TOID(
+                      txn.getSequenceNumber().intValue(),
+                      txn.getApplicationOrder(),
+                      result.event.getOperationIndex().intValue() + 1)
+                  .toInt64());
+      LedgerOperation op =
+          txn.getOperations().stream()
+              .filter(o -> wantedOpId.equals(getOperationId(o)))
+              .findFirst()
+              .orElse(null);
+      if (op == null) {
+        errorF(
+            "No creditable operation found for transfer event: txHash={}, operationIndex={}."
+                + " The operation may be a contract sub-invocation with no direct representation"
+                + " in the filtered operation list. Skipping.",
+            result.event.getTransactionHash(),
+            result.event.getOperationIndex());
+        return;
+      }
       processOperation(txn, op);
     } catch (Exception ex) {
       warnF(
@@ -182,6 +209,14 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           GsonUtils.getInstance().toJson(result.event),
           ex.getMessage());
     }
+  }
+
+  private String getOperationId(LedgerOperation op) {
+    if (op.getPaymentOperation() != null) return op.getPaymentOperation().getId();
+    if (op.getPathPaymentOperation() != null) return op.getPathPaymentOperation().getId();
+    if (op.getInvokeHostFunctionOperation() != null)
+      return op.getInvokeHostFunctionOperation().getId();
+    return null;
   }
 
   @Builder
@@ -328,7 +363,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
     if (isEmpty(cursor)) {
       long latestLedger = getLatestLedger();
-      return GetEventsRequest.builder().filters(filters).startLedger(latestLedger - 1).build();
+      long startLedger = Math.max(1, latestLedger - 5);
+      return GetEventsRequest.builder().filters(filters).startLedger(startLedger).build();
     } else {
       return GetEventsRequest.builder()
           .filters(filters)

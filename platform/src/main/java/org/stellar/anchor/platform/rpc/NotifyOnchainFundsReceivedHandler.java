@@ -5,16 +5,16 @@ import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHD
 import static org.stellar.anchor.api.rpc.method.RpcMethod.NOTIFY_ONCHAIN_FUNDS_RECEIVED;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.*;
 import static org.stellar.anchor.platform.utils.PaymentHelper.addStellarTransaction;
-import static org.stellar.anchor.util.Log.errorEx;
+import static org.stellar.anchor.platform.utils.PaymentHelper.getLedgerPayment;
 
 import com.google.common.collect.ImmutableSet;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.exception.NotFoundException;
-import org.stellar.anchor.api.exception.rpc.InternalErrorException;
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException;
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind;
@@ -26,8 +26,9 @@ import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.ledger.LedgerClient;
+import org.stellar.anchor.ledger.LedgerClientHelper;
 import org.stellar.anchor.ledger.LedgerTransaction;
-import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerPayment;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep31Transaction;
@@ -39,7 +40,6 @@ import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
-import org.stellar.sdk.xdr.OperationType;
 
 public class NotifyOnchainFundsReceivedHandler
     extends RpcTransactionStatusHandler<NotifyOnchainFundsReceivedRequest> {
@@ -163,28 +163,23 @@ public class NotifyOnchainFundsReceivedHandler
       JdbcSepTransaction txn, NotifyOnchainFundsReceivedRequest request) throws AnchorException {
     String stellarTxnId = request.getStellarTransactionId();
     try {
-      LedgerTransaction ledgerTxn = ledgerClient.getTransaction(stellarTxnId);
-      if (ledgerTxn == null) {
-        throw new NotFoundException(String.format("Transaction (hash=%s) not found", stellarTxnId));
-      }
-
+      LedgerTransaction ledgerTxn =
+          LedgerClientHelper.waitForTransactionAvailable(ledgerClient, stellarTxnId);
       addStellarTransaction(sacToAssetMapper, ledgerTxn, txn);
 
       if (Sep.SEP_31.equals(Sep.from(txn.getProtocol()))) {
         JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
-        LedgerOperation operation = ledgerTxn.getOperations().get(0);
-        if (operation.getType() == OperationType.INVOKE_HOST_FUNCTION) {
-          txn31.setFromAccount(operation.getInvokeHostFunctionOperation().getFrom());
-        } else {
-          txn31.setFromAccount(ledgerTxn.getOperations().get(0).getPaymentOperation().getFrom());
-        }
+        LedgerPayment payment =
+            ledgerTxn.getOperations().stream()
+                .map(op -> getLedgerPayment(op))
+                .filter(Objects::nonNull)
+                .filter(p -> txn31.getToAccount() != null && txn31.getToAccount().equals(p.getTo()))
+                .findFirst()
+                .orElse(null);
+        if (payment != null) txn31.setFromAccount(payment.getFrom());
       }
     } catch (LedgerException ex) {
-      errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
-      throw new InternalErrorException(
-          String.format(
-              "Failed to retrieve Stellar transaction by ID[%s]: %s",
-              stellarTxnId, ex.getMessage()));
+      throw new NotFoundException(String.format("Transaction (hash=%s) not found", stellarTxnId));
     }
 
     if (request.getAmountIn() != null) {

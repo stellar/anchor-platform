@@ -130,6 +130,9 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     } catch (TransactionException tex) {
       errorEx("Error restarting stream.", tex);
       setStatus(DATABASE_ERROR);
+    } catch (RuntimeException rex) {
+      errorEx("Error restarting observer.", rex);
+      setStatus(STREAM_ERROR);
     }
   }
 
@@ -187,6 +190,15 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
   }
 
   void checkStatus() {
+    try {
+      checkStatusInternal();
+    } catch (RuntimeException rex) {
+      errorEx("Unexpected error in observer supervisor; shutting down", rex);
+      setStatus(NEEDS_SHUTDOWN);
+    }
+  }
+
+  private void checkStatusInternal() {
     switch (status) {
       case NEEDS_SHUTDOWN:
         infoF("shut down the observer");

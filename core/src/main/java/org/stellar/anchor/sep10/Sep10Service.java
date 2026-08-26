@@ -91,7 +91,8 @@ public class Sep10Service implements ISep10Service {
     // Non-custodial case
     if (!isEmpty(request.getClientDomain())) {
       debugF("Fetching SIGNING_KEY from client_domain: {}", request.getClientDomain());
-      String clientDomainSigningKey = fetchSigningKeyFromClientDomain(request.getClientDomain());
+      String clientDomainSigningKey =
+          fetchSigningKeyFromClientDomainBounded(request.getClientDomain());
       debugF("SIGNING_KEY from client_domain fetched: {}", clientDomainSigningKey);
 
       // Check authorization
@@ -116,8 +117,7 @@ public class Sep10Service implements ISep10Service {
     }
   }
 
-  public ValidationResponse validateChallenge(ValidationRequest request)
-      throws SepValidationException {
+  public ValidationResponse validateChallenge(ValidationRequest request) throws SepException {
     info("Validating SEP-10 challenge.");
 
     ChallengeTransaction challenge = parseChallenge(request);
@@ -239,6 +239,17 @@ public class Sep10Service implements ISep10Service {
             request.getClientDomain());
         throw new SepNotAuthorizedException("unable to process");
       }
+    } else if (!custodialWallet
+        && request.getClientDomain() != null
+        && sep10Config.getClientAllowList() != null
+        && !sep10Config.getClientAllowList().isEmpty()) {
+      List<String> allowList = sep10Config.getAllowedClientDomains();
+      if (!allowList.contains(request.getClientDomain())) {
+        infoF(
+            "client_domain provided ({}) is not in the configured allow list",
+            request.getClientDomain());
+        throw new SepNotAuthorizedException("unable to process");
+      }
     }
   }
 
@@ -276,8 +287,8 @@ public class Sep10Service implements ISep10Service {
     sep10ChallengeValidatedCounter.increment();
   }
 
-  String fetchSigningKeyFromClientDomain(String clientDomain) throws SepException {
-    return ClientDomainHelper.fetchSigningKeyFromClientDomain(
+  String fetchSigningKeyFromClientDomainBounded(String clientDomain) throws SepException {
+    return ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(
         clientDomain,
         !stellarNetworkConfig
             .getStellarNetworkPassphrase()
@@ -435,10 +446,8 @@ public class Sep10Service implements ISep10Service {
       traceF("challenge account: {}", account);
       sep10ChallengeValidatedCounter.increment();
       return account;
-    } catch (LedgerException ex) {
-      infoF("Account {} does not exist in the Stellar Network");
-      // account not found
-      // The client account does not exist, using the client's master key to verify.
+    } catch (AccountNotFoundException ex) {
+      infoF("Account {} does not exist in the Stellar Network", challenge.getClientAccountId());
       Set<String> signers = new HashSet<>();
       signers.add(challenge.getClientAccountId());
 
@@ -480,6 +489,8 @@ public class Sep10Service implements ISep10Service {
               homeDomain,
               sep10Config.getWebAuthDomain(),
               signers);
+    } catch (LedgerException ex) {
+      throw new SepValidationException("Failed to fetch account: " + ex.getMessage(), ex);
     }
     sep10ChallengeValidatedCounter.increment();
     return null;
@@ -539,8 +550,8 @@ public class Sep10Service implements ISep10Service {
     return challenge;
   }
 
-  String generateWebAuthJwt(
-      ChallengeTransaction challenge, String clientDomain, String homeDomain) {
+  String generateWebAuthJwt(ChallengeTransaction challenge, String clientDomain, String homeDomain)
+      throws SepException {
     long issuedAt = challenge.getTransaction().getTimeBounds().getMinTime().longValue();
     Memo memo = challenge.getTransaction().getMemo();
     Sep10Jwt webAuthJwt =
@@ -554,6 +565,10 @@ public class Sep10Service implements ISep10Service {
             challenge.getTransaction().hashHex(),
             clientDomain,
             homeDomain);
+
+    webAuthJwt.setClientName(
+        clientFinder.getClientName(clientDomain, challenge.getClientAccountId()));
+
     debug("jwtToken:", webAuthJwt);
     return jwtService.encode(webAuthJwt);
   }

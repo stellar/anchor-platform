@@ -2,13 +2,20 @@ package org.stellar.anchor.platform.component.share;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.stellar.anchor.platform.configurator.FlywayChecksumCompatibilityCallback;
 import org.stellar.anchor.platform.data.*;
 import org.stellar.anchor.platform.observer.stellar.JdbcStellarPaymentStreamerCursorStore;
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountStore;
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 
 @Configuration
 public class DataBeans {
+  @Bean
+  FlywayChecksumCompatibilityCallback flywayChecksumCompatibilityCallback() {
+    return new FlywayChecksumCompatibilityCallback();
+  }
+
   @Bean
   JdbcSep6TransactionStore sep6TransactionStore(JdbcSep6TransactionRepo sep6TransactionRepo) {
     return new JdbcSep6TransactionStore(sep6TransactionRepo);
@@ -27,6 +34,11 @@ public class DataBeans {
   @Bean
   Sep38QuoteStore sep38QuoteStore(JdbcSep38QuoteRepo quoteRepo) {
     return new JdbcSep38QuoteStore(quoteRepo);
+  }
+
+  @Bean
+  Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore(JdbcSep31CustomerIdOwnerRepo repo) {
+    return new JdbcSep31CustomerIdOwnerStore(repo);
   }
 
   @Bean

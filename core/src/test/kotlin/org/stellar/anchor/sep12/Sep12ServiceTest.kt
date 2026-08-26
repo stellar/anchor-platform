@@ -34,8 +34,8 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.WebAuthJwt
-import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.event.EventService
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
 import org.stellar.anchor.util.StringHelper.json
 
 class Sep12ServiceTest {
@@ -102,7 +102,7 @@ class Sep12ServiceTest {
   @MockK(relaxed = true) private lateinit var platformApiClient: PlatformApiClient
   @MockK(relaxed = true) private lateinit var eventService: EventService
   @MockK(relaxed = true) private lateinit var eventSession: EventService.Session
-  @MockK(relaxed = true) private lateinit var clientFinder: ClientFinder
+  @MockK(relaxed = true) private lateinit var customerIdOwnerStore: Sep31CustomerIdOwnerStore
 
   @BeforeEach
   fun setup() {
@@ -113,8 +113,15 @@ class Sep12ServiceTest {
 
     every { assetService.getAssets() } returns assets
     every { eventService.createSession(any(), any()) } returns eventSession
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
 
-    sep12Service = Sep12Service(customerIntegration, platformApiClient, eventService, clientFinder)
+    sep12Service =
+      Sep12Service(
+        customerIntegration,
+        platformApiClient,
+        eventService,
+        customerIdOwnerStore,
+      )
   }
 
   @ValueSource(strings = [TEST_ACCOUNT, TEST_CONTRACT_ACCOUNT, TEST_MUXED_ACCOUNT])
@@ -428,13 +435,158 @@ class Sep12ServiceTest {
   }
 
   @Test
-  fun `Test put customer publishes event with null clientName and logs warning when client is not authorized`() {
+  fun `test put customer creating a new sep31-receiver claims ownership of the new id`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("new-receiver-id").status(Sep12Status.ACCEPTED.name).build()
+
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .type("sep31-receiver")
+        .memo(TEST_MEMO)
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-receiver-id", TEST_ACCOUNT, TEST_MEMO)
+    }
+  }
+
+  @Test
+  fun `test put customer creating a new sep31-receiver via a muxed account claims ownership using the muxed id`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder()
+        .id("new-muxed-receiver-id")
+        .status(Sep12Status.ACCEPTED.name)
+        .build()
+
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .type("sep31-receiver")
+        .memo(TEST_MEMO)
+        .memoType("id")
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken(TEST_MUXED_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-muxed-receiver-id", TEST_MUXED_ACCOUNT, TEST_MEMO)
+    }
+  }
+
+  @Test
+  fun `test put customer rejects creation when the returned id is already claimed by another client`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("colliding-id").status(Sep12Status.ACCEPTED.name).build()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns false
+
+    val request = Sep12PutCustomerRequest.builder().type("sep31-sender").firstName("John").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    val ex: SepException = assertThrows { sep12Service.putCustomer(jwtToken, request) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+  }
+
+  @Test
+  fun `test put customer does not claim ownership when updating an existing customer`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("existing-id").status(Sep12Status.ACCEPTED.name).build()
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("existing-id").build()
+
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .id("existing-id")
+        .type("sep31-receiver")
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+  }
+
+  @Test
+  fun `test put customer does not claim ownership for non-sep31 customer types`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("sep24-id").status(Sep12Status.ACCEPTED.name).build()
+
+    val request = Sep12PutCustomerRequest.builder().account(TEST_ACCOUNT).firstName("Jane").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+  }
+
+  @Test
+  fun `test put customer claims ownership by client name when one resolves`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("new-sender-id").status(Sep12Status.ACCEPTED.name).build()
+
+    val request = Sep12PutCustomerRequest.builder().type("sep31-sender").firstName("John").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT, "vibrant")
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 1) { customerIdOwnerStore.verifyOrClaim("new-sender-id", "vibrant", null) }
+  }
+
+  @Test
+  fun `test put customer keeps memo distinct per sub-user even when a client name resolves`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("new-receiver-id").status(Sep12Status.ACCEPTED.name).build()
+
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .type("sep31-receiver")
+        .memo(TEST_MEMO)
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO", "vibrant")
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-receiver-id", "vibrant", TEST_MEMO)
+    }
+  }
+
+  @Test
+  fun `test put customer keeps muxed id distinct per sub-user even when a client name resolves`() {
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder()
+        .id("new-muxed-receiver-id")
+        .status(Sep12Status.ACCEPTED.name)
+        .build()
+
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .type("sep31-receiver")
+        .memo(TEST_MEMO)
+        .memoType("id")
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken(TEST_MUXED_ACCOUNT, "vibrant")
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-muxed-receiver-id", "vibrant", TEST_MEMO)
+    }
+  }
+
+  @Test
+  fun `Test put customer publishes event with null clientName when the token was never authorized as a client`() {
     val kycUpdateEventSlot = slot<AnchorEvent>()
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("customer-id").build()
     every { eventSession.publish(capture(kycUpdateEventSlot)) } returns Unit
-    every { clientFinder.getClientName(any<WebAuthJwt>()) } throws
-      SepNotAuthorizedException("Client not found")
 
     val jwtToken = createJwtToken(TEST_ACCOUNT)
     assertDoesNotThrow {
@@ -929,7 +1081,10 @@ class Sep12ServiceTest {
     assertEquals(wantDeleteCustomerId, deleteCustomerIdSlot.captured)
   }
 
-  private fun createJwtToken(subject: String): WebAuthJwt {
-    return Sep10Jwt.of("$TEST_HOST_URL/auth", subject, issuedAt, expiresAt, "", CLIENT_DOMAIN, null)
+  private fun createJwtToken(subject: String, clientName: String? = null): WebAuthJwt {
+    val token =
+      Sep10Jwt.of("$TEST_HOST_URL/auth", subject, issuedAt, expiresAt, "", CLIENT_DOMAIN, null)
+    token.setClientName(clientName)
+    return token
   }
 }

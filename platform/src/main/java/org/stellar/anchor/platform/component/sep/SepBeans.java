@@ -32,6 +32,7 @@ import org.stellar.anchor.sep12.Sep12Service;
 import org.stellar.anchor.sep24.InteractiveUrlConstructor;
 import org.stellar.anchor.sep24.Sep24Service;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.sep31.Sep31Service;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
@@ -78,8 +79,11 @@ public class SepBeans {
 
   @Bean
   @ConfigurationProperties(prefix = "sep45")
-  Sep45Config sep45Config(StellarNetworkConfig stellarNetworkConfig, SecretConfig secretConfig) {
-    return new PropertySep45Config(stellarNetworkConfig, secretConfig);
+  Sep45Config sep45Config(
+      StellarNetworkConfig stellarNetworkConfig,
+      SecretConfig secretConfig,
+      ClientService clientService) {
+    return new PropertySep45Config(stellarNetworkConfig, secretConfig, clientService);
   }
 
   /**
@@ -120,15 +124,15 @@ public class SepBeans {
   }
 
   @Bean
-  @OnAnySepsEnabled(seps = {"sep6", "sep10", "sep24"})
+  @OnAnySepsEnabled(seps = {"sep6", "sep10", "sep24", "sep31", "sep45"})
   ClientFinder clientFinder(Sep10Config sep10Config, ClientService clientService) {
     return new ClientFinder(sep10Config, clientService);
   }
 
   @Bean
   @OnAnySepsEnabled(seps = {"sep6", "sep24"})
-  SepRequestValidator sepRequestValidator(AssetService assetService) {
-    return new SepRequestValidator(assetService);
+  SepRequestValidator sepRequestValidator(AssetService assetService, ClientService clientService) {
+    return new SepRequestValidator(assetService, clientService);
   }
 
   @Bean
@@ -149,7 +153,6 @@ public class SepBeans {
       Sep6Config sep6Config,
       AssetService assetService,
       SepRequestValidator requestValidator,
-      ClientFinder clientFinder,
       Sep6TransactionStore txnStore,
       EventService eventService,
       Clock clock,
@@ -160,7 +163,6 @@ public class SepBeans {
         sep6Config,
         assetService,
         requestValidator,
-        clientFinder,
         txnStore,
         exchangeAmountsCalculator(sep38QuoteStore, clock),
         eventService,
@@ -186,12 +188,13 @@ public class SepBeans {
       CustomerIntegration customerIntegration,
       PlatformApiClient platformApiClient,
       EventService eventService,
-      ClientFinder clientFinder) {
-    return new Sep12Service(customerIntegration, platformApiClient, eventService, clientFinder);
+      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore) {
+    return new Sep12Service(
+        customerIntegration, platformApiClient, eventService, sep31CustomerIdOwnerStore);
   }
 
   @Bean
-  @OnAllSepsEnabled(seps = {"sep6", "sep24", "sep31"})
+  @OnAnySepsEnabled(seps = {"sep6", "sep24", "sep31"})
   ExchangeAmountsCalculator exchangeAmountsCalculator(
       Sep38QuoteStore sep38QuoteStore, Clock clock) {
     return new ExchangeAmountsCalculator(sep38QuoteStore, clock);
@@ -203,11 +206,9 @@ public class SepBeans {
       LanguageConfig languageConfig,
       StellarNetworkConfig stellarNetworkConfig,
       Sep24Config sep24Config,
-      ClientService clientService,
       AssetService assetService,
       SepRequestValidator requestValidator,
       JwtService jwtService,
-      ClientFinder clientFinder,
       Sep24TransactionStore sep24TransactionStore,
       EventService eventService,
       Clock clock,
@@ -218,11 +219,9 @@ public class SepBeans {
         languageConfig,
         stellarNetworkConfig,
         sep24Config,
-        clientService,
         assetService,
         requestValidator,
         jwtService,
-        clientFinder,
         sep24TransactionStore,
         eventService,
         interactiveUrlConstructor,
@@ -245,27 +244,25 @@ public class SepBeans {
   @OnAllSepsEnabled(seps = {"sep31"})
   Sep31Service sep31Service(
       LanguageConfig languageConfig,
-      Sep10Config sep10Config,
       Sep31Config sep31Config,
       Sep31TransactionStore sep31TransactionStore,
       Sep38QuoteStore sep38QuoteStore,
-      ClientService clientService,
       AssetService assetService,
       RateIntegration rateIntegration,
       Clock clock,
-      EventService eventService) {
+      EventService eventService,
+      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore) {
     return new Sep31Service(
         languageConfig,
-        sep10Config,
         sep31Config,
         sep31TransactionStore,
         sep38QuoteStore,
-        clientService,
         assetService,
         rateIntegration,
         eventService,
         clock,
-        exchangeAmountsCalculator(sep38QuoteStore, clock));
+        exchangeAmountsCalculator(sep38QuoteStore, clock),
+        sep31CustomerIdOwnerStore);
   }
 
   @Bean
@@ -288,7 +285,8 @@ public class SepBeans {
       Sep45Config sep45Config,
       LedgerClient ledgerClient,
       NonceManager nonceManager,
-      JwtService jwtService) {
+      JwtService jwtService,
+      ClientFinder clientFinder) {
     assert (ledgerClient instanceof StellarRpc);
     return new Sep45Service(
         stellarNetworkConfig,
@@ -296,6 +294,7 @@ public class SepBeans {
         sep45Config,
         (StellarRpc) ledgerClient,
         nonceManager,
-        jwtService);
+        jwtService,
+        clientFinder);
   }
 }

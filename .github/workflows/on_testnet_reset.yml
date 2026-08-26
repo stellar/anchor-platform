@@ -1,0 +1,71 @@
+name: Testnet Reset
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  testnet_reset:
+    name: Run Testnet Reset
+    runs-on: ubuntu-latest
+    env:
+      SECRET_SEP10_SIGNING_SEED: ${{ secrets.SECRET_SEP10_SIGNING_SEED }}
+      TEST_CLIENT_WALLET_SECRET: ${{ secrets.TEST_CLIENT_WALLET_SECRET }}
+      TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET: ${{ secrets.TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET }}
+      TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET: ${{ secrets.TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET }}
+      OTHER_SEP10_SIGNING_SECRET: ${{ secrets.OTHER_SEP10_SIGNING_SECRET }}
+      TEST_WITHDRAW_FUND_CLIENT_SECRET_1: ${{ secrets.TEST_WITHDRAW_FUND_CLIENT_SECRET_1 }}
+      TEST_WITHDRAW_FUND_CLIENT_SECRET_2: ${{ secrets.TEST_WITHDRAW_FUND_CLIENT_SECRET_2 }}
+      TEST_DEPOSIT_FUND_CLIENT_SECRET_1: ${{ secrets.TEST_DEPOSIT_FUND_CLIENT_SECRET_1 }}
+      TEST_DEPOSIT_FUND_CLIENT_SECRET_2: ${{ secrets.TEST_DEPOSIT_FUND_CLIENT_SECRET_2 }}
+      USDC_ISSUER_SECRET: ${{ secrets.USDC_ISSUER_SECRET }}
+      SRT_ISSUER_SECRET: ${{ secrets.SRT_ISSUER_SECRET }}
+      TESTANCHOR_DISTRIBUTION_SECRET: ${{ secrets.TESTANCHOR_DISTRIBUTION_SECRET }}
+      TESTANCHOR_RECEIVE_SECRET: ${{ secrets.TESTANCHOR_RECEIVE_SECRET }}
+      SECRET__KEY: ${{ secrets.SECRET__KEY }}
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+
+      - name: Cache cargo bin
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-${{ hashFiles('anchor-platform/soroban/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bin-
+
+      - name: Cache rustup
+        uses: actions/cache@v3
+        with:
+          path: ~/.rustup
+          key: ${{ runner.os }}-rustup-${{ hashFiles('anchor-platform/soroban/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rustup-
+
+      - name: Setup Rust
+        run: |
+          rustup self update || true
+          if ! rustup update stable 2>&1; then
+            echo "rustup update failed, cleaning and reinstalling..."
+            rustup toolchain uninstall stable || true
+            rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
+            rustup toolchain install stable
+          fi
+          rustup default stable
+          rustup target add wasm32v1-none
+
+      - name: Cache Rust dependencies
+        uses: stellar/actions/rust-cache@main
+
+      - name: Install Stellar CLI
+        uses: stellar/stellar-cli@v27.0.0
+
+      - name: Install stellar-sdk Python package
+        run: python3 -m pip install stellar-sdk
+
+      - name: Run testnet reset
+        working-directory: scripts
+        run: bash testnet_reset.sh

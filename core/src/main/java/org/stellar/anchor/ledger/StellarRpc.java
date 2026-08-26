@@ -2,6 +2,9 @@ package org.stellar.anchor.ledger;
 
 import static org.stellar.sdk.xdr.LedgerEntry.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519;
+import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
+import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_HASH_X;
+import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_PRE_AUTH_TX;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -10,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import okhttp3.OkHttpClient;
+import org.stellar.anchor.api.exception.AccountNotFoundException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.RpcAuthConfig;
 import org.stellar.anchor.config.SecretConfig;
@@ -105,19 +109,16 @@ public class StellarRpc implements LedgerClient {
                   .map(
                       s ->
                           Signer.builder()
-                              .key(
-                                  StrKey.encodeEd25519PublicKey(
-                                      s.getKey().getEd25519().getUint256()))
+                              .key(encodeSignerKey(s.getKey()))
                               .type(s.getKey().getDiscriminant().name())
                               .weight(s.getWeight().getUint32().getNumber())
                               .build())
                   .toList());
-      // Add master key which is not included in the signersXdr
       signers.add(
           Signer.builder()
               .key(account)
               .type(SIGNER_KEY_TYPE_ED25519.name())
-              .weight((long) thresholdsXdr.getThresholds()[0])
+              .weight((long) unsignedByte(thresholdsXdr.getThresholds()[0]))
               .build());
 
       return Account.builder()
@@ -125,16 +126,42 @@ public class StellarRpc implements LedgerClient {
           .sequenceNumber(ae.getSeqNum().getSequenceNumber().getInt64())
           .thresholds(
               new Thresholds(
-                  // master threshold txdr.getThresholds()[0] has no use in the context of the
-                  // anchor
-                  (int) thresholdsXdr.getThresholds()[1],
-                  (int) thresholdsXdr.getThresholds()[2],
-                  (int) thresholdsXdr.getThresholds()[3]))
+                  unsignedByte(thresholdsXdr.getThresholds()[1]),
+                  unsignedByte(thresholdsXdr.getThresholds()[2]),
+                  unsignedByte(thresholdsXdr.getThresholds()[3])))
           .signers(signers)
           .build();
+    } catch (AccountNotFoundException e) {
+      throw e;
     } catch (Exception e) {
       throw new LedgerException("Error getting account: " + account, e);
     }
+  }
+
+  private static int unsignedByte(byte b) {
+    return b & 0xFF;
+  }
+
+  private static String encodeSignerKey(org.stellar.sdk.xdr.SignerKey key) {
+    return switch (key.getDiscriminant()) {
+      case SIGNER_KEY_TYPE_ED25519 -> StrKey.encodeEd25519PublicKey(key.getEd25519().getUint256());
+      case SIGNER_KEY_TYPE_PRE_AUTH_TX -> StrKey.encodePreAuthTx(key.getPreAuthTx().getUint256());
+      case SIGNER_KEY_TYPE_HASH_X -> StrKey.encodeSha256Hash(key.getHashX().getUint256());
+      case SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD -> {
+        org.stellar.sdk.xdr.SignerKey.SignerKeyEd25519SignedPayload sp =
+            key.getEd25519SignedPayload();
+        byte[] ed25519 = sp.getEd25519().getUint256();
+        byte[] payload = sp.getPayload();
+        byte[] raw = new byte[36 + payload.length];
+        System.arraycopy(ed25519, 0, raw, 0, 32);
+        raw[32] = (byte) (payload.length >>> 24);
+        raw[33] = (byte) (payload.length >>> 16);
+        raw[34] = (byte) (payload.length >>> 8);
+        raw[35] = (byte) payload.length;
+        System.arraycopy(payload, 0, raw, 36, payload.length);
+        yield StrKey.encodeSignedPayload(raw);
+      }
+    };
   }
 
   @Override
@@ -189,7 +216,7 @@ public class StellarRpc implements LedgerClient {
     }
   }
 
-  private AccountEntry getAccountRpc(String accountId) throws IOException {
+  private AccountEntry getAccountRpc(String accountId) throws IOException, LedgerException {
     KeyPair kp = KeyPair.fromAccountId(accountId);
 
     LedgerKey ledgerKey =
@@ -201,6 +228,9 @@ public class StellarRpc implements LedgerClient {
     List<LedgerKey> ledgerKeys = Collections.singletonList(ledgerKey);
     GetLedgerEntriesResponse response = sorobanServer.getLedgerEntries(ledgerKeys);
 
+    if (response.getEntries() == null || response.getEntries().isEmpty()) {
+      throw new AccountNotFoundException(accountId);
+    }
     LedgerEntryData ledgerEntryData =
         LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr());
     return ledgerEntryData.getAccount();
@@ -226,8 +256,19 @@ public class StellarRpc implements LedgerClient {
     LedgerClientHelper.ParseResult parseResult =
         LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, txnResponse.getTxHash());
     if (parseResult == null) return null;
+
+    TransactionResult txResult;
+    try {
+      txResult = txnResponse.parseResultXdr();
+    } catch (RuntimeException rex) {
+      throw new LedgerException(
+          "Unable to parse transaction result for hash=" + txnResponse.getTxHash(), rex);
+    }
+    OperationResult[] opResults =
+        LedgerClientHelper.parseOperationResults(txResult, txnResponse.getTxHash());
     List<LedgerTransaction.LedgerOperation> operations =
-        LedgerClientHelper.getLedgerOperations(applicationOrder, sequenceNumber, parseResult);
+        LedgerClientHelper.getLedgerOperations(
+            applicationOrder, sequenceNumber, parseResult, opResults);
 
     return LedgerTransaction.builder()
         .hash(txnResponse.getTxHash())

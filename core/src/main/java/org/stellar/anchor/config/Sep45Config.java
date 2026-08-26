@@ -15,4 +15,8 @@ public interface Sep45Config {
   Integer getAuthTimeout();
 
   Integer getJwtTimeout();
+
+  List<String> getClientAllowList();
+
+  List<String> getAllowedClientDomains();
 }

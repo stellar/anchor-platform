@@ -47,9 +47,6 @@ import org.stellar.anchor.api.sep.sep24.TransactionResponse;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.WebAuthJwt;
-import org.stellar.anchor.client.ClientFinder;
-import org.stellar.anchor.client.ClientService;
-import org.stellar.anchor.client.CustodialClient;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep24Config;
 import org.stellar.anchor.config.StellarNetworkConfig;
@@ -68,11 +65,9 @@ public class Sep24Service {
   final LanguageConfig languageConfig;
   final StellarNetworkConfig stellarNetworkConfig;
   final Sep24Config sep24Config;
-  final ClientService clientService;
   final AssetService assetService;
   final SepRequestValidator requestValidator;
   final JwtService jwtService;
-  final ClientFinder clientFinder;
   final Sep24TransactionStore txnStore;
   final EventService.Session eventSession;
   final InteractiveUrlConstructor interactiveUrlConstructor;
@@ -96,11 +91,9 @@ public class Sep24Service {
       LanguageConfig languageConfig,
       StellarNetworkConfig stellarNetworkConfig,
       Sep24Config sep24Config,
-      ClientService clientsService,
       AssetService assetService,
       SepRequestValidator requestValidator,
       JwtService jwtService,
-      ClientFinder clientFinder,
       Sep24TransactionStore txnStore,
       EventService eventService,
       InteractiveUrlConstructor interactiveUrlConstructor,
@@ -111,11 +104,9 @@ public class Sep24Service {
     this.languageConfig = languageConfig;
     this.stellarNetworkConfig = stellarNetworkConfig;
     this.sep24Config = sep24Config;
-    this.clientService = clientsService;
     this.assetService = assetService;
     this.requestValidator = requestValidator;
     this.jwtService = jwtService;
-    this.clientFinder = clientFinder;
     this.txnStore = txnStore;
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.interactiveUrlConstructor = interactiveUrlConstructor;
@@ -174,29 +165,14 @@ public class Sep24Service {
       throw new SepValidationException(String.format("invalid operation for asset %s", assetCode));
     }
 
-    // Validate min amount
+    // Validate min/max amount
     DepositWithdrawOperation sep24WithdrawInfo = asset.getSep24().getWithdraw();
     Long minAmount = sep24WithdrawInfo.getMinAmount();
-    if (strAmount != null && minAmount != null) {
-      if (decimal(strAmount).compareTo(decimal(minAmount)) < 0) {
-        infoF("invalid amount {}", strAmount);
-        throw new SepValidationException(
-            String.format("amount is less than asset's minimum limit: %s", strAmount));
-      }
-    }
-
-    // Validate max amount
     Long maxAmount = sep24WithdrawInfo.getMaxAmount();
-    if (strAmount != null && maxAmount != null) {
-      if (decimal(strAmount).compareTo(decimal(maxAmount)) > 0) {
-        infoF("invalid amount {}", strAmount);
-        throw new SepValidationException(
-            String.format("amount exceeds asset's maximum limit: %s", strAmount));
-      }
-    }
+    validateAmountLimits(strAmount, minAmount, maxAmount);
 
     // Validate sourceAccount
-    requestValidator.validateAccount(sourceAccount);
+    requestValidator.validateDestinationAccount(token, sourceAccount);
 
     if (token.getClientDomain() != null)
       withdrawRequest.put("client_domain", token.getClientDomain());
@@ -222,7 +198,7 @@ public class Sep24Service {
             .fromAccount(sourceAccount)
             .toAccount(asset.getDistributionAccount())
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .requestClientIpAddress(withdrawRequest.get("clientIpAddress"));
 
     if (memo != null) {
@@ -242,7 +218,9 @@ public class Sep24Service {
     String quoteId = withdrawRequest.get("quote_id");
     AssetInfo buyAsset = assetService.getAssetById(withdrawRequest.get("destination_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
+      Sep38Quote quote =
+          validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
+      validateAmountLimits(quote.getSellAmount(), minAmount, maxAmount);
     } else {
       builder.amountExpected(strAmount);
       if (buyAsset != null) {
@@ -331,27 +309,6 @@ public class Sep24Service {
       destinationAccount = token.getAccount();
     }
 
-    if (!destinationAccount.equals(token.getAccount())) {
-      CustodialClient clientConfig = clientService.getClientConfigBySigningKey(token.getAccount());
-      if (clientConfig != null && clientConfig.getDestinationAccounts() != null) {
-        if (!clientConfig.getDestinationAccounts().contains(destinationAccount)) {
-          infoF(
-              "The request account:{} for wallet:{} is not in the allowed destination accounts list",
-              destinationAccount,
-              clientConfig.getName());
-          throw new SepValidationException("Provided 'account' is not allowed");
-        }
-      } else {
-        if (clientConfig == null || !clientConfig.isAllowAnyDestination()) {
-          infoF(
-              "The request account:{} does not match the one in the token:{}",
-              destinationAccount,
-              token.getAccount());
-          throw new SepValidationException(ERR_TOKEN_ACCOUNT_MISMATCH);
-        }
-      }
-    }
-
     if (assetService.getAsset(assetCode, assetIssuer) == null) {
       infoF("The asset_code of the deposit request must be set.");
       throw new SepValidationException("The asset_code of the deposit request must be set");
@@ -370,29 +327,13 @@ public class Sep24Service {
       throw new SepValidationException(String.format("invalid operation for asset %s", assetCode));
     }
 
-    // Validate min amount
+    // Validate min/max amount
     DepositWithdrawOperation sep24DepositInfo = asset.getSep24().getDeposit();
     Long minAmount = sep24DepositInfo.getMinAmount();
-    if (strAmount != null && minAmount != null) {
-      if (decimal(strAmount).compareTo(decimal(minAmount)) < 0) {
-        infoF("invalid amount {}", strAmount);
-        throw new SepValidationException(
-            String.format("amount is less than asset's minimum limit: %s", strAmount));
-      }
-    }
-
-    // Validate max amount
     Long maxAmount = sep24DepositInfo.getMaxAmount();
-    if (strAmount != null && maxAmount != null) {
-      if (decimal(strAmount).compareTo(decimal(maxAmount)) > 0) {
-        infoF("invalid amount {}", strAmount);
-        throw new SepValidationException(
-            String.format("amount exceeds asset's maximum limit: %s", strAmount));
-      }
-    }
+    validateAmountLimits(strAmount, minAmount, maxAmount);
 
-    // validate destination account
-    requestValidator.validateAccount(destinationAccount);
+    requestValidator.validateDestinationAccount(token, destinationAccount);
 
     if (token.getClientDomain() != null)
       depositRequest.put("client_domain", token.getClientDomain());
@@ -414,7 +355,7 @@ public class Sep24Service {
             .webAuthAccountMemo(token.getAccountMemo())
             .toAccount(destinationAccount)
             .clientDomain(token.getClientDomain())
-            .clientName(clientFinder.getClientName(token))
+            .clientName(token.getClientName())
             .claimableBalanceSupported(claimableSupported)
             .requestClientIpAddress(depositRequest.get("clientIpAddress"));
 
@@ -439,7 +380,9 @@ public class Sep24Service {
     String quoteId = depositRequest.get("quote_id");
     AssetInfo sellAsset = assetService.getAssetById(depositRequest.get("source_asset"));
     if (quoteId != null) {
-      validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
+      Sep38Quote quote =
+          validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
+      validateAmountLimits(quote.getBuyAmount(), minAmount, maxAmount);
     } else {
       builder.amountExpected(strAmount);
       if (sellAsset != null) {
@@ -609,7 +552,35 @@ public class Sep24Service {
         .build();
   }
 
-  public void validateAndPopulateQuote(
+  /**
+   * Validates that the given amount is within the asset's configured min/max limits, using the same
+   * error messages for both the explicit-amount and quote_id (quote-derived amount) paths.
+   *
+   * @param amount the amount to validate; if null, validation is skipped
+   * @param minAmount the asset's minimum amount limit, or null if unset
+   * @param maxAmount the asset's maximum amount limit, or null if unset
+   * @throws SepValidationException if the amount is outside the min/max limits
+   */
+  private void validateAmountLimits(String amount, Long minAmount, Long maxAmount)
+      throws SepValidationException {
+    if (amount != null && minAmount != null) {
+      if (decimal(amount).compareTo(decimal(minAmount)) < 0) {
+        infoF("invalid amount {}", amount);
+        throw new SepValidationException(
+            String.format("amount is less than asset's minimum limit: %s", amount));
+      }
+    }
+
+    if (amount != null && maxAmount != null) {
+      if (decimal(amount).compareTo(decimal(maxAmount)) > 0) {
+        infoF("invalid amount {}", amount);
+        throw new SepValidationException(
+            String.format("amount exceeds asset's maximum limit: %s", amount));
+      }
+    }
+  }
+
+  private Sep38Quote validateAndPopulateQuote(
       String quoteId,
       AssetInfo sellAsset,
       AssetInfo buyAsset,
@@ -629,6 +600,7 @@ public class Sep24Service {
     builder.amountOut(quote.getBuyAmount());
     builder.amountOutAsset(quote.getBuyAsset());
     builder.feeDetails(quote.getFee());
+    return quote;
   }
 
   /**

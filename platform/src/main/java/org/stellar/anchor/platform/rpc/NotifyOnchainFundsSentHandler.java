@@ -24,6 +24,7 @@ import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.ledger.LedgerClient;
+import org.stellar.anchor.ledger.LedgerClientHelper;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.metrics.MetricsService;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
@@ -111,11 +112,8 @@ public class NotifyOnchainFundsSentHandler
 
     String stellarTxnId = request.getStellarTransactionId();
     try {
-      LedgerTransaction ledgerTxn = ledgerClient.getTransaction(stellarTxnId);
-      if (ledgerTxn == null) {
-        throw new InternalErrorException(
-            String.format("Failed to retrieve Stellar transaction by ID[%s]", stellarTxnId));
-      }
+      LedgerTransaction ledgerTxn =
+          LedgerClientHelper.waitForTransactionAvailable(ledgerClient, stellarTxnId);
       addStellarTransaction(sacToAssetMapper, ledgerTxn, txn);
     } catch (LedgerException ex) {
       errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
