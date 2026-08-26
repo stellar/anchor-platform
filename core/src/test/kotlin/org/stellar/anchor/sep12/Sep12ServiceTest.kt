@@ -599,6 +599,33 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test put customer forwards the owner memo to the callback for a new muxed customer`() {
+    val putRequestSlot = slot<PutCustomerRequest>()
+    every { customerIntegration.putCustomer(capture(putRequestSlot)) } returns
+      PutCustomerResponse.builder()
+        .id("new-muxed-receiver-id")
+        .status(Sep12Status.ACCEPTED.name)
+        .build()
+
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .type("sep31-receiver")
+        .memo(TEST_MEMO)
+        .memoType("id")
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken(TEST_MUXED_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    assertEquals(TEST_ACCOUNT, putRequestSlot.captured.account)
+    assertEquals(TEST_MEMO, putRequestSlot.captured.memo)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-muxed-receiver-id", TEST_MUXED_ACCOUNT, TEST_MEMO)
+    }
+  }
+
+  @Test
   fun `Test put customer publishes event with null clientName when the token was never authorized as a client`() {
     val kycUpdateEventSlot = slot<AnchorEvent>()
     every { customerIntegration.putCustomer(any()) } returns
@@ -867,6 +894,22 @@ class Sep12ServiceTest {
     val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
     assertEquals("not authorized for customer id", ex.message)
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test id path propagates the base account, not the muxed account, once the store has authorized it`() {
+    every { customerIdOwnerStore.isClaimed("claimed-muxed-id") } returns true
+    every { customerIdOwnerStore.verify("claimed-muxed-id", TEST_MUXED_ACCOUNT, TEST_MEMO) } returns
+      true
+
+    val jwtToken = createJwtToken(TEST_MUXED_ACCOUNT)
+    val request = Sep12GetCustomerRequest.builder().id("claimed-muxed-id").build()
+
+    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+
+    assertEquals(TEST_ACCOUNT, request.account)
+    assertEquals(TEST_MEMO, request.memo)
     verify(exactly = 0) { customerIntegration.getCustomer(any()) }
   }
 

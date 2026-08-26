@@ -246,6 +246,7 @@ class Sep31ServiceTest {
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
     every { eventService.createSession(any(), TRANSACTION) } returns eventSession
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
 
     jwtService = spyk(JwtService(secretConfig))
 
@@ -261,6 +262,7 @@ class Sep31ServiceTest {
         Clock.systemUTC(),
         exchangeAmountsCalculator,
         customerIdOwnerStore,
+        customerIntegration,
       )
 
     request = gson.fromJson(requestJson, Sep31PostTransactionRequest::class.java)
@@ -735,6 +737,7 @@ class Sep31ServiceTest {
         Clock.systemUTC(),
         exchangeAmountsCalculator,
         customerIdOwnerStore,
+        customerIntegration,
       )
     every { rateIntegration.getRate(any()) } returns
       GetRateResponse(GetRateResponse.Rate.builder().fee(FeeDetails("2", "stellar:USDC")).build())
@@ -892,6 +895,64 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test postTransaction verifies a legacy customer id against the callback before claiming it`() {
+    useQuotesNotSupportedAssetService()
+    every { customerIdOwnerStore.isClaimed("legacy-receiver-id") } returns false
+    val legacyCustomer = GetCustomerResponse()
+    legacyCustomer.id = "legacy-receiver-id"
+    every { customerIntegration.getCustomer(any()) } returns legacyCustomer
+
+    val postTxRequest = ownershipTestRequest(receiverId = "legacy-receiver-id")
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "legacy-receiver-id",
+        TestHelper.TEST_ACCOUNT,
+        TestHelper.TEST_MEMO,
+      )
+    }
+  }
+
+  @Test
+  fun `test postTransaction fails closed for an unclaimed customer id the caller cannot verify via the callback`() {
+    useQuotesNotSupportedAssetService()
+    every { customerIdOwnerStore.isClaimed("victim-legacy-id") } returns false
+    every { customerIntegration.getCustomer(any()) } returns null
+
+    val postTxRequest = ownershipTestRequest(receiverId = "victim-legacy-id")
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction fails closed when the callback returns a different customer id`() {
+    useQuotesNotSupportedAssetService()
+    every { customerIdOwnerStore.isClaimed("victim-legacy-id") } returns false
+    val someoneElsesCustomer = GetCustomerResponse()
+    someoneElsesCustomer.id = "unrelated-customer-id"
+    every { customerIntegration.getCustomer(any()) } returns someoneElsesCustomer
+
+    val postTxRequest = ownershipTestRequest(receiverId = "victim-legacy-id")
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+  }
+
+  @Test
   fun `test preValidateQuote rejects already-bound quote`() {
     val tomorrow = Instant.now().plus(1, ChronoUnit.DAYS)
     val boundQuote =
@@ -1036,6 +1097,7 @@ class Sep31ServiceTest {
         Clock.systemUTC(),
         exchangeAmountsCalculator,
         customerIdOwnerStore,
+        customerIntegration,
       )
 
     val senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"

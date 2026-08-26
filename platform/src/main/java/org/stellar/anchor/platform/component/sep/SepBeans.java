@@ -257,7 +257,8 @@ public class SepBeans {
       RateIntegration rateIntegration,
       Clock clock,
       EventService eventService,
-      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore) {
+      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore,
+      CustomerIntegration customerIntegration) {
     return new Sep31Service(
         languageConfig,
         sep31Config,
@@ -268,7 +269,8 @@ public class SepBeans {
         eventService,
         clock,
         exchangeAmountsCalculator(sep38QuoteStore, clock),
-        sep31CustomerIdOwnerStore);
+        sep31CustomerIdOwnerStore,
+        customerIntegration);
   }
 
   @Bean

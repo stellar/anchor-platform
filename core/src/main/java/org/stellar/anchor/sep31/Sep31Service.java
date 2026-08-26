@@ -70,6 +70,7 @@ public class Sep31Service {
   private final Counter sep31TransactionPatchedCounter = counter(SEP31_TRANSACTION_PATCHED);
   final ExchangeAmountsCalculator exchangeAmountsCalculator;
   private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
+  private final CustomerIntegration customerIntegration;
 
   public Sep31Service(
       LanguageConfig languageConfig,
@@ -81,7 +82,8 @@ public class Sep31Service {
       EventService eventService,
       Clock clock,
       ExchangeAmountsCalculator exchangeAmountsCalculator,
-      Sep31CustomerIdOwnerStore customerIdOwnerStore) {
+      Sep31CustomerIdOwnerStore customerIdOwnerStore,
+      CustomerIntegration customerIntegration) {
     debug("sep31Config:", sep31Config);
     this.languageConfig = languageConfig;
     this.sep31Config = sep31Config;
@@ -92,6 +94,7 @@ public class Sep31Service {
     this.clock = clock;
     this.exchangeAmountsCalculator = exchangeAmountsCalculator;
     this.customerIdOwnerStore = customerIdOwnerStore;
+    this.customerIntegration = customerIntegration;
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.infoResponse = sep31InfoResponseFromAssetInfoList(assetService.getAssets());
     Log.info("Sep31Service initialized.");
@@ -168,8 +171,31 @@ public class Sep31Service {
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
     for (String customerId : Arrays.asList(request.getSenderId(), request.getReceiverId())) {
-      if (customerId != null
-          && !customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
+      if (customerId == null) {
+        continue;
+      }
+
+      if (!customerIdOwnerStore.isClaimed(customerId)) {
+        GetCustomerResponse owned;
+        try {
+          owned =
+              customerIntegration.getCustomer(
+                  GetCustomerRequest.builder()
+                      .account(webAuthJwt.getOwnerAccount())
+                      .memo(webAuthJwt.getOwnerMemo())
+                      .memoType(webAuthJwt.getOwnerMemo() != null ? "id" : null)
+                      .build());
+        } catch (Exception e) {
+          Log.warnEx(e);
+          owned = null;
+        }
+        if (owned == null || !customerId.equals(owned.getId())) {
+          throw new SepNotAuthorizedException(
+              "sender_id/receiver_id does not belong to the authenticated client");
+        }
+      }
+
+      if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
         throw new SepNotAuthorizedException(
             "sender_id/receiver_id does not belong to the authenticated client");
       }

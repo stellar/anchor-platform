@@ -85,6 +85,11 @@ public class Sep12Service {
         && request.getId() == null
         && request.getTransactionId() == null) {
       request.setAccount(token.getAccount());
+
+      if (request.getMemo() == null && token.getOwnerMemo() != null) {
+        request.setMemo(token.getOwnerMemo());
+        request.setMemoType(MemoHelper.memoTypeAsString(MemoType.MEMO_ID));
+      }
     }
 
     if (StringUtils.isNotEmpty(request.getBirthDate())) {
@@ -231,7 +236,11 @@ public class Sep12Service {
         if (!customerIdOwnerStore.verify(requestBase.getId(), ownerAccount, token.getOwnerMemo())) {
           throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
         }
-        requestBase.setAccount(tokenAccount);
+
+        requestBase.setAccount(token.getAccount());
+        if (token.getOwnerMemo() != null) {
+          requestBase.setMemo(token.getOwnerMemo());
+        }
       } else {
         try {
           String tokenMemo =

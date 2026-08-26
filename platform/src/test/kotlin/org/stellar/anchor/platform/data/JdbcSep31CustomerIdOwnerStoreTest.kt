@@ -71,4 +71,60 @@ class JdbcSep31CustomerIdOwnerStoreTest {
       store.verifyOrClaim("cust-1", "GALICE", "111")
     }
   }
+
+  @Test
+  fun `isClaimed is false for a missing id`() {
+    every { repo.findById("cust-missing") } returns Optional.empty()
+
+    assertFalse(store.isClaimed("cust-missing"))
+  }
+
+  @Test
+  fun `isClaimed is true when a row exists`() {
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
+
+    assertTrue(store.isClaimed("cust-1"))
+  }
+
+  @Test
+  fun `verify is false for a missing id`() {
+    every { repo.findById("cust-missing") } returns Optional.empty()
+
+    assertFalse(store.verify("cust-missing", "GALICE", "111"))
+  }
+
+  @Test
+  fun `verify is true when account and memo both match`() {
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
+
+    assertTrue(store.verify("cust-1", "GALICE", "111"))
+  }
+
+  @Test
+  fun `verify is false when the account does not match`() {
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
+
+    assertFalse(store.verify("cust-1", "GMALLORY", "111"))
+  }
+
+  @Test
+  fun `verify is false when the memo does not match`() {
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
+
+    assertFalse(store.verify("cust-1", "GALICE", "222"))
+  }
+
+  @Test
+  fun `verify is false when a null memo is compared against a non-null stored memo`() {
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
+
+    assertFalse(store.verify("cust-1", "GALICE", null))
+  }
+
+  @Test
+  fun `verify is true when both the stored and requested memo are null`() {
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", null))
+
+    assertTrue(store.verify("cust-1", "GALICE", null))
+  }
 }
