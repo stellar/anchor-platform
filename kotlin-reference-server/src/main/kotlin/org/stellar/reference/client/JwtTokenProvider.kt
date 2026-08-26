@@ -7,6 +7,8 @@ import java.util.Date
 import org.stellar.anchor.util.GsonUtils
 
 object JwtTokenProvider {
+  private const val AUD_PLATFORM_API = "platform_api"
+
   fun createJwt(secret: String, expirationMilliseconds: Long): String {
     val issuedAt = Date()
     val expiresAt = Date(issuedAt.time + expirationMilliseconds)
@@ -15,6 +17,9 @@ object JwtTokenProvider {
       .json(GsonJwtSerializer())
       .issuedAt(issuedAt)
       .expiration(expiresAt)
+      .audience()
+      .add(AUD_PLATFORM_API)
+      .and()
       .signWith(key, Jwts.SIG.HS256)
       .compact()
   }
