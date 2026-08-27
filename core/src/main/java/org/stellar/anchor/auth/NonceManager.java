@@ -38,10 +38,6 @@ public class NonceManager {
    * @return the nonce
    */
   public Nonce createWithId(String id, int expiresIn) {
-    if (nonceStore.findById(id) != null) {
-      throw new RuntimeException("Duplicate nonce id");
-    }
-
     Nonce nonce =
         new NonceBuilder(nonceStore)
             .id(id)
@@ -49,7 +45,14 @@ public class NonceManager {
             .expiresAt(clock.instant().plus(Duration.ofSeconds(expiresIn)))
             .build();
 
-    return nonceStore.save(nonce);
+    // A single atomic insert-if-absent, rather than findById() followed by save(): the latter is
+    // a check-then-act race between concurrent callers, since JdbcNonce's assigned (non-generated)
+    // id means Spring Data's save() can merge/overwrite an existing row instead of failing.
+    if (!nonceStore.insertIfAbsent(nonce)) {
+      throw new RuntimeException("Duplicate nonce id");
+    }
+
+    return nonce;
   }
 
   /**

@@ -22,6 +22,11 @@ public class JdbcNonceStore implements NonceStore {
     return jdbcNonceRepo.save((JdbcNonce) nonce);
   }
 
+  public boolean insertIfAbsent(Nonce nonce) {
+    JdbcNonce jdbcNonce = (JdbcNonce) nonce;
+    return jdbcNonceRepo.insertIfAbsent(jdbcNonce.getId(), jdbcNonce.getExpiresAt()) == 1;
+  }
+
   public void deleteExpiredNonces() {
     int expired = jdbcNonceRepo.countExpired();
     jdbcNonceRepo.deleteAllExpired();
