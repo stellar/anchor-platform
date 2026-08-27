@@ -20,6 +20,7 @@ import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.auth.JwtService
+import org.stellar.anchor.auth.NonceManager
 import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
@@ -73,6 +74,7 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
   @MockK(relaxed = true) lateinit var sep10Config: Sep10Config
   @MockK(relaxed = true) lateinit var ledgerClient: LedgerClient
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
+  @MockK(relaxed = true) lateinit var nonceManager: NonceManager
 
   private lateinit var jwtService: JwtService
   private lateinit var sep10Service: Sep10Service
@@ -86,6 +88,7 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
     every { sep10Config.jwtTimeout } returns 900
     every { sep10Config.homeDomains } returns listOf(TEST_HOME_DOMAIN, "*.wildcard.stellar.org")
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
+    every { nonceManager.verifyAndUse(any()) } returns true
 
     secretConfig.setupMock()
     this.jwtService = spyk(JwtService(secretConfig))
@@ -96,7 +99,8 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
         sep10Config,
         ledgerClient,
         jwtService,
-        clientFinder
+        clientFinder,
+        nonceManager
       )
     this.httpClient = `create httpClient`()
   }
@@ -189,7 +193,8 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
         sep10Config,
         ledgerClient,
         jwtService,
-        clientFinder
+        clientFinder,
+        nonceManager
       )
 
     // 3 ------ Run tests
@@ -278,7 +283,8 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
         sep10Config,
         ledgerClient,
         jwtService,
-        clientFinder
+        clientFinder,
+        nonceManager
       )
 
     // 3 ------ Run tests
@@ -363,7 +369,8 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
         sep10Config,
         ledgerClient,
         jwtService,
-        clientFinder
+        clientFinder,
+        nonceManager
       )
 
     // 3 ------ Setup multisig

@@ -126,13 +126,6 @@ public class Sep10Service implements ISep10Service {
 
     ChallengeTransaction challenge = parseChallenge(request);
 
-    // Reject the challenge if its nonce has already been consumed (replay of a previously
-    // validated challenge) or was never issued by this server / has expired. This must run
-    // before a JWT can be generated below.
-    if (!nonceManager.verifyAndUse(challenge.getTransaction().hashHex())) {
-      throw new SepValidationException("Challenge has already been used or has expired.");
-    }
-
     // pre validation to be defined by the anchor
     preValidateRequestValidation(request, challenge);
 
@@ -573,6 +566,15 @@ public class Sep10Service implements ISep10Service {
 
   String generateWebAuthJwt(ChallengeTransaction challenge, String clientDomain, String homeDomain)
       throws SepException {
+    // Consume the challenge's nonce only now, immediately before minting a JWT for it -- not
+    // earlier in validateChallenge(). All other validation (home domain, account, signers,
+    // threshold) must succeed first, so that a submission that fails validation for an unrelated
+    // reason doesn't burn the nonce and cause a subsequent, correctly signed retry of the same
+    // challenge to be wrongly rejected as a replay.
+    if (!nonceManager.verifyAndUse(challenge.getTransaction().hashHex())) {
+      throw new SepValidationException("Challenge has already been used or has expired.");
+    }
+
     long issuedAt = challenge.getTransaction().getTimeBounds().getMinTime().longValue();
     Memo memo = challenge.getTransaction().getMemo();
     Sep10Jwt webAuthJwt =
