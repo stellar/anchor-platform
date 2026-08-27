@@ -105,6 +105,37 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
     )
   }
 
+  /** Signs a fresh SEP-10 challenge with the client wallet key, without submitting it. */
+  private fun signedChallengeXdr(homeDomain: String): String {
+    val challenge = sep10Client.challenge(homeDomain)
+    val challengeTransaction =
+      Sep10Challenge.readChallengeTransaction(
+        challenge.transaction,
+        toml.getString("SIGNING_KEY"),
+        Network(challenge.networkPassphrase),
+        homeDomain,
+        webAuthDomain,
+      )
+    challengeTransaction.transaction.sign(KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET))
+    return challengeTransaction.transaction.toEnvelopeXdrBase64()
+  }
+
+  @Test
+  fun testAuthReplayRejected() {
+    val signedXdr = signedChallengeXdr(webAuthDomain)
+
+    // The first validation of a signed challenge must succeed and consume its nonce.
+    val token = sep10Client.validate(ValidationRequest.of(signedXdr))
+    assertEquals(true, !token?.token.isNullOrEmpty())
+
+    // Replaying the exact same signed challenge a second time must be rejected, even though the
+    // signature and time bounds are still otherwise valid.
+    assertFailsWith(
+      exceptionClass = SepNotAuthorizedException::class,
+      block = { sep10Client.validate(ValidationRequest.of(signedXdr)) },
+    )
+  }
+
   @Test
   fun testCustodial() = runBlocking {
     val rnd = wallet.stellar().account().createKeyPair()

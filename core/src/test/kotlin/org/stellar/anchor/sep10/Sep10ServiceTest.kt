@@ -226,6 +226,32 @@ internal class Sep10ServiceTest {
   }
 
   @Test
+  fun `test validate challenge rejects a replayed challenge`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
+
+    val mockSigners =
+      listOf(TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner())
+    val accountResponse =
+      mockk<LedgerClient.Account> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { signers } returns mockSigners
+        every { thresholds.medium } returns 1
+      }
+    every { ledgerClient.getAccount(any()) } returns accountResponse
+
+    // First validation of this challenge succeeds and consumes its nonce.
+    every { nonceManager.verifyAndUse(any()) } returns true
+    sep10Service.validateChallenge(vr)
+
+    // Replaying the exact same challenge transaction must be rejected, even though its signature
+    // and time bounds are still otherwise valid.
+    every { nonceManager.verifyAndUse(any()) } returns false
+    assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
+  }
+
+  @Test
   fun `test validate challenge stamps client_name resolved by ClientFinder onto the jwt`() {
     val vr = ValidationRequest()
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)

@@ -63,6 +63,27 @@ class NonceManagerTest {
   }
 
   @Test
+  fun testCreateWithId() {
+    val nonce = nonceManager.createWithId("challenge-hash-1", 300)
+
+    assertEquals("challenge-hash-1", nonce.id)
+    assertFalse(nonce.used)
+    assert(nonce.expiresAt == Instant.EPOCH.plusSeconds(300))
+
+    verify(exactly = 1) { nonceStore.save(nonce) }
+  }
+
+  @Test
+  fun testCreateWithIdRejectsDuplicateId() {
+    val nonce = PojoNonce()
+    every { nonceStore.findById("challenge-hash-1") } returns nonce
+
+    assertThrows<RuntimeException> { nonceManager.createWithId("challenge-hash-1", 300) }
+
+    verify(exactly = 0) { nonceStore.save(any()) }
+  }
+
+  @Test
   fun testVerifyAndUseSuccess() {
     every { nonceStore.markAsUsed("nonce-1", Instant.EPOCH) } returns 1
     assertTrue(nonceManager.verifyAndUse("nonce-1"))
