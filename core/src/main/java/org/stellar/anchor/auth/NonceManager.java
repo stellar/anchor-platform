@@ -49,7 +49,7 @@ public class NonceManager {
     // a check-then-act race between concurrent callers, since JdbcNonce's assigned (non-generated)
     // id means Spring Data's save() can merge/overwrite an existing row instead of failing.
     if (!nonceStore.insertIfAbsent(nonce)) {
-      throw new RuntimeException("Duplicate nonce id");
+      throw new NonceCollisionException(id);
     }
 
     return nonce;

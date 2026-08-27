@@ -39,6 +39,7 @@ import org.stellar.anchor.api.sep.sep10.ChallengeRequest
 import org.stellar.anchor.api.sep.sep10.ChallengeResponse
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.auth.JwtService
+import org.stellar.anchor.auth.NonceCollisionException
 import org.stellar.anchor.auth.NonceManager
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.client.ClientFinder
@@ -247,6 +248,27 @@ internal class Sep10ServiceTest {
 
     // Replaying the exact same challenge transaction must be rejected, even though its signature
     // and time bounds are still otherwise valid.
+    every { nonceManager.verifyAndUse(any()) } returns false
+    assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
+  }
+
+  @Test
+  fun `test validate challenge rejects a replayed challenge when the account does not exist on the ledger`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
+
+    every { ledgerClient.getAccount(ofType(String::class)) } answers
+      {
+        throw AccountNotFoundException(clientKeyPair.accountId)
+      }
+
+    // First validation of this challenge succeeds (via the account-not-found branch) and
+    // consumes its nonce.
+    every { nonceManager.verifyAndUse(any()) } returns true
+    sep10Service.validateChallenge(vr)
+
+    // Replaying the exact same challenge transaction must be rejected -- this branch shares
+    // generateWebAuthJwt (and therefore the nonce check) with the account-exists branch.
     every { nonceManager.verifyAndUse(any()) } returns false
     assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
   }
@@ -649,6 +671,47 @@ internal class Sep10ServiceTest {
         )
       }
     // Then
+    assertTrue(sepex.message!!.startsWith("Failed to create the sep-10 challenge"))
+  }
+
+  @Test
+  fun `test createChallengeResponse() registers a nonce for the challenge`() {
+    val response =
+      sep10Service.createChallengeResponse(
+        ChallengeRequest.builder()
+          .account(TEST_ACCOUNT)
+          .memo(TEST_MEMO)
+          .homeDomain(TEST_HOME_DOMAIN)
+          .clientDomain(null)
+          .build(),
+        MemoId(1234567890),
+        null,
+      )
+
+    val txn = Transaction.fromEnvelopeXdr(response.transaction, TESTNET) as Transaction
+    val expectedHash = txn.hashHex()
+    val expectedTimeout = 900
+    verify(exactly = 1) { nonceManager.createWithId(expectedHash, expectedTimeout) }
+  }
+
+  @Test
+  fun `test createChallengeResponse() wraps a nonce collision into a SepException`() {
+    every { nonceManager.createWithId(any(), any()) } throws NonceCollisionException("dup")
+
+    val sepex =
+      assertThrows<SepException> {
+        sep10Service.createChallengeResponse(
+          ChallengeRequest.builder()
+            .account(TEST_ACCOUNT)
+            .memo(TEST_MEMO)
+            .homeDomain(TEST_HOME_DOMAIN)
+            .clientDomain(null)
+            .build(),
+          MemoId(1234567890),
+          null,
+        )
+      }
+
     assertTrue(sepex.message!!.startsWith("Failed to create the sep-10 challenge"))
   }
 

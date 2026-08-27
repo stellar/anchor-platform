@@ -28,6 +28,7 @@ import org.stellar.anchor.api.sep.sep10.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep10.ValidationRequest;
 import org.stellar.anchor.api.sep.sep10.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
+import org.stellar.anchor.auth.NonceCollisionException;
 import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.client.ClientFinder;
@@ -184,7 +185,7 @@ public class Sep10Service implements ISep10Service {
               txn.toEnvelopeXdrBase64(), stellarNetworkConfig.getStellarNetworkPassphrase());
       trace("challengeResponse:", challengeResponse);
       return challengeResponse;
-    } catch (InvalidSep10ChallengeException ex) {
+    } catch (InvalidSep10ChallengeException | NonceCollisionException ex) {
       warnEx(ex);
       throw new SepException("Failed to create the sep-10 challenge.", ex);
     }

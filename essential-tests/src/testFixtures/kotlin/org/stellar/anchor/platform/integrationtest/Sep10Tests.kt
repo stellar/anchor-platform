@@ -8,6 +8,7 @@ import io.ktor.http.*
 import java.io.IOException
 import java.util.*
 import java.util.Base64
+import java.util.concurrent.Executors
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlinx.coroutines.runBlocking
@@ -134,6 +135,36 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
       exceptionClass = SepNotAuthorizedException::class,
       block = { sep10Client.validate(ValidationRequest.of(signedXdr)) },
     )
+  }
+
+  @Test
+  fun testAuthReplayRejectedConcurrently() {
+    val signedXdr = signedChallengeXdr(webAuthDomain)
+
+    // Submit the exact same signed challenge from two threads at once. The nonce is consumed via
+    // a single atomic SQL UPDATE (JdbcNonceRepo.markAsUsed), so exactly one submission must win,
+    // regardless of request ordering/timing.
+    val executor = Executors.newFixedThreadPool(2)
+    val futures =
+      (1..2).map {
+        executor.submit<Exception?> {
+          try {
+            sep10Client.validate(ValidationRequest.of(signedXdr))
+            null
+          } catch (e: SepNotAuthorizedException) {
+            e
+          }
+        }
+      }
+
+    val exceptions = futures.map { it.get() }
+    executor.shutdown()
+
+    val successCount = exceptions.count { it == null }
+    val failureCount = exceptions.count { it != null }
+
+    assertEquals(1, successCount, "Expected exactly 1 successful validation, got $successCount")
+    assertEquals(1, failureCount, "Expected exactly 1 rejected validation, got $failureCount")
   }
 
   @Test
