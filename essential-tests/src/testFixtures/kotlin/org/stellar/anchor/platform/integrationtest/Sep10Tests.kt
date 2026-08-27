@@ -157,8 +157,12 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
         }
       }
 
-    val exceptions = futures.map { it.get() }
-    executor.shutdown()
+    val exceptions =
+      try {
+        futures.map { it.get() }
+      } finally {
+        executor.shutdown()
+      }
 
     val successCount = exceptions.count { it == null }
     val failureCount = exceptions.count { it != null }

@@ -343,6 +343,30 @@ internal class Sep10ServiceTest {
   }
 
   @Test
+  fun `test validate challenge does not consume the nonce when client name resolution fails`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
+
+    every { ledgerClient.getAccount(ofType(String::class)) } answers
+      {
+        throw AccountNotFoundException(clientKeyPair.accountId)
+      }
+
+    // First attempt fails during client name resolution -- part of client authorization, and
+    // the last thing that can fail before the nonce is consumed. The nonce must not be touched.
+    every { clientFinder.getClientName(any(), any()) } throws
+      SepNotAuthorizedException("Client not found")
+    assertThrows<SepNotAuthorizedException> { sep10Service.validateChallenge(vr) }
+    verify(exactly = 0) { nonceManager.verifyAndUse(any()) }
+
+    // Retrying the exact same challenge once client name resolution succeeds must succeed --
+    // proving the earlier failure didn't burn the nonce.
+    every { clientFinder.getClientName(any(), any()) } returns null
+    assertDoesNotThrow { sep10Service.validateChallenge(vr) }
+    verify(exactly = 1) { nonceManager.verifyAndUse(any()) }
+  }
+
+  @Test
   @LockAndMockStatic([Sep10Challenge::class])
   fun `test validate challenge with client domain`() {
     val mockSigners =
