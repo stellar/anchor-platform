@@ -7,7 +7,9 @@ import io.jsonwebtoken.Jwts
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import java.io.IOException
+import java.security.SecureRandom
 import java.time.Instant
+import java.util.Base64
 import java.util.stream.Stream
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
@@ -53,6 +55,7 @@ import org.stellar.anchor.util.NetUtil
 import org.stellar.sdk.*
 import org.stellar.sdk.Network.*
 import org.stellar.sdk.exception.InvalidSep10ChallengeException
+import org.stellar.sdk.operations.ManageDataOperation
 import org.stellar.walletsdk.auth.DefaultAuthHeaderSigner
 import org.stellar.walletsdk.auth.createAuthSignToken
 import org.stellar.walletsdk.horizon.AccountKeyPair
@@ -159,6 +162,254 @@ internal class Sep10ServiceTest {
       txn.sign(clientDomainKeyPair)
     }
     return txn.toEnvelopeXdrBase64()
+  }
+
+  /**
+   * Builds a challenge signed by [clientKeyPair] twice, to test that a duplicate signature from the
+   * same signer isn't counted as two independent signers' worth of weight.
+   */
+  @Synchronized
+  fun createTestChallengeSignedTwiceByClient(homeDomain: String): String {
+    val now = System.currentTimeMillis() / 1000L
+    val signer = KeyPair.fromSecretSeed(TEST_SIGNING_SEED)
+    val memo = MemoId(TEST_MEMO.toLong())
+    val txn =
+      Sep10ChallengeWrapper.instance()
+        .newChallenge(
+          signer,
+          Network(TESTNET.networkPassphrase),
+          clientKeyPair.accountId,
+          homeDomain,
+          TEST_WEB_AUTH_DOMAIN,
+          TimeBounds(now, now + 900),
+          "",
+          "",
+          memo,
+        )
+    txn.sign(clientKeyPair)
+    txn.sign(clientKeyPair)
+    return txn.toEnvelopeXdrBase64()
+  }
+
+  /**
+   * Builds a challenge shaped correctly (source account = the real SIGNING_KEY's account) but
+   * signed by an impostor key instead of the real SIGNING_KEY, to test that a forged/self-signed
+   * challenge is rejected.
+   */
+  @Synchronized
+  fun createTestChallengeSignedByWrongServerKey(homeDomain: String): String {
+    val now = System.currentTimeMillis() / 1000L
+    val realServerKeyPair = KeyPair.fromSecretSeed(TEST_SIGNING_SEED)
+    val impostorKeyPair = KeyPair.random()
+
+    val nonce = ByteArray(48)
+    SecureRandom().nextBytes(nonce)
+    val encodedNonce = Base64.getEncoder().encode(nonce)
+
+    val sourceAccount = Account(realServerKeyPair.accountId, -1L)
+    val homeDomainOp =
+      ManageDataOperation.builder()
+        .name("$homeDomain auth")
+        .value(encodedNonce)
+        .sourceAccount(clientKeyPair.accountId)
+        .build()
+    val webAuthDomainOp =
+      ManageDataOperation.builder()
+        .name("web_auth_domain")
+        .value(TEST_WEB_AUTH_DOMAIN.toByteArray())
+        .sourceAccount(realServerKeyPair.accountId)
+        .build()
+
+    val txn =
+      TransactionBuilder(sourceAccount, Network(TESTNET.networkPassphrase))
+        .addPreconditions(
+          TransactionPreconditions.builder().timeBounds(TimeBounds(now, now + 900)).build()
+        )
+        .setBaseFee(100)
+        .addOperation(homeDomainOp)
+        .addOperation(webAuthDomainOp)
+        .build()
+
+    // Signed by an impostor key instead of the real SIGNING_KEY, even though the transaction's
+    // source account is the real server account.
+    txn.sign(impostorKeyPair)
+    txn.sign(clientKeyPair)
+    return txn.toEnvelopeXdrBase64()
+  }
+
+  @Test
+  fun `test validate challenge rejects a challenge not signed by SIGNING_KEY`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallengeSignedByWrongServerKey(TEST_HOME_DOMAIN)
+
+    assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
+  }
+
+  @Test
+  fun `test validate challenge rejects signature weight below medium threshold`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
+
+    val mockSigners =
+      listOf(TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 10, "").toSigner())
+    val accountResponse =
+      mockk<LedgerClient.Account> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { signers } returns mockSigners
+        every { thresholds.medium } returns 15
+      }
+    every { ledgerClient.getAccount(any()) } returns accountResponse
+
+    // The client's only signer has weight 10, below the account's medium threshold of 15.
+    assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
+  }
+
+  @Test
+  fun `test validate challenge does not double-count a duplicate signature from the same signer`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallengeSignedTwiceByClient(TEST_HOME_DOMAIN)
+
+    val mockSigners =
+      listOf(TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 10, "").toSigner())
+    val accountResponse =
+      mockk<LedgerClient.Account> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { signers } returns mockSigners
+        every { thresholds.medium } returns 15
+      }
+    every { ledgerClient.getAccount(any()) } returns accountResponse
+
+    // The single signer's weight (10) is below the threshold (15). If the duplicate signature
+    // were double-counted as 20, this would incorrectly succeed -- it must still be rejected.
+    assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
+  }
+
+  /** Builds a challenge for [clientKeyPair]'s account, signed by the given [signers] instead. */
+  @Synchronized
+  fun createTestChallengeSignedBy(homeDomain: String, signers: List<KeyPair>): String {
+    val now = System.currentTimeMillis() / 1000L
+    val serverSigner = KeyPair.fromSecretSeed(TEST_SIGNING_SEED)
+    val memo = MemoId(TEST_MEMO.toLong())
+    val txn =
+      Sep10ChallengeWrapper.instance()
+        .newChallenge(
+          serverSigner,
+          Network(TESTNET.networkPassphrase),
+          clientKeyPair.accountId,
+          homeDomain,
+          TEST_WEB_AUTH_DOMAIN,
+          TimeBounds(now, now + 900),
+          "",
+          "",
+          memo,
+        )
+    signers.forEach { txn.sign(it) }
+    return txn.toEnvelopeXdrBase64()
+  }
+
+  @Test
+  fun `test validate challenge succeeds with a non-master signer only`() {
+    val nonMasterSigner = KeyPair.random()
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(nonMasterSigner))
+
+    val mockSigners =
+      listOf(TestSigner(nonMasterSigner.accountId, "SIGNER_KEY_TYPE_ED25519", 20, "").toSigner())
+    val accountResponse =
+      mockk<LedgerClient.Account> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { signers } returns mockSigners
+        every { thresholds.medium } returns 20
+      }
+    every { ledgerClient.getAccount(any()) } returns accountResponse
+
+    // clientKeyPair (the account's own/master key) never signs and isn't even a configured
+    // signer; only a non-master signer with sufficient weight does.
+    assertDoesNotThrow { sep10Service.validateChallenge(vr) }
+  }
+
+  @Test
+  fun `test validate challenge succeeds with multiple non-master signers meeting threshold together`() {
+    val signerA = KeyPair.random()
+    val signerB = KeyPair.random()
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(signerA, signerB))
+
+    val mockSigners =
+      listOf(
+        TestSigner(signerA.accountId, "SIGNER_KEY_TYPE_ED25519", 10, "").toSigner(),
+        TestSigner(signerB.accountId, "SIGNER_KEY_TYPE_ED25519", 10, "").toSigner(),
+      )
+    val accountResponse =
+      mockk<LedgerClient.Account> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { signers } returns mockSigners
+        every { thresholds.medium } returns 15
+      }
+    every { ledgerClient.getAccount(any()) } returns accountResponse
+
+    // Neither non-master signer alone (weight 10) meets the threshold (15), and the account's
+    // own master key never signs -- combined (20), they must still be accepted.
+    assertDoesNotThrow { sep10Service.validateChallenge(vr) }
+  }
+
+  /** Builds a normal challenge, then adds one extra, illegitimate signature. */
+  @Synchronized
+  fun createTestChallengeWithExtraSignature(homeDomain: String): String {
+    val now = System.currentTimeMillis() / 1000L
+    val signer = KeyPair.fromSecretSeed(TEST_SIGNING_SEED)
+    val memo = MemoId(TEST_MEMO.toLong())
+    val txn =
+      Sep10ChallengeWrapper.instance()
+        .newChallenge(
+          signer,
+          Network(TESTNET.networkPassphrase),
+          clientKeyPair.accountId,
+          homeDomain,
+          TEST_WEB_AUTH_DOMAIN,
+          TimeBounds(now, now + 900),
+          "",
+          "",
+          memo,
+        )
+    txn.sign(clientKeyPair)
+    txn.sign(KeyPair.random())
+    return txn.toEnvelopeXdrBase64()
+  }
+
+  @Test
+  fun `test validate challenge rejects nonexistent account with an extra client signature`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallengeWithExtraSignature(TEST_HOME_DOMAIN)
+
+    every { ledgerClient.getAccount(ofType(String::class)) } answers
+      {
+        throw AccountNotFoundException(clientKeyPair.accountId)
+      }
+
+    // With no client_domain, exactly 2 signatures (server + client) are expected when the
+    // account doesn't exist on the ledger; a 3rd signature must be rejected.
+    assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
+  }
+
+  @Test
+  fun `test createChallenge() returns response with correct network passphrase`() {
+    every { sep10Config.knownCustodialAccountList } returns listOf(TEST_ACCOUNT)
+    val cr =
+      ChallengeRequest.builder()
+        .account(TEST_ACCOUNT)
+        .memo(TEST_MEMO)
+        .homeDomain(TEST_HOME_DOMAIN)
+        .clientDomain(null)
+        .build()
+
+    val response = sep10Service.createChallenge(cr)
+
+    assertEquals(TESTNET.networkPassphrase, response.networkPassphrase)
   }
 
   @ParameterizedTest
@@ -539,6 +790,30 @@ internal class Sep10ServiceTest {
     cr.account = "GXXX"
 
     assertThrows<SepValidationException> { sep10Service.createChallenge(cr) }
+  }
+
+  @Test
+  fun `test createChallenge() with missing account`() {
+    every { sep10Config.isClientAttributionRequired } returns false
+    val cr =
+      ChallengeRequest.builder()
+        .account(TEST_ACCOUNT)
+        .memo(TEST_MEMO)
+        .homeDomain(TEST_HOME_DOMAIN)
+        .clientDomain(TEST_CLIENT_DOMAIN)
+        .build()
+    cr.account = null
+
+    assertThrows<SepValidationException> { sep10Service.createChallenge(cr) }
+  }
+
+  @Test
+  fun `test validate challenge rejects a malformed transaction value`() {
+    val vr = ValidationRequest()
+    vr.transaction = "this-is-not-a-valid-base64-xdr-transaction"
+
+    val ex = assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
+    assertEquals("Invalid challenge transaction.", ex.message)
   }
 
   @ParameterizedTest

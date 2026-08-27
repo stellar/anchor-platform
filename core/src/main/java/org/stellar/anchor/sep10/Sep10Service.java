@@ -409,6 +409,10 @@ public class Sep10Service implements ISep10Service {
 
   void validateAccountFormat(ChallengeRequest request) throws SepException {
     // Validate account
+    if (isEmpty(request.getAccount())) {
+      info("client wallet account is required");
+      throw new SepValidationException("Invalid account.");
+    }
     try {
       KeyPair.fromAccountId(request.getAccount());
     } catch (IllegalArgumentException ex) {
