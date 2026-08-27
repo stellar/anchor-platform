@@ -39,6 +39,7 @@ import org.stellar.anchor.api.sep.sep10.ChallengeRequest
 import org.stellar.anchor.api.sep.sep10.ChallengeResponse
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.auth.JwtService
+import org.stellar.anchor.auth.NonceManager
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.config.SecretConfig
@@ -94,6 +95,7 @@ internal class Sep10ServiceTest {
   @MockK(relaxed = true) lateinit var sep10Config: Sep10Config
   @MockK(relaxed = true) lateinit var ledgerClient: LedgerClient
   @MockK(relaxed = true) lateinit var clientFinder: ClientFinder
+  @MockK(relaxed = true) lateinit var nonceManager: NonceManager
 
   private lateinit var jwtService: JwtService
   private lateinit var sep10Service: Sep10Service
@@ -113,6 +115,10 @@ internal class Sep10ServiceTest {
 
     secretConfig.setupMock()
 
+    // Default to "not a replay" so existing tests that don't exercise replay protection keep
+    // passing; tests that specifically test replay protection override this.
+    every { nonceManager.verifyAndUse(any()) } returns true
+
     this.jwtService = spyk(JwtService(secretConfig))
     this.sep10Service =
       Sep10Service(
@@ -121,7 +127,8 @@ internal class Sep10ServiceTest {
         sep10Config,
         ledgerClient,
         jwtService,
-        clientFinder
+        clientFinder,
+        nonceManager
       )
   }
 

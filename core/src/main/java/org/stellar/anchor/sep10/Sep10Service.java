@@ -28,6 +28,7 @@ import org.stellar.anchor.api.sep.sep10.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep10.ValidationRequest;
 import org.stellar.anchor.api.sep.sep10.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
+import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.SecretConfig;
@@ -50,6 +51,7 @@ public class Sep10Service implements ISep10Service {
   final LedgerClient ledgerClient;
   final JwtService jwtService;
   final ClientFinder clientFinder;
+  final NonceManager nonceManager;
   final String serverAccountId;
   final Counter sep10ChallengeCreatedCounter = Metrics.counter(SEP10_CHALLENGE_CREATED);
   final Counter sep10ChallengeValidatedCounter = Metrics.counter(SEP10_CHALLENGE_VALIDATED);
@@ -60,7 +62,8 @@ public class Sep10Service implements ISep10Service {
       Sep10Config sep10Config,
       LedgerClient ledgerClient,
       JwtService jwtService,
-      ClientFinder clientFinder) {
+      ClientFinder clientFinder,
+      NonceManager nonceManager) {
     debug("appConfig:", stellarNetworkConfig);
     debug("sep10Config:", sep10Config);
     this.stellarNetworkConfig = stellarNetworkConfig;
@@ -69,6 +72,7 @@ public class Sep10Service implements ISep10Service {
     this.ledgerClient = ledgerClient;
     this.jwtService = jwtService;
     this.clientFinder = clientFinder;
+    this.nonceManager = nonceManager;
     this.serverAccountId =
         KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed()).getAccountId();
     Log.info("Sep10Service initialized.");
@@ -121,6 +125,14 @@ public class Sep10Service implements ISep10Service {
     info("Validating SEP-10 challenge.");
 
     ChallengeTransaction challenge = parseChallenge(request);
+
+    // Reject the challenge if its nonce has already been consumed (replay of a previously
+    // validated challenge) or was never issued by this server / has expired. This must run
+    // before a JWT can be generated below.
+    if (!nonceManager.verifyAndUse(challenge.getTransaction().hashHex())) {
+      throw new SepValidationException("Challenge has already been used or has expired.");
+    }
+
     // pre validation to be defined by the anchor
     preValidateRequestValidation(request, challenge);
 
@@ -166,6 +178,11 @@ public class Sep10Service implements ISep10Service {
     try {
       // create challenge transaction
       Transaction txn = newChallenge(request, clientSigningKey, memo);
+
+      // Register a nonce keyed by the challenge's transaction hash so it can only be redeemed
+      // for a JWT once, before it expires. The hash excludes signatures, so it is unaffected by
+      // the client (and, for non-custodial wallets, client_domain) signatures added later.
+      nonceManager.createWithId(txn.hashHex(), sep10Config.getAuthTimeout());
 
       // Convert the challenge to response
       trace("SEP-10 challenge txn:", txn);

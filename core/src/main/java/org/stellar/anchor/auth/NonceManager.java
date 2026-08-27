@@ -25,7 +25,19 @@ public class NonceManager {
    * @return the nonce
    */
   public Nonce create(int expiresIn) {
-    String id = UUID.randomUUID().toString();
+    return createWithId(UUID.randomUUID().toString(), expiresIn);
+  }
+
+  /**
+   * Create a new nonce with a caller-supplied id that expires in expiresIn seconds. Use this when
+   * the id must be derivable by both the issuer and the verifier of the nonce, e.g. a SEP-10
+   * challenge transaction hash, instead of an opaque random id.
+   *
+   * @param id the nonce id
+   * @param expiresIn the number of seconds until the nonce expires
+   * @return the nonce
+   */
+  public Nonce createWithId(String id, int expiresIn) {
     if (nonceStore.findById(id) != null) {
       throw new RuntimeException("Duplicate nonce id");
     }
