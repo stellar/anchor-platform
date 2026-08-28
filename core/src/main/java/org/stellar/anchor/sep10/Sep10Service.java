@@ -143,8 +143,6 @@ public class Sep10Service implements ISep10Service {
     }
     // Since the account exists, we should check the signers and the client domain
     validateChallengeRequest(request, account, clientDomain);
-    // increment counter
-    incrementValidationRequestValidatedCounter();
     // Generate the JWT token
     return ValidationResponse.of(generateWebAuthJwt(challenge, clientDomain, homeDomain));
   }
@@ -459,7 +457,6 @@ public class Sep10Service implements ISep10Service {
       infoF("Checking if {} exists in the Stellar network", challenge.getClientAccountId());
       account = ledgerClient.getAccount(challenge.getClientAccountId());
       traceF("challenge account: {}", account);
-      sep10ChallengeValidatedCounter.increment();
       return account;
     } catch (AccountNotFoundException ex) {
       infoF("Account {} does not exist in the Stellar Network", challenge.getClientAccountId());
@@ -507,7 +504,6 @@ public class Sep10Service implements ISep10Service {
     } catch (LedgerException ex) {
       throw new SepValidationException("Failed to fetch account: " + ex.getMessage(), ex);
     }
-    sep10ChallengeValidatedCounter.increment();
     return null;
   }
 
@@ -594,6 +590,11 @@ public class Sep10Service implements ISep10Service {
     if (!nonceManager.verifyAndUse(challenge.getTransaction().hashHex())) {
       throw new SepValidationException("Challenge has already been used or has expired.");
     }
+
+    // Only count a challenge as validated once it's actually going to be redeemed for a JWT --
+    // incrementing any earlier (e.g. right after the account/signers are confirmed) would inflate
+    // this counter for a challenge that's later rejected as a replay.
+    incrementValidationRequestValidatedCounter();
 
     debug("jwtToken:", webAuthJwt);
     return jwtService.encode(webAuthJwt);
