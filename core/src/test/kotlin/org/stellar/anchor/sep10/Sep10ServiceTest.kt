@@ -41,7 +41,6 @@ import org.stellar.anchor.api.sep.sep10.ChallengeRequest
 import org.stellar.anchor.api.sep.sep10.ChallengeResponse
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.auth.JwtService
-import org.stellar.anchor.auth.NonceCollisionException
 import org.stellar.anchor.auth.NonceManager
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.client.ClientFinder
@@ -121,7 +120,7 @@ internal class Sep10ServiceTest {
 
     // Default to "not a replay" so existing tests that don't exercise replay protection keep
     // passing; tests that specifically test replay protection override this.
-    every { nonceManager.verifyAndUse(any()) } returns true
+    every { nonceManager.claim(any(), any()) } returns true
 
     this.jwtService = spyk(JwtService(secretConfig))
     this.sep10Service =
@@ -493,13 +492,13 @@ internal class Sep10ServiceTest {
       }
     every { ledgerClient.getAccount(any()) } returns accountResponse
 
-    // First validation of this challenge succeeds and consumes its nonce.
-    every { nonceManager.verifyAndUse(any()) } returns true
+    // First validation of this challenge succeeds and claims its nonce.
+    every { nonceManager.claim(any(), any()) } returns true
     sep10Service.validateChallenge(vr)
 
     // Replaying the exact same challenge transaction must be rejected, even though its signature
     // and time bounds are still otherwise valid.
-    every { nonceManager.verifyAndUse(any()) } returns false
+    every { nonceManager.claim(any(), any()) } returns false
     assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
   }
 
@@ -514,13 +513,13 @@ internal class Sep10ServiceTest {
       }
 
     // First validation of this challenge succeeds (via the account-not-found branch) and
-    // consumes its nonce.
-    every { nonceManager.verifyAndUse(any()) } returns true
+    // claims its nonce.
+    every { nonceManager.claim(any(), any()) } returns true
     sep10Service.validateChallenge(vr)
 
     // Replaying the exact same challenge transaction must be rejected -- this branch shares
     // generateWebAuthJwt (and therefore the nonce check) with the account-exists branch.
-    every { nonceManager.verifyAndUse(any()) } returns false
+    every { nonceManager.claim(any(), any()) } returns false
     assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
   }
 
@@ -536,7 +535,7 @@ internal class Sep10ServiceTest {
         throw LedgerException("rpc unavailable")
       }
     assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
-    verify(exactly = 0) { nonceManager.verifyAndUse(any()) }
+    verify(exactly = 0) { nonceManager.claim(any(), any()) }
 
     // Retrying the exact same challenge once the transient failure clears must succeed --
     // proving the earlier failed attempt didn't burn the nonce.
@@ -552,7 +551,7 @@ internal class Sep10ServiceTest {
     every { ledgerClient.getAccount(any()) } returns accountResponse
 
     assertDoesNotThrow { sep10Service.validateChallenge(vr) }
-    verify(exactly = 1) { nonceManager.verifyAndUse(any()) }
+    verify(exactly = 1) { nonceManager.claim(any(), any()) }
   }
 
   @Test
@@ -608,13 +607,13 @@ internal class Sep10ServiceTest {
     every { clientFinder.getClientName(any(), any()) } throws
       SepNotAuthorizedException("Client not found")
     assertThrows<SepNotAuthorizedException> { sep10Service.validateChallenge(vr) }
-    verify(exactly = 0) { nonceManager.verifyAndUse(any()) }
+    verify(exactly = 0) { nonceManager.claim(any(), any()) }
 
     // Retrying the exact same challenge once client name resolution succeeds must succeed --
     // proving the earlier failure didn't burn the nonce.
     every { clientFinder.getClientName(any(), any()) } returns null
     assertDoesNotThrow { sep10Service.validateChallenge(vr) }
-    verify(exactly = 1) { nonceManager.verifyAndUse(any()) }
+    verify(exactly = 1) { nonceManager.claim(any(), any()) }
   }
 
   @Test
@@ -974,44 +973,22 @@ internal class Sep10ServiceTest {
   }
 
   @Test
-  fun `test createChallengeResponse() registers a nonce for the challenge`() {
-    val response =
-      sep10Service.createChallengeResponse(
-        ChallengeRequest.builder()
-          .account(TEST_ACCOUNT)
-          .memo(TEST_MEMO)
-          .homeDomain(TEST_HOME_DOMAIN)
-          .clientDomain(null)
-          .build(),
-        MemoId(1234567890),
-        null,
-      )
+  fun `test createChallengeResponse() does not touch the NonceManager`() {
+    // The challenge's transaction hash is claimed as a nonce only at validation time (see
+    // generateWebAuthJwt), not pre-registered at creation -- creating a challenge is an
+    // unauthenticated request and must not write to the nonce store.
+    sep10Service.createChallengeResponse(
+      ChallengeRequest.builder()
+        .account(TEST_ACCOUNT)
+        .memo(TEST_MEMO)
+        .homeDomain(TEST_HOME_DOMAIN)
+        .clientDomain(null)
+        .build(),
+      MemoId(1234567890),
+      null,
+    )
 
-    val txn = Transaction.fromEnvelopeXdr(response.transaction, TESTNET) as Transaction
-    val expectedHash = txn.hashHex()
-    val expectedTimeout = 900
-    verify(exactly = 1) { nonceManager.createWithId(expectedHash, expectedTimeout) }
-  }
-
-  @Test
-  fun `test createChallengeResponse() wraps a nonce collision into a SepException`() {
-    every { nonceManager.createWithId(any(), any()) } throws NonceCollisionException("dup")
-
-    val sepex =
-      assertThrows<SepException> {
-        sep10Service.createChallengeResponse(
-          ChallengeRequest.builder()
-            .account(TEST_ACCOUNT)
-            .memo(TEST_MEMO)
-            .homeDomain(TEST_HOME_DOMAIN)
-            .clientDomain(null)
-            .build(),
-          MemoId(1234567890),
-          null,
-        )
-      }
-
-    assertTrue(sepex.message!!.startsWith("Failed to create the sep-10 challenge"))
+    verify { nonceManager wasNot Called }
   }
 
   @Test

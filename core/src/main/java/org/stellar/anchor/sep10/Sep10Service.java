@@ -28,7 +28,6 @@ import org.stellar.anchor.api.sep.sep10.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep10.ValidationRequest;
 import org.stellar.anchor.api.sep.sep10.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
-import org.stellar.anchor.auth.NonceCollisionException;
 import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.client.ClientFinder;
@@ -171,11 +170,6 @@ public class Sep10Service implements ISep10Service {
       // create challenge transaction
       Transaction txn = newChallenge(request, clientSigningKey, memo);
 
-      // Register a nonce keyed by the challenge's transaction hash so it can only be redeemed
-      // for a JWT once, before it expires. The hash excludes signatures, so it is unaffected by
-      // the client (and, for non-custodial wallets, client_domain) signatures added later.
-      nonceManager.createWithId(txn.hashHex(), sep10Config.getAuthTimeout());
-
       // Convert the challenge to response
       trace("SEP-10 challenge txn:", txn);
       ChallengeResponse challengeResponse =
@@ -183,7 +177,7 @@ public class Sep10Service implements ISep10Service {
               txn.toEnvelopeXdrBase64(), stellarNetworkConfig.getStellarNetworkPassphrase());
       trace("challengeResponse:", challengeResponse);
       return challengeResponse;
-    } catch (InvalidSep10ChallengeException | NonceCollisionException ex) {
+    } catch (InvalidSep10ChallengeException ex) {
       warnEx(ex);
       throw new SepException("Failed to create the sep-10 challenge.", ex);
     }
@@ -565,6 +559,7 @@ public class Sep10Service implements ISep10Service {
       throws SepException {
     long issuedAt = challenge.getTransaction().getTimeBounds().getMinTime().longValue();
     Memo memo = challenge.getTransaction().getMemo();
+    String hash = challenge.getTransaction().hashHex();
     Sep10Jwt webAuthJwt =
         Sep10Jwt.of(
             authUrl(),
@@ -573,21 +568,28 @@ public class Sep10Service implements ISep10Service {
                 : challenge.getClientAccountId() + ":" + memo,
             issuedAt,
             issuedAt + sep10Config.getJwtTimeout(),
-            challenge.getTransaction().hashHex(),
+            hash,
             clientDomain,
             homeDomain);
 
     // Resolve the client name (which itself can fail authorization, e.g. SepNotAuthorizedException)
-    // before consuming the nonce below.
+    // before claiming the nonce below.
     webAuthJwt.setClientName(
         clientFinder.getClientName(clientDomain, challenge.getClientAccountId()));
 
-    // Consume the challenge's nonce only now, immediately before minting/encoding the JWT -- not
-    // earlier in this method or in validateChallenge(). Everything above (home domain, account,
-    // signers, threshold, and client name resolution) must succeed first, so that a submission
-    // that fails for an unrelated reason doesn't burn the nonce and cause a subsequent, correctly
-    // signed retry of the same challenge to be wrongly rejected as a replay.
-    if (!nonceManager.verifyAndUse(challenge.getTransaction().hashHex())) {
+    // Claim the challenge's transaction hash as a nonce only now, immediately before
+    // minting/encoding the JWT -- not earlier in this method or in validateChallenge(). Everything
+    // above (home domain, account, signers, threshold, and client name resolution) must succeed
+    // first, so that a submission that fails for an unrelated reason doesn't burn the nonce and
+    // cause a subsequent, correctly signed retry of the same challenge to be wrongly rejected as a
+    // replay.
+    //
+    // The hash isn't pre-registered when the challenge is created (unlike SEP-45's nonces): it's
+    // derivable independently by anyone holding the challenge, so the first successful validation
+    // simply claims it directly as used. This avoids an unauthenticated DB write on every
+    // GET /auth, and avoids a replay window across a rolling deploy where an old-code replica
+    // would otherwise create a challenge with no nonce row for a new-code replica to find.
+    if (!nonceManager.claim(hash, sep10Config.getAuthTimeout())) {
       throw new SepValidationException("Challenge has already been used or has expired.");
     }
 

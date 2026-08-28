@@ -9,9 +9,12 @@ import java.io.IOException
 import java.util.*
 import java.util.Base64
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.jupiter.api.*
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
@@ -37,6 +40,12 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
   private val walletDomain = config.env["wallet.server.url"]?.replace("http://", "")!!
   private val walletUrl = config.env["wallet.server.url"]!!
   private val domainSinger = WalletSigner.DomainSigner("$walletUrl/signChallenge")
+
+  private val rawHttpClient: OkHttpClient =
+    OkHttpClient.Builder()
+      .connectTimeout(1, TimeUnit.MINUTES)
+      .readTimeout(1, TimeUnit.MINUTES)
+      .build()
 
   init {
     if (!::sep10Client.isInitialized) {
@@ -104,6 +113,19 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
       exceptionClass = SepNotAuthorizedException::class,
       block = { sep10Client.validate(ValidationRequest.of(challenge.transaction)) },
     )
+  }
+
+  @Test
+  fun testAuthWithMissingAccountReturns400() {
+    // Sep10Client always appends `account=...` to the request, so this bypasses it entirely to
+    // hit the live GET /auth with no `account` query parameter, proving that Spring MVC's
+    // MissingServletRequestParameterException is actually turned into an HTTP 400 by
+    // SepControllerExceptionHandler for this endpoint -- not just that the handler method itself
+    // produces the right message when called directly.
+    val request = Request.Builder().url(toml.getString("WEB_AUTH_ENDPOINT")).get().build()
+    val response = rawHttpClient.newCall(request).execute()
+
+    assertEquals(400, response.code)
   }
 
   /** Signs a fresh SEP-10 challenge with the client wallet key, without submitting it. */

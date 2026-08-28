@@ -3,6 +3,7 @@ package org.stellar.anchor.auth
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
+import io.mockk.slot
 import io.mockk.verify
 import java.time.Clock
 import java.time.Instant
@@ -89,5 +90,24 @@ class NonceManagerTest {
   fun testVerifyAndUseNonexistent() {
     every { nonceStore.markAsUsed("missing", Instant.EPOCH) } returns 0
     assertFalse(nonceManager.verifyAndUse("missing"))
+  }
+
+  @Test
+  fun testClaimFirstTimeSucceeds() {
+    val claimed = nonceManager.claim("challenge-hash-1", 300)
+
+    assertTrue(claimed)
+    val nonceSlot = slot<Nonce>()
+    verify(exactly = 1) { nonceStore.insertIfAbsent(capture(nonceSlot)) }
+    assertEquals("challenge-hash-1", nonceSlot.captured.id)
+    assertTrue(nonceSlot.captured.used)
+    assertEquals(Instant.EPOCH.plusSeconds(300), nonceSlot.captured.expiresAt)
+  }
+
+  @Test
+  fun testClaimRejectsAlreadyClaimedId() {
+    every { nonceStore.insertIfAbsent(any()) } returns false
+
+    assertFalse(nonceManager.claim("challenge-hash-1", 300))
   }
 }

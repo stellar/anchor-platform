@@ -22,27 +22,37 @@ class JdbcNonceStoreTest {
     store = JdbcNonceStore(repo)
   }
 
-  private fun nonce(id: String, expiresAt: Instant) =
+  private fun nonce(id: String, used: Boolean, expiresAt: Instant) =
     JdbcNonce().apply {
       this.id = id
+      this.used = used
       this.expiresAt = expiresAt
     }
 
   @Test
   fun `insertIfAbsent returns true when the row is newly inserted`() {
     val expiresAt = Instant.parse("2026-08-27T00:00:00Z")
-    every { repo.insertIfAbsent("nonce-1", expiresAt) } returns 1
+    every { repo.insertIfAbsent("nonce-1", false, expiresAt) } returns 1
 
-    assertTrue(store.insertIfAbsent(nonce("nonce-1", expiresAt)))
-    verify(exactly = 1) { repo.insertIfAbsent("nonce-1", expiresAt) }
+    assertTrue(store.insertIfAbsent(nonce("nonce-1", false, expiresAt)))
+    verify(exactly = 1) { repo.insertIfAbsent("nonce-1", false, expiresAt) }
   }
 
   @Test
   fun `insertIfAbsent returns false when the id already exists`() {
     val expiresAt = Instant.parse("2026-08-27T00:00:00Z")
-    every { repo.insertIfAbsent("nonce-1", expiresAt) } returns 0
+    every { repo.insertIfAbsent("nonce-1", false, expiresAt) } returns 0
 
-    assertFalse(store.insertIfAbsent(nonce("nonce-1", expiresAt)))
-    verify(exactly = 1) { repo.insertIfAbsent("nonce-1", expiresAt) }
+    assertFalse(store.insertIfAbsent(nonce("nonce-1", false, expiresAt)))
+    verify(exactly = 1) { repo.insertIfAbsent("nonce-1", false, expiresAt) }
+  }
+
+  @Test
+  fun `insertIfAbsent passes through a pre-used nonce for atomic first-claim semantics`() {
+    val expiresAt = Instant.parse("2026-08-27T00:00:00Z")
+    every { repo.insertIfAbsent("nonce-1", true, expiresAt) } returns 1
+
+    assertTrue(store.insertIfAbsent(nonce("nonce-1", true, expiresAt)))
+    verify(exactly = 1) { repo.insertIfAbsent("nonce-1", true, expiresAt) }
   }
 }

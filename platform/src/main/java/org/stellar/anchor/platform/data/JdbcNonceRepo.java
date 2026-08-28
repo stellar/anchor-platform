@@ -13,10 +13,11 @@ public interface JdbcNonceRepo extends CrudRepository<JdbcNonce, String> {
   @Modifying
   @Query(
       value =
-          "INSERT INTO nonce (id, used, expires_at) VALUES (:id, false, :expiresAt) "
+          "INSERT INTO nonce (id, used, expires_at) VALUES (:id, :used, :expiresAt) "
               + "ON CONFLICT (id) DO NOTHING",
       nativeQuery = true)
-  int insertIfAbsent(@Param("id") String id, @Param("expiresAt") Instant expiresAt);
+  int insertIfAbsent(
+      @Param("id") String id, @Param("used") boolean used, @Param("expiresAt") Instant expiresAt);
 
   @Query("SELECT COUNT(n) FROM JdbcNonce n WHERE n.expiresAt < CURRENT_TIMESTAMP")
   int countExpired();

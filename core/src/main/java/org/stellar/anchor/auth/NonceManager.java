@@ -65,4 +65,26 @@ public class NonceManager {
   public boolean verifyAndUse(String id) {
     return nonceStore.markAsUsed(id, clock.instant()) == 1;
   }
+
+  /**
+   * Atomically claim an id for first-time use, without requiring it to have been pre-registered by
+   * {@link #create(int)}/{@link #createWithId(String, int)}. Use this when the id is independently
+   * derivable by both the issuer and the verifier (e.g. a SEP-10 challenge transaction hash) and
+   * doesn't need to be reserved ahead of time: the first caller to claim a given id wins (the row
+   * is inserted already marked used), and every later claim of the same id fails.
+   *
+   * @param id the id to claim
+   * @param expiresIn how long the claimed row is retained before cleanup, in seconds
+   * @return true if this call claimed the id for the first time, false if it was already claimed
+   */
+  public boolean claim(String id, int expiresIn) {
+    Nonce nonce =
+        new NonceBuilder(nonceStore)
+            .id(id)
+            .used(true)
+            .expiresAt(clock.instant().plus(Duration.ofSeconds(expiresIn)))
+            .build();
+
+    return nonceStore.insertIfAbsent(nonce);
+  }
 }
