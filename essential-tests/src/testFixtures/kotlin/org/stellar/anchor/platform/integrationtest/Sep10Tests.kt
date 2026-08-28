@@ -8,10 +8,14 @@ import io.ktor.http.*
 import java.io.IOException
 import java.util.*
 import java.util.Base64
+import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.jupiter.api.*
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
@@ -30,6 +34,16 @@ import org.stellar.walletsdk.horizon.SigningKeyPair
 import org.stellar.walletsdk.horizon.sign
 
 class Sep10Tests : IntegrationTestBase(TestConfig()) {
+  companion object {
+    // Shared across test instances (JUnit creates a new Sep10Tests per @Test method by default),
+    // so this connection pool isn't rebuilt for every test in the class, only the one that uses it.
+    private val rawHttpClient: OkHttpClient =
+      OkHttpClient.Builder()
+        .connectTimeout(1, TimeUnit.MINUTES)
+        .readTimeout(1, TimeUnit.MINUTES)
+        .build()
+  }
+
   lateinit var sep10Client: Sep10Client
   lateinit var sep10ClientMultiSig: Sep10Client
   lateinit var webAuthDomain: String
@@ -106,6 +120,17 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
     )
   }
 
+  @Test
+  fun testAuthWithMissingAccountReturns400() {
+    // Sep10Client always appends `account=...` to the request, so this bypasses it entirely to
+    // hit the live GET /auth with no `account` query parameter, proving that Spring MVC's
+    // MissingServletRequestParameterException is actually turned into an HTTP 400 by
+    // SepControllerExceptionHandler for this endpoint -- not just that the handler method itself
+    // produces the right message when called directly.
+    val request = Request.Builder().url(toml.getString("WEB_AUTH_ENDPOINT")).get().build()
+    rawHttpClient.newCall(request).execute().use { response -> assertEquals(400, response.code) }
+  }
+
   /** Signs a fresh SEP-10 challenge with the client wallet key, without submitting it. */
   private fun signedChallengeXdr(homeDomain: String): String {
     val challenge = sep10Client.challenge(homeDomain)
@@ -141,13 +166,17 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
   fun testAuthReplayRejectedConcurrently() {
     val signedXdr = signedChallengeXdr(webAuthDomain)
 
-    // Submit the exact same signed challenge from two threads at once. The nonce is consumed via
-    // a single atomic SQL UPDATE (JdbcNonceRepo.markAsUsed), so exactly one submission must win,
-    // regardless of request ordering/timing.
+    // Submit the exact same signed challenge from two threads, gated on a barrier so both actually
+    // reach `validate` at (as close to) the same instant -- otherwise the thread pool could simply
+    // run them one after the other, and the test would pass even against a non-atomic
+    // check-then-write implementation. The nonce is claimed via a single atomic SQL insert
+    // (JdbcNonceRepo.insertIfAbsent), so exactly one submission must win regardless of timing.
+    val barrier = CyclicBarrier(2)
     val executor = Executors.newFixedThreadPool(2)
     val futures =
       (1..2).map {
         executor.submit<Exception?> {
+          barrier.await()
           try {
             sep10Client.validate(ValidationRequest.of(signedXdr))
             null

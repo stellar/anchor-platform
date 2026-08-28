@@ -88,7 +88,7 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
     every { sep10Config.jwtTimeout } returns 900
     every { sep10Config.homeDomains } returns listOf(TEST_HOME_DOMAIN, "*.wildcard.stellar.org")
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
-    every { nonceManager.verifyAndUse(any()) } returns true
+    every { nonceManager.claim(any(), any(), any()) } returns true
 
     secretConfig.setupMock()
     this.jwtService = spyk(JwtService(secretConfig))
