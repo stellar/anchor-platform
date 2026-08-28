@@ -577,9 +577,16 @@ public class Sep10Service implements ISep10Service {
     webAuthJwt.setClientName(
         clientFinder.getClientName(clientDomain, challenge.getClientAccountId()));
 
-    // Claim the challenge's transaction hash as a nonce only now, immediately before
-    // minting/encoding the JWT -- not earlier in this method or in validateChallenge(). Everything
-    // above (home domain, account, signers, threshold, and client name resolution) must succeed
+    // Encode the token before claiming the nonce: encoding is pure (no shared state), so if it
+    // fails (e.g. a signing error) the challenge is untouched and a retry can still succeed. Once
+    // the nonce is claimed below, that's irreversible -- a failure after that point would burn the
+    // challenge without ever handing the client a token.
+    debug("jwtToken:", webAuthJwt);
+    String token = jwtService.encode(webAuthJwt);
+
+    // Claim the challenge's transaction hash as a nonce only now, immediately before returning the
+    // token -- not earlier in this method or in validateChallenge(). Everything above (home
+    // domain, account, signers, threshold, client name resolution, and JWT encoding) must succeed
     // first, so that a submission that fails for an unrelated reason doesn't burn the nonce and
     // cause a subsequent, correctly signed retry of the same challenge to be wrongly rejected as a
     // replay.
@@ -598,8 +605,7 @@ public class Sep10Service implements ISep10Service {
     // this counter for a challenge that's later rejected as a replay.
     incrementValidationRequestValidatedCounter();
 
-    debug("jwtToken:", webAuthJwt);
-    return jwtService.encode(webAuthJwt);
+    return token;
   }
 
   private String authUrl() {

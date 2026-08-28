@@ -123,9 +123,7 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
     // SepControllerExceptionHandler for this endpoint -- not just that the handler method itself
     // produces the right message when called directly.
     val request = Request.Builder().url(toml.getString("WEB_AUTH_ENDPOINT")).get().build()
-    val response = rawHttpClient.newCall(request).execute()
-
-    assertEquals(400, response.code)
+    rawHttpClient.newCall(request).execute().use { response -> assertEquals(400, response.code) }
   }
 
   /** Signs a fresh SEP-10 challenge with the client wallet key, without submitting it. */
