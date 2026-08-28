@@ -246,6 +246,8 @@ class Sep31ServiceTest {
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
     every { eventService.createSession(any(), TRANSACTION) } returns eventSession
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().status(Sep12Status.ACCEPTED.getName()).build()
 
     jwtService = spyk(JwtService(secretConfig))
 
@@ -261,6 +263,7 @@ class Sep31ServiceTest {
         Clock.systemUTC(),
         exchangeAmountsCalculator,
         customerIdOwnerStore,
+        customerIntegration,
       )
 
     request = gson.fromJson(requestJson, Sep31PostTransactionRequest::class.java)
@@ -735,6 +738,7 @@ class Sep31ServiceTest {
         Clock.systemUTC(),
         exchangeAmountsCalculator,
         customerIdOwnerStore,
+        customerIntegration,
       )
     every { rateIntegration.getRate(any()) } returns
       GetRateResponse(GetRateResponse.Rate.builder().fee(FeeDetails("2", "stellar:USDC")).build())
@@ -889,6 +893,76 @@ class Sep31ServiceTest {
     assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
     verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test postTransaction rejects when sender_id needs more SEP-12 info`() {
+    useQuotesNotSupportedAssetService()
+    every { customerIntegration.getCustomer(match { it.id == "sender-needs-info" }) } returns
+      GetCustomerResponse.builder().status(Sep12Status.NEEDS_INFO.getName()).build()
+    val postTxRequest = ownershipTestRequest(senderId = "sender-needs-info")
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertInstanceOf(Sep31CustomerInfoNeededException::class.java, ex)
+    assertEquals("sep31-sender", (ex as Sep31CustomerInfoNeededException).type)
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction rejects when receiver_id needs more SEP-12 info`() {
+    useQuotesNotSupportedAssetService()
+    every { customerIntegration.getCustomer(match { it.id == "receiver-needs-info" }) } returns
+      GetCustomerResponse.builder().status(Sep12Status.NEEDS_INFO.getName()).build()
+    val postTxRequest = ownershipTestRequest(receiverId = "receiver-needs-info")
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertInstanceOf(Sep31CustomerInfoNeededException::class.java, ex)
+    assertEquals("sep31-receiver", (ex as Sep31CustomerInfoNeededException).type)
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction succeeds and queries SEP-12 with the right id and type when KYC is accepted`() {
+    useQuotesNotSupportedAssetService()
+    val postTxRequest =
+      ownershipTestRequest(senderId = "sender-accepted", receiverId = "receiver-accepted")
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    verify(exactly = 1) {
+      customerIntegration.getCustomer(
+        match { it.id == "sender-accepted" && it.type == "sep31-sender" }
+      )
+    }
+    verify(exactly = 1) {
+      customerIntegration.getCustomer(
+        match { it.id == "receiver-accepted" && it.type == "sep31-receiver" }
+      )
+    }
+  }
+
+  @Test
+  fun `test postTransaction does not query SEP-12 for a customer_id it doesn't own`() {
+    useQuotesNotSupportedAssetService()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns false
+    val postTxRequest = ownershipTestRequest(receiverId = "victim-customer-id")
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
   }
 
   @Test
@@ -1036,6 +1110,7 @@ class Sep31ServiceTest {
         Clock.systemUTC(),
         exchangeAmountsCalculator,
         customerIdOwnerStore,
+        customerIntegration,
       )
 
     val senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"

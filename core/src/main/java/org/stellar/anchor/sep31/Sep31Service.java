@@ -31,11 +31,13 @@ import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.NotFoundException;
+import org.stellar.anchor.api.exception.Sep31CustomerInfoNeededException;
 import org.stellar.anchor.api.exception.Sep31MissingFieldException;
 import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
+import org.stellar.anchor.api.sep.sep12.Sep12Status;
 import org.stellar.anchor.api.sep.sep31.Sep31GetTransactionResponse;
 import org.stellar.anchor.api.sep.sep31.Sep31InfoResponse;
 import org.stellar.anchor.api.sep.sep31.Sep31PatchTransactionRequest;
@@ -70,6 +72,7 @@ public class Sep31Service {
   private final Counter sep31TransactionPatchedCounter = counter(SEP31_TRANSACTION_PATCHED);
   final ExchangeAmountsCalculator exchangeAmountsCalculator;
   private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
+  private final CustomerIntegration customerIntegration;
 
   public Sep31Service(
       LanguageConfig languageConfig,
@@ -81,7 +84,8 @@ public class Sep31Service {
       EventService eventService,
       Clock clock,
       ExchangeAmountsCalculator exchangeAmountsCalculator,
-      Sep31CustomerIdOwnerStore customerIdOwnerStore) {
+      Sep31CustomerIdOwnerStore customerIdOwnerStore,
+      CustomerIntegration customerIntegration) {
     debug("sep31Config:", sep31Config);
     this.languageConfig = languageConfig;
     this.sep31Config = sep31Config;
@@ -92,6 +96,7 @@ public class Sep31Service {
     this.clock = clock;
     this.exchangeAmountsCalculator = exchangeAmountsCalculator;
     this.customerIdOwnerStore = customerIdOwnerStore;
+    this.customerIntegration = customerIntegration;
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.infoResponse = sep31InfoResponseFromAssetInfoList(assetService.getAssets());
     Log.info("Sep31Service initialized.");
@@ -167,13 +172,9 @@ public class Sep31Service {
     String ownerAccount = ownerClientName != null ? ownerClientName : webAuthJwt.getOwnerAccount();
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
-    for (String customerId : Arrays.asList(request.getSenderId(), request.getReceiverId())) {
-      if (customerId != null
-          && !customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
-        throw new SepNotAuthorizedException(
-            "sender_id/receiver_id does not belong to the authenticated client");
-      }
-    }
+    verifyCustomerOwnershipAndKyc(request.getSenderId(), "sep31-sender", ownerAccount, ownerMemo);
+    verifyCustomerOwnershipAndKyc(
+        request.getReceiverId(), "sep31-receiver", ownerAccount, ownerMemo);
 
     Sep38Quote quote = Context.get().getQuote();
     FeeDetails feeDetails;
@@ -243,6 +244,48 @@ public class Sep31Service {
     // increment counter
     sep31TransactionCreatedCounter.increment();
     return response;
+  }
+
+  /**
+   * Verifies that a `sender_id`/`receiver_id` provided in a `POST /transactions` request belongs to
+   * the authenticated client, and that the SEP-12 customer it references already has complete KYC
+   * on file. A no-op if {@code customerId} is null (the field is optional).
+   *
+   * <p>This is a fail-fast check only: it rejects upfront a transaction the receiving anchor
+   * already knows can't proceed, before creating it. It doesn't replace the anchor's own
+   * asynchronous re-verification of a transaction already in flight (e.g. via {@code
+   * PENDING_CUSTOMER_INFO_UPDATE} and the Platform API), which still handles KYC that becomes
+   * incomplete or stale after the transaction is created.
+   *
+   * @param customerId the `sender_id` or `receiver_id` from the request, or null if not provided
+   * @param customerType the SEP-12 `type` to request -- {@code "sep31-sender"} or {@code
+   *     "sep31-receiver"}, matching this codebase's existing convention (see {@code
+   *     Sep31EventProcessor} in kotlin-reference-server) and echoed back in {@link
+   *     Sep31CustomerInfoNeededException#getType()} so the sending anchor knows which SEP-12 `type`
+   *     to use when it re-fetches the customer
+   * @throws SepNotAuthorizedException if the customer doesn't belong to the authenticated client
+   * @throws Sep31CustomerInfoNeededException if the customer's SEP-12 KYC status is {@code
+   *     NEEDS_INFO}
+   */
+  void verifyCustomerOwnershipAndKyc(
+      String customerId, String customerType, String ownerAccount, String ownerMemo)
+      throws AnchorException {
+    if (customerId == null) {
+      return;
+    }
+
+    if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
+      throw new SepNotAuthorizedException(
+          "sender_id/receiver_id does not belong to the authenticated client");
+    }
+
+    GetCustomerResponse customer =
+        customerIntegration.getCustomer(
+            GetCustomerRequest.builder().id(customerId).type(customerType).build());
+    if (Sep12Status.NEEDS_INFO.getName().equals(customer.getStatus())) {
+      infoF("Customer ({}) needs more info before this transaction can proceed", customerId);
+      throw new Sep31CustomerInfoNeededException(customerType);
+    }
   }
 
   /**
@@ -581,15 +624,23 @@ public class Sep31Service {
   }
 
   /**
-   * validateRequiredFields will validate if the fields provided in the `POST /transactions` or
-   * `PATCH /transactions/{id}` request body contains all the fields expected by the Anchor, and
-   * pre-configured in the `app-config.app.assets`.
+   * validateRequiredFields validates only that the `POST /transactions` or `PATCH
+   * /transactions/{id}` request body's `fields.transaction` map is present and that the requested
+   * asset is configured for SEP-31 receive.
    *
-   * @throws BadRequestException if the asset is invalid or id the fields are missing from the
+   * <p>It intentionally does NOT validate individual field values against a per-asset "required
+   * fields" spec, and never throws {@link Sep31MissingFieldException} -- the SEP-31 spec itself
+   * deprecates the `/info` `fields` key and the request's `fields.transaction` map (see {@link
+   * org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest#fields}, marked
+   * {@code @Deprecated}) in favor of SEP-12 customer fields: "Pass SEP-9 fields via SEP-12 PUT
+   * /customer instead." KYC completeness for `sender_id`/`receiver_id` is instead enforced by
+   * {@link #verifyCustomerOwnershipAndKyc}, which throws {@link Sep31CustomerInfoNeededException}
+   * -- the spec-compliant replacement for this mechanism.
+   *
+   * @throws BadRequestException if the asset is invalid or the `fields` map is missing from the
    *     request
-   * @throws Sep31MissingFieldException if not all fields were provided.
    */
-  void validateRequiredFields() throws BadRequestException, Sep31MissingFieldException {
+  void validateRequiredFields() throws BadRequestException {
     AssetInfo assetInfo = Context.get().getAsset();
     if (assetInfo == null) {
       infoF("Missing asset information for request ({})", Context.get().getRequest());
