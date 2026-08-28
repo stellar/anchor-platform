@@ -2,8 +2,10 @@ package org.stellar.anchor.platform.component.share;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.stellar.anchor.auth.NonceStore;
 import org.stellar.anchor.platform.configurator.FlywayChecksumCompatibilityCallback;
 import org.stellar.anchor.platform.data.*;
+import org.stellar.anchor.platform.job.NonceCleanupJob;
 import org.stellar.anchor.platform.observer.stellar.JdbcStellarPaymentStreamerCursorStore;
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountStore;
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
@@ -55,5 +57,14 @@ public class DataBeans {
   @Bean
   JdbcNonceStore nonceStore(JdbcNonceRepo nonceRepo) {
     return new JdbcNonceStore(nonceRepo);
+  }
+
+  // Registered here (rather than in PlatformServerBeans) and scheduling enabled on both
+  // SepServer and PlatformServer: SEP-10's /auth traffic -- the nonce table's primary writer --
+  // is served by SepServer, which can run standalone without a PlatformServer instance, so the
+  // cleanup job must be reachable there too or SEP-server-only deployments never reap these rows.
+  @Bean
+  public NonceCleanupJob nonceCleanupJob(NonceStore nonceStore) {
+    return new NonceCleanupJob(nonceStore);
   }
 }
