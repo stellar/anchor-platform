@@ -477,6 +477,36 @@ internal class Sep10ServiceTest {
   }
 
   @Test
+  fun `test validate challenge claims the nonce with an expiry anchored to the challenge's own max_time`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
+
+    val mockSigners =
+      listOf(TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner())
+    val accountResponse =
+      mockk<LedgerClient.Account> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { signers } returns mockSigners
+        every { thresholds.medium } returns 1
+      }
+    every { ledgerClient.getAccount(any()) } returns accountResponse
+
+    sep10Service.validateChallenge(vr)
+
+    // The claim's expiry must be derived from the challenge transaction's own signed max_time (plus
+    // the SDK's grace period) -- not from sep10Config.authTimeout read at validation time -- so a
+    // config change between issuance and validation can't let cleanup remove the claim early. Read
+    // max_time from the same transaction the service parsed, rather than recomputing it, so this
+    // doesn't depend on wall-clock timing.
+    val txn: Transaction = Transaction.fromEnvelopeXdr(vr.transaction, TESTNET) as Transaction
+    val maxTime: Long = txn.timeBounds.maxTime.toLong()
+    val expiresAtSlot = slot<Instant>()
+    verify(exactly = 1) { nonceManager.claim(any(), capture(expiresAtSlot)) }
+    assertEquals(Instant.ofEpochSecond(maxTime).plusSeconds(300), expiresAtSlot.captured)
+  }
+
+  @Test
   fun `test validate challenge rejects a replayed challenge`() {
     val vr = ValidationRequest()
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
