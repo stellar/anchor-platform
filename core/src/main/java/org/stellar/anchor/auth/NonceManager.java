@@ -3,7 +3,6 @@ package org.stellar.anchor.auth;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 
@@ -74,16 +73,26 @@ public class NonceManager {
    * doesn't need to be reserved ahead of time: the first caller to claim a given id wins (the row
    * is inserted already marked used), and every later claim of the same id fails.
    *
+   * <p>{@code minRetentionSeconds} is measured from now (the moment of this claim), not from any
+   * property of the id itself (e.g. a challenge's own signed expiry) -- anchoring retention to the
+   * underlying resource's own deadline is tempting but fragile: a second, slower concurrent claim
+   * attempt for the same id can still be validating (ledger lookups, signing, etc.) after that
+   * deadline has passed, and if cleanup removes the row in that gap, the slower attempt succeeds in
+   * claiming it too. Pass a value generous enough to outlast any realistic in-flight validation for
+   * this id, not just the id's own nominal expiry.
+   *
    * @param id the id to claim
-   * @param expiresAt the absolute instant after which the claimed row may be cleaned up. Pass the
-   *     underlying resource's own actual expiry (not e.g. "now + this instance's current config
-   *     value for some duration") -- otherwise a config change between claims, or simply reading a
-   *     duration relative to "now" instead of the resource's real expiry, can let cleanup remove
-   *     the claim while the resource itself would still be considered valid, reopening a replay.
+   * @param minRetentionSeconds how long, at minimum, the claimed row must be retained before
+   *     cleanup may remove it, counted from now
    * @return true if this call claimed the id for the first time, false if it was already claimed
    */
-  public boolean claim(String id, Instant expiresAt) {
-    Nonce nonce = new NonceBuilder(nonceStore).id(id).used(true).expiresAt(expiresAt).build();
+  public boolean claim(String id, int minRetentionSeconds) {
+    Nonce nonce =
+        new NonceBuilder(nonceStore)
+            .id(id)
+            .used(true)
+            .expiresAt(clock.instant().plusSeconds(minRetentionSeconds))
+            .build();
 
     return nonceStore.insertIfAbsent(nonce);
   }

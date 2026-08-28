@@ -477,7 +477,7 @@ internal class Sep10ServiceTest {
   }
 
   @Test
-  fun `test validate challenge claims the nonce with an expiry anchored to the challenge's own max_time`() {
+  fun `test validate challenge claims the nonce with a fixed generous retention, not a deadline derived from the challenge`() {
     val vr = ValidationRequest()
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
 
@@ -494,20 +494,13 @@ internal class Sep10ServiceTest {
 
     sep10Service.validateChallenge(vr)
 
-    // The claim's expiry must be derived from the challenge transaction's own signed max_time --
-    // not from sep10Config.authTimeout read at validation time -- so a config change between
-    // issuance and validation can't let cleanup remove the claim early. It must also extend 1
-    // second past max_time: the SDK truncates "now" to whole seconds, so it accepts a submission
-    // anywhere in [max_time, max_time + 1), not just the exact instant max_time.000 -- anchoring
-    // to exactly max_time would let cleanup (sub-second CURRENT_TIMESTAMP) delete the row while
-    // the SDK would still accept a replay for up to another second. Read max_time from the same
-    // transaction the service parsed, rather than recomputing it, so this doesn't depend on
-    // wall-clock timing.
-    val txn: Transaction = Transaction.fromEnvelopeXdr(vr.transaction, TESTNET) as Transaction
-    val maxTime: Long = txn.timeBounds.maxTime.toLong()
-    val expiresAtSlot = slot<Instant>()
-    verify(exactly = 1) { nonceManager.claim(any(), capture(expiresAtSlot)) }
-    assertEquals(Instant.ofEpochSecond(maxTime).plusSeconds(1), expiresAtSlot.captured)
+    // The claim's retention must be a fixed, generous window (long enough to outlast any
+    // in-flight validation of a concurrent submission of the same challenge), not something
+    // derived from the challenge's own max_time or from sep10Config.authTimeout -- both were
+    // tried and both leave a gap where a slower concurrent request can still claim the hash
+    // after a faster one's claim has already been cleaned up. This must match
+    // Sep10Service.SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS.
+    verify(exactly = 1) { nonceManager.claim(any(), 3600) }
   }
 
   @Test

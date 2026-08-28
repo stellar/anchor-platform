@@ -45,6 +45,12 @@ import org.stellar.sdk.operations.Operation;
 
 /** The Sep-10 protocol service. */
 public class Sep10Service implements ISep10Service {
+  // How long a claimed nonce is retained, at minimum, past the moment it's claimed. Only needs to
+  // outlast how long a single /auth validation can plausibly still be in flight (ledger lookups,
+  // JWT signing) -- see generateWebAuthJwt's nonce claim for why this must NOT instead be derived
+  // from the challenge's own signed max_time or from sep10Config.getAuthTimeout().
+  private static final int SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS = 3600;
+
   final StellarNetworkConfig stellarNetworkConfig;
   final SecretConfig secretConfig;
   final Sep10Config sep10Config;
@@ -597,27 +603,18 @@ public class Sep10Service implements ISep10Service {
     // GET /auth, and avoids a replay window across a rolling deploy where an old-code replica
     // would otherwise create a challenge with no nonce row for a new-code replica to find.
     //
-    // The claim's retention is anchored to the challenge transaction's own signed max_time, not to
-    // this instance's current sep10.auth_timeout: that config can change between when a challenge
-    // was issued and when it's validated, and "now + current auth_timeout" could then expire (and
-    // be cleaned up) before the transaction itself stops being acceptable to the SDK -- reopening a
-    // replay once the row is gone. The SDK's own time-bounds check (org.stellar.sdk.Sep10Challenge)
-    // applies GRACE_PERIOD_SECONDS only to min_time (letting a slightly-early submission through),
-    // not to max_time -- it rejects unconditionally once now > max_time, so once max_time has
-    // passed the SDK itself blocks any replay before this method is ever reached, regardless of
-    // whether this row still exists.
-    //
-    // Retention is extended by 1 second past max_time to cover the SDK's own whole-second
-    // truncation of "now" (System.currentTimeMillis() / 1000): it accepts any submission during
-    // the entire second [max_time, max_time + 1), not just the exact instant max_time.000.
-    // Postgres'
-    // CURRENT_TIMESTAMP has sub-second precision, so anchoring the claim to exactly max_time (with
-    // no buffer) would let cleanup delete the row moments after max_time.000, while the SDK would
-    // still accept a replay for up to another second.
-    Instant nonceExpiresAt =
-        Instant.ofEpochSecond(challenge.getTransaction().getTimeBounds().getMaxTime().longValue())
-            .plusSeconds(1);
-    if (!nonceManager.claim(hash, nonceExpiresAt)) {
+    // The claim's retention is a fixed, generous window from the moment of this claim -- not
+    // anchored to the challenge's own signed max_time or to sep10Config.getAuthTimeout(). Both were
+    // tried and both leave a gap: two near-simultaneous submissions of the same challenge can both
+    // pass validation up to this point, and if the first claims the hash and cleanup then removes
+    // that row (because it was retained only until some deadline computed from the challenge's own
+    // timing) while the second is still validating -- a slow ledger lookup or JWT encode is enough
+    // -- the second claim succeeds too, minting a second token for one challenge. Retaining the
+    // claim for a fixed period from *now* instead sidesteps that: it only has to outlast how long a
+    // single validation can plausibly still be in flight, not track any deadline belonging to the
+    // challenge itself, so it can't be undermined by a slow concurrent request racing a cleanup run
+    // timed against that deadline. An hour is enormously more than any real request needs.
+    if (!nonceManager.claim(hash, SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS)) {
       throw new SepValidationException("Challenge has already been used or has expired.");
     }
 
