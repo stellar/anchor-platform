@@ -45,6 +45,11 @@ import org.stellar.sdk.operations.Operation;
 
 /** The Sep-10 protocol service. */
 public class Sep10Service implements ISep10Service {
+  // Mirrors org.stellar.sdk.Sep10Challenge's own (package-private) GRACE_PERIOD_SECONDS: the
+  // window past a challenge transaction's signed max_time during which the SDK still accepts it.
+  // See generateWebAuthJwt's nonce claim for why this must be reflected here too.
+  private static final long SEP10_CHALLENGE_TIME_BOUNDS_GRACE_PERIOD_SECONDS = 300;
+
   final StellarNetworkConfig stellarNetworkConfig;
   final SecretConfig secretConfig;
   final Sep10Config sep10Config;
@@ -596,7 +601,17 @@ public class Sep10Service implements ISep10Service {
     // simply claims it directly as used. This avoids an unauthenticated DB write on every
     // GET /auth, and avoids a replay window across a rolling deploy where an old-code replica
     // would otherwise create a challenge with no nonce row for a new-code replica to find.
-    if (!nonceManager.claim(hash, sep10Config.getAuthTimeout())) {
+    //
+    // The claim's retention is anchored to the challenge transaction's own signed max_time (plus
+    // the SDK's own GRACE_PERIOD_SECONDS=300 tolerance for validating a transaction past max_time),
+    // not to this instance's current sep10.auth_timeout: that config can change between when a
+    // challenge was issued and when it's validated, and "now + current auth_timeout" could then
+    // expire (and be cleaned up) before the transaction itself stops being acceptable to the SDK --
+    // reopening a replay once the row is gone.
+    Instant nonceExpiresAt =
+        Instant.ofEpochSecond(challenge.getTransaction().getTimeBounds().getMaxTime().longValue())
+            .plusSeconds(SEP10_CHALLENGE_TIME_BOUNDS_GRACE_PERIOD_SECONDS);
+    if (!nonceManager.claim(hash, nonceExpiresAt)) {
       throw new SepValidationException("Challenge has already been used or has expired.");
     }
 

@@ -94,20 +94,21 @@ class NonceManagerTest {
 
   @Test
   fun testClaimFirstTimeSucceeds() {
-    val claimed = nonceManager.claim("challenge-hash-1", 300)
+    val expiresAt = Instant.EPOCH.plusSeconds(1200)
+    val claimed = nonceManager.claim("challenge-hash-1", expiresAt)
 
     assertTrue(claimed)
     val nonceSlot = slot<Nonce>()
     verify(exactly = 1) { nonceStore.insertIfAbsent(capture(nonceSlot)) }
     assertEquals("challenge-hash-1", nonceSlot.captured.id)
     assertTrue(nonceSlot.captured.used)
-    assertEquals(Instant.EPOCH.plusSeconds(300), nonceSlot.captured.expiresAt)
+    assertEquals(expiresAt, nonceSlot.captured.expiresAt)
   }
 
   @Test
   fun testClaimRejectsAlreadyClaimedId() {
     every { nonceStore.insertIfAbsent(any()) } returns false
 
-    assertFalse(nonceManager.claim("challenge-hash-1", 300))
+    assertFalse(nonceManager.claim("challenge-hash-1", Instant.EPOCH.plusSeconds(300)))
   }
 }

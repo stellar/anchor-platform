@@ -8,6 +8,7 @@ import io.ktor.http.*
 import java.io.IOException
 import java.util.*
 import java.util.Base64
+import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
@@ -161,13 +162,17 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
   fun testAuthReplayRejectedConcurrently() {
     val signedXdr = signedChallengeXdr(webAuthDomain)
 
-    // Submit the exact same signed challenge from two threads at once. The nonce is consumed via
-    // a single atomic SQL UPDATE (JdbcNonceRepo.markAsUsed), so exactly one submission must win,
-    // regardless of request ordering/timing.
+    // Submit the exact same signed challenge from two threads, gated on a barrier so both actually
+    // reach `validate` at (as close to) the same instant -- otherwise the thread pool could simply
+    // run them one after the other, and the test would pass even against a non-atomic
+    // check-then-write implementation. The nonce is claimed via a single atomic SQL insert
+    // (JdbcNonceRepo.insertIfAbsent), so exactly one submission must win regardless of timing.
+    val barrier = CyclicBarrier(2)
     val executor = Executors.newFixedThreadPool(2)
     val futures =
       (1..2).map {
         executor.submit<Exception?> {
+          barrier.await()
           try {
             sep10Client.validate(ValidationRequest.of(signedXdr))
             null

@@ -3,6 +3,7 @@ package org.stellar.anchor.auth;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 
@@ -74,16 +75,15 @@ public class NonceManager {
    * is inserted already marked used), and every later claim of the same id fails.
    *
    * @param id the id to claim
-   * @param expiresIn how long the claimed row is retained before cleanup, in seconds
+   * @param expiresAt the absolute instant after which the claimed row may be cleaned up. Pass the
+   *     underlying resource's own actual expiry (not e.g. "now + this instance's current config
+   *     value for some duration") -- otherwise a config change between claims, or simply reading a
+   *     duration relative to "now" instead of the resource's real expiry, can let cleanup remove
+   *     the claim while the resource itself would still be considered valid, reopening a replay.
    * @return true if this call claimed the id for the first time, false if it was already claimed
    */
-  public boolean claim(String id, int expiresIn) {
-    Nonce nonce =
-        new NonceBuilder(nonceStore)
-            .id(id)
-            .used(true)
-            .expiresAt(clock.instant().plus(Duration.ofSeconds(expiresIn)))
-            .build();
+  public boolean claim(String id, Instant expiresAt) {
+    Nonce nonce = new NonceBuilder(nonceStore).id(id).used(true).expiresAt(expiresAt).build();
 
     return nonceStore.insertIfAbsent(nonce);
   }
