@@ -494,16 +494,18 @@ internal class Sep10ServiceTest {
 
     sep10Service.validateChallenge(vr)
 
-    // The claim's expiry must be derived from the challenge transaction's own signed max_time (plus
-    // the SDK's grace period) -- not from sep10Config.authTimeout read at validation time -- so a
-    // config change between issuance and validation can't let cleanup remove the claim early. Read
-    // max_time from the same transaction the service parsed, rather than recomputing it, so this
-    // doesn't depend on wall-clock timing.
+    // The claim's expiry must be derived from the challenge transaction's own signed max_time --
+    // not from sep10Config.authTimeout read at validation time -- so a config change between
+    // issuance and validation can't let cleanup remove the claim early. No extra buffer past
+    // max_time is needed: the SDK's own time-bounds check rejects unconditionally once
+    // now > max_time, so once max_time has passed nothing can replay this challenge regardless of
+    // whether this row still exists. Read max_time from the same transaction the service parsed,
+    // rather than recomputing it, so this doesn't depend on wall-clock timing.
     val txn: Transaction = Transaction.fromEnvelopeXdr(vr.transaction, TESTNET) as Transaction
     val maxTime: Long = txn.timeBounds.maxTime.toLong()
     val expiresAtSlot = slot<Instant>()
     verify(exactly = 1) { nonceManager.claim(any(), capture(expiresAtSlot)) }
-    assertEquals(Instant.ofEpochSecond(maxTime).plusSeconds(300), expiresAtSlot.captured)
+    assertEquals(Instant.ofEpochSecond(maxTime), expiresAtSlot.captured)
   }
 
   @Test

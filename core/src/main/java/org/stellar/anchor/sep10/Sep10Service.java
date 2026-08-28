@@ -45,11 +45,6 @@ import org.stellar.sdk.operations.Operation;
 
 /** The Sep-10 protocol service. */
 public class Sep10Service implements ISep10Service {
-  // Mirrors org.stellar.sdk.Sep10Challenge's own (package-private) GRACE_PERIOD_SECONDS: the
-  // window past a challenge transaction's signed max_time during which the SDK still accepts it.
-  // See generateWebAuthJwt's nonce claim for why this must be reflected here too.
-  private static final long SEP10_CHALLENGE_TIME_BOUNDS_GRACE_PERIOD_SECONDS = 300;
-
   final StellarNetworkConfig stellarNetworkConfig;
   final SecretConfig secretConfig;
   final Sep10Config sep10Config;
@@ -602,15 +597,17 @@ public class Sep10Service implements ISep10Service {
     // GET /auth, and avoids a replay window across a rolling deploy where an old-code replica
     // would otherwise create a challenge with no nonce row for a new-code replica to find.
     //
-    // The claim's retention is anchored to the challenge transaction's own signed max_time (plus
-    // the SDK's own GRACE_PERIOD_SECONDS=300 tolerance for validating a transaction past max_time),
-    // not to this instance's current sep10.auth_timeout: that config can change between when a
-    // challenge was issued and when it's validated, and "now + current auth_timeout" could then
-    // expire (and be cleaned up) before the transaction itself stops being acceptable to the SDK --
-    // reopening a replay once the row is gone.
+    // The claim's retention is anchored to the challenge transaction's own signed max_time, not to
+    // this instance's current sep10.auth_timeout: that config can change between when a challenge
+    // was issued and when it's validated, and "now + current auth_timeout" could then expire (and
+    // be cleaned up) before the transaction itself stops being acceptable to the SDK -- reopening a
+    // replay once the row is gone. No extra buffer past max_time is needed: the SDK's own
+    // time-bounds check (org.stellar.sdk.Sep10Challenge) applies GRACE_PERIOD_SECONDS only to
+    // min_time (letting a slightly-early submission through), not to max_time -- it rejects
+    // unconditionally once now > max_time, so once max_time has passed the SDK itself blocks any
+    // replay before this method is ever reached, regardless of whether this row still exists.
     Instant nonceExpiresAt =
-        Instant.ofEpochSecond(challenge.getTransaction().getTimeBounds().getMaxTime().longValue())
-            .plusSeconds(SEP10_CHALLENGE_TIME_BOUNDS_GRACE_PERIOD_SECONDS);
+        Instant.ofEpochSecond(challenge.getTransaction().getTimeBounds().getMaxTime().longValue());
     if (!nonceManager.claim(hash, nonceExpiresAt)) {
       throw new SepValidationException("Challenge has already been used or has expired.");
     }
