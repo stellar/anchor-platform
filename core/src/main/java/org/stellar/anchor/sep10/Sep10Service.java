@@ -28,6 +28,8 @@ import org.stellar.anchor.api.sep.sep10.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep10.ValidationRequest;
 import org.stellar.anchor.api.sep.sep10.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
+import org.stellar.anchor.auth.NonceCollisionException;
+import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.SecretConfig;
@@ -50,6 +52,7 @@ public class Sep10Service implements ISep10Service {
   final LedgerClient ledgerClient;
   final JwtService jwtService;
   final ClientFinder clientFinder;
+  final NonceManager nonceManager;
   final String serverAccountId;
   final Counter sep10ChallengeCreatedCounter = Metrics.counter(SEP10_CHALLENGE_CREATED);
   final Counter sep10ChallengeValidatedCounter = Metrics.counter(SEP10_CHALLENGE_VALIDATED);
@@ -60,7 +63,8 @@ public class Sep10Service implements ISep10Service {
       Sep10Config sep10Config,
       LedgerClient ledgerClient,
       JwtService jwtService,
-      ClientFinder clientFinder) {
+      ClientFinder clientFinder,
+      NonceManager nonceManager) {
     debug("appConfig:", stellarNetworkConfig);
     debug("sep10Config:", sep10Config);
     this.stellarNetworkConfig = stellarNetworkConfig;
@@ -69,6 +73,7 @@ public class Sep10Service implements ISep10Service {
     this.ledgerClient = ledgerClient;
     this.jwtService = jwtService;
     this.clientFinder = clientFinder;
+    this.nonceManager = nonceManager;
     this.serverAccountId =
         KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed()).getAccountId();
     Log.info("Sep10Service initialized.");
@@ -121,6 +126,7 @@ public class Sep10Service implements ISep10Service {
     info("Validating SEP-10 challenge.");
 
     ChallengeTransaction challenge = parseChallenge(request);
+
     // pre validation to be defined by the anchor
     preValidateRequestValidation(request, challenge);
 
@@ -167,6 +173,11 @@ public class Sep10Service implements ISep10Service {
       // create challenge transaction
       Transaction txn = newChallenge(request, clientSigningKey, memo);
 
+      // Register a nonce keyed by the challenge's transaction hash so it can only be redeemed
+      // for a JWT once, before it expires. The hash excludes signatures, so it is unaffected by
+      // the client (and, for non-custodial wallets, client_domain) signatures added later.
+      nonceManager.createWithId(txn.hashHex(), sep10Config.getAuthTimeout());
+
       // Convert the challenge to response
       trace("SEP-10 challenge txn:", txn);
       ChallengeResponse challengeResponse =
@@ -174,7 +185,7 @@ public class Sep10Service implements ISep10Service {
               txn.toEnvelopeXdrBase64(), stellarNetworkConfig.getStellarNetworkPassphrase());
       trace("challengeResponse:", challengeResponse);
       return challengeResponse;
-    } catch (InvalidSep10ChallengeException ex) {
+    } catch (InvalidSep10ChallengeException | NonceCollisionException ex) {
       warnEx(ex);
       throw new SepException("Failed to create the sep-10 challenge.", ex);
     }
@@ -566,8 +577,19 @@ public class Sep10Service implements ISep10Service {
             clientDomain,
             homeDomain);
 
+    // Resolve the client name (which itself can fail authorization, e.g. SepNotAuthorizedException)
+    // before consuming the nonce below.
     webAuthJwt.setClientName(
         clientFinder.getClientName(clientDomain, challenge.getClientAccountId()));
+
+    // Consume the challenge's nonce only now, immediately before minting/encoding the JWT -- not
+    // earlier in this method or in validateChallenge(). Everything above (home domain, account,
+    // signers, threshold, and client name resolution) must succeed first, so that a submission
+    // that fails for an unrelated reason doesn't burn the nonce and cause a subsequent, correctly
+    // signed retry of the same challenge to be wrongly rejected as a replay.
+    if (!nonceManager.verifyAndUse(challenge.getTransaction().hashHex())) {
+      throw new SepValidationException("Challenge has already been used or has expired.");
+    }
 
     debug("jwtToken:", webAuthJwt);
     return jwtService.encode(webAuthJwt);

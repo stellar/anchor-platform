@@ -25,11 +25,19 @@ public class NonceManager {
    * @return the nonce
    */
   public Nonce create(int expiresIn) {
-    String id = UUID.randomUUID().toString();
-    if (nonceStore.findById(id) != null) {
-      throw new RuntimeException("Duplicate nonce id");
-    }
+    return createWithId(UUID.randomUUID().toString(), expiresIn);
+  }
 
+  /**
+   * Create a new nonce with a caller-supplied id that expires in expiresIn seconds. Use this when
+   * the id must be derivable by both the issuer and the verifier of the nonce, e.g. a SEP-10
+   * challenge transaction hash, instead of an opaque random id.
+   *
+   * @param id the nonce id
+   * @param expiresIn the number of seconds until the nonce expires
+   * @return the nonce
+   */
+  public Nonce createWithId(String id, int expiresIn) {
     Nonce nonce =
         new NonceBuilder(nonceStore)
             .id(id)
@@ -37,7 +45,14 @@ public class NonceManager {
             .expiresAt(clock.instant().plus(Duration.ofSeconds(expiresIn)))
             .build();
 
-    return nonceStore.save(nonce);
+    // A single atomic insert-if-absent, rather than findById() followed by save(): the latter is
+    // a check-then-act race between concurrent callers, since JdbcNonce's assigned (non-generated)
+    // id means Spring Data's save() can merge/overwrite an existing row instead of failing.
+    if (!nonceStore.insertIfAbsent(nonce)) {
+      throw new NonceCollisionException(id);
+    }
+
+    return nonce;
   }
 
   /**

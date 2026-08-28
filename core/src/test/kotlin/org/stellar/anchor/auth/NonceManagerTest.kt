@@ -3,7 +3,6 @@ package org.stellar.anchor.auth
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
-import io.mockk.slot
 import io.mockk.verify
 import java.time.Clock
 import java.time.Instant
@@ -25,9 +24,7 @@ class NonceManagerTest {
     clock = Clock.fixed(Instant.EPOCH, Clock.systemUTC().zone)
 
     every { nonceStore.newInstance() } answers { PojoNonce() }
-    every { nonceStore.findById(any()) } returns null
-    val nonce = slot<Nonce>()
-    every { nonceStore.save(capture(nonce)) } answers { nonce.captured }
+    every { nonceStore.insertIfAbsent(any()) } returns true
 
     nonceManager = NonceManager(nonceStore, clock)
   }
@@ -40,7 +37,7 @@ class NonceManagerTest {
     assertFalse(nonce.used)
     assert(nonce.expiresAt == Instant.EPOCH.plusSeconds(300))
 
-    verify(exactly = 1) { nonceStore.save(nonce) }
+    verify(exactly = 1) { nonceStore.insertIfAbsent(nonce) }
   }
 
   @Test
@@ -53,13 +50,27 @@ class NonceManagerTest {
 
   @Test
   fun testDuplicateNonceExists() {
-    val nonce = PojoNonce()
-    every { nonceStore.findById(any()) } returns nonce
+    every { nonceStore.insertIfAbsent(any()) } returns false
 
     assertThrows<RuntimeException> { nonceManager.create(300) }
+  }
 
-    verify(exactly = 1) { nonceStore.findById(any()) }
-    verify(exactly = 0) { nonceStore.save(any()) }
+  @Test
+  fun testCreateWithId() {
+    val nonce = nonceManager.createWithId("challenge-hash-1", 300)
+
+    assertEquals("challenge-hash-1", nonce.id)
+    assertFalse(nonce.used)
+    assert(nonce.expiresAt == Instant.EPOCH.plusSeconds(300))
+
+    verify(exactly = 1) { nonceStore.insertIfAbsent(nonce) }
+  }
+
+  @Test
+  fun testCreateWithIdRejectsDuplicateId() {
+    every { nonceStore.insertIfAbsent(any()) } returns false
+
+    assertThrows<RuntimeException> { nonceManager.createWithId("challenge-hash-1", 300) }
   }
 
   @Test
