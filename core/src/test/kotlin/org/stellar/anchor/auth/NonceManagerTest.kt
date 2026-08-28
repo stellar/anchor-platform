@@ -53,7 +53,8 @@ class NonceManagerTest {
   fun testDuplicateNonceExists() {
     every { nonceStore.insertIfAbsent(any()) } returns false
 
-    assertThrows<RuntimeException> { nonceManager.create(300) }
+    assertThrows<NonceCollisionException> { nonceManager.create(300) }
+    verify(exactly = 1) { nonceStore.insertIfAbsent(any()) }
   }
 
   @Test
@@ -71,7 +72,8 @@ class NonceManagerTest {
   fun testCreateWithIdRejectsDuplicateId() {
     every { nonceStore.insertIfAbsent(any()) } returns false
 
-    assertThrows<RuntimeException> { nonceManager.createWithId("challenge-hash-1", 300) }
+    assertThrows<NonceCollisionException> { nonceManager.createWithId("challenge-hash-1", 300) }
+    verify(exactly = 1) { nonceStore.insertIfAbsent(any()) }
   }
 
   @Test
