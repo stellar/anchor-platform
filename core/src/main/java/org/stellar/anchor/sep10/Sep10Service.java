@@ -45,10 +45,10 @@ import org.stellar.sdk.operations.Operation;
 
 /** The Sep-10 protocol service. */
 public class Sep10Service implements ISep10Service {
-  // How long a claimed nonce is retained, at minimum, past the moment it's claimed. Only needs to
-  // outlast how long a single /auth validation can plausibly still be in flight (ledger lookups,
-  // JWT signing) -- see generateWebAuthJwt's nonce claim for why this must NOT instead be derived
-  // from the challenge's own signed max_time or from sep10Config.getAuthTimeout().
+  // How long a claimed nonce is retained, at minimum, past the moment it's claimed -- one of two
+  // floors combined at the claim site (see generateWebAuthJwt); only needs to outlast how long a
+  // single /auth validation can plausibly still be in flight (ledger lookups, JWT signing), not
+  // the challenge's own signed max_time or sep10Config.getAuthTimeout() (that's the other floor).
   private static final int SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS = 3600;
 
   final StellarNetworkConfig stellarNetworkConfig;
@@ -603,18 +603,30 @@ public class Sep10Service implements ISep10Service {
     // GET /auth, and avoids a replay window across a rolling deploy where an old-code replica
     // would otherwise create a challenge with no nonce row for a new-code replica to find.
     //
-    // The claim's retention is a fixed, generous window from the moment of this claim -- not
-    // anchored to the challenge's own signed max_time or to sep10Config.getAuthTimeout(). Both were
-    // tried and both leave a gap: two near-simultaneous submissions of the same challenge can both
-    // pass validation up to this point, and if the first claims the hash and cleanup then removes
-    // that row (because it was retained only until some deadline computed from the challenge's own
-    // timing) while the second is still validating -- a slow ledger lookup or JWT encode is enough
-    // -- the second claim succeeds too, minting a second token for one challenge. Retaining the
-    // claim for a fixed period from *now* instead sidesteps that: it only has to outlast how long a
-    // single validation can plausibly still be in flight, not track any deadline belonging to the
-    // challenge itself, so it can't be undermined by a slow concurrent request racing a cleanup run
-    // timed against that deadline. An hour is enormously more than any real request needs.
-    if (!nonceManager.claim(hash, SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS)) {
+    // The claim's retention takes the later of two floors -- neither alone is sufficient:
+    //
+    // 1) A fixed window from the moment of this claim (SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS).
+    //    Anchoring retention only to the challenge's own signed max_time was tried and leaves a
+    //    gap: two near-simultaneous submissions of the same challenge can both pass validation up
+    //    to this point, and if the first claims the hash and cleanup then removes that row (because
+    //    it was retained only until a deadline computed from the challenge's own timing) while the
+    //    second is still validating -- a slow ledger lookup or JWT encode is enough -- the second
+    //    claim succeeds too, minting a second token for one challenge.
+    //
+    // 2) The challenge's own signed max_time (plus a second for the SDK's whole-second truncation
+    //    of "now" when it checks max_time). Relying only on the fixed window above is *also*
+    //    insufficient on its own: sep10.auth_timeout is anchor-configurable with no enforced
+    //    ceiling (PropertySep10Config only requires it to be positive), and it determines the
+    //    challenge's max_time -- so a longer-than-default auth_timeout can leave the challenge
+    //    still validly within its own time bounds well after the fixed window alone would have
+    //    let cleanup remove the claim, letting the same hash be claimed again for a second token.
+    //
+    // Together, the claim can never be removed before both the in-flight-validation window has
+    // passed AND the challenge's own signed validity has ended, regardless of how auth_timeout is
+    // configured.
+    long maxTimeEpochSecond = challenge.getTransaction().getTimeBounds().getMaxTime().longValue();
+    Instant challengeNotBefore = Instant.ofEpochSecond(maxTimeEpochSecond).plusSeconds(1);
+    if (!nonceManager.claim(hash, SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS, challengeNotBefore)) {
       throw new SepValidationException("Challenge has already been used or has expired.");
     }
 

@@ -96,7 +96,7 @@ class NonceManagerTest {
 
   @Test
   fun testClaimFirstTimeSucceeds() {
-    val claimed = nonceManager.claim("challenge-hash-1", 1200)
+    val claimed = nonceManager.claim("challenge-hash-1", 1200, Instant.EPOCH)
 
     assertTrue(claimed)
     val nonceSlot = slot<Nonce>()
@@ -110,6 +110,30 @@ class NonceManagerTest {
   fun testClaimRejectsAlreadyClaimedId() {
     every { nonceStore.insertIfAbsent(any()) } returns false
 
-    assertFalse(nonceManager.claim("challenge-hash-1", 300))
+    assertFalse(nonceManager.claim("challenge-hash-1", 300, Instant.EPOCH))
+  }
+
+  @Test
+  fun testClaimUsesMinRetentionWhenItsLaterThanNotBefore() {
+    // notBefore (EPOCH + 10s) is earlier than now + minRetentionSeconds (EPOCH + 300s), so the
+    // fixed retention window must win.
+    nonceManager.claim("challenge-hash-1", 300, Instant.EPOCH.plusSeconds(10))
+
+    val nonceSlot = slot<Nonce>()
+    verify(exactly = 1) { nonceStore.insertIfAbsent(capture(nonceSlot)) }
+    assertEquals(Instant.EPOCH.plusSeconds(300), nonceSlot.captured.expiresAt)
+  }
+
+  @Test
+  fun testClaimUsesNotBeforeWhenItsLaterThanMinRetention() {
+    // notBefore (EPOCH + 7200s) is later than now + minRetentionSeconds (EPOCH + 300s) -- e.g. a
+    // challenge whose own signed max_time is further out than the fixed retention window, because
+    // sep10.auth_timeout was configured longer than that window. notBefore must win, or cleanup
+    // could remove the claim while the challenge itself is still validly within its time bounds.
+    nonceManager.claim("challenge-hash-1", 300, Instant.EPOCH.plusSeconds(7200))
+
+    val nonceSlot = slot<Nonce>()
+    verify(exactly = 1) { nonceStore.insertIfAbsent(capture(nonceSlot)) }
+    assertEquals(Instant.EPOCH.plusSeconds(7200), nonceSlot.captured.expiresAt)
   }
 }

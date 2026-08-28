@@ -120,7 +120,7 @@ internal class Sep10ServiceTest {
 
     // Default to "not a replay" so existing tests that don't exercise replay protection keep
     // passing; tests that specifically test replay protection override this.
-    every { nonceManager.claim(any(), any()) } returns true
+    every { nonceManager.claim(any(), any(), any()) } returns true
 
     this.jwtService = spyk(JwtService(secretConfig))
     this.sep10Service =
@@ -477,7 +477,7 @@ internal class Sep10ServiceTest {
   }
 
   @Test
-  fun `test validate challenge claims the nonce with a fixed generous retention, not a deadline derived from the challenge`() {
+  fun `test validate challenge claims the nonce with both a fixed retention floor and a max_time floor`() {
     val vr = ValidationRequest()
     vr.transaction = createTestChallenge("", TEST_HOME_DOMAIN, false)
 
@@ -494,13 +494,17 @@ internal class Sep10ServiceTest {
 
     sep10Service.validateChallenge(vr)
 
-    // The claim's retention must be a fixed, generous window (long enough to outlast any
-    // in-flight validation of a concurrent submission of the same challenge), not something
-    // derived from the challenge's own max_time or from sep10Config.authTimeout -- both were
-    // tried and both leave a gap where a slower concurrent request can still claim the hash
-    // after a faster one's claim has already been cleaned up. This must match
-    // Sep10Service.SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS.
-    verify(exactly = 1) { nonceManager.claim(any(), 3600) }
+    // Sep10Service must pass both floors to NonceManager.claim, which picks whichever is later:
+    // a fixed, generous window (long enough to outlast any in-flight validation of a concurrent
+    // submission), and the challenge's own signed max_time + 1s (so a long sep10.auth_timeout
+    // can't leave the challenge validly within its time bounds after the fixed window alone would
+    // have let cleanup remove the claim). Neither floor alone is sufficient -- see
+    // Sep10Service.SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS and NonceManager.claim's own doc.
+    val txn: Transaction = Transaction.fromEnvelopeXdr(vr.transaction, TESTNET) as Transaction
+    val maxTime: Long = txn.timeBounds.maxTime.toLong()
+    verify(exactly = 1) {
+      nonceManager.claim(any(), 3600, Instant.ofEpochSecond(maxTime).plusSeconds(1))
+    }
   }
 
   @Test
@@ -520,12 +524,12 @@ internal class Sep10ServiceTest {
     every { ledgerClient.getAccount(any()) } returns accountResponse
 
     // First validation of this challenge succeeds and claims its nonce.
-    every { nonceManager.claim(any(), any()) } returns true
+    every { nonceManager.claim(any(), any(), any()) } returns true
     sep10Service.validateChallenge(vr)
 
     // Replaying the exact same challenge transaction must be rejected, even though its signature
     // and time bounds are still otherwise valid.
-    every { nonceManager.claim(any(), any()) } returns false
+    every { nonceManager.claim(any(), any(), any()) } returns false
     assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
   }
 
@@ -541,12 +545,12 @@ internal class Sep10ServiceTest {
 
     // First validation of this challenge succeeds (via the account-not-found branch) and
     // claims its nonce.
-    every { nonceManager.claim(any(), any()) } returns true
+    every { nonceManager.claim(any(), any(), any()) } returns true
     sep10Service.validateChallenge(vr)
 
     // Replaying the exact same challenge transaction must be rejected -- this branch shares
     // generateWebAuthJwt (and therefore the nonce check) with the account-exists branch.
-    every { nonceManager.claim(any(), any()) } returns false
+    every { nonceManager.claim(any(), any(), any()) } returns false
     assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
   }
 
@@ -562,7 +566,7 @@ internal class Sep10ServiceTest {
         throw LedgerException("rpc unavailable")
       }
     assertThrows<SepValidationException> { sep10Service.validateChallenge(vr) }
-    verify(exactly = 0) { nonceManager.claim(any(), any()) }
+    verify(exactly = 0) { nonceManager.claim(any(), any(), any()) }
 
     // Retrying the exact same challenge once the transient failure clears must succeed --
     // proving the earlier failed attempt didn't burn the nonce.
@@ -578,7 +582,7 @@ internal class Sep10ServiceTest {
     every { ledgerClient.getAccount(any()) } returns accountResponse
 
     assertDoesNotThrow { sep10Service.validateChallenge(vr) }
-    verify(exactly = 1) { nonceManager.claim(any(), any()) }
+    verify(exactly = 1) { nonceManager.claim(any(), any(), any()) }
   }
 
   @Test
@@ -634,13 +638,13 @@ internal class Sep10ServiceTest {
     every { clientFinder.getClientName(any(), any()) } throws
       SepNotAuthorizedException("Client not found")
     assertThrows<SepNotAuthorizedException> { sep10Service.validateChallenge(vr) }
-    verify(exactly = 0) { nonceManager.claim(any(), any()) }
+    verify(exactly = 0) { nonceManager.claim(any(), any(), any()) }
 
     // Retrying the exact same challenge once client name resolution succeeds must succeed --
     // proving the earlier failure didn't burn the nonce.
     every { clientFinder.getClientName(any(), any()) } returns null
     assertDoesNotThrow { sep10Service.validateChallenge(vr) }
-    verify(exactly = 1) { nonceManager.claim(any(), any()) }
+    verify(exactly = 1) { nonceManager.claim(any(), any(), any()) }
   }
 
   @Test

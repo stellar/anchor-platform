@@ -66,7 +66,7 @@ class Sep10RpcThresholdSignExtensionTest {
     val clientFinder = mockk<ClientFinder>(relaxed = true)
     val jwtService = JwtService(secretConfig)
     val nonceManager = mockk<NonceManager>(relaxed = true)
-    every { nonceManager.claim(any(), any()) } returns true
+    every { nonceManager.claim(any(), any(), any()) } returns true
 
     return Sep10Service(
       stellarNetworkConfig,
