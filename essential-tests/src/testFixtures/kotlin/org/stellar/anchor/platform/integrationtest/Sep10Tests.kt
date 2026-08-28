@@ -8,6 +8,7 @@ import io.ktor.http.*
 import java.io.IOException
 import java.util.*
 import java.util.Base64
+import java.util.concurrent.Executors
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlinx.coroutines.runBlocking
@@ -103,6 +104,71 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
       exceptionClass = SepNotAuthorizedException::class,
       block = { sep10Client.validate(ValidationRequest.of(challenge.transaction)) },
     )
+  }
+
+  /** Signs a fresh SEP-10 challenge with the client wallet key, without submitting it. */
+  private fun signedChallengeXdr(homeDomain: String): String {
+    val challenge = sep10Client.challenge(homeDomain)
+    val challengeTransaction =
+      Sep10Challenge.readChallengeTransaction(
+        challenge.transaction,
+        toml.getString("SIGNING_KEY"),
+        Network(challenge.networkPassphrase),
+        homeDomain,
+        webAuthDomain,
+      )
+    challengeTransaction.transaction.sign(KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET))
+    return challengeTransaction.transaction.toEnvelopeXdrBase64()
+  }
+
+  @Test
+  fun testAuthReplayRejected() {
+    val signedXdr = signedChallengeXdr(webAuthDomain)
+
+    // The first validation of a signed challenge must succeed and consume its nonce.
+    val token = sep10Client.validate(ValidationRequest.of(signedXdr))
+    assertEquals(true, !token?.token.isNullOrEmpty())
+
+    // Replaying the exact same signed challenge a second time must be rejected, even though the
+    // signature and time bounds are still otherwise valid.
+    assertFailsWith(
+      exceptionClass = SepNotAuthorizedException::class,
+      block = { sep10Client.validate(ValidationRequest.of(signedXdr)) },
+    )
+  }
+
+  @Test
+  fun testAuthReplayRejectedConcurrently() {
+    val signedXdr = signedChallengeXdr(webAuthDomain)
+
+    // Submit the exact same signed challenge from two threads at once. The nonce is consumed via
+    // a single atomic SQL UPDATE (JdbcNonceRepo.markAsUsed), so exactly one submission must win,
+    // regardless of request ordering/timing.
+    val executor = Executors.newFixedThreadPool(2)
+    val futures =
+      (1..2).map {
+        executor.submit<Exception?> {
+          try {
+            sep10Client.validate(ValidationRequest.of(signedXdr))
+            null
+          } catch (e: SepNotAuthorizedException) {
+            e
+          }
+        }
+      }
+
+    val exceptions =
+      try {
+        futures.map { it.get() }
+      } finally {
+        executor.shutdown()
+      }
+
+    val successCount = exceptions.count { it == null }
+    val failureCount = exceptions.count { it != null }
+
+    assertEquals(1, successCount, "Expected exactly 1 successful validation, got $successCount")
+    assertEquals(1, failureCount, "Expected exactly 1 rejected validation, got $failureCount")
   }
 
   @Test
