@@ -63,6 +63,11 @@ public class DataBeans {
   // SepServer and PlatformServer: SEP-10's /auth traffic -- the nonce table's primary writer --
   // is served by SepServer, which can run standalone without a PlatformServer instance, so the
   // cleanup job must be reachable there too or SEP-server-only deployments never reap these rows.
+  // A deployment that runs both servers in one process (e.g. `--sep-server --platform-server`)
+  // ends up with two independently-scheduled instances of this job, each in its own Spring
+  // context; both querying the same table is harmless (DELETE is idempotent, and this table is
+  // small and indexed by expires_at), just mildly redundant -- an acceptable trade-off for the
+  // job being reachable in every supported topology rather than only some.
   @Bean
   public NonceCleanupJob nonceCleanupJob(NonceStore nonceStore) {
     return new NonceCleanupJob(nonceStore);

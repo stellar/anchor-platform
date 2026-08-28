@@ -34,6 +34,16 @@ import org.stellar.walletsdk.horizon.SigningKeyPair
 import org.stellar.walletsdk.horizon.sign
 
 class Sep10Tests : IntegrationTestBase(TestConfig()) {
+  companion object {
+    // Shared across test instances (JUnit creates a new Sep10Tests per @Test method by default),
+    // so this connection pool isn't rebuilt for every test in the class, only the one that uses it.
+    private val rawHttpClient: OkHttpClient =
+      OkHttpClient.Builder()
+        .connectTimeout(1, TimeUnit.MINUTES)
+        .readTimeout(1, TimeUnit.MINUTES)
+        .build()
+  }
+
   lateinit var sep10Client: Sep10Client
   lateinit var sep10ClientMultiSig: Sep10Client
   lateinit var webAuthDomain: String
@@ -41,12 +51,6 @@ class Sep10Tests : IntegrationTestBase(TestConfig()) {
   private val walletDomain = config.env["wallet.server.url"]?.replace("http://", "")!!
   private val walletUrl = config.env["wallet.server.url"]!!
   private val domainSinger = WalletSigner.DomainSigner("$walletUrl/signChallenge")
-
-  private val rawHttpClient: OkHttpClient =
-    OkHttpClient.Builder()
-      .connectTimeout(1, TimeUnit.MINUTES)
-      .readTimeout(1, TimeUnit.MINUTES)
-      .build()
 
   init {
     if (!::sep10Client.isInitialized) {
