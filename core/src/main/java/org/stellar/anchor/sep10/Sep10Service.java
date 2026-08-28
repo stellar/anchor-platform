@@ -601,13 +601,22 @@ public class Sep10Service implements ISep10Service {
     // this instance's current sep10.auth_timeout: that config can change between when a challenge
     // was issued and when it's validated, and "now + current auth_timeout" could then expire (and
     // be cleaned up) before the transaction itself stops being acceptable to the SDK -- reopening a
-    // replay once the row is gone. No extra buffer past max_time is needed: the SDK's own
-    // time-bounds check (org.stellar.sdk.Sep10Challenge) applies GRACE_PERIOD_SECONDS only to
-    // min_time (letting a slightly-early submission through), not to max_time -- it rejects
-    // unconditionally once now > max_time, so once max_time has passed the SDK itself blocks any
-    // replay before this method is ever reached, regardless of whether this row still exists.
+    // replay once the row is gone. The SDK's own time-bounds check (org.stellar.sdk.Sep10Challenge)
+    // applies GRACE_PERIOD_SECONDS only to min_time (letting a slightly-early submission through),
+    // not to max_time -- it rejects unconditionally once now > max_time, so once max_time has
+    // passed the SDK itself blocks any replay before this method is ever reached, regardless of
+    // whether this row still exists.
+    //
+    // Retention is extended by 1 second past max_time to cover the SDK's own whole-second
+    // truncation of "now" (System.currentTimeMillis() / 1000): it accepts any submission during
+    // the entire second [max_time, max_time + 1), not just the exact instant max_time.000.
+    // Postgres'
+    // CURRENT_TIMESTAMP has sub-second precision, so anchoring the claim to exactly max_time (with
+    // no buffer) would let cleanup delete the row moments after max_time.000, while the SDK would
+    // still accept a replay for up to another second.
     Instant nonceExpiresAt =
-        Instant.ofEpochSecond(challenge.getTransaction().getTimeBounds().getMaxTime().longValue());
+        Instant.ofEpochSecond(challenge.getTransaction().getTimeBounds().getMaxTime().longValue())
+            .plusSeconds(1);
     if (!nonceManager.claim(hash, nonceExpiresAt)) {
       throw new SepValidationException("Challenge has already been used or has expired.");
     }
