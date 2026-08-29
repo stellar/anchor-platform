@@ -174,14 +174,21 @@ public class Sep31Service {
     String ownerAccount = ownerClientName != null ? ownerClientName : webAuthJwt.getOwnerAccount();
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
+    Sep31Info.Sep12Info sep12Config = assetInfo.getSep31().getSep12();
     verifyCustomerOwnershipAndKyc(
-        webAuthJwt, request.getSenderId(), Sep12Service.TYPE_SEP31_SENDER, ownerAccount, ownerMemo);
+        webAuthJwt,
+        request.getSenderId(),
+        Sep12Service.TYPE_SEP31_SENDER,
+        ownerAccount,
+        ownerMemo,
+        sep12Config != null && sep12Config.getSender() != null);
     verifyCustomerOwnershipAndKyc(
         webAuthJwt,
         request.getReceiverId(),
         Sep12Service.TYPE_SEP31_RECEIVER,
         ownerAccount,
-        ownerMemo);
+        ownerMemo,
+        sep12Config != null && sep12Config.getReceiver() != null);
 
     Sep38Quote quote = Context.get().getQuote();
     FeeDetails feeDetails;
@@ -292,56 +299,73 @@ public class Sep31Service {
    *     org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse#getSep12()}), and echoed
    *     back in {@link Sep31CustomerInfoNeededException#getType()} so the sending anchor knows
    *     which SEP-12 `type` to use when it re-fetches the customer
+   * @param kycRequired whether this asset's config actually advertises a SEP-12 type for this role
+   *     (`assetInfo.getSep31().getSep12()`'s `sender`/`receiver` is non-null) -- per SEP-31, an
+   *     absent `sep12.sender`/`sep12.receiver` in `GET /info` means KYC isn't required for that
+   *     role, so ownership is still verified (and, for an unclaimed id, still established via the
+   *     identity lookup above) but the KYC-status check is skipped
    * @throws SepNotAuthorizedException if the customer has no owner on file and doesn't resolve to
    *     the caller's own SEP-12 identity, or belongs to a different authenticated client
-   * @throws Sep31CustomerInfoNeededException if the customer's SEP-12 KYC status is {@code
-   *     NEEDS_INFO}
+   * @throws Sep31CustomerInfoNeededException if {@code kycRequired} and the customer's SEP-12 KYC
+   *     status is {@code NEEDS_INFO}
    */
   void verifyCustomerOwnershipAndKyc(
       WebAuthJwt webAuthJwt,
       String customerId,
       String customerType,
       String ownerAccount,
-      String ownerMemo)
+      String ownerMemo,
+      boolean kycRequired)
       throws AnchorException {
     if (customerId == null) {
       return;
     }
-
-    GetCustomerResponse customer;
 
     if (customerIdOwnerStore.isClaimed(customerId)) {
       if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
         throw new SepNotAuthorizedException(
             "sender_id/receiver_id does not belong to the authenticated client");
       }
-      customer =
+      if (!kycRequired) {
+        return;
+      }
+      GetCustomerResponse customer =
           customerIntegration.getCustomer(
               GetCustomerRequest.builder().id(customerId).type(customerType).build());
-    } else {
-      String tokenAccount =
-          webAuthJwt.getMuxedAccount() != null
-              ? webAuthJwt.getMuxedAccount()
-              : webAuthJwt.getAccount();
-      String tokenMemo = webAuthJwt.getOwnerMemo();
-      customer =
-          customerIntegration.getCustomer(
-              GetCustomerRequest.builder()
-                  .account(tokenAccount)
-                  .memo(tokenMemo)
-                  .memoType(tokenMemo != null ? "id" : null)
-                  .type(customerType)
-                  .build());
-      if (customer == null || !customerId.equals(customer.getId())) {
-        throw new SepNotAuthorizedException(
-            "sender_id/receiver_id has not been registered via SEP-12 PUT /customer");
-      }
-      if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
-        throw new SepNotAuthorizedException(
-            "sender_id/receiver_id does not belong to the authenticated client");
-      }
+      rejectIfNeedsInfo(customer, customerId, customerType);
+      return;
     }
 
+    String tokenAccount =
+        webAuthJwt.getMuxedAccount() != null
+            ? webAuthJwt.getMuxedAccount()
+            : webAuthJwt.getAccount();
+    String tokenMemo = webAuthJwt.getOwnerMemo();
+    GetCustomerResponse customer =
+        customerIntegration.getCustomer(
+            GetCustomerRequest.builder()
+                .account(tokenAccount)
+                .memo(tokenMemo)
+                .memoType(tokenMemo != null ? "id" : null)
+                .type(customerType)
+                .build());
+    if (customer == null || !customerId.equals(customer.getId())) {
+      throw new SepNotAuthorizedException(
+          "sender_id/receiver_id does not belong to the authenticated client");
+    }
+    if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
+      throw new SepNotAuthorizedException(
+          "sender_id/receiver_id does not belong to the authenticated client");
+    }
+    if (!kycRequired) {
+      return;
+    }
+    rejectIfNeedsInfo(customer, customerId, customerType);
+  }
+
+  private static void rejectIfNeedsInfo(
+      GetCustomerResponse customer, String customerId, String customerType)
+      throws Sep31CustomerInfoNeededException {
     if (Sep12Status.NEEDS_INFO.getName().equals(customer.getStatus())) {
       infoF("Customer ({}) needs more info before this transaction can proceed", customerId);
       throw new Sep31CustomerInfoNeededException(customerType);
@@ -765,6 +789,9 @@ public class Sep31Service {
       sep12Response.setReceiver(
           sep12TypesResponse(
               Sep12Service.TYPE_SEP31_RECEIVER, sep12Config.getReceiver().getDescription()));
+    }
+    if (sep12Response.getSender() == null && sep12Response.getReceiver() == null) {
+      return null;
     }
     return sep12Response;
   }

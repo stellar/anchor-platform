@@ -1022,6 +1022,60 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test postTransaction skips SEP-12 KYC status check when the asset does not advertise sep12 for that role`() {
+    val noSep12AssetJson =
+      """
+      {
+        "items": [
+          {
+            "id": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+            "distribution_account": "GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I",
+            "significant_decimals": 2,
+            "sep31": {
+              "enabled": true,
+              "receive": {"min_amount": 1, "max_amount": 1000000, "methods": ["SEPA", "SWIFT"]},
+              "quotes_supported": false,
+              "quotes_required": false
+            }
+          }
+        ]
+      }
+      """
+        .trimIndent()
+    sep31Service =
+      Sep31Service(
+        languageConfig,
+        sep31Config,
+        txnStore,
+        quoteStore,
+        DefaultAssetService.fromJsonContent(noSep12AssetJson),
+        rateIntegration,
+        eventService,
+        Clock.systemUTC(),
+        exchangeAmountsCalculator,
+        customerIdOwnerStore,
+        customerIntegration,
+      )
+    every { rateIntegration.getRate(any()) } returns
+      GetRateResponse(GetRateResponse.Rate.builder().fee(FeeDetails("2", "stellar:USDC")).build())
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().status(Sep12Status.NEEDS_INFO.getName()).build()
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val postTxRequest = ownershipTestRequest(receiverId = "needs-info-but-not-required")
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("needs-info-but-not-required", any(), any())
+    }
+  }
+
+  @Test
   fun `test preValidateQuote rejects already-bound quote`() {
     val tomorrow = Instant.now().plus(1, ChronoUnit.DAYS)
     val boundQuote =
