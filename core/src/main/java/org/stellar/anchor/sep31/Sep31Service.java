@@ -779,20 +779,20 @@ public class Sep31Service {
     if (sep12Config == null) {
       return null;
     }
-    Sep31InfoResponse.Sep12Response sep12Response = new Sep31InfoResponse.Sep12Response();
-    if (sep12Config.getSender() != null) {
-      sep12Response.setSender(
-          sep12TypesResponse(
-              Sep12Service.TYPE_SEP31_SENDER, sep12Config.getSender().getDescription()));
-    }
-    if (sep12Config.getReceiver() != null) {
-      sep12Response.setReceiver(
-          sep12TypesResponse(
-              Sep12Service.TYPE_SEP31_RECEIVER, sep12Config.getReceiver().getDescription()));
-    }
-    if (sep12Response.getSender() == null && sep12Response.getReceiver() == null) {
+if (sep12Config.getSender() == null && sep12Config.getReceiver() == null) {
       return null;
     }
+    Sep31InfoResponse.Sep12Response sep12Response = new Sep31InfoResponse.Sep12Response();
+    sep12Response.setSender(
+        sep12Config.getSender() == null
+            ? new Sep31InfoResponse.Sep12TypesResponse()
+            : sep12TypesResponse(
+                Sep12Service.TYPE_SEP31_SENDER, sep12Config.getSender().getDescription()));
+    sep12Response.setReceiver(
+        sep12Config.getReceiver() == null
+            ? new Sep31InfoResponse.Sep12TypesResponse()
+            : sep12TypesResponse(
+                Sep12Service.TYPE_SEP31_RECEIVER, sep12Config.getReceiver().getDescription()));
     return sep12Response;
   }
 
