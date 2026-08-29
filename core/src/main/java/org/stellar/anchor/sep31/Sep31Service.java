@@ -257,15 +257,22 @@ public class Sep31Service {
    * PENDING_CUSTOMER_INFO_UPDATE} and the Platform API), which still handles KYC that becomes
    * incomplete or stale after the transaction is created.
    *
+   * <p>The SEP-12 status lookup only runs for a `customerId` that was already claimed by an owner
+   * *before* this call -- not one this call is claiming for the first time. A first-time claim of
+   * an id that has no owner row yet is handed to whoever references it first (an accepted,
+   * separately-tracked risk for creating a transaction, see ANCHOR-1248's "Known limitations");
+   * letting that same claim also unlock a SEP-12 status lookup would turn it into an oracle for a
+   * stranger's KYC status, which is a new capability this method must not grant.
+   *
    * @param customerId the `sender_id` or `receiver_id` from the request, or null if not provided
    * @param customerType the SEP-12 `type` to request -- {@code "sep31-sender"} or {@code
    *     "sep31-receiver"}, matching this codebase's existing convention (see {@code
-   *     Sep31EventProcessor} in kotlin-reference-server) and echoed back in {@link
+   *     Sep12Service#TYPE_SEP31_SENDER}/{@code TYPE_SEP31_RECEIVER}) and echoed back in {@link
    *     Sep31CustomerInfoNeededException#getType()} so the sending anchor knows which SEP-12 `type`
    *     to use when it re-fetches the customer
    * @throws SepNotAuthorizedException if the customer doesn't belong to the authenticated client
-   * @throws Sep31CustomerInfoNeededException if the customer's SEP-12 KYC status is {@code
-   *     NEEDS_INFO}
+   * @throws Sep31CustomerInfoNeededException if the customer was already claimed by this owner and
+   *     its SEP-12 KYC status is {@code NEEDS_INFO}
    */
   void verifyCustomerOwnershipAndKyc(
       String customerId, String customerType, String ownerAccount, String ownerMemo)
@@ -274,9 +281,15 @@ public class Sep31Service {
       return;
     }
 
+    boolean alreadyClaimed = customerIdOwnerStore.isClaimed(customerId);
+
     if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
       throw new SepNotAuthorizedException(
           "sender_id/receiver_id does not belong to the authenticated client");
+    }
+
+    if (!alreadyClaimed) {
+      return;
     }
 
     GetCustomerResponse customer =

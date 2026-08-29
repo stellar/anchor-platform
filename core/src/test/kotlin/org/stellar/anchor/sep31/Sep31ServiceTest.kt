@@ -246,6 +246,7 @@ class Sep31ServiceTest {
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
     every { eventService.createSession(any(), TRANSACTION) } returns eventSession
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.getCustomer(any()) } returns
       GetCustomerResponse.builder().status(Sep12Status.ACCEPTED.getName()).build()
 
@@ -962,6 +963,26 @@ class Sep31ServiceTest {
     val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test postTransaction does not query SEP-12 when claiming a customer_id for the first time`() {
+    useQuotesNotSupportedAssetService()
+    every { customerIdOwnerStore.isClaimed("brand-new-customer-id") } returns false
+    val postTxRequest = ownershipTestRequest(receiverId = "brand-new-customer-id")
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("brand-new-customer-id", any(), any())
+    }
     verify(exactly = 0) { customerIntegration.getCustomer(any()) }
   }
 
