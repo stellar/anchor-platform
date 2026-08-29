@@ -286,7 +286,7 @@ public class Sep31Service {
    * muxed-preferring account/memo/memo_type reverse lookup as {@code
    * Sep12Service#validateGetOrPutRequest}'s {@code isIdPath} branch) and only claims `customerId`
    * if that lookup resolves to this exact id, so a legacy customer can still self-heal on their
-   * first post-upgrade transaction without reopening the disclosure/fabricated -id gap this method
+   * first post-upgrade transaction without reopening the disclosure/fabricated-ID gap this method
    * exists to close: a `customerId` with no owner on file AND no matching identity lookup is
    * rejected outright, never silently claimed-and-allowed-through (see
    * `docs/audits/ANCHOR-1279-sep-coverage-audit.md`'s "`sender_id`/`receiver_id` are never
