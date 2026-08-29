@@ -24,7 +24,9 @@ public class JdbcNonceStore implements NonceStore {
 
   public boolean insertIfAbsent(Nonce nonce) {
     JdbcNonce jdbcNonce = (JdbcNonce) nonce;
-    return jdbcNonceRepo.insertIfAbsent(jdbcNonce.getId(), jdbcNonce.getExpiresAt()) == 1;
+    return jdbcNonceRepo.insertIfAbsent(
+            jdbcNonce.getId(), jdbcNonce.getUsed(), jdbcNonce.getExpiresAt())
+        == 1;
   }
 
   public void deleteExpiredNonces() {
