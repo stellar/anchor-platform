@@ -266,12 +266,14 @@ public class Sep31Service {
    * registered before ownership tracking existed and never referenced in a transaction since (see
    * ANCHOR-1248's "Known limitations" -- the backfill only covers ids with transaction history) --
    * for that case, this method looks the caller up by their own Stellar identity (the same
-   * account/memo {@code Sep12Service#getCustomer} uses) and only claims `customerId` if that lookup
-   * resolves to this exact id, so a legacy customer can still self-heal on their first post-upgrade
-   * transaction without reopening the disclosure/fabricated -id gap this method exists to close: a
-   * `customerId` with no owner on file AND no matching identity lookup is rejected outright, never
-   * silently claimed-and-allowed-through (see `docs/audits/ANCHOR-1279-sep-coverage-audit.md`'s
-   * "`sender_id`/`receiver_id` are never validated against real SEP-12 customer records" finding).
+   * muxed-preferring account/memo/memo_type reverse lookup as {@code
+   * Sep12Service#validateGetOrPutRequest}'s {@code isIdPath} branch) and only claims `customerId`
+   * if that lookup resolves to this exact id, so a legacy customer can still self-heal on their
+   * first post-upgrade transaction without reopening the disclosure/fabricated -id gap this method
+   * exists to close: a `customerId` with no owner on file AND no matching identity lookup is
+   * rejected outright, never silently claimed-and-allowed-through (see
+   * `docs/audits/ANCHOR-1279-sep-coverage-audit.md`'s "`sender_id`/`receiver_id` are never
+   * validated against real SEP-12 customer records" finding).
    *
    * @param webAuthJwt the authenticated caller's SEP-10 token, used only for the identity-lookup
    *     compatibility path above (not for the ownership-store identity, which is {@code
@@ -309,11 +311,17 @@ public class Sep31Service {
           customerIntegration.getCustomer(
               GetCustomerRequest.builder().id(customerId).type(customerType).build());
     } else {
+      String tokenAccount =
+          webAuthJwt.getMuxedAccount() != null
+              ? webAuthJwt.getMuxedAccount()
+              : webAuthJwt.getAccount();
+      String tokenMemo = webAuthJwt.getOwnerMemo();
       customer =
           customerIntegration.getCustomer(
               GetCustomerRequest.builder()
-                  .account(webAuthJwt.getAccount())
-                  .memo(webAuthJwt.getOwnerMemo())
+                  .account(tokenAccount)
+                  .memo(tokenMemo)
+                  .memoType(tokenMemo != null ? "id" : null)
                   .type(customerType)
                   .build());
       if (customer == null || !customerId.equals(customer.getId())) {

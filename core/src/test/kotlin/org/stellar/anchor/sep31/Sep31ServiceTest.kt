@@ -975,6 +975,7 @@ class Sep31ServiceTest {
         match {
           it.account == TestHelper.TEST_ACCOUNT &&
             it.memo == TestHelper.TEST_MEMO &&
+            it.memoType == "id" &&
             it.type == "sep31-receiver"
         }
       )
@@ -998,6 +999,7 @@ class Sep31ServiceTest {
         match {
           it.account == TestHelper.TEST_ACCOUNT &&
             it.memo == TestHelper.TEST_MEMO &&
+            it.memoType == "id" &&
             it.type == "sep31-receiver"
         }
       )
