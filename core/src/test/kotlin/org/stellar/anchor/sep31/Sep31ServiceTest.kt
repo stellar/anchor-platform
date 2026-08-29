@@ -967,23 +967,18 @@ class Sep31ServiceTest {
   }
 
   @Test
-  fun `test postTransaction does not query SEP-12 when claiming a customer_id for the first time`() {
+  fun `test postTransaction rejects a customer_id that has no owner on file yet`() {
     useQuotesNotSupportedAssetService()
     every { customerIdOwnerStore.isClaimed("brand-new-customer-id") } returns false
     val postTxRequest = ownershipTestRequest(receiverId = "brand-new-customer-id")
 
-    every { txnStore.save(any()) } answers
-      {
-        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
-      }
-
     val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
-    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+    val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
-    verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("brand-new-customer-id", any(), any())
-    }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
     verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+    verify(exactly = 0) { txnStore.save(any()) }
   }
 
   @Test
