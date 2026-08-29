@@ -341,14 +341,20 @@ public class Sep31Service {
             ? webAuthJwt.getMuxedAccount()
             : webAuthJwt.getAccount();
     String tokenMemo = webAuthJwt.getOwnerMemo();
-    GetCustomerResponse customer =
-        customerIntegration.getCustomer(
-            GetCustomerRequest.builder()
-                .account(tokenAccount)
-                .memo(tokenMemo)
-                .memoType(tokenMemo != null ? "id" : null)
-                .type(customerType)
-                .build());
+GetCustomerResponse customer;
+    try {
+      customer =
+          customerIntegration.getCustomer(
+              GetCustomerRequest.builder()
+                  .account(tokenAccount)
+                  .memo(tokenMemo)
+                  .memoType(tokenMemo != null ? "id" : null)
+                  .type(customerType)
+                  .build());
+    } catch (NotFoundException e) {
+      throw new SepNotAuthorizedException(
+          "sender_id/receiver_id does not belong to the authenticated client", e);
+    }
     if (customer == null || !customerId.equals(customer.getId())) {
       throw new SepNotAuthorizedException(
           "sender_id/receiver_id does not belong to the authenticated client");
