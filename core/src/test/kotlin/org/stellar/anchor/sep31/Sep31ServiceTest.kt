@@ -1213,7 +1213,9 @@ class Sep31ServiceTest {
 
   private val usdcJson =
     """
-    {"enabled":true,"quotes_supported":true,"quotes_required":true,"min_amount":1,"max_amount":1000000,"funding_methods":["SEPA","SWIFT"]}
+    {"enabled":true,"quotes_supported":true,"quotes_required":true,"min_amount":1,"max_amount":1000000,"funding_methods":["SEPA","SWIFT"],
+     "sep12":{"sender":{"types":{"sep31-sender":{"description":"the sender's KYC information"}}},
+              "receiver":{"types":{"sep31-receiver":{"description":"the receiver's KYC information"}}}}}
   """
       .trimIndent()
 

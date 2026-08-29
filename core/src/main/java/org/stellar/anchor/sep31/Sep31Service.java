@@ -25,6 +25,7 @@ import java.util.*;
 import lombok.Data;
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.asset.AssetInfo;
+import org.stellar.anchor.api.asset.Sep31Info;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.callback.*;
 import org.stellar.anchor.api.event.AnchorEvent;
@@ -51,6 +52,7 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.event.EventService;
+import org.stellar.anchor.sep12.Sep12Service;
 import org.stellar.anchor.sep38.Sep38Quote;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.util.ExchangeAmountsCalculator;
@@ -173,9 +175,13 @@ public class Sep31Service {
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
     verifyCustomerOwnershipAndKyc(
-        webAuthJwt, request.getSenderId(), "sep31-sender", ownerAccount, ownerMemo);
+        webAuthJwt, request.getSenderId(), Sep12Service.TYPE_SEP31_SENDER, ownerAccount, ownerMemo);
     verifyCustomerOwnershipAndKyc(
-        webAuthJwt, request.getReceiverId(), "sep31-receiver", ownerAccount, ownerMemo);
+        webAuthJwt,
+        request.getReceiverId(),
+        Sep12Service.TYPE_SEP31_RECEIVER,
+        ownerAccount,
+        ownerMemo);
 
     Sep38Quote quote = Context.get().getQuote();
     FeeDetails feeDetails;
@@ -279,11 +285,13 @@ public class Sep31Service {
    *     compatibility path above (not for the ownership-store identity, which is {@code
    *     ownerAccount}/{@code ownerMemo} and may substitute a resolved client name)
    * @param customerId the `sender_id` or `receiver_id` from the request, or null if not provided
-   * @param customerType the SEP-12 `type` to request -- {@code "sep31-sender"} or {@code
-   *     "sep31-receiver"}, matching this codebase's existing convention (see {@code
-   *     Sep12Service#TYPE_SEP31_SENDER}/{@code TYPE_SEP31_RECEIVER}) and echoed back in {@link
-   *     Sep31CustomerInfoNeededException#getType()} so the sending anchor knows which SEP-12 `type`
-   *     to use when it re-fetches the customer
+   * @param customerType the SEP-12 `type` to request -- {@link Sep12Service#TYPE_SEP31_SENDER} or
+   *     {@link Sep12Service#TYPE_SEP31_RECEIVER}, the same constants {@code
+   *     Sep12Service#putCustomer}'s {@code isNewSep31Customer} check uses, also advertised in `GET
+   *     /info`'s `sep12.sender`/`sep12.receiver` (see {@link
+   *     org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse#getSep12()}), and echoed
+   *     back in {@link Sep31CustomerInfoNeededException#getType()} so the sending anchor knows
+   *     which SEP-12 `type` to use when it re-fetches the customer
    * @throws SepNotAuthorizedException if the customer has no owner on file and doesn't resolve to
    *     the caller's own SEP-12 identity, or belongs to a different authenticated client
    * @throws Sep31CustomerInfoNeededException if the customer's SEP-12 KYC status is {@code
@@ -730,10 +738,44 @@ public class Sep31Service {
         assetResponse.setMinAmount(assetInfo.getSep31().getReceive().getMinAmount());
         assetResponse.setMaxAmount(assetInfo.getSep31().getReceive().getMaxAmount());
         assetResponse.setFundingMethods(methods);
+        assetResponse.setSep12(sep12ResponseFromConfig(assetInfo.getSep31().getSep12()));
         response.getReceive().put(assetInfo.getCode(), assetResponse);
       }
     }
     return response;
+  }
+
+  /**
+   * Advertises the (fixed) SEP-12 customer types this asset uses for `sender_id`/`receiver_id`, per
+   * {@link #verifyCustomerOwnershipAndKyc}'s javadoc -- null (omitted from `GET /info`) if the
+   * asset's config doesn't set a `sep12` block for that role.
+   */
+  private static Sep31InfoResponse.Sep12Response sep12ResponseFromConfig(
+      Sep31Info.Sep12Info sep12Config) {
+    if (sep12Config == null) {
+      return null;
+    }
+    Sep31InfoResponse.Sep12Response sep12Response = new Sep31InfoResponse.Sep12Response();
+    if (sep12Config.getSender() != null) {
+      sep12Response.setSender(
+          sep12TypesResponse(
+              Sep12Service.TYPE_SEP31_SENDER, sep12Config.getSender().getDescription()));
+    }
+    if (sep12Config.getReceiver() != null) {
+      sep12Response.setReceiver(
+          sep12TypesResponse(
+              Sep12Service.TYPE_SEP31_RECEIVER, sep12Config.getReceiver().getDescription()));
+    }
+    return sep12Response;
+  }
+
+  private static Sep31InfoResponse.Sep12TypesResponse sep12TypesResponse(
+      String type, String description) {
+    Sep31InfoResponse.Sep12TypeResponse typeResponse = new Sep31InfoResponse.Sep12TypeResponse();
+    typeResponse.setDescription(description);
+    Sep31InfoResponse.Sep12TypesResponse typesResponse = new Sep31InfoResponse.Sep12TypesResponse();
+    typesResponse.setTypes(Map.of(type, typeResponse));
+    return typesResponse;
   }
 
   @Data
