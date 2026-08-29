@@ -967,18 +967,56 @@ class Sep31ServiceTest {
   }
 
   @Test
-  fun `test postTransaction rejects a customer_id that has no owner on file yet`() {
+  fun `test postTransaction rejects a customer_id with no owner on file and no matching SEP-12 identity`() {
     useQuotesNotSupportedAssetService()
-    every { customerIdOwnerStore.isClaimed("brand-new-customer-id") } returns false
-    val postTxRequest = ownershipTestRequest(receiverId = "brand-new-customer-id")
+    every { customerIdOwnerStore.isClaimed("garbage-customer-id") } returns false
+    every {
+      customerIntegration.getCustomer(
+        match {
+          it.account == TestHelper.TEST_ACCOUNT &&
+            it.memo == TestHelper.TEST_MEMO &&
+            it.type == "sep31-receiver"
+        }
+      )
+    } returns GetCustomerResponse.builder().id("some-other-customer-id").build()
+    val postTxRequest = ownershipTestRequest(receiverId = "garbage-customer-id")
 
     val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
     val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
     verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
-    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
     verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction claims and allows a legacy customer_id that matches the caller's own SEP-12 identity`() {
+    useQuotesNotSupportedAssetService()
+    every { customerIdOwnerStore.isClaimed("legacy-customer-id") } returns false
+    every {
+      customerIntegration.getCustomer(
+        match {
+          it.account == TestHelper.TEST_ACCOUNT &&
+            it.memo == TestHelper.TEST_MEMO &&
+            it.type == "sep31-receiver"
+        }
+      )
+    } returns
+      GetCustomerResponse.builder()
+        .id("legacy-customer-id")
+        .status(Sep12Status.ACCEPTED.getName())
+        .build()
+    val postTxRequest = ownershipTestRequest(receiverId = "legacy-customer-id")
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    verify(exactly = 1) { customerIdOwnerStore.verifyOrClaim("legacy-customer-id", any(), any()) }
   }
 
   @Test
