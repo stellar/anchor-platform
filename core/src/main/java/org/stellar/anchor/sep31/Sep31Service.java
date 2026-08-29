@@ -263,7 +263,11 @@ public class Sep31Service {
   /**
    * Verifies that a `sender_id`/`receiver_id` provided in a `POST /transactions` request belongs to
    * the authenticated client, and that the SEP-12 customer it references already has complete KYC
-   * on file. A no-op if {@code customerId} is null (the field is optional).
+   * on file. A no-op if {@code customerId} is null and {@code kycRequired} is false -- per SEP-31,
+   * `sender_id`/`receiver_id` is "Required if the Receiving Anchor requires SEP-12 KYC on the
+   * [Sending/Receiving] Client", so a null `customerId` while {@code kycRequired} is true is
+   * rejected with {@link Sep31CustomerInfoNeededException} instead, the same signal used to guide
+   * the sending anchor to go register a SEP-12 customer for this role in the first place.
    *
    * <p>This is a fail-fast check only: it rejects upfront a transaction the receiving anchor
    * already knows can't proceed, before creating it. It doesn't replace the anchor's own
@@ -305,9 +309,10 @@ public class Sep31Service {
    *     role, so ownership is still verified (and, for an unclaimed id, still established via the
    *     identity lookup above) but the KYC-status check is skipped
    * @throws SepNotAuthorizedException if the customer has no owner on file and doesn't resolve to
-   *     the caller's own SEP-12 identity, or belongs to a different authenticated client
-   * @throws Sep31CustomerInfoNeededException if {@code kycRequired} and the customer's SEP-12 KYC
-   *     status is {@code NEEDS_INFO}
+   *     the caller's own SEP-12 identity, belongs to a different authenticated client, or (when
+   *     {@code kycRequired}) has a {@code REJECTED} SEP-12 KYC status
+   * @throws Sep31CustomerInfoNeededException if {@code kycRequired} and either {@code customerId}
+   *     is null or the customer's SEP-12 KYC status is {@code NEEDS_INFO}
    */
   void verifyCustomerOwnershipAndKyc(
       WebAuthJwt webAuthJwt,
@@ -318,6 +323,9 @@ public class Sep31Service {
       boolean kycRequired)
       throws AnchorException {
     if (customerId == null) {
+      if (kycRequired) {
+        throw new Sep31CustomerInfoNeededException(customerType);
+      }
       return;
     }
 
@@ -332,7 +340,7 @@ public class Sep31Service {
       GetCustomerResponse customer =
           customerIntegration.getCustomer(
               GetCustomerRequest.builder().id(customerId).type(customerType).build());
-      rejectIfNeedsInfo(customer, customerId, customerType);
+      enforceKycStatus(customer, customerId, customerType);
       return;
     }
 
@@ -341,7 +349,7 @@ public class Sep31Service {
             ? webAuthJwt.getMuxedAccount()
             : webAuthJwt.getAccount();
     String tokenMemo = webAuthJwt.getOwnerMemo();
-GetCustomerResponse customer;
+    GetCustomerResponse customer;
     try {
       customer =
           customerIntegration.getCustomer(
@@ -366,15 +374,27 @@ GetCustomerResponse customer;
     if (!kycRequired) {
       return;
     }
-    rejectIfNeedsInfo(customer, customerId, customerType);
+    enforceKycStatus(customer, customerId, customerType);
   }
 
-  private static void rejectIfNeedsInfo(
-      GetCustomerResponse customer, String customerId, String customerType)
-      throws Sep31CustomerInfoNeededException {
+  /**
+   * Rejects the transaction if {@code customer}'s SEP-12 KYC status isn't usable: {@code
+   * NEEDS_INFO} is retryable (the sending anchor can supply more SEP-12 fields and try again), but
+   * {@code REJECTED} means the customer's KYC failed and will never succeed, so it must fail fast
+   * with a non-retryable error rather than being treated like {@code ACCEPTED}. {@code PROCESSING}
+   * (and any other status) is let through -- this method only guards against the two definitively
+   * bad outcomes.
+   */
+  private static void enforceKycStatus(
+      GetCustomerResponse customer, String customerId, String customerType) throws AnchorException {
     if (Sep12Status.NEEDS_INFO.getName().equals(customer.getStatus())) {
       infoF("Customer ({}) needs more info before this transaction can proceed", customerId);
       throw new Sep31CustomerInfoNeededException(customerType);
+    }
+    if (Sep12Status.REJECTED.getName().equals(customer.getStatus())) {
+      infoF("Customer ({}) has a rejected SEP-12 KYC status", customerId);
+      throw new SepNotAuthorizedException(
+          "sender_id/receiver_id belongs to a customer whose SEP-12 KYC was rejected");
     }
   }
 
@@ -785,7 +805,7 @@ GetCustomerResponse customer;
     if (sep12Config == null) {
       return null;
     }
-if (sep12Config.getSender() == null && sep12Config.getReceiver() == null) {
+    if (sep12Config.getSender() == null && sep12Config.getReceiver() == null) {
       return null;
     }
     Sep31InfoResponse.Sep12Response sep12Response = new Sep31InfoResponse.Sep12Response();
