@@ -61,9 +61,9 @@ public class PropertySep10Config implements Sep10Config, Validator {
     try {
       KeyPair.fromAccountId(account);
       return true;
-    } catch (Throwable ex) {
+    } catch (IllegalArgumentException ex) {
       Log.errorF(
-          "Ignoring client with invalid signing key {}; fix it via the /clients API.", account);
+          "Discarding invalid custodial signing key {}; fix it via the /clients API.", account);
       return false;
     }
   }
