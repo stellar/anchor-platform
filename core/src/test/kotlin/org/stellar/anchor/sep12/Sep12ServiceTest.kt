@@ -898,7 +898,7 @@ class Sep12ServiceTest {
   }
 
   @Test
-  fun `test id path propagates the base account, not the muxed account, once the store has authorized it`() {
+  fun `test id path clears account and memo once the store has authorized it`() {
     every { customerIdOwnerStore.isClaimed("claimed-muxed-id") } returns true
     every { customerIdOwnerStore.verify("claimed-muxed-id", TEST_MUXED_ACCOUNT, TEST_MEMO) } returns
       true
@@ -908,8 +908,8 @@ class Sep12ServiceTest {
 
     assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
 
-    assertEquals(TEST_ACCOUNT, request.account)
-    assertEquals(TEST_MEMO, request.memo)
+    assertEquals(null, request.account)
+    assertEquals(null, request.memo)
     verify(exactly = 0) { customerIntegration.getCustomer(any()) }
   }
 

@@ -243,10 +243,8 @@ public class Sep12Service {
           throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
         }
 
-        requestBase.setAccount(token.getAccount());
-        if (token.getOwnerMemo() != null) {
-          requestBase.setMemo(token.getOwnerMemo());
-        }
+        requestBase.setAccount(null);
+        requestBase.setMemo(null);
       } else {
         try {
           String tokenMemo =
