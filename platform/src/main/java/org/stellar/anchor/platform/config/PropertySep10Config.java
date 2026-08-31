@@ -19,6 +19,7 @@ import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep10Config;
 import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.util.KeyUtil;
+import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.NetUtil;
 import org.stellar.sdk.*;
 import org.stellar.sdk.operations.ManageDataOperation;
@@ -49,7 +50,22 @@ public class PropertySep10Config implements Sep10Config, Validator {
     this.knownCustodialAccountList =
         clientService.getCustodialClients().stream()
             .flatMap(cfg -> cfg.getSigningKeys().stream())
+            .filter(this::isValidCustodialAccount)
             .collect(Collectors.toList());
+  }
+
+  private boolean isValidCustodialAccount(String account) {
+    if (account == null) {
+      return true;
+    }
+    try {
+      KeyPair.fromAccountId(account);
+      return true;
+    } catch (Throwable ex) {
+      Log.errorF(
+          "Ignoring client with invalid signing key {}; fix it via the /clients API.", account);
+      return false;
+    }
   }
 
   @PostConstruct
