@@ -138,6 +138,7 @@ class Sep12ServiceTest {
   @ValueSource(strings = [TEST_ACCOUNT, TEST_CONTRACT_ACCOUNT, TEST_MUXED_ACCOUNT])
   @ParameterizedTest
   fun `test put for all account types succeed`(account: String) {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     val jwtToken = createJwtToken(account)
     val request =
       Sep12PutCustomerRequest.builder()
@@ -347,6 +348,7 @@ class Sep12ServiceTest {
   @ValueSource(strings = [TEST_TRANSACTION_ID])
   @NullSource
   fun `Test put customer request ok`(transactionId: String?) {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     // mock `PUT {callbackApi}/customer` response
     val callbackApiPutRequestSlot = slot<PutCustomerRequest>()
     val kycUpdateEventSlot = slot<AnchorEvent>()
@@ -436,6 +438,7 @@ class Sep12ServiceTest {
 
   @Test
   fun `test put customer creating a new sep31-receiver claims ownership of the new id`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("new-receiver-id").status(Sep12Status.ACCEPTED.name).build()
 
@@ -456,6 +459,7 @@ class Sep12ServiceTest {
 
   @Test
   fun `test put customer creating a new sep31-receiver via a muxed account claims ownership using the muxed id`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder()
         .id("new-muxed-receiver-id")
@@ -480,6 +484,7 @@ class Sep12ServiceTest {
 
   @Test
   fun `test put customer rejects creation when the returned id is already claimed by another client`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("colliding-id").status(Sep12Status.ACCEPTED.name).build()
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns false
@@ -512,7 +517,57 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test put customer verifies a legacy id against the callback before claiming it`() {
+    every { customerIdOwnerStore.isClaimed("legacy-sep24-id") } returns false
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("legacy-sep24-id").status(Sep12Status.ACCEPTED.name).build()
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("legacy-sep24-id").build()
+
+    val request = Sep12PutCustomerRequest.builder().account(TEST_ACCOUNT).firstName("Jane").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("legacy-sep24-id", TEST_ACCOUNT, null)
+    }
+  }
+
+  @Test
+  fun `test put customer fails closed for an unclaimed id the caller cannot verify against the callback`() {
+    every { customerIdOwnerStore.isClaimed("victim-legacy-id") } returns false
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("victim-legacy-id").status(Sep12Status.ACCEPTED.name).build()
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("some-other-id").build()
+
+    val request = Sep12PutCustomerRequest.builder().account(TEST_ACCOUNT).firstName("Jane").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    val ex: SepException = assertThrows { sep12Service.putCustomer(jwtToken, request) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+  }
+
+  @Test
+  fun `test put customer fails closed when the callback lookup for a legacy id errors`() {
+    every { customerIdOwnerStore.isClaimed("legacy-sep24-id") } returns false
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("legacy-sep24-id").status(Sep12Status.ACCEPTED.name).build()
+    every { customerIntegration.getCustomer(any()) } throws RuntimeException("callback unavailable")
+
+    val request = Sep12PutCustomerRequest.builder().account(TEST_ACCOUNT).firstName("Jane").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    val ex: SepException = assertThrows { sep12Service.putCustomer(jwtToken, request) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+  }
+
+  @Test
   fun `test put customer claims ownership for a new non-sep31 customer too`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("sep24-id").status(Sep12Status.ACCEPTED.name).build()
 
@@ -526,6 +581,7 @@ class Sep12ServiceTest {
 
   @Test
   fun `test put customer rejects a new non-sep31 customer id already claimed by another client`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder()
         .id("sep6-colliding-id")
@@ -543,6 +599,7 @@ class Sep12ServiceTest {
 
   @Test
   fun `test put customer claims ownership by client name when one resolves`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("new-sender-id").status(Sep12Status.ACCEPTED.name).build()
 
@@ -556,6 +613,7 @@ class Sep12ServiceTest {
 
   @Test
   fun `test put customer keeps memo distinct per sub-user even when a client name resolves`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("new-receiver-id").status(Sep12Status.ACCEPTED.name).build()
 
@@ -576,6 +634,7 @@ class Sep12ServiceTest {
 
   @Test
   fun `test put customer keeps muxed id distinct per sub-user even when a client name resolves`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder()
         .id("new-muxed-receiver-id")
@@ -600,6 +659,7 @@ class Sep12ServiceTest {
 
   @Test
   fun `test put customer forwards the owner memo to the callback for a new muxed customer`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     val putRequestSlot = slot<PutCustomerRequest>()
     every { customerIntegration.putCustomer(capture(putRequestSlot)) } returns
       PutCustomerResponse.builder()
@@ -627,6 +687,7 @@ class Sep12ServiceTest {
 
   @Test
   fun `Test put customer publishes event with null clientName when the token was never authorized as a client`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     val kycUpdateEventSlot = slot<AnchorEvent>()
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("customer-id").build()

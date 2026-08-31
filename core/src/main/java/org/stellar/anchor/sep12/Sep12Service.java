@@ -125,10 +125,30 @@ public class Sep12Service {
     if (isNewCustomer || isNewSep31Customer) {
       String ownerAccount = token.getOwnerAccount();
       String ownerMemo = token.getOwnerMemo();
+      String claimant = clientName != null ? clientName : ownerAccount;
+
+      if (!customerIdOwnerStore.isClaimed(updatedCustomer.getId())) {
+        GetCustomerResponse callbackCustomer;
+        try {
+          callbackCustomer =
+              customerIntegration.getCustomer(
+                  GetCustomerRequest.builder()
+                      .account(token.getOwnerAccount())
+                      .memo(token.getOwnerMemo())
+                      .memoType(token.getOwnerMemo() != null ? "id" : null)
+                      .build());
+        } catch (Exception e) {
+          Log.warnEx(e);
+          callbackCustomer = null;
+        }
+        if (callbackCustomer == null || !updatedCustomer.getId().equals(callbackCustomer.getId())) {
+          throw new SepNotAuthorizedException(
+              "customer id returned by the business server is already claimed by another client");
+        }
+      }
 
       boolean owned =
-          customerIdOwnerStore.verifyOrClaim(
-              updatedCustomer.getId(), clientName != null ? clientName : ownerAccount, ownerMemo);
+          customerIdOwnerStore.verifyOrClaim(updatedCustomer.getId(), claimant, ownerMemo);
 
       if (!owned) {
         throw new SepNotAuthorizedException(
