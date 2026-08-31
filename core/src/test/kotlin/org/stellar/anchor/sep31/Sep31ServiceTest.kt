@@ -21,6 +21,7 @@ import org.stellar.anchor.api.asset.AssetInfo.Field
 import org.stellar.anchor.api.asset.Sep31Info
 import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.callback.CustomerIntegration
+import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.callback.GetCustomerResponse
 import org.stellar.anchor.api.callback.GetRateResponse
 import org.stellar.anchor.api.callback.RateIntegration
@@ -934,6 +935,36 @@ class Sep31ServiceTest {
 
     verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
     verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction verifies a legacy customer id against the callback using the base account for a muxed caller`() {
+    useQuotesNotSupportedAssetService()
+    every { customerIdOwnerStore.isClaimed("legacy-receiver-id") } returns false
+    val legacyCustomer = GetCustomerResponse()
+    legacyCustomer.id = "legacy-receiver-id"
+    val getCustomerRequestSlot = slot<GetCustomerRequest>()
+    every { customerIntegration.getCustomer(capture(getCustomerRequestSlot)) } returns
+      legacyCustomer
+
+    val postTxRequest = ownershipTestRequest(receiverId = "legacy-receiver-id")
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createMuxedWebAuthJwt(muxedId = 42L)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertEquals(TestHelper.TEST_ACCOUNT, getCustomerRequestSlot.captured.account)
+    assertEquals("42", getCustomerRequestSlot.captured.memo)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "legacy-receiver-id",
+        jwtToken.ownerAccount,
+        "42",
+      )
+    }
   }
 
   @Test

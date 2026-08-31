@@ -686,6 +686,28 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test put customer backfills the owner memo before validation for a muxed caller who omits it`() {
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
+    val putRequestSlot = slot<PutCustomerRequest>()
+    every { customerIntegration.putCustomer(capture(putRequestSlot)) } returns
+      PutCustomerResponse.builder()
+        .id("new-muxed-receiver-id")
+        .status(Sep12Status.ACCEPTED.name)
+        .build()
+
+    val request = Sep12PutCustomerRequest.builder().type("sep31-receiver").firstName("Jane").build()
+    val jwtToken = createJwtToken(TEST_MUXED_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    assertEquals(TEST_ACCOUNT, putRequestSlot.captured.account)
+    assertEquals(TEST_MEMO, putRequestSlot.captured.memo)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-muxed-receiver-id", TEST_MUXED_ACCOUNT, TEST_MEMO)
+    }
+  }
+
+  @Test
   fun `Test put customer publishes event with null clientName when the token was never authorized as a client`() {
     every { customerIdOwnerStore.isClaimed(any()) } returns true
     val kycUpdateEventSlot = slot<AnchorEvent>()

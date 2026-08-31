@@ -84,7 +84,6 @@ public class Sep12Service {
         isNewCustomer
             && (TYPE_SEP31_SENDER.equals(request.getType())
                 || TYPE_SEP31_RECEIVER.equals(request.getType()));
-    validateGetOrPutRequest(request, token);
 
     if (request.getAccount() == null
         && token.getAccount() != null
@@ -97,6 +96,8 @@ public class Sep12Service {
         request.setMemoType(MemoHelper.memoTypeAsString(MemoType.MEMO_ID));
       }
     }
+
+    validateGetOrPutRequest(request, token);
 
     if (StringUtils.isNotEmpty(request.getBirthDate())) {
       if (!isValidISO8601Date(request.getBirthDate())) {

@@ -181,7 +181,7 @@ public class Sep31Service {
           owned =
               customerIntegration.getCustomer(
                   GetCustomerRequest.builder()
-                      .account(webAuthJwt.getOwnerAccount())
+                      .account(webAuthJwt.getAccount())
                       .memo(webAuthJwt.getOwnerMemo())
                       .memoType(webAuthJwt.getOwnerMemo() != null ? "id" : null)
                       .build());
