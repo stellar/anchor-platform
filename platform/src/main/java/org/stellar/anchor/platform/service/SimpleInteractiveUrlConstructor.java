@@ -128,8 +128,8 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
             gson.fromJson(gsonRequest, PutCustomerRequest.class);
         putCustomerRequest.setType(FORWARD_KYC_CUSTOMER_TYPE);
         putCustomerRequest.setAccount(jwt.getAccount());
-        if (jwt.getAccountMemo() != null) {
-          putCustomerRequest.setMemo(jwt.getAccountMemo());
+        if (jwt.getOwnerMemo() != null) {
+          putCustomerRequest.setMemo(jwt.getOwnerMemo());
           putCustomerRequest.setMemoType("id");
         }
         PutCustomerResponse forwarded = customerIntegration.putCustomer(putCustomerRequest);

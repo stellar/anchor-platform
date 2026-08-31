@@ -302,6 +302,46 @@ class SimpleInteractiveUrlConstructorTest {
     }
   }
 
+  @Test
+  fun `when a custodial client authenticates with a muxed account, the forwarded customer callback receives the muxed owner memo, not the account memo`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    val putRequestSlot = slot<PutCustomerRequest>()
+    every { customerIntegration.putCustomer(capture(putRequestSlot)) } returns
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    val baseAccountRegisteredAsSomeWallet =
+      "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    every { webAuthJwt.account }.returns(baseAccountRegisteredAsSomeWallet)
+    every { webAuthJwt.accountMemo }.returns(null)
+    every { webAuthJwt.ownerAccount }
+      .returns("MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC")
+    every { webAuthJwt.ownerMemo }.returns("42")
+    every { webAuthJwt.clientName }.returns(null)
+
+    constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+
+    assertEquals(baseAccountRegisteredAsSomeWallet, putRequestSlot.captured.account)
+    assertEquals("42", putRequestSlot.captured.memo)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "forwarded-customer-id",
+        "MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC",
+        "42",
+      )
+    }
+  }
+
   private fun parseJwtFromUrl(url: String?): Sep24InteractiveUrlJwt {
     val params = UriComponentsBuilder.fromUriString(url!!).build().queryParams
     val cipher = params["token"]!![0]
