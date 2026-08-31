@@ -30,6 +30,8 @@ import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.xdr.MemoType;
 
 public class Sep12Service {
+  private static final String TYPE_SEP31_SENDER = "sep31-sender";
+  private static final String TYPE_SEP31_RECEIVER = "sep31-receiver";
   private final CustomerIntegration customerIntegration;
   private final Counter sep12GetCustomerCounter =
       Metrics.counter(SEP12_CUSTOMER, TYPE, TV_SEP12_GET_CUSTOMER);
@@ -76,8 +78,12 @@ public class Sep12Service {
 
   public Sep12PutCustomerResponse putCustomer(WebAuthJwt token, Sep12PutCustomerRequest request)
       throws AnchorException {
-    boolean isNewCustomer = request.getId() == null && request.getTransactionId() == null;
 
+    boolean isNewCustomer = request.getId() == null && request.getTransactionId() == null;
+    boolean isNewSep31Customer =
+        isNewCustomer
+            && (TYPE_SEP31_SENDER.equals(request.getType())
+                || TYPE_SEP31_RECEIVER.equals(request.getType()));
     validateGetOrPutRequest(request, token);
 
     if (request.getAccount() == null
@@ -116,7 +122,7 @@ public class Sep12Service {
 
     String clientName = token.getClientName();
 
-    if (isNewCustomer) {
+    if (isNewCustomer || isNewSep31Customer) {
       String ownerAccount = token.getOwnerAccount();
       String ownerMemo = token.getOwnerMemo();
 
