@@ -61,7 +61,7 @@ public class PropertySep10Config implements Sep10Config, Validator {
     try {
       KeyPair.fromAccountId(account);
       return true;
-    } catch (IllegalArgumentException ex) {
+    } catch (RuntimeException ex) {
       Log.errorF(
           "Discarding invalid custodial signing key {}; fix it via the /clients API.", account);
       return false;
@@ -178,19 +178,17 @@ public class PropertySep10Config implements Sep10Config, Validator {
           clientService.getNonCustodialClients().stream().map(ClientConfig::getName).toList();
 
       if (nonCustodialClientNames.isEmpty()) {
-        errors.reject(
-            "sep10-client-attribution-lists-empty",
-            "sep10.client_attribution_required is set to true but no NONCUSTODIAL clients are defined in the clients: section of the configuration.");
+        Log.errorF(
+            "sep10.client_attribution_required is set to true but no NONCUSTODIAL clients are defined in the clients: section of the configuration; every attribution-requiring authentication will be rejected until one is added.");
       }
     }
 
-    // Make sure all the names in the allow list is defined in the clients section.
     if (clientAllowList != null && !clientAllowList.isEmpty()) {
       for (String clientName : clientAllowList) {
         if (clientService.getClientConfigByName(clientName) == null) {
-          errors.reject(
-              "sep10-client-allow-list-invalid",
-              format("Invalid client name:%s in sep10.client_allow_list", clientName));
+          Log.errorF(
+              "Ignoring client name {} in sep10.client_allow_list; it does not match any configured client.",
+              clientName);
         }
       }
     }

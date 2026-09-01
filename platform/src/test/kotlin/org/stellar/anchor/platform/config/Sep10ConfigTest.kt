@@ -54,7 +54,7 @@ class Sep10ConfigTest {
     val config = PropertySep10Config(stellarNetworkConfig, DefaultClientService(), secretConfig)
     config.isClientAttributionRequired = true
     config.validateClientAttribution(errors)
-    assertErrorCode(errors, "sep10-client-attribution-lists-empty")
+    assertFalse(errors.hasErrors())
   }
 
   @Test
@@ -117,7 +117,7 @@ class Sep10ConfigTest {
 
     config.clientAllowList = listOf("invalid")
     config.validateClientAttribution(errors)
-    assertErrorCode(errors, "sep10-client-allow-list-invalid")
+    assertFalse(errors.hasErrors())
     assertTrue(config.allowedClientDomains.isEmpty())
   }
 
@@ -135,6 +135,28 @@ class Sep10ConfigTest {
         CustodialClient.builder()
           .name("legacy-bad")
           .signingKeys(setOf("GALICE", "GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"))
+          .build()
+      )
+
+    val badConfig = PropertySep10Config(stellarNetworkConfig, badClientService, secretConfig)
+
+    assertEquals(
+      listOf("GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"),
+      badConfig.knownCustodialAccountList,
+    )
+  }
+
+  @Test
+  fun `test known custodial account list filters out a signing key that throws ArrayIndexOutOfBoundsException`() {
+    val aioobeTriggeringKey = "A".repeat(54) + "é"
+    val badClientService = mockk<ClientService>()
+    every { badClientService.custodialClients } returns
+      listOf(
+        CustodialClient.builder()
+          .name("legacy-bad")
+          .signingKeys(
+            setOf(aioobeTriggeringKey, "GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2")
+          )
           .build()
       )
 
