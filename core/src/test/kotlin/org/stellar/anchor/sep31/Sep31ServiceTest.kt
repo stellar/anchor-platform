@@ -824,7 +824,7 @@ class Sep31ServiceTest {
   }
 
   @Test
-  fun `test postTransaction binds ownership to client name so key rotation does not lock out the owner`() {
+  fun `test postTransaction rejects a different account under the same client name from claiming another user's receiver_id`() {
     useQuotesNotSupportedAssetService()
 
     every { txnStore.save(any()) } answers
@@ -839,15 +839,31 @@ class Sep31ServiceTest {
     val secondSigningKey = "GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"
     val jwtToken2 = TestHelper.createWebAuthJwt(account = secondSigningKey)
     jwtToken2.clientName = "vibrant"
-    assertDoesNotThrow {
+    every {
+      customerIdOwnerStore.verifyOrClaim(
+        "shared-receiver-id",
+        "vibrant:$secondSigningKey",
+        null,
+      )
+    } returns false
+
+    val ex: AnchorException = assertThrows {
       sep31Service.postTransaction(
         jwtToken2,
         ownershipTestRequest(receiverId = "shared-receiver-id"),
       )
     }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
 
-    verify(exactly = 2) {
-      customerIdOwnerStore.verifyOrClaim("shared-receiver-id", "vibrant", null)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "shared-receiver-id",
+        "vibrant:${TestHelper.TEST_ACCOUNT}",
+        null,
+      )
+    }
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("shared-receiver-id", "vibrant:$secondSigningKey", null)
     }
   }
 
@@ -869,14 +885,21 @@ class Sep31ServiceTest {
     sep31Service.postTransaction(subUserA, ownershipTestRequest(receiverId = "sub-user-a-id"))
 
     verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("sub-user-a-id", "vibrant", TestHelper.TEST_MEMO)
+      customerIdOwnerStore.verifyOrClaim(
+        "sub-user-a-id",
+        subUserA.ownerKey,
+        TestHelper.TEST_MEMO,
+      )
     }
 
     val subUserB = TestHelper.createMuxedWebAuthJwt(muxedId = 99L)
     subUserB.clientName = "vibrant"
     sep31Service.postTransaction(subUserB, ownershipTestRequest(receiverId = "sub-user-b-id"))
 
-    verify(exactly = 1) { customerIdOwnerStore.verifyOrClaim("sub-user-b-id", "vibrant", "99") }
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("sub-user-b-id", subUserB.ownerKey, "99")
+    }
+    assertNotEquals(subUserA.ownerKey, subUserB.ownerKey)
   }
 
   @Test

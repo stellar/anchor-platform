@@ -133,7 +133,7 @@ class SimpleInteractiveUrlConstructorTest {
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     val capturedPutCustomerRequest = slot<PutCustomerRequest>()
     every { customerIntegration.putCustomer(capture(capturedPutCustomerRequest)) } returns
-      PutCustomerResponse()
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
     val constructor =
       SimpleInteractiveUrlConstructor(
@@ -150,6 +150,7 @@ class SimpleInteractiveUrlConstructorTest {
     every { webAuthJwt.ownerAccount }.returns("test_account")
     every { webAuthJwt.ownerMemo }.returns("123")
     every { webAuthJwt.clientName }.returns(null)
+    every { webAuthJwt.ownerKey }.returns("test_account")
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
     assertEquals(capturedPutCustomerRequest.captured.type, FORWARD_KYC_CUSTOMER_TYPE)
     assertEquals(capturedPutCustomerRequest.captured.firstName, request.get("first_name"))
@@ -199,6 +200,7 @@ class SimpleInteractiveUrlConstructorTest {
     every { webAuthJwt.ownerAccount }.returns("test_account")
     every { webAuthJwt.ownerMemo }.returns("123")
     every { webAuthJwt.clientName }.returns(null)
+    every { webAuthJwt.ownerKey }.returns("test_account")
 
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
 
@@ -257,11 +259,12 @@ class SimpleInteractiveUrlConstructorTest {
     every { webAuthJwt.ownerAccount }.returns("test_account")
     every { webAuthJwt.ownerMemo }.returns(null)
     every { webAuthJwt.clientName }.returns("vibrant")
+    every { webAuthJwt.ownerKey }.returns("vibrant:test_account")
 
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
 
     verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("forwarded-customer-id", "vibrant", null)
+      customerIdOwnerStore.verifyOrClaim("forwarded-customer-id", "vibrant:test_account", null)
     }
   }
 
@@ -290,6 +293,8 @@ class SimpleInteractiveUrlConstructorTest {
       .returns("MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC")
     every { webAuthJwt.ownerMemo }.returns(null)
     every { webAuthJwt.clientName }.returns(null)
+    every { webAuthJwt.ownerKey }
+      .returns("MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC")
 
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
 
@@ -328,6 +333,8 @@ class SimpleInteractiveUrlConstructorTest {
       .returns("MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC")
     every { webAuthJwt.ownerMemo }.returns("42")
     every { webAuthJwt.clientName }.returns(null)
+    every { webAuthJwt.ownerKey }
+      .returns("MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC")
 
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
 

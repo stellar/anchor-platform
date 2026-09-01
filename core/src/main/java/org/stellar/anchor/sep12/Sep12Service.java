@@ -30,8 +30,6 @@ import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.xdr.MemoType;
 
 public class Sep12Service {
-  private static final String TYPE_SEP31_SENDER = "sep31-sender";
-  private static final String TYPE_SEP31_RECEIVER = "sep31-receiver";
   private final CustomerIntegration customerIntegration;
   private final Counter sep12GetCustomerCounter =
       Metrics.counter(SEP12_CUSTOMER, TYPE, TV_SEP12_GET_CUSTOMER);
@@ -80,10 +78,6 @@ public class Sep12Service {
       throws AnchorException {
 
     boolean isNewCustomer = request.getId() == null && request.getTransactionId() == null;
-    boolean isNewSep31Customer =
-        isNewCustomer
-            && (TYPE_SEP31_SENDER.equals(request.getType())
-                || TYPE_SEP31_RECEIVER.equals(request.getType()));
 
     if (request.getAccount() == null
         && token.getAccount() != null
@@ -123,10 +117,9 @@ public class Sep12Service {
 
     String clientName = token.getClientName();
 
-    if (isNewCustomer || isNewSep31Customer) {
-      String ownerAccount = token.getOwnerAccount();
+    if (isNewCustomer) {
       String ownerMemo = token.getOwnerMemo();
-      String claimant = clientName != null ? clientName : ownerAccount;
+      String claimant = token.getOwnerKey();
 
       if (!customerIdOwnerStore.isClaimed(updatedCustomer.getId())) {
         GetCustomerResponse callbackCustomer;
@@ -137,6 +130,7 @@ public class Sep12Service {
                       .account(request.getAccount())
                       .memo(request.getMemo())
                       .memoType(request.getMemoType())
+                      .type(request.getType())
                       .build());
         } catch (Exception e) {
           Log.warnEx(e);
@@ -258,9 +252,8 @@ public class Sep12Service {
           token.getMuxedAccount() != null ? token.getMuxedAccount() : token.getAccount();
 
       if (customerIdOwnerStore.isClaimed(requestBase.getId())) {
-        String clientName = token.getClientName();
-        String ownerAccount = clientName != null ? clientName : token.getOwnerAccount();
-        if (!customerIdOwnerStore.verify(requestBase.getId(), ownerAccount, token.getOwnerMemo())) {
+        if (!customerIdOwnerStore.verify(
+            requestBase.getId(), token.getOwnerKey(), token.getOwnerMemo())) {
           throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
         }
 

@@ -19,6 +19,7 @@ import org.stellar.anchor.api.callback.PutCustomerRequest;
 import org.stellar.anchor.api.callback.PutCustomerResponse;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.SepNotAuthorizedException;
+import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt;
@@ -133,10 +134,13 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
           putCustomerRequest.setMemoType("id");
         }
         PutCustomerResponse forwarded = customerIntegration.putCustomer(putCustomerRequest);
+        if (forwarded == null || forwarded.getId() == null) {
+          throw new ServerErrorException(
+              "business server returned an empty PUT /customer response");
+        }
 
-        String owner = jwt.getClientName() != null ? jwt.getClientName() : jwt.getOwnerAccount();
-
-        if (!customerIdOwnerStore.verifyOrClaim(forwarded.getId(), owner, jwt.getOwnerMemo())) {
+        if (!customerIdOwnerStore.verifyOrClaim(
+            forwarded.getId(), jwt.getOwnerKey(), jwt.getOwnerMemo())) {
           throw new SepNotAuthorizedException("customer id already claimed by another client");
         }
       }

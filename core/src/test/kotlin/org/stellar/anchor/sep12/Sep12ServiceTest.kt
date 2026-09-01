@@ -561,6 +561,7 @@ class Sep12ServiceTest {
 
     assertEquals(TEST_ACCOUNT, getCustomerRequestSlot.captured.account)
     assertEquals(TEST_MEMO, getCustomerRequestSlot.captured.memo)
+    assertEquals("sep31-sender", getCustomerRequestSlot.captured.type)
     verify(exactly = 1) {
       customerIdOwnerStore.verifyOrClaim("new-sep31-sender-id", TEST_ACCOUNT, null)
     }
@@ -640,7 +641,9 @@ class Sep12ServiceTest {
 
     assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
 
-    verify(exactly = 1) { customerIdOwnerStore.verifyOrClaim("new-sender-id", "vibrant", null) }
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-sender-id", "vibrant:$TEST_ACCOUNT", null)
+    }
   }
 
   @Test
@@ -660,7 +663,7 @@ class Sep12ServiceTest {
     assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
 
     verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("new-receiver-id", "vibrant", TEST_MEMO)
+      customerIdOwnerStore.verifyOrClaim("new-receiver-id", "vibrant:$TEST_ACCOUNT", TEST_MEMO)
     }
   }
 
@@ -685,7 +688,11 @@ class Sep12ServiceTest {
     assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
 
     verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("new-muxed-receiver-id", "vibrant", TEST_MEMO)
+      customerIdOwnerStore.verifyOrClaim(
+        "new-muxed-receiver-id",
+        "vibrant:$TEST_MUXED_ACCOUNT",
+        TEST_MEMO,
+      )
     }
   }
 
@@ -1010,6 +1017,27 @@ class Sep12ServiceTest {
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
     assertEquals("not authorized for customer id", ex.message)
     verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test id path rejects a different account under the same client name from the true owner`() {
+    every { customerIdOwnerStore.isClaimed("victim-id") } returns true
+    every { customerIdOwnerStore.verify("victim-id", "vibrant:$TEST_ACCOUNT", null) } returns true
+    val attackerAccount = "GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"
+    every { customerIdOwnerStore.verify("victim-id", "vibrant:$attackerAccount", null) } returns
+      false
+
+    val victimToken = createJwtToken(TEST_ACCOUNT, "vibrant")
+    val victimRequest = Sep12GetCustomerRequest.builder().id("victim-id").build()
+    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(victimRequest, victimToken) }
+
+    val attackerToken = createJwtToken(attackerAccount, "vibrant")
+    val attackerRequest = Sep12GetCustomerRequest.builder().id("victim-id").build()
+    val ex: SepException = assertThrows {
+      sep12Service.validateGetOrPutRequest(attackerRequest, attackerToken)
+    }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
   }
 
   @Test

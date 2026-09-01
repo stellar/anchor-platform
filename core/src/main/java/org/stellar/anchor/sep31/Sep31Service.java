@@ -166,11 +166,15 @@ public class Sep31Service {
             .memo(webAuthJwt.getAccountMemo())
             .build();
 
-    String ownerClientName = webAuthJwt.getClientName();
-    String ownerAccount = ownerClientName != null ? ownerClientName : webAuthJwt.getOwnerAccount();
+    String ownerAccount = webAuthJwt.getOwnerKey();
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
-    for (String customerId : Arrays.asList(request.getSenderId(), request.getReceiverId())) {
+    String[][] customerIdsByType = {
+      {"sep31-sender", request.getSenderId()}, {"sep31-receiver", request.getReceiverId()}
+    };
+    for (String[] customerIdByType : customerIdsByType) {
+      String customerType = customerIdByType[0];
+      String customerId = customerIdByType[1];
       if (customerId == null) {
         continue;
       }
@@ -184,6 +188,7 @@ public class Sep31Service {
                       .account(webAuthJwt.getAccount())
                       .memo(webAuthJwt.getOwnerMemo())
                       .memoType(webAuthJwt.getOwnerMemo() != null ? "id" : null)
+                      .type(customerType)
                       .build());
         } catch (Exception e) {
           Log.warnEx(e);
