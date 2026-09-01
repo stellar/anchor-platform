@@ -535,6 +535,38 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test put customer verifies the legacy id using the request's account and memo, not the token's`() {
+    every { customerIdOwnerStore.isClaimed("new-sep31-sender-id") } returns false
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder()
+        .id("new-sep31-sender-id")
+        .status(Sep12Status.ACCEPTED.name)
+        .build()
+    val getCustomerRequestSlot = slot<GetCustomerRequest>()
+    every { customerIntegration.getCustomer(capture(getCustomerRequestSlot)) } returns
+      GetCustomerResponse.builder().id("new-sep31-sender-id").build()
+
+    // A plain, non-muxed token with no memo in `sub` — the memo lives only in the request body,
+    // which SEP-12 allows when the token carries none.
+    val request =
+      Sep12PutCustomerRequest.builder()
+        .type("sep31-sender")
+        .memo(TEST_MEMO)
+        .memoType("id")
+        .firstName("Jane")
+        .build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    assertDoesNotThrow { sep12Service.putCustomer(jwtToken, request) }
+
+    assertEquals(TEST_ACCOUNT, getCustomerRequestSlot.captured.account)
+    assertEquals(TEST_MEMO, getCustomerRequestSlot.captured.memo)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-sep31-sender-id", TEST_ACCOUNT, null)
+    }
+  }
+
+  @Test
   fun `test put customer fails closed for an unclaimed id the caller cannot verify against the callback`() {
     every { customerIdOwnerStore.isClaimed("victim-legacy-id") } returns false
     every { customerIntegration.putCustomer(any()) } returns

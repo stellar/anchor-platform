@@ -134,9 +134,9 @@ public class Sep12Service {
           callbackCustomer =
               customerIntegration.getCustomer(
                   GetCustomerRequest.builder()
-                      .account(token.getOwnerAccount())
-                      .memo(token.getOwnerMemo())
-                      .memoType(token.getOwnerMemo() != null ? "id" : null)
+                      .account(request.getAccount())
+                      .memo(request.getMemo())
+                      .memoType(request.getMemoType())
                       .build());
         } catch (Exception e) {
           Log.warnEx(e);
