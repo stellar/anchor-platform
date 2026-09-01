@@ -883,6 +883,7 @@ class Sep31ServiceTest {
       customerIdOwnerStore.reconcileLegacyKey(
         "legacy-receiver-id",
         "vibrant",
+        null,
         "vibrant:${TestHelper.TEST_ACCOUNT}",
         null,
       )

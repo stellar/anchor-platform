@@ -41,6 +41,6 @@ public final class CustomerOwnershipReconciliation {
     }
 
     return store.reconcileLegacyKey(
-        customerId, clientName, token.getOwnerKey(), token.getOwnerMemo());
+        customerId, clientName, null, token.getOwnerKey(), token.getOwnerMemo());
   }
 }

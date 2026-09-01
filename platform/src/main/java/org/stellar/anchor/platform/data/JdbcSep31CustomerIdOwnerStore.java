@@ -47,10 +47,11 @@ public class JdbcSep31CustomerIdOwnerStore implements Sep31CustomerIdOwnerStore 
   public boolean reconcileLegacyKey(
       String customerId,
       String legacyCreatorAccount,
+      String legacyCreatorMemo,
       String newCreatorAccount,
       String newCreatorMemo) {
     repo.reassignIfCreatorAccountMatches(
-        customerId, legacyCreatorAccount, newCreatorAccount, newCreatorMemo);
+        customerId, legacyCreatorAccount, legacyCreatorMemo, newCreatorAccount, newCreatorMemo);
     return verify(customerId, newCreatorAccount, newCreatorMemo);
   }
 }

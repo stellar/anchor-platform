@@ -135,6 +135,7 @@ class SimpleInteractiveUrlConstructorTest {
     val capturedPutCustomerRequest = slot<PutCustomerRequest>()
     every { customerIntegration.putCustomer(capture(capturedPutCustomerRequest)) } returns
       PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
     every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
     val constructor =
@@ -186,6 +187,7 @@ class SimpleInteractiveUrlConstructorTest {
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
     every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
     val constructor =
@@ -254,6 +256,7 @@ class SimpleInteractiveUrlConstructorTest {
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
     every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns false
     val constructor =
@@ -284,6 +287,7 @@ class SimpleInteractiveUrlConstructorTest {
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("deduped-existing-customer-id").build()
     every { customerIdOwnerStore.isClaimed("deduped-existing-customer-id") } returns false
+    every { customerIdOwnerStore.isClaimed("some-other-customer-id") } returns false
     every { customerIntegration.getCustomer(any()) } returns
       GetCustomerResponse.builder().id("some-other-customer-id").build()
     val constructor =
@@ -314,6 +318,7 @@ class SimpleInteractiveUrlConstructorTest {
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
     every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
     val constructor =
@@ -350,12 +355,16 @@ class SimpleInteractiveUrlConstructorTest {
     every { customerIntegration.getCustomer(any()) } returns
       GetCustomerResponse.builder().id("legacy-customer-id").build()
     every {
+      customerIdOwnerStore.verify("legacy-customer-id", "vibrant:test_account", null)
+    } returns false
+    every {
       customerIdOwnerStore.verifyOrClaim("legacy-customer-id", "vibrant:test_account", null)
     } returns false
     every {
       customerIdOwnerStore.reconcileLegacyKey(
         "legacy-customer-id",
         "vibrant",
+        null,
         "vibrant:test_account",
         null,
       )
@@ -388,6 +397,7 @@ class SimpleInteractiveUrlConstructorTest {
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
       PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
     every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
     val constructor =
@@ -429,6 +439,7 @@ class SimpleInteractiveUrlConstructorTest {
     val putRequestSlot = slot<PutCustomerRequest>()
     every { customerIntegration.putCustomer(capture(putRequestSlot)) } returns
       PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
     every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
     val constructor =

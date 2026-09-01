@@ -22,13 +22,14 @@ public class V33__rewrite_wallet_only_customer_id_owner_keys extends BaseJavaMig
         "SELECT DISTINCT ON (customer_id) customer_id, client_name, "
             + "       creator::jsonb ->> 'account' AS winning_account "
             + "FROM ("
-            + "  SELECT receiver_id AS customer_id, creator, client_name, started_at, id "
+            + "  SELECT receiver_id AS customer_id, creator, client_name, started_at, id, status "
             + "    FROM sep31_transaction WHERE receiver_id IS NOT NULL "
             + "  UNION ALL "
-            + "  SELECT sender_id AS customer_id, creator, client_name, started_at, id "
+            + "  SELECT sender_id AS customer_id, creator, client_name, started_at, id, status "
             + "    FROM sep31_transaction WHERE sender_id IS NOT NULL "
             + ") refs "
             + "WHERE client_name IS NOT NULL "
+            + "  AND status <> 'pending_receiver' "
             + "ORDER BY customer_id, started_at ASC NULLS LAST, id ASC";
 
     String rewriteKey =

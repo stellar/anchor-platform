@@ -10,6 +10,7 @@ public interface Sep31CustomerIdOwnerStore {
   boolean reconcileLegacyKey(
       String customerId,
       String legacyCreatorAccount,
+      String legacyCreatorMemo,
       String newCreatorAccount,
       String newCreatorMemo);
 }

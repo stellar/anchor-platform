@@ -252,7 +252,9 @@ public class Sep12Service {
       } catch (Exception e) {
         throw new SepNotAuthorizedException("The transaction specified does not exist");
       }
-    } else if (requestBase.getId() != null) {
+    }
+
+    if (requestBase.getId() != null) {
       isIdPath = true;
 
       String tokenAccount =

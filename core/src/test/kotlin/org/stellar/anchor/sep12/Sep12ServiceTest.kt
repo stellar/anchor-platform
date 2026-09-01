@@ -292,6 +292,32 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test transaction_id path rejects a resolved customer id the caller does not own`() {
+    val transaction =
+      GetTransactionResponse.builder()
+        .creator(StellarId.builder().account(TEST_ACCOUNT).build())
+        .customers(
+          Customers.builder().receiver(StellarId.builder().id("victim-customer-id").build()).build()
+        )
+        .build()
+    every { platformApiClient.getTransaction(any()) } returns transaction
+    every { customerIdOwnerStore.isClaimed("victim-customer-id") } returns true
+    every { customerIdOwnerStore.verify("victim-customer-id", TEST_ACCOUNT, null) } returns false
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("some-other-id").build()
+
+    val request =
+      Sep12GetCustomerRequest.builder()
+        .transactionId(TEST_TRANSACTION_ID)
+        .type("sep31-receiver")
+        .build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+  }
+
+  @Test
   fun `test update request memo and memo type`() {
     val mockRequestBase = mockk<Sep12CustomerRequestBase>(relaxed = true)
 
@@ -1047,7 +1073,13 @@ class Sep12ServiceTest {
     every { customerIntegration.getCustomer(any()) } returns
       GetCustomerResponse.builder().id("legacy-id").build()
     every {
-      customerIdOwnerStore.reconcileLegacyKey("legacy-id", "vibrant", "vibrant:$TEST_ACCOUNT", null)
+      customerIdOwnerStore.reconcileLegacyKey(
+        "legacy-id",
+        "vibrant",
+        null,
+        "vibrant:$TEST_ACCOUNT",
+        null,
+      )
     } returns true
 
     val jwtToken = createJwtToken(TEST_ACCOUNT, "vibrant")
@@ -1070,7 +1102,9 @@ class Sep12ServiceTest {
 
     val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
-    verify(exactly = 0) { customerIdOwnerStore.reconcileLegacyKey(any(), any(), any(), any()) }
+    verify(exactly = 0) {
+      customerIdOwnerStore.reconcileLegacyKey(any(), any(), any(), any(), any())
+    }
   }
 
   @Test

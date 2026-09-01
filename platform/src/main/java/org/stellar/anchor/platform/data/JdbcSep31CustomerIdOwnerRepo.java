@@ -32,11 +32,13 @@ public interface JdbcSep31CustomerIdOwnerRepo
       value =
           "UPDATE sep31_customer_id_owner "
               + "SET creator_account = :newAccount, creator_memo = :newMemo "
-              + "WHERE customer_id = :customerId AND creator_account = :legacyAccount",
+              + "WHERE customer_id = :customerId AND creator_account = :legacyAccount "
+              + "AND creator_memo IS NOT DISTINCT FROM :legacyMemo",
       nativeQuery = true)
   int reassignIfCreatorAccountMatches(
       @Param("customerId") String customerId,
       @Param("legacyAccount") String legacyAccount,
+      @Param("legacyMemo") String legacyMemo,
       @Param("newAccount") String newAccount,
       @Param("newMemo") String newMemo);
 }

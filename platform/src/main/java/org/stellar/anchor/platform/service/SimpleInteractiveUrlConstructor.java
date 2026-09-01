@@ -127,6 +127,34 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
       Map<String, String> sep9 = extractSep9Fields(request);
       // Putting SEP-9 into JWT exposes PII
       if (!sep9.isEmpty()) {
+        GetCustomerResponse existing;
+        try {
+          existing =
+              customerIntegration.getCustomer(
+                  GetCustomerRequest.builder()
+                      .account(jwt.getAccount())
+                      .memo(jwt.getOwnerMemo())
+                      .memoType(jwt.getOwnerMemo() != null ? "id" : null)
+                      .type(FORWARD_KYC_CUSTOMER_TYPE)
+                      .build());
+        } catch (Exception e) {
+          Log.warnEx(e);
+          existing = null;
+        }
+
+        if (existing != null
+            && existing.getId() != null
+            && customerIdOwnerStore.isClaimed(existing.getId())
+            && !customerIdOwnerStore.verify(existing.getId(), jwt.getOwnerKey(), jwt.getOwnerMemo())
+            && !CustomerOwnershipReconciliation.tryReconcile(
+                customerIdOwnerStore,
+                customerIntegration,
+                existing.getId(),
+                jwt,
+                FORWARD_KYC_CUSTOMER_TYPE)) {
+          throw new SepNotAuthorizedException("customer id already claimed by another client");
+        }
+
         Gson gson = GsonUtils.getInstance();
         String gsonRequest = gson.toJson(sep9);
         PutCustomerRequest putCustomerRequest =
