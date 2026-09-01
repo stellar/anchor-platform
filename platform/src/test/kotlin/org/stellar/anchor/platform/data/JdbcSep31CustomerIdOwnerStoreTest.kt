@@ -73,6 +73,31 @@ class JdbcSep31CustomerIdOwnerStoreTest {
   }
 
   @Test
+  fun `verifyOrClaim with ignoreMemo true succeeds for the same account under a different memo`() {
+    every { repo.claimIfAbsent("cust-1", "GALICE", "222") } returns 0
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
+
+    assertTrue(store.verifyOrClaim("cust-1", "GALICE", "222", true))
+  }
+
+  @Test
+  fun `verifyOrClaim with ignoreMemo true still rejects a different account`() {
+    every { repo.claimIfAbsent("cust-1", "GMALLORY", "111") } returns 0
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
+
+    assertFalse(store.verifyOrClaim("cust-1", "GMALLORY", "111", true))
+  }
+
+  @Test
+  fun `verifyOrClaim with ignoreMemo false is unaffected by the flag's default`() {
+    every { repo.claimIfAbsent("cust-1", "GALICE", "222") } returns 0
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
+
+    assertFalse(store.verifyOrClaim("cust-1", "GALICE", "222", false))
+    assertFalse(store.verifyOrClaim("cust-1", "GALICE", "222"))
+  }
+
+  @Test
   fun `isClaimed is false for a missing id`() {
     every { repo.findById("cust-missing") } returns Optional.empty()
 

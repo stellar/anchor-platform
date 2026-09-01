@@ -11,7 +11,8 @@ public class JdbcSep31CustomerIdOwnerStore implements Sep31CustomerIdOwnerStore 
   }
 
   @Override
-  public boolean verifyOrClaim(String customerId, String creatorAccount, String creatorMemo) {
+  public boolean verifyOrClaim(
+      String customerId, String creatorAccount, String creatorMemo, boolean ignoreMemo) {
     if (repo.claimIfAbsent(customerId, creatorAccount, creatorMemo) == 1) {
       return true;
     }
@@ -25,7 +26,7 @@ public class JdbcSep31CustomerIdOwnerStore implements Sep31CustomerIdOwnerStore 
                             + customerId));
 
     return Objects.equals(owner.getCreatorAccount(), creatorAccount)
-        && Objects.equals(owner.getCreatorMemo(), creatorMemo);
+        && (ignoreMemo || Objects.equals(owner.getCreatorMemo(), creatorMemo));
   }
 
   @Override

@@ -1,7 +1,12 @@
 package org.stellar.anchor.sep31;
 
 public interface Sep31CustomerIdOwnerStore {
-  boolean verifyOrClaim(String customerId, String creatorAccount, String creatorMemo);
+  default boolean verifyOrClaim(String customerId, String creatorAccount, String creatorMemo) {
+    return verifyOrClaim(customerId, creatorAccount, creatorMemo, false);
+  }
+
+  boolean verifyOrClaim(
+      String customerId, String creatorAccount, String creatorMemo, boolean ignoreMemo);
 
   boolean isClaimed(String customerId);
 

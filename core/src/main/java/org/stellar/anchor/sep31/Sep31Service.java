@@ -200,7 +200,7 @@ public class Sep31Service {
         }
       }
 
-      if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)
+      if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo, true)
           && !CustomerOwnershipReconciliation.tryReconcile(
               customerIdOwnerStore, customerIntegration, customerId, webAuthJwt, customerType)) {
         throw new SepNotAuthorizedException(

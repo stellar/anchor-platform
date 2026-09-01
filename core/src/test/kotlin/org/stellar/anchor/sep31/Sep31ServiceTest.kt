@@ -246,7 +246,7 @@ class Sep31ServiceTest {
     every { sep31Config.paymentType } returns STRICT_SEND
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
     every { eventService.createSession(any(), TRANSACTION) } returns eventSession
-    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any(), any()) } returns true
     every { customerIdOwnerStore.isClaimed(any()) } returns true
 
     jwtService = spyk(JwtService(secretConfig))
@@ -765,7 +765,7 @@ class Sep31ServiceTest {
   @Test
   fun `test postTransaction rejects receiver_id not owned by caller`() {
     useQuotesNotSupportedAssetService()
-    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns false
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any(), any()) } returns false
 
     val postTxRequest = ownershipTestRequest(receiverId = "victim-customer-id")
 
@@ -794,6 +794,7 @@ class Sep31ServiceTest {
         "sender-customer-id",
         TestHelper.TEST_ACCOUNT,
         TestHelper.TEST_MEMO,
+        true,
       )
     }
     verify(exactly = 1) {
@@ -801,6 +802,7 @@ class Sep31ServiceTest {
         "receiver-customer-id",
         TestHelper.TEST_ACCOUNT,
         TestHelper.TEST_MEMO,
+        true,
       )
     }
   }
@@ -819,7 +821,7 @@ class Sep31ServiceTest {
     assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
     verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("muxed-receiver-id", jwtToken.muxedAccount, "42")
+      customerIdOwnerStore.verifyOrClaim("muxed-receiver-id", jwtToken.muxedAccount, "42", true)
     }
   }
 
@@ -844,6 +846,7 @@ class Sep31ServiceTest {
         "shared-receiver-id",
         "vibrant:$secondSigningKey",
         null,
+        true,
       )
     } returns false
 
@@ -860,10 +863,16 @@ class Sep31ServiceTest {
         "shared-receiver-id",
         "vibrant:${TestHelper.TEST_ACCOUNT}",
         null,
+        true,
       )
     }
     verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("shared-receiver-id", "vibrant:$secondSigningKey", null)
+      customerIdOwnerStore.verifyOrClaim(
+        "shared-receiver-id",
+        "vibrant:$secondSigningKey",
+        null,
+        true,
+      )
     }
   }
 
@@ -875,6 +884,7 @@ class Sep31ServiceTest {
         "legacy-receiver-id",
         "vibrant:${TestHelper.TEST_ACCOUNT}",
         null,
+        true,
       )
     } returns false
     every { customerIntegration.getCustomer(any()) } returns
@@ -927,6 +937,7 @@ class Sep31ServiceTest {
         "sub-user-a-id",
         subUserA.ownerKey,
         TestHelper.TEST_MEMO,
+        true,
       )
     }
 
@@ -935,7 +946,7 @@ class Sep31ServiceTest {
     sep31Service.postTransaction(subUserB, ownershipTestRequest(receiverId = "sub-user-b-id"))
 
     verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("sub-user-b-id", subUserB.ownerKey, "99")
+      customerIdOwnerStore.verifyOrClaim("sub-user-b-id", subUserB.ownerKey, "99", true)
     }
     assertNotEquals(subUserA.ownerKey, subUserB.ownerKey)
   }
@@ -953,7 +964,7 @@ class Sep31ServiceTest {
     val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
     assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
-    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any(), any()) }
   }
 
   @Test
@@ -978,6 +989,7 @@ class Sep31ServiceTest {
         "legacy-receiver-id",
         TestHelper.TEST_ACCOUNT,
         TestHelper.TEST_MEMO,
+        true,
       )
     }
   }
@@ -994,7 +1006,7 @@ class Sep31ServiceTest {
     val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
 
-    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any(), any()) }
     verify(exactly = 0) { txnStore.save(any()) }
   }
 
@@ -1024,6 +1036,7 @@ class Sep31ServiceTest {
         "legacy-receiver-id",
         jwtToken.ownerAccount,
         "42",
+        true,
       )
     }
   }
@@ -1041,7 +1054,7 @@ class Sep31ServiceTest {
     val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
     val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
-    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any(), any()) }
   }
 
   @Test
