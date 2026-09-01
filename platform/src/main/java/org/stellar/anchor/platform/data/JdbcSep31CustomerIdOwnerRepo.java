@@ -25,4 +25,18 @@ public interface JdbcSep31CustomerIdOwnerRepo
       @Param("customerId") String customerId,
       @Param("creatorAccount") String creatorAccount,
       @Param("creatorMemo") String creatorMemo);
+
+  @Modifying
+  @Transactional
+  @Query(
+      value =
+          "UPDATE sep31_customer_id_owner "
+              + "SET creator_account = :newAccount, creator_memo = :newMemo "
+              + "WHERE customer_id = :customerId AND creator_account = :legacyAccount",
+      nativeQuery = true)
+  int reassignIfCreatorAccountMatches(
+      @Param("customerId") String customerId,
+      @Param("legacyAccount") String legacyAccount,
+      @Param("newAccount") String newAccount,
+      @Param("newMemo") String newMemo);
 }

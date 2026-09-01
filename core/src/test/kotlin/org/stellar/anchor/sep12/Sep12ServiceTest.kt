@@ -1041,6 +1041,39 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test id path reconciles a legacy wallet-only key for the true owner via the callback`() {
+    every { customerIdOwnerStore.isClaimed("legacy-id") } returns true
+    every { customerIdOwnerStore.verify("legacy-id", "vibrant:$TEST_ACCOUNT", null) } returns false
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("legacy-id").build()
+    every {
+      customerIdOwnerStore.reconcileLegacyKey("legacy-id", "vibrant", "vibrant:$TEST_ACCOUNT", null)
+    } returns true
+
+    val jwtToken = createJwtToken(TEST_ACCOUNT, "vibrant")
+    val request = Sep12GetCustomerRequest.builder().id("legacy-id").build()
+
+    assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+  }
+
+  @Test
+  fun `test id path does not reconcile a legacy wallet-only key for a different account`() {
+    every { customerIdOwnerStore.isClaimed("legacy-id") } returns true
+    val attackerAccount = "GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"
+    every { customerIdOwnerStore.verify("legacy-id", "vibrant:$attackerAccount", null) } returns
+      false
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("some-other-customer-id").build()
+
+    val jwtToken = createJwtToken(attackerAccount, "vibrant")
+    val request = Sep12GetCustomerRequest.builder().id("legacy-id").build()
+
+    val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { customerIdOwnerStore.reconcileLegacyKey(any(), any(), any(), any()) }
+  }
+
+  @Test
   fun `test id path clears account and memo once the store has authorized it`() {
     every { customerIdOwnerStore.isClaimed("claimed-muxed-id") } returns true
     every { customerIdOwnerStore.verify("claimed-muxed-id", TEST_MUXED_ACCOUNT, TEST_MEMO) } returns

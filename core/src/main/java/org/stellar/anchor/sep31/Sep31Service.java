@@ -200,7 +200,9 @@ public class Sep31Service {
         }
       }
 
-      if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
+      if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)
+          && !CustomerOwnershipReconciliation.tryReconcile(
+              customerIdOwnerStore, customerIntegration, customerId, webAuthJwt, customerType)) {
         throw new SepNotAuthorizedException(
             "sender_id/receiver_id does not belong to the authenticated client");
       }

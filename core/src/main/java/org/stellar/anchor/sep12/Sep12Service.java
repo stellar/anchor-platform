@@ -24,6 +24,7 @@ import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.event.EventService;
+import org.stellar.anchor.sep31.CustomerOwnershipReconciliation;
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.MemoHelper;
@@ -145,7 +146,13 @@ public class Sep12Service {
       boolean owned =
           customerIdOwnerStore.verifyOrClaim(updatedCustomer.getId(), claimant, ownerMemo);
 
-      if (!owned) {
+      if (!owned
+          && !CustomerOwnershipReconciliation.tryReconcile(
+              customerIdOwnerStore,
+              customerIntegration,
+              updatedCustomer.getId(),
+              token,
+              request.getType())) {
         throw new SepNotAuthorizedException(
             "customer id returned by the business server is already claimed by another client");
       }
@@ -253,7 +260,13 @@ public class Sep12Service {
 
       if (customerIdOwnerStore.isClaimed(requestBase.getId())) {
         if (!customerIdOwnerStore.verify(
-            requestBase.getId(), token.getOwnerKey(), token.getOwnerMemo())) {
+                requestBase.getId(), token.getOwnerKey(), token.getOwnerMemo())
+            && !CustomerOwnershipReconciliation.tryReconcile(
+                customerIdOwnerStore,
+                customerIntegration,
+                requestBase.getId(),
+                token,
+                requestBase.getType())) {
           throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
         }
 

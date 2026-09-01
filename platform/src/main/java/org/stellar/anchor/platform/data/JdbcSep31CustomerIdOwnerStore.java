@@ -42,4 +42,15 @@ public class JdbcSep31CustomerIdOwnerStore implements Sep31CustomerIdOwnerStore 
                     && Objects.equals(owner.getCreatorMemo(), creatorMemo))
         .orElse(false);
   }
+
+  @Override
+  public boolean reconcileLegacyKey(
+      String customerId,
+      String legacyCreatorAccount,
+      String newCreatorAccount,
+      String newCreatorMemo) {
+    repo.reassignIfCreatorAccountMatches(
+        customerId, legacyCreatorAccount, newCreatorAccount, newCreatorMemo);
+    return verify(customerId, newCreatorAccount, newCreatorMemo);
+  }
 }

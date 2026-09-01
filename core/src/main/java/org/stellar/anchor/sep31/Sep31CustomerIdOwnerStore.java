@@ -6,4 +6,10 @@ public interface Sep31CustomerIdOwnerStore {
   boolean isClaimed(String customerId);
 
   boolean verify(String customerId, String creatorAccount, String creatorMemo);
+
+  boolean reconcileLegacyKey(
+      String customerId,
+      String legacyCreatorAccount,
+      String newCreatorAccount,
+      String newCreatorMemo);
 }

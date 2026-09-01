@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.MethodSource
 import org.springframework.web.util.UriComponentsBuilder
 import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.callback.CustomerIntegration
+import org.stellar.anchor.api.callback.GetCustomerResponse
 import org.stellar.anchor.api.callback.PutCustomerRequest
 import org.stellar.anchor.api.callback.PutCustomerResponse
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
@@ -265,6 +266,47 @@ class SimpleInteractiveUrlConstructorTest {
 
     verify(exactly = 1) {
       customerIdOwnerStore.verifyOrClaim("forwarded-customer-id", "vibrant:test_account", null)
+    }
+  }
+
+  @Test
+  fun `when the forwarded id is a legacy wallet-only key, the callback confirms it and it is reconciled`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("legacy-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("legacy-customer-id").build()
+    every {
+      customerIdOwnerStore.verifyOrClaim("legacy-customer-id", "vibrant:test_account", null)
+    } returns false
+    every {
+      customerIdOwnerStore.reconcileLegacyKey(
+        "legacy-customer-id",
+        "vibrant",
+        "vibrant:test_account",
+        null,
+      )
+    } returns true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns(null)
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns(null)
+    every { webAuthJwt.clientName }.returns("vibrant")
+    every { webAuthJwt.ownerKey }.returns("vibrant:test_account")
+
+    assertDoesNotThrow {
+      constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
     }
   }
 

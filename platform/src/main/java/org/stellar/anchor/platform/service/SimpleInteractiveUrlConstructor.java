@@ -29,6 +29,7 @@ import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.platform.config.PropertySep24Config;
 import org.stellar.anchor.sep24.InteractiveUrlConstructor;
 import org.stellar.anchor.sep24.Sep24Transaction;
+import org.stellar.anchor.sep31.CustomerOwnershipReconciliation;
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.util.GsonUtils;
 
@@ -140,7 +141,13 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
         }
 
         if (!customerIdOwnerStore.verifyOrClaim(
-            forwarded.getId(), jwt.getOwnerKey(), jwt.getOwnerMemo())) {
+                forwarded.getId(), jwt.getOwnerKey(), jwt.getOwnerMemo())
+            && !CustomerOwnershipReconciliation.tryReconcile(
+                customerIdOwnerStore,
+                customerIntegration,
+                forwarded.getId(),
+                jwt,
+                FORWARD_KYC_CUSTOMER_TYPE)) {
           throw new SepNotAuthorizedException("customer id already claimed by another client");
         }
       }

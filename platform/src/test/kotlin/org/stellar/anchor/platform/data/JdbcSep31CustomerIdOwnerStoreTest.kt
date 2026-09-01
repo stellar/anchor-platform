@@ -127,4 +127,40 @@ class JdbcSep31CustomerIdOwnerStoreTest {
 
     assertTrue(store.verify("cust-1", "GALICE", null))
   }
+
+  @Test
+  fun `reconcileLegacyKey rewrites a row still keyed by the legacy value and confirms the new key`() {
+    every {
+      repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", "vibrant:GALICE", "111")
+    } returns 1
+    every { repo.findById("cust-1") } returns
+      Optional.of(ownerRow("cust-1", "vibrant:GALICE", "111"))
+
+    assertTrue(store.reconcileLegacyKey("cust-1", "vibrant", "vibrant:GALICE", "111"))
+    verify(exactly = 1) {
+      repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", "vibrant:GALICE", "111")
+    }
+  }
+
+  @Test
+  fun `reconcileLegacyKey returns true when the row already matches the new key`() {
+    every {
+      repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", "vibrant:GALICE", "111")
+    } returns 0
+    every { repo.findById("cust-1") } returns
+      Optional.of(ownerRow("cust-1", "vibrant:GALICE", "111"))
+
+    assertTrue(store.reconcileLegacyKey("cust-1", "vibrant", "vibrant:GALICE", "111"))
+  }
+
+  @Test
+  fun `reconcileLegacyKey returns false when the row belongs to a different owner`() {
+    every {
+      repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", "vibrant:GATTACKER", "111")
+    } returns 0
+    every { repo.findById("cust-1") } returns
+      Optional.of(ownerRow("cust-1", "vibrant:GVICTIM", "111"))
+
+    assertFalse(store.reconcileLegacyKey("cust-1", "vibrant", "vibrant:GATTACKER", "111"))
+  }
 }

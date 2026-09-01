@@ -6,13 +6,6 @@ import java.sql.ResultSet;
 import org.flywaydb.core.api.migration.BaseJavaMigration;
 import org.flywaydb.core.api.migration.Context;
 
-/**
- * V31 backfilled {@code creator_account} as a bare {@code client_name} for non-custodial clients. A
- * bare client name is not a per-user key: every user of a given non-custodial wallet shares it. The
- * runtime now keys ownership as {@code "<client_name>:<account>"} instead (see {@code
- * WebAuthJwt.getOwnerKey()}), so rows still holding the bare form no longer match and must be
- * rewritten to line up with it.
- */
 public class V33__rewrite_wallet_only_customer_id_owner_keys extends BaseJavaMigration {
 
   @Override

@@ -868,6 +868,43 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test postTransaction reconciles a legacy wallet-only key for the true owner via the callback`() {
+    useQuotesNotSupportedAssetService()
+    every {
+      customerIdOwnerStore.verifyOrClaim(
+        "legacy-receiver-id",
+        "vibrant:${TestHelper.TEST_ACCOUNT}",
+        null,
+      )
+    } returns false
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse().apply { id = "legacy-receiver-id" }
+    every {
+      customerIdOwnerStore.reconcileLegacyKey(
+        "legacy-receiver-id",
+        "vibrant",
+        "vibrant:${TestHelper.TEST_ACCOUNT}",
+        null,
+      )
+    } returns true
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(account = TestHelper.TEST_ACCOUNT)
+    jwtToken.clientName = "vibrant"
+
+    assertDoesNotThrow {
+      sep31Service.postTransaction(
+        jwtToken,
+        ownershipTestRequest(receiverId = "legacy-receiver-id")
+      )
+    }
+  }
+
+  @Test
   fun `test postTransaction keeps memo distinct per sub-user even when a client name resolves`() {
     useQuotesNotSupportedAssetService()
 
