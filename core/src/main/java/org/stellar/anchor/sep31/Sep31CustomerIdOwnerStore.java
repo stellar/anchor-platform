@@ -10,7 +10,13 @@ public interface Sep31CustomerIdOwnerStore {
 
   boolean isClaimed(String customerId);
 
-  boolean verify(String customerId, String creatorAccount, String creatorMemo);
+  default boolean verify(String customerId, String creatorAccount, String creatorMemo) {
+    return verify(customerId, creatorAccount, creatorMemo, false);
+  }
+
+  boolean verify(String customerId, String creatorAccount, String creatorMemo, boolean ignoreMemo);
+
+  String getCreatorMemo(String customerId);
 
   boolean reconcileLegacyKey(
       String customerId,

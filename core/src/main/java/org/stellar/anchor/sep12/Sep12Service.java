@@ -220,6 +220,10 @@ public class Sep12Service {
   void validateGetOrPutRequest(Sep12CustomerRequestBase requestBase, WebAuthJwt token)
       throws SepException {
     boolean isIdPath = false;
+    boolean isSep31TransactionLookup =
+        requestBase.getTransactionId() != null
+            && ("sep31-sender".equals(requestBase.getType())
+                || "sep31-receiver".equals(requestBase.getType()));
     if (requestBase.getTransactionId() != null) {
       try {
         // `transactionId` should be used in conjunction with customer type `type` (sep6,
@@ -257,12 +261,12 @@ public class Sep12Service {
     if (requestBase.getId() != null) {
       isIdPath = true;
 
-      String tokenAccount =
-          token.getMuxedAccount() != null ? token.getMuxedAccount() : token.getAccount();
-
       if (customerIdOwnerStore.isClaimed(requestBase.getId())) {
         if (!customerIdOwnerStore.verify(
-                requestBase.getId(), token.getOwnerKey(), token.getOwnerMemo())
+                requestBase.getId(),
+                token.getOwnerKey(),
+                token.getOwnerMemo(),
+                isSep31TransactionLookup)
             && !CustomerOwnershipReconciliation.tryReconcile(
                 customerIdOwnerStore,
                 customerIntegration,
@@ -286,7 +290,7 @@ public class Sep12Service {
                   GetCustomerRequest.builder()
                       .memo(tokenMemo)
                       .memoType(tokenMemo != null ? "id" : null)
-                      .account(tokenAccount)
+                      .account(token.getAccount())
                       .type(requestBase.getType())
                       .build());
 
@@ -294,7 +298,7 @@ public class Sep12Service {
             throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
           }
 
-          requestBase.setAccount(tokenAccount);
+          requestBase.setAccount(token.getAccount());
         } catch (SepNotAuthorizedException e) {
           throw e;
         } catch (Exception e) {

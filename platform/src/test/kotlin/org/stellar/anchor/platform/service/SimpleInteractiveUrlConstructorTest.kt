@@ -360,6 +360,7 @@ class SimpleInteractiveUrlConstructorTest {
     every {
       customerIdOwnerStore.verifyOrClaim("legacy-customer-id", "vibrant:test_account", null)
     } returns false
+    every { customerIdOwnerStore.getCreatorMemo("legacy-customer-id") } returns null
     every {
       customerIdOwnerStore.reconcileLegacyKey(
         "legacy-customer-id",

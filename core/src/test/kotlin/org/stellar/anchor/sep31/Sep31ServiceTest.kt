@@ -936,6 +936,7 @@ class Sep31ServiceTest {
     } returns false
     every { customerIntegration.getCustomer(any()) } returns
       GetCustomerResponse().apply { id = "legacy-receiver-id" }
+    every { customerIdOwnerStore.getCreatorMemo("legacy-receiver-id") } returns null
     every {
       customerIdOwnerStore.reconcileLegacyKey(
         "legacy-receiver-id",

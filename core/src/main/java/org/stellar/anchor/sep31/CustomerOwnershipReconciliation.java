@@ -40,7 +40,8 @@ public final class CustomerOwnershipReconciliation {
       return false;
     }
 
+    String legacyMemo = store.getCreatorMemo(customerId);
     return store.reconcileLegacyKey(
-        customerId, clientName, null, token.getOwnerKey(), token.getOwnerMemo());
+        customerId, clientName, legacyMemo, token.getOwnerKey(), token.getOwnerMemo());
   }
 }

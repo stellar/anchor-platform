@@ -35,13 +35,19 @@ public class JdbcSep31CustomerIdOwnerStore implements Sep31CustomerIdOwnerStore 
   }
 
   @Override
-  public boolean verify(String customerId, String creatorAccount, String creatorMemo) {
+  public boolean verify(
+      String customerId, String creatorAccount, String creatorMemo, boolean ignoreMemo) {
     return repo.findById(customerId)
         .map(
             owner ->
                 Objects.equals(owner.getCreatorAccount(), creatorAccount)
-                    && Objects.equals(owner.getCreatorMemo(), creatorMemo))
+                    && (ignoreMemo || Objects.equals(owner.getCreatorMemo(), creatorMemo)))
         .orElse(false);
+  }
+
+  @Override
+  public String getCreatorMemo(String customerId) {
+    return repo.findById(customerId).map(JdbcSep31CustomerIdOwner::getCreatorMemo).orElse(null);
   }
 
   @Override

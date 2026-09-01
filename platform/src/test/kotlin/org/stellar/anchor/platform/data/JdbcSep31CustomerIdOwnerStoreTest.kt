@@ -154,6 +154,34 @@ class JdbcSep31CustomerIdOwnerStoreTest {
   }
 
   @Test
+  fun `verify with ignoreMemo true succeeds for the same account under a different memo`() {
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
+
+    assertTrue(store.verify("cust-1", "GALICE", "222", true))
+  }
+
+  @Test
+  fun `verify with ignoreMemo true still rejects a different account`() {
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "GALICE", "111"))
+
+    assertFalse(store.verify("cust-1", "GMALLORY", "111", true))
+  }
+
+  @Test
+  fun `getCreatorMemo returns null for a missing id`() {
+    every { repo.findById("cust-missing") } returns Optional.empty()
+
+    assertNull(store.getCreatorMemo("cust-missing"))
+  }
+
+  @Test
+  fun `getCreatorMemo returns the row's current memo`() {
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", "vibrant", "42"))
+
+    assertEquals("42", store.getCreatorMemo("cust-1"))
+  }
+
+  @Test
   fun `reconcileLegacyKey rewrites a row still keyed by the legacy value and confirms the new key`() {
     every {
       repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", null, "vibrant:GALICE", "111")
