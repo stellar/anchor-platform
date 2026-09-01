@@ -15,6 +15,8 @@ import lombok.SneakyThrows;
 import org.apache.http.client.utils.URIBuilder;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.callback.CustomerIntegration;
+import org.stellar.anchor.api.callback.GetCustomerRequest;
+import org.stellar.anchor.api.callback.GetCustomerResponse;
 import org.stellar.anchor.api.callback.PutCustomerRequest;
 import org.stellar.anchor.api.callback.PutCustomerResponse;
 import org.stellar.anchor.api.exception.AnchorException;
@@ -32,6 +34,7 @@ import org.stellar.anchor.sep24.Sep24Transaction;
 import org.stellar.anchor.sep31.CustomerOwnershipReconciliation;
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.util.GsonUtils;
+import org.stellar.anchor.util.Log;
 
 public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
   public static final String FORWARD_KYC_CUSTOMER_TYPE = "sep24-customer";
@@ -138,6 +141,26 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
         if (forwarded == null || forwarded.getId() == null) {
           throw new ServerErrorException(
               "business server returned an empty PUT /customer response");
+        }
+
+        if (!customerIdOwnerStore.isClaimed(forwarded.getId())) {
+          GetCustomerResponse callbackCustomer;
+          try {
+            callbackCustomer =
+                customerIntegration.getCustomer(
+                    GetCustomerRequest.builder()
+                        .account(jwt.getAccount())
+                        .memo(jwt.getOwnerMemo())
+                        .memoType(jwt.getOwnerMemo() != null ? "id" : null)
+                        .type(FORWARD_KYC_CUSTOMER_TYPE)
+                        .build());
+          } catch (Exception e) {
+            Log.warnEx(e);
+            callbackCustomer = null;
+          }
+          if (callbackCustomer == null || !forwarded.getId().equals(callbackCustomer.getId())) {
+            throw new SepNotAuthorizedException("customer id already claimed by another client");
+          }
         }
 
         if (!customerIdOwnerStore.verifyOrClaim(
