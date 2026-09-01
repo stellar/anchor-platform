@@ -54,7 +54,7 @@ class Sep10ConfigTest {
     val config = PropertySep10Config(stellarNetworkConfig, DefaultClientService(), secretConfig)
     config.isClientAttributionRequired = true
     config.validateClientAttribution(errors)
-    assertFalse(errors.hasErrors())
+    assertErrorCode(errors, "sep10-client-attribution-lists-empty")
   }
 
   @Test
@@ -117,7 +117,7 @@ class Sep10ConfigTest {
 
     config.clientAllowList = listOf("invalid")
     config.validateClientAttribution(errors)
-    assertFalse(errors.hasErrors())
+    assertErrorCode(errors, "sep10-client-allow-list-invalid")
     assertTrue(config.allowedClientDomains.isEmpty())
   }
 
