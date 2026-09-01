@@ -71,14 +71,4 @@ class JdbcSep31CustomerIdOwnerStoreTest {
       store.verifyOrClaim("cust-1", "GALICE", "111")
     }
   }
-
-  @Test
-  fun `isClaimed reflects whether an owner row already exists, without claiming it`() {
-    every { repo.existsById("cust-1") } returns true
-    every { repo.existsById("cust-2") } returns false
-
-    assertTrue(store.isClaimed("cust-1"))
-    assertFalse(store.isClaimed("cust-2"))
-    verify(exactly = 0) { repo.claimIfAbsent(any(), any(), any()) }
-  }
 }

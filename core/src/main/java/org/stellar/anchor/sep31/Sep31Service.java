@@ -176,14 +176,12 @@ public class Sep31Service {
 
     Sep31Info.Sep12Info sep12Config = assetInfo.getSep31().getSep12();
     verifyCustomerOwnershipAndKyc(
-        webAuthJwt,
         request.getSenderId(),
         Sep12Service.TYPE_SEP31_SENDER,
         ownerAccount,
         ownerMemo,
         sep12Config != null && sep12Config.getSender() != null);
     verifyCustomerOwnershipAndKyc(
-        webAuthJwt,
         request.getReceiverId(),
         Sep12Service.TYPE_SEP31_RECEIVER,
         ownerAccount,
@@ -262,8 +260,10 @@ public class Sep31Service {
 
   /**
    * Verifies that a `sender_id`/`receiver_id` provided in a `POST /transactions` request belongs to
-   * the authenticated client, and that the SEP-12 customer it references already has complete KYC
-   * on file. A no-op if {@code customerId} is null and {@code kycRequired} is false -- per SEP-31,
+   * the authenticated client, and (only if this asset's config requires SEP-12 KYC for this role)
+   * that the SEP-12 customer it references has usable KYC on file.
+   *
+   * <p>A no-op if {@code customerId} is null and {@code kycRequired} is false. Per SEP-31,
    * `sender_id`/`receiver_id` is "Required if the Receiving Anchor requires SEP-12 KYC on the
    * [Sending/Receiving] Client", so a null `customerId` while {@code kycRequired} is true is
    * rejected with {@link Sep31CustomerInfoNeededException} instead, the same signal used to guide
@@ -275,47 +275,45 @@ public class Sep31Service {
    * PENDING_CUSTOMER_INFO_UPDATE} and the Platform API), which still handles KYC that becomes
    * incomplete or stale after the transaction is created.
    *
-   * <p>`customerId` must either already have an owner on file, or be verifiably owned by the
-   * authenticated caller's own SEP-12 record before this call will claim it. In the intended flow,
-   * a `sender_id`/`receiver_id` always comes from an earlier SEP-12 `PUT /customer` (which claims
-   * it, via {@code Sep12Service#putCustomer}'s {@code isNewSep31Customer} branch), so by the time
-   * it's referenced here it's normally already claimed. The one legitimate exception is a customer
-   * registered before ownership tracking existed and never referenced in a transaction since (see
-   * ANCHOR-1248's "Known limitations" -- the backfill only covers ids with transaction history) --
-   * for that case, this method looks the caller up by their own Stellar identity (the same
-   * muxed-preferring account/memo/memo_type reverse lookup as {@code
-   * Sep12Service#validateGetOrPutRequest}'s {@code isIdPath} branch) and only claims `customerId`
-   * if that lookup resolves to this exact id, so a legacy customer can still self-heal on their
-   * first post-upgrade transaction without reopening the disclosure/fabricated-ID gap this method
-   * exists to close: a `customerId` with no owner on file AND no matching identity lookup is
-   * rejected outright, never silently claimed-and-allowed-through (see
-   * `docs/audits/ANCHOR-1279-sep-coverage-audit.md`'s "`sender_id`/`receiver_id` are never
-   * validated against real SEP-12 customer records" finding).
+   * <p>Ownership of `customerId` is established by {@link Sep31CustomerIdOwnerStore#verifyOrClaim}:
+   * an id with no owner yet is claimed by whoever references it first, tied to the authenticated
+   * caller's own identity. There's no general way to independently verify a
+   * `sender_id`/`receiver_id` against SEP-12 before that first reference, since SEP-12 registration
+   * doesn't require declaring a `sep31-sender`/ `sep31-receiver` `type` -- many real clients
+   * (including the `stellar-anchor-tests` compliance suite) register a customer under an
+   * account/memo that differs from whatever authenticates the later `POST /transactions` call (e.g.
+   * a sending anchor registering both a sender and a receiver customer under the same Stellar
+   * account, differentiated only by memo). See ANCHOR-1248's "Known limitations" for the same
+   * accepted trade-off applied to this ownership model generally.
    *
-   * @param webAuthJwt the authenticated caller's SEP-10 token, used only for the identity-lookup
-   *     compatibility path above (not for the ownership-store identity, which is {@code
-   *     ownerAccount}/{@code ownerMemo} and may substitute a resolved client name)
+   * <p>Once ownership is established, if {@code kycRequired}, this fetches the customer's SEP-12
+   * status by id: a `customerId` that doesn't correspond to a real customer (a fabricated id) is
+   * treated the same as one that still needs KYC info -- {@link Sep31CustomerInfoNeededException}
+   * either way -- so a transaction is never silently created for an id this anchor can't actually
+   * verify KYC for (see `docs/audits/ANCHOR-1279-sep-coverage-audit.md`'s "`sender_id`/
+   * `receiver_id` are never validated against real SEP-12 customer records" finding).
+   *
    * @param customerId the `sender_id` or `receiver_id` from the request, or null if not provided
    * @param customerType the SEP-12 `type` to request -- {@link Sep12Service#TYPE_SEP31_SENDER} or
-   *     {@link Sep12Service#TYPE_SEP31_RECEIVER}, the same constants {@code
-   *     Sep12Service#putCustomer}'s {@code isNewSep31Customer} check uses, also advertised in `GET
-   *     /info`'s `sep12.sender`/`sep12.receiver` (see {@link
+   *     {@link Sep12Service#TYPE_SEP31_RECEIVER}, also advertised in `GET /info`'s
+   *     `sep12.sender`/`sep12.receiver` (see {@link
    *     org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse#getSep12()}), and echoed
    *     back in {@link Sep31CustomerInfoNeededException#getType()} so the sending anchor knows
    *     which SEP-12 `type` to use when it re-fetches the customer
+   * @param ownerAccount the authenticated caller's ownership-store identity (may be a resolved
+   *     client name instead of a raw Stellar account -- see the {@code ownerAccount} computed in
+   *     {@link #postTransaction})
+   * @param ownerMemo the authenticated caller's ownership-store memo
    * @param kycRequired whether this asset's config actually advertises a SEP-12 type for this role
    *     (`assetInfo.getSep31().getSep12()`'s `sender`/`receiver` is non-null) -- per SEP-31, an
    *     absent `sep12.sender`/`sep12.receiver` in `GET /info` means KYC isn't required for that
-   *     role, so ownership is still verified (and, for an unclaimed id, still established via the
-   *     identity lookup above) but the KYC-status check is skipped
-   * @throws SepNotAuthorizedException if the customer has no owner on file and doesn't resolve to
-   *     the caller's own SEP-12 identity, belongs to a different authenticated client, or (when
-   *     {@code kycRequired}) has a {@code REJECTED} SEP-12 KYC status
-   * @throws Sep31CustomerInfoNeededException if {@code kycRequired} and either {@code customerId}
-   *     is null or the customer's SEP-12 KYC status is {@code NEEDS_INFO}
+   *     role, so ownership is still verified but the KYC-status check is skipped
+   * @throws SepNotAuthorizedException if the customer belongs to a different authenticated client,
+   *     or (when {@code kycRequired}) has a {@code REJECTED} SEP-12 KYC status
+   * @throws Sep31CustomerInfoNeededException if {@code kycRequired} and {@code customerId} is null,
+   *     doesn't correspond to a real SEP-12 customer, or has a {@code NEEDS_INFO} KYC status
    */
   void verifyCustomerOwnershipAndKyc(
-      WebAuthJwt webAuthJwt,
       String customerId,
       String customerType,
       String ownerAccount,
@@ -329,50 +327,22 @@ public class Sep31Service {
       return;
     }
 
-    if (customerIdOwnerStore.isClaimed(customerId)) {
-      if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
-        throw new SepNotAuthorizedException(
-            "sender_id/receiver_id does not belong to the authenticated client");
-      }
-      if (!kycRequired) {
-        return;
-      }
-      GetCustomerResponse customer =
-          customerIntegration.getCustomer(
-              GetCustomerRequest.builder().id(customerId).type(customerType).build());
-      enforceKycStatus(customer, customerId, customerType);
-      return;
-    }
-
-    String tokenAccount =
-        webAuthJwt.getMuxedAccount() != null
-            ? webAuthJwt.getMuxedAccount()
-            : webAuthJwt.getAccount();
-    String tokenMemo = webAuthJwt.getOwnerMemo();
-    GetCustomerResponse customer;
-    try {
-      customer =
-          customerIntegration.getCustomer(
-              GetCustomerRequest.builder()
-                  .account(tokenAccount)
-                  .memo(tokenMemo)
-                  .memoType(tokenMemo != null ? "id" : null)
-                  .type(customerType)
-                  .build());
-    } catch (NotFoundException e) {
-      throw new SepNotAuthorizedException(
-          "sender_id/receiver_id does not belong to the authenticated client", e);
-    }
-    if (customer == null || !customerId.equals(customer.getId())) {
-      throw new SepNotAuthorizedException(
-          "sender_id/receiver_id does not belong to the authenticated client");
-    }
     if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
       throw new SepNotAuthorizedException(
           "sender_id/receiver_id does not belong to the authenticated client");
     }
+
     if (!kycRequired) {
       return;
+    }
+
+    GetCustomerResponse customer;
+    try {
+      customer =
+          customerIntegration.getCustomer(
+              GetCustomerRequest.builder().id(customerId).type(customerType).build());
+    } catch (NotFoundException e) {
+      throw new Sep31CustomerInfoNeededException(customerType);
     }
     enforceKycStatus(customer, customerId, customerType);
   }

@@ -246,7 +246,6 @@ class Sep31ServiceTest {
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
     every { eventService.createSession(any(), TRANSACTION) } returns eventSession
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
-    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.getCustomer(any()) } returns
       GetCustomerResponse.builder().status(Sep12Status.ACCEPTED.getName()).build()
 
@@ -1077,50 +1076,32 @@ class Sep31ServiceTest {
   }
 
   @Test
-  fun `test postTransaction rejects a customer_id with no owner on file and no matching SEP-12 identity`() {
+  fun `test postTransaction rejects with customer_info_needed when the referenced customer does not exist`() {
     useQuotesNotSupportedAssetService()
-    every { customerIdOwnerStore.isClaimed("garbage-customer-id") } returns false
-    every {
-      customerIntegration.getCustomer(
-        match {
-          it.account == TestHelper.TEST_ACCOUNT &&
-            it.memo == TestHelper.TEST_MEMO &&
-            it.memoType == "id" &&
-            it.type == "sep31-receiver"
-        }
-      )
-    } returns GetCustomerResponse.builder().id("some-other-customer-id").build()
+    every { customerIntegration.getCustomer(match { it.id == "fabricated-customer-id" }) } throws
+      NotFoundException("customer not found")
     val postTxRequest =
-      ownershipTestRequest(senderId = "generic-sender", receiverId = "garbage-customer-id")
+      ownershipTestRequest(senderId = "generic-sender", receiverId = "fabricated-customer-id")
 
     val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
     val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
-    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
-    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim("garbage-customer-id", any(), any()) }
+    assertInstanceOf(Sep31CustomerInfoNeededException::class.java, ex)
+    assertEquals("sep31-receiver", (ex as Sep31CustomerInfoNeededException).type)
     verify(exactly = 0) { txnStore.save(any()) }
   }
 
   @Test
-  fun `test postTransaction claims and allows a legacy customer_id that matches the caller's own SEP-12 identity`() {
+  fun `test postTransaction claims a customer_id registered under a different identity than the caller`() {
+    // Mirrors stellar-anchor-tests' "differentMemosSameAccount" pattern: a sending anchor
+    // registers a sender and a receiver customer via SEP-12 under the same Stellar account but
+    // different memos (and no `type`, so neither is claimed at PUT time), then calls
+    // POST /transactions authenticated as just one of those memos. There's no way to verify the
+    // receiver_id against SEP-12 independently of the caller's own identity, so the first
+    // reference claims it -- same as it always has -- and KYC is still checked by id.
     useQuotesNotSupportedAssetService()
-    every { customerIdOwnerStore.isClaimed("legacy-customer-id") } returns false
-    every {
-      customerIntegration.getCustomer(
-        match {
-          it.account == TestHelper.TEST_ACCOUNT &&
-            it.memo == TestHelper.TEST_MEMO &&
-            it.memoType == "id" &&
-            it.type == "sep31-receiver"
-        }
-      )
-    } returns
-      GetCustomerResponse.builder()
-        .id("legacy-customer-id")
-        .status(Sep12Status.ACCEPTED.getName())
-        .build()
     val postTxRequest =
-      ownershipTestRequest(senderId = "generic-sender", receiverId = "legacy-customer-id")
+      ownershipTestRequest(senderId = "generic-sender", receiverId = "receiver-under-other-memo")
 
     every { txnStore.save(any()) } answers
       {
@@ -1130,7 +1111,18 @@ class Sep31ServiceTest {
     val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
     assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
-    verify(exactly = 1) { customerIdOwnerStore.verifyOrClaim("legacy-customer-id", any(), any()) }
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "receiver-under-other-memo",
+        TestHelper.TEST_ACCOUNT,
+        TestHelper.TEST_MEMO,
+      )
+    }
+    verify(exactly = 1) {
+      customerIntegration.getCustomer(
+        match { it.id == "receiver-under-other-memo" && it.type == "sep31-receiver" }
+      )
+    }
   }
 
   @Test
