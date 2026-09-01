@@ -20,6 +20,7 @@ import org.stellar.anchor.api.callback.GetCustomerResponse;
 import org.stellar.anchor.api.callback.PutCustomerRequest;
 import org.stellar.anchor.api.callback.PutCustomerResponse;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.NotFoundException;
 import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.asset.AssetService;
@@ -137,9 +138,11 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
                       .memoType(jwt.getOwnerMemo() != null ? "id" : null)
                       .type(FORWARD_KYC_CUSTOMER_TYPE)
                       .build());
+        } catch (NotFoundException e) {
+          existing = null;
         } catch (Exception e) {
           Log.warnEx(e);
-          existing = null;
+          throw new ServerErrorException("unable to verify customer ownership", e);
         }
 
         if (existing != null

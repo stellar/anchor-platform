@@ -114,6 +114,7 @@ class Sep12ServiceTest {
     every { assetService.getAssets() } returns assets
     every { eventService.createSession(any(), any()) } returns eventSession
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    every { customerIntegration.getCustomer(any()) } returns null
 
     sep12Service =
       Sep12Service(
@@ -150,6 +151,8 @@ class Sep12ServiceTest {
   @ValueSource(strings = [TEST_ACCOUNT, TEST_CONTRACT_ACCOUNT, TEST_MUXED_ACCOUNT])
   @ParameterizedTest
   fun `test delete for all account types succeed`(account: String) {
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("existing-customer-id").build()
     val jwtToken = createJwtToken(account)
     val memo = if (account == TEST_MUXED_ACCOUNT) TEST_MEMO else null
     val memoType = if (account == TEST_MUXED_ACCOUNT) "id" else null
@@ -642,17 +645,17 @@ class Sep12ServiceTest {
   }
 
   @Test
-  fun `test put customer fails closed when the callback lookup for a legacy id errors`() {
-    every { customerIdOwnerStore.isClaimed("legacy-sep24-id") } returns false
-    every { customerIntegration.putCustomer(any()) } returns
-      PutCustomerResponse.builder().id("legacy-sep24-id").status(Sep12Status.ACCEPTED.name).build()
+  fun `test put customer fails closed when the pre-check callback lookup errors`() {
+    // A callback outage must abort before the mutating PUT, not be treated as "no existing
+    // customer" and let the write through.
     every { customerIntegration.getCustomer(any()) } throws RuntimeException("callback unavailable")
 
     val request = Sep12PutCustomerRequest.builder().account(TEST_ACCOUNT).firstName("Jane").build()
     val jwtToken = createJwtToken(TEST_ACCOUNT)
 
-    val ex: SepException = assertThrows { sep12Service.putCustomer(jwtToken, request) }
-    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    val ex: AnchorException = assertThrows { sep12Service.putCustomer(jwtToken, request) }
+    assertInstanceOf(ServerErrorException::class.java, ex)
+    verify(exactly = 0) { customerIntegration.putCustomer(any()) }
     verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
   }
 
@@ -686,6 +689,23 @@ class Sep12ServiceTest {
 
     val ex: SepException = assertThrows { sep12Service.putCustomer(jwtToken, request) }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+  }
+
+  @Test
+  fun `test put customer rejects before writing when the caller already has a colliding customer`() {
+    // The ownership pre-check must run before the mutating PUT: a deduplicating business server
+    // could otherwise apply the caller's submitted fields to a customer someone else already owns.
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("already-claimed-id").build()
+    every { customerIdOwnerStore.isClaimed("already-claimed-id") } returns true
+    every { customerIdOwnerStore.verify("already-claimed-id", any(), any()) } returns false
+
+    val request = Sep12PutCustomerRequest.builder().account(TEST_ACCOUNT).firstName("Jane").build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    val ex: SepException = assertThrows { sep12Service.putCustomer(jwtToken, request) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { customerIntegration.putCustomer(any()) }
   }
 
   @Test
@@ -1384,6 +1404,8 @@ class Sep12ServiceTest {
   @Test
   fun `test delete customer validation`() {
     every { customerIntegration.deleteCustomer(any()) } just Runs
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("existing-customer-id").build()
 
     // PART 1 - account without memo
     // throws exception if request is missing the account

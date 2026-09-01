@@ -113,6 +113,40 @@ public class Sep12Service {
       }
     }
 
+    if (isNewCustomer) {
+      GetCustomerResponse existing;
+      try {
+        existing =
+            customerIntegration.getCustomer(
+                GetCustomerRequest.builder()
+                    .account(request.getAccount())
+                    .memo(request.getMemo())
+                    .memoType(request.getMemoType())
+                    .type(request.getType())
+                    .build());
+      } catch (NotFoundException e) {
+        existing = null;
+      } catch (Exception e) {
+        Log.warnEx(e);
+        throw new ServerErrorException("unable to verify customer ownership", e);
+      }
+
+      if (existing != null
+          && existing.getId() != null
+          && customerIdOwnerStore.isClaimed(existing.getId())
+          && !customerIdOwnerStore.verify(
+              existing.getId(), token.getOwnerKey(), token.getOwnerMemo())
+          && !CustomerOwnershipReconciliation.tryReconcile(
+              customerIdOwnerStore,
+              customerIntegration,
+              existing.getId(),
+              token,
+              request.getType())) {
+        throw new SepNotAuthorizedException(
+            "customer id returned by the business server is already claimed by another client");
+      }
+    }
+
     PutCustomerResponse updatedCustomer =
         customerIntegration.putCustomer(PutCustomerRequest.from(request));
 
@@ -200,7 +234,7 @@ public class Sep12Service {
     GetCustomerResponse existingCustomer =
         customerIntegration.getCustomer(
             GetCustomerRequest.builder().account(account).memo(memo).memoType(memoType).build());
-    if (existingCustomer.getId() != null) {
+    if (existingCustomer != null && existingCustomer.getId() != null) {
       existingCustomerMatch = true;
       customerIntegration.deleteCustomer(existingCustomer.getId());
     }

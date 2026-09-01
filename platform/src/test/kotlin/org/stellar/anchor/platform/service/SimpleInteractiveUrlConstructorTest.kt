@@ -17,6 +17,7 @@ import org.stellar.anchor.api.callback.GetCustomerResponse
 import org.stellar.anchor.api.callback.PutCustomerRequest
 import org.stellar.anchor.api.callback.PutCustomerResponse
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.ServerErrorException
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.JwtService.*
@@ -278,6 +279,33 @@ class SimpleInteractiveUrlConstructorTest {
     assertThrows(SepNotAuthorizedException::class.java) {
       constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
     }
+  }
+
+  @Test
+  fun `when the pre-check callback lookup fails with a server error, construct aborts without writing`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.getCustomer(any()) } throws RuntimeException("callback unavailable")
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns("123")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns("123")
+    every { webAuthJwt.clientName }.returns(null)
+
+    assertThrows(ServerErrorException::class.java) {
+      constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+    }
+    verify(exactly = 0) { customerIntegration.putCustomer(any()) }
   }
 
   @Test
