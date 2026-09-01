@@ -30,8 +30,10 @@ import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.xdr.MemoType;
 
 public class Sep12Service {
-  private static final String TYPE_SEP31_SENDER = "sep31-sender";
-  private static final String TYPE_SEP31_RECEIVER = "sep31-receiver";
+  /** Shared with {@code Sep31Service}, the sole source of truth for these two SEP-12 types. */
+  public static final String TYPE_SEP31_SENDER = "sep31-sender";
+
+  public static final String TYPE_SEP31_RECEIVER = "sep31-receiver";
 
   private final CustomerIntegration customerIntegration;
   private final Counter sep12GetCustomerCounter =

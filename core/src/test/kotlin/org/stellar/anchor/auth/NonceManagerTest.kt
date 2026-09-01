@@ -25,9 +25,7 @@ class NonceManagerTest {
     clock = Clock.fixed(Instant.EPOCH, Clock.systemUTC().zone)
 
     every { nonceStore.newInstance() } answers { PojoNonce() }
-    every { nonceStore.findById(any()) } returns null
-    val nonce = slot<Nonce>()
-    every { nonceStore.save(capture(nonce)) } answers { nonce.captured }
+    every { nonceStore.insertIfAbsent(any()) } returns true
 
     nonceManager = NonceManager(nonceStore, clock)
   }
@@ -40,7 +38,7 @@ class NonceManagerTest {
     assertFalse(nonce.used)
     assert(nonce.expiresAt == Instant.EPOCH.plusSeconds(300))
 
-    verify(exactly = 1) { nonceStore.save(nonce) }
+    verify(exactly = 1) { nonceStore.insertIfAbsent(nonce) }
   }
 
   @Test
@@ -53,13 +51,29 @@ class NonceManagerTest {
 
   @Test
   fun testDuplicateNonceExists() {
-    val nonce = PojoNonce()
-    every { nonceStore.findById(any()) } returns nonce
+    every { nonceStore.insertIfAbsent(any()) } returns false
 
-    assertThrows<RuntimeException> { nonceManager.create(300) }
+    assertThrows<NonceCollisionException> { nonceManager.create(300) }
+    verify(exactly = 1) { nonceStore.insertIfAbsent(any()) }
+  }
 
-    verify(exactly = 1) { nonceStore.findById(any()) }
-    verify(exactly = 0) { nonceStore.save(any()) }
+  @Test
+  fun testCreateWithId() {
+    val nonce = nonceManager.createWithId("challenge-hash-1", 300)
+
+    assertEquals("challenge-hash-1", nonce.id)
+    assertFalse(nonce.used)
+    assert(nonce.expiresAt == Instant.EPOCH.plusSeconds(300))
+
+    verify(exactly = 1) { nonceStore.insertIfAbsent(nonce) }
+  }
+
+  @Test
+  fun testCreateWithIdRejectsDuplicateId() {
+    every { nonceStore.insertIfAbsent(any()) } returns false
+
+    assertThrows<NonceCollisionException> { nonceManager.createWithId("challenge-hash-1", 300) }
+    verify(exactly = 1) { nonceStore.insertIfAbsent(any()) }
   }
 
   @Test
@@ -78,5 +92,48 @@ class NonceManagerTest {
   fun testVerifyAndUseNonexistent() {
     every { nonceStore.markAsUsed("missing", Instant.EPOCH) } returns 0
     assertFalse(nonceManager.verifyAndUse("missing"))
+  }
+
+  @Test
+  fun testClaimFirstTimeSucceeds() {
+    val claimed = nonceManager.claim("challenge-hash-1", 1200, Instant.EPOCH)
+
+    assertTrue(claimed)
+    val nonceSlot = slot<Nonce>()
+    verify(exactly = 1) { nonceStore.insertIfAbsent(capture(nonceSlot)) }
+    assertEquals("challenge-hash-1", nonceSlot.captured.id)
+    assertTrue(nonceSlot.captured.used)
+    assertEquals(Instant.EPOCH.plusSeconds(1200), nonceSlot.captured.expiresAt)
+  }
+
+  @Test
+  fun testClaimRejectsAlreadyClaimedId() {
+    every { nonceStore.insertIfAbsent(any()) } returns false
+
+    assertFalse(nonceManager.claim("challenge-hash-1", 300, Instant.EPOCH))
+  }
+
+  @Test
+  fun testClaimUsesMinRetentionWhenItsLaterThanNotBefore() {
+    // notBefore (EPOCH + 10s) is earlier than now + minRetentionSeconds (EPOCH + 300s), so the
+    // fixed retention window must win.
+    nonceManager.claim("challenge-hash-1", 300, Instant.EPOCH.plusSeconds(10))
+
+    val nonceSlot = slot<Nonce>()
+    verify(exactly = 1) { nonceStore.insertIfAbsent(capture(nonceSlot)) }
+    assertEquals(Instant.EPOCH.plusSeconds(300), nonceSlot.captured.expiresAt)
+  }
+
+  @Test
+  fun testClaimUsesNotBeforeWhenItsLaterThanMinRetention() {
+    // notBefore (EPOCH + 7200s) is later than now + minRetentionSeconds (EPOCH + 300s) -- e.g. a
+    // challenge whose own signed max_time is further out than the fixed retention window, because
+    // sep10.auth_timeout was configured longer than that window. notBefore must win, or cleanup
+    // could remove the claim while the challenge itself is still validly within its time bounds.
+    nonceManager.claim("challenge-hash-1", 300, Instant.EPOCH.plusSeconds(7200))
+
+    val nonceSlot = slot<Nonce>()
+    verify(exactly = 1) { nonceStore.insertIfAbsent(capture(nonceSlot)) }
+    assertEquals(Instant.EPOCH.plusSeconds(7200), nonceSlot.captured.expiresAt)
   }
 }

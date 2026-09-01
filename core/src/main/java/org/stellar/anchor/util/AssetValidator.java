@@ -7,6 +7,7 @@ import static org.stellar.anchor.util.ListHelper.isEmpty;
 
 import java.util.*;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.stellar.anchor.api.asset.*;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.asset.AssetService;
@@ -187,6 +188,20 @@ public class AssetValidator {
                 format("Asset %s: SEP-31 duplicate receive method found: %s", assetId, method));
           }
         }
+      }
+    }
+
+    // Validate sep12 customer-type descriptions
+    if (sep31Info.getSep12() != null) {
+      Sep12TypeInfo sender = sep31Info.getSep12().getSender();
+      if (sender != null && StringUtils.isBlank(sender.getDescription())) {
+        errors.add(
+            format("Asset %s: SEP-31 sep12.sender 'description' must not be blank.", assetId));
+      }
+      Sep12TypeInfo receiver = sep31Info.getSep12().getReceiver();
+      if (receiver != null && StringUtils.isBlank(receiver.getDescription())) {
+        errors.add(
+            format("Asset %s: SEP-31 sep12.receiver 'description' must not be blank.", assetId));
       }
     }
 
