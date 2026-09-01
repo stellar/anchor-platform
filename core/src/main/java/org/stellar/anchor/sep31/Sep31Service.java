@@ -25,17 +25,20 @@ import java.util.*;
 import lombok.Data;
 import lombok.SneakyThrows;
 import org.stellar.anchor.api.asset.AssetInfo;
+import org.stellar.anchor.api.asset.Sep31Info;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.callback.*;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.NotFoundException;
+import org.stellar.anchor.api.exception.Sep31CustomerInfoNeededException;
 import org.stellar.anchor.api.exception.Sep31MissingFieldException;
 import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
+import org.stellar.anchor.api.sep.sep12.Sep12Status;
 import org.stellar.anchor.api.sep.sep31.Sep31GetTransactionResponse;
 import org.stellar.anchor.api.sep.sep31.Sep31InfoResponse;
 import org.stellar.anchor.api.sep.sep31.Sep31PatchTransactionRequest;
@@ -169,44 +172,21 @@ public class Sep31Service {
     String ownerAccount = webAuthJwt.getOwnerKey();
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
-    String[][] customerIdsByType = {
-      {"sep31-sender", request.getSenderId()}, {"sep31-receiver", request.getReceiverId()}
-    };
-    for (String[] customerIdByType : customerIdsByType) {
-      String customerType = customerIdByType[0];
-      String customerId = customerIdByType[1];
-      if (customerId == null) {
-        continue;
-      }
-
-      if (!customerIdOwnerStore.isClaimed(customerId)) {
-        GetCustomerResponse owned;
-        try {
-          owned =
-              customerIntegration.getCustomer(
-                  GetCustomerRequest.builder()
-                      .account(webAuthJwt.getAccount())
-                      .memo(webAuthJwt.getOwnerMemo())
-                      .memoType(webAuthJwt.getOwnerMemo() != null ? "id" : null)
-                      .type(customerType)
-                      .build());
-        } catch (Exception e) {
-          Log.warnEx(e);
-          owned = null;
-        }
-        if (owned == null || !customerId.equals(owned.getId())) {
-          throw new SepNotAuthorizedException(
-              "sender_id/receiver_id does not belong to the authenticated client");
-        }
-      }
-
-      if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo, true)
-          && !CustomerOwnershipReconciliation.tryReconcile(
-              customerIdOwnerStore, customerIntegration, customerId, webAuthJwt, customerType)) {
-        throw new SepNotAuthorizedException(
-            "sender_id/receiver_id does not belong to the authenticated client");
-      }
-    }
+    Sep31Info.Sep12Info sep12Config = assetInfo.getSep31().getSep12();
+    verifyCustomerOwnershipAndKyc(
+        request.getSenderId(),
+        "sep31-sender",
+        ownerAccount,
+        ownerMemo,
+        webAuthJwt,
+        sep12Config != null && sep12Config.getSender() != null);
+    verifyCustomerOwnershipAndKyc(
+        request.getReceiverId(),
+        "sep31-receiver",
+        ownerAccount,
+        ownerMemo,
+        webAuthJwt,
+        sep12Config != null && sep12Config.getReceiver() != null);
 
     Sep38Quote quote = Context.get().getQuote();
     FeeDetails feeDetails;
@@ -276,6 +256,140 @@ public class Sep31Service {
     // increment counter
     sep31TransactionCreatedCounter.increment();
     return response;
+  }
+
+  /**
+   * Verifies that a `sender_id`/`receiver_id` provided in a `POST /transactions` request belongs to
+   * the authenticated client, and (only if this asset's config requires SEP-12 KYC for this role)
+   * that the SEP-12 customer it references has usable KYC on file.
+   *
+   * <p>A no-op if {@code customerId} is null and {@code kycRequired} is false. Per SEP-31,
+   * `sender_id`/`receiver_id` is "Required if the Receiving Anchor requires SEP-12 KYC on the
+   * [Sending/Receiving] Client", so a null `customerId` while {@code kycRequired} is true is
+   * rejected with {@link Sep31CustomerInfoNeededException} instead, the same signal used to guide
+   * the sending anchor to go register a SEP-12 customer for this role in the first place.
+   *
+   * <p>This is a fail-fast check only: it rejects upfront a transaction the receiving anchor
+   * already knows can't proceed, before creating it. It doesn't replace the anchor's own
+   * asynchronous re-verification of a transaction already in flight (e.g. via {@code
+   * PENDING_CUSTOMER_INFO_UPDATE} and the Platform API), which still handles KYC that becomes
+   * incomplete or stale after the transaction is created.
+   *
+   * <p>Ownership of `customerId` is established by {@link Sep31CustomerIdOwnerStore#verifyOrClaim}:
+   * an id with no owner yet is claimed by whoever references it first, tied to the authenticated
+   * caller's own identity. There's no general way to independently verify a
+   * `sender_id`/`receiver_id` against SEP-12 before that first reference, since SEP-12 registration
+   * doesn't require declaring a `sep31-sender`/ `sep31-receiver` `type` -- many real clients
+   * (including the `stellar-anchor-tests` compliance suite) register a customer under an
+   * account/memo that differs from whatever authenticates the later `POST /transactions` call (e.g.
+   * a sending anchor registering both a sender and a receiver customer under the same Stellar
+   * account, differentiated only by memo). See ANCHOR-1248's "Known limitations" for the same
+   * accepted trade-off applied to this ownership model generally.
+   *
+   * <p>Once ownership is established, if {@code kycRequired}, this fetches the customer's SEP-12
+   * status by id: a `customerId` that doesn't correspond to a real customer (a fabricated id) is
+   * treated the same as one that still needs KYC info -- {@link Sep31CustomerInfoNeededException}
+   * either way -- so a transaction is never silently created for an id this anchor can't actually
+   * verify KYC for (see `docs/audits/ANCHOR-1279-sep-coverage-audit.md`'s "`sender_id`/
+   * `receiver_id` are never validated against real SEP-12 customer records" finding).
+   *
+   * @param customerId the `sender_id` or `receiver_id` from the request, or null if not provided
+   * @param customerType the SEP-12 `type` to request -- {@code sep31-sender} or {@code
+   *     sep31-receiver}, also advertised in `GET /info`'s `sep12.sender`/`sep12.receiver` (see
+   *     {@link org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse#getSep12()}), and
+   *     echoed back in {@link Sep31CustomerInfoNeededException#getType()} so the sending anchor
+   *     knows which SEP-12 `type` to use when it re-fetches the customer
+   * @param ownerAccount the authenticated caller's per-user ownership-store identity (see the
+   *     {@code ownerAccount} computed in {@link #postTransaction})
+   * @param ownerMemo the authenticated caller's ownership-store memo
+   * @param webAuthJwt the authenticated caller's token, used both for the unclaimed-id reverse
+   *     lookup and for legacy-key reconciliation
+   * @param kycRequired whether this asset's config actually advertises a SEP-12 type for this role
+   *     (`assetInfo.getSep31().getSep12()`'s `sender`/`receiver` is non-null) -- per SEP-31, an
+   *     absent `sep12.sender`/`sep12.receiver` in `GET /info` means KYC isn't required for that
+   *     role, so ownership is still verified but the KYC-status check is skipped
+   * @throws SepNotAuthorizedException if the customer belongs to a different authenticated client,
+   *     or (when {@code kycRequired}) has a {@code REJECTED} SEP-12 KYC status
+   * @throws Sep31CustomerInfoNeededException if {@code kycRequired} and {@code customerId} is null,
+   *     doesn't correspond to a real SEP-12 customer, or has a {@code NEEDS_INFO} KYC status
+   */
+  void verifyCustomerOwnershipAndKyc(
+      String customerId,
+      String customerType,
+      String ownerAccount,
+      String ownerMemo,
+      WebAuthJwt webAuthJwt,
+      boolean kycRequired)
+      throws AnchorException {
+    if (customerId == null) {
+      if (kycRequired) {
+        throw new Sep31CustomerInfoNeededException(customerType);
+      }
+      return;
+    }
+
+    if (!customerIdOwnerStore.isClaimed(customerId)) {
+      GetCustomerResponse owned;
+      try {
+        owned =
+            customerIntegration.getCustomer(
+                GetCustomerRequest.builder()
+                    .account(webAuthJwt.getAccount())
+                    .memo(webAuthJwt.getOwnerMemo())
+                    .memoType(webAuthJwt.getOwnerMemo() != null ? "id" : null)
+                    .type(customerType)
+                    .build());
+      } catch (Exception e) {
+        Log.warnEx(e);
+        owned = null;
+      }
+      if (owned == null || !customerId.equals(owned.getId())) {
+        throw new SepNotAuthorizedException(
+            "sender_id/receiver_id does not belong to the authenticated client");
+      }
+    }
+
+    if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo, true)
+        && !CustomerOwnershipReconciliation.tryReconcile(
+            customerIdOwnerStore, customerIntegration, customerId, webAuthJwt, customerType)) {
+      throw new SepNotAuthorizedException(
+          "sender_id/receiver_id does not belong to the authenticated client");
+    }
+
+    if (!kycRequired) {
+      return;
+    }
+
+    GetCustomerResponse customer;
+    try {
+      customer =
+          customerIntegration.getCustomer(
+              GetCustomerRequest.builder().id(customerId).type(customerType).build());
+    } catch (NotFoundException e) {
+      throw new Sep31CustomerInfoNeededException(customerType);
+    }
+    enforceKycStatus(customer, customerId, customerType);
+  }
+
+  /**
+   * Rejects the transaction if {@code customer}'s SEP-12 KYC status isn't usable: {@code
+   * NEEDS_INFO} is retryable (the sending anchor can supply more SEP-12 fields and try again), but
+   * {@code REJECTED} means the customer's KYC failed and will never succeed, so it must fail fast
+   * with a non-retryable error rather than being treated like {@code ACCEPTED}. {@code PROCESSING}
+   * (and any other status) is let through -- this method only guards against the two definitively
+   * bad outcomes.
+   */
+  private static void enforceKycStatus(
+      GetCustomerResponse customer, String customerId, String customerType) throws AnchorException {
+    if (Sep12Status.NEEDS_INFO.getName().equals(customer.getStatus())) {
+      infoF("Customer ({}) needs more info before this transaction can proceed", customerId);
+      throw new Sep31CustomerInfoNeededException(customerType);
+    }
+    if (Sep12Status.REJECTED.getName().equals(customer.getStatus())) {
+      infoF("Customer ({}) has a rejected SEP-12 KYC status", customerId);
+      throw new SepNotAuthorizedException(
+          "sender_id/receiver_id belongs to a customer whose SEP-12 KYC was rejected");
+    }
   }
 
   /**
@@ -614,15 +728,23 @@ public class Sep31Service {
   }
 
   /**
-   * validateRequiredFields will validate if the fields provided in the `POST /transactions` or
-   * `PATCH /transactions/{id}` request body contains all the fields expected by the Anchor, and
-   * pre-configured in the `app-config.app.assets`.
+   * validateRequiredFields validates only that the `POST /transactions` or `PATCH
+   * /transactions/{id}` request body's `fields.transaction` map is present and that the requested
+   * asset is configured for SEP-31 receive.
    *
-   * @throws BadRequestException if the asset is invalid or id the fields are missing from the
+   * <p>It intentionally does NOT validate individual field values against a per-asset "required
+   * fields" spec, and never throws {@link Sep31MissingFieldException} -- the SEP-31 spec itself
+   * deprecates the `/info` `fields` key and the request's `fields.transaction` map (see {@link
+   * org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest#fields}, marked
+   * {@code @Deprecated}) in favor of SEP-12 customer fields: "Pass SEP-9 fields via SEP-12 PUT
+   * /customer instead." KYC completeness for `sender_id`/`receiver_id` is instead enforced by
+   * {@link #verifyCustomerOwnershipAndKyc}, which throws {@link Sep31CustomerInfoNeededException}
+   * -- the spec-compliant replacement for this mechanism.
+   *
+   * @throws BadRequestException if the asset is invalid or the `fields` map is missing from the
    *     request
-   * @throws Sep31MissingFieldException if not all fields were provided.
    */
-  void validateRequiredFields() throws BadRequestException, Sep31MissingFieldException {
+  void validateRequiredFields() throws BadRequestException {
     AssetInfo assetInfo = Context.get().getAsset();
     if (assetInfo == null) {
       infoF("Missing asset information for request ({})", Context.get().getRequest());
@@ -660,10 +782,45 @@ public class Sep31Service {
         assetResponse.setMinAmount(assetInfo.getSep31().getReceive().getMinAmount());
         assetResponse.setMaxAmount(assetInfo.getSep31().getReceive().getMaxAmount());
         assetResponse.setFundingMethods(methods);
+        assetResponse.setSep12(sep12ResponseFromConfig(assetInfo.getSep31().getSep12()));
         response.getReceive().put(assetInfo.getCode(), assetResponse);
       }
     }
     return response;
+  }
+
+  /**
+   * Advertises the (fixed) SEP-12 customer types this asset uses for `sender_id`/`receiver_id`, per
+   * {@link #verifyCustomerOwnershipAndKyc}'s javadoc -- null (omitted from `GET /info`) if the
+   * asset's config doesn't set a `sep12` block for that role.
+   */
+  private static Sep31InfoResponse.Sep12Response sep12ResponseFromConfig(
+      Sep31Info.Sep12Info sep12Config) {
+    if (sep12Config == null) {
+      return null;
+    }
+    if (sep12Config.getSender() == null && sep12Config.getReceiver() == null) {
+      return null;
+    }
+    Sep31InfoResponse.Sep12Response sep12Response = new Sep31InfoResponse.Sep12Response();
+    sep12Response.setSender(
+        sep12Config.getSender() == null
+            ? new Sep31InfoResponse.Sep12TypesResponse()
+            : sep12TypesResponse("sep31-sender", sep12Config.getSender().getDescription()));
+    sep12Response.setReceiver(
+        sep12Config.getReceiver() == null
+            ? new Sep31InfoResponse.Sep12TypesResponse()
+            : sep12TypesResponse("sep31-receiver", sep12Config.getReceiver().getDescription()));
+    return sep12Response;
+  }
+
+  private static Sep31InfoResponse.Sep12TypesResponse sep12TypesResponse(
+      String type, String description) {
+    Sep31InfoResponse.Sep12TypeResponse typeResponse = new Sep31InfoResponse.Sep12TypeResponse();
+    typeResponse.setDescription(description);
+    Sep31InfoResponse.Sep12TypesResponse typesResponse = new Sep31InfoResponse.Sep12TypesResponse();
+    typesResponse.setTypes(Map.of(type, typeResponse));
+    return typesResponse;
   }
 
   @Data
