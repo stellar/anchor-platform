@@ -12,6 +12,12 @@ public class V33__rewrite_wallet_only_customer_id_owner_keys extends BaseJavaMig
   public void migrate(Context context) throws Exception {
     Connection connection = context.getConnection();
 
+    try (PreparedStatement widenColumn =
+        connection.prepareStatement(
+            "ALTER TABLE sep31_customer_id_owner ALTER COLUMN creator_account TYPE VARCHAR(512)")) {
+      widenColumn.executeUpdate();
+    }
+
     String findWinningReferences =
         "SELECT DISTINCT ON (customer_id) customer_id, client_name, "
             + "       creator::jsonb ->> 'account' AS winning_account "
