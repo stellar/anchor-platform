@@ -140,11 +140,14 @@ public class Sep31Service {
         request.getFundingMethod(),
         assetInfo.getSep31().getReceive().getMethods());
     validateLanguage(languageConfig, request.getLang());
-    // Validates the refund_memo/refund_memo_type pair: rejects either field specified without the
-    // other, and an invalid type/value combination. makeMemo alone only rejects a memo without a
-    // type, so a type without a memo is rejected explicitly here first.
-    if (isEmpty(request.getRefundMemo()) && !isEmpty(request.getRefundMemoType())) {
-      throw new SepValidationException("refund_memo is required if refund_memo_type is specified");
+    // Validates the refund_memo/refund_memo_type pair: both must be specified together, or both
+    // omitted. The presence check is done explicitly (with the correct field names) rather than
+    // relying on makeMemo's own message, which assumes a "memo_type" field that doesn't exist on
+    // this endpoint. makeMemo is still used to validate the type/value combination once both are
+    // known to be present.
+    if (isEmpty(request.getRefundMemo()) != isEmpty(request.getRefundMemoType())) {
+      throw new SepValidationException(
+          "refund_memo and refund_memo_type must both be specified or both be omitted");
     }
     makeMemo(request.getRefundMemo(), request.getRefundMemoType());
 

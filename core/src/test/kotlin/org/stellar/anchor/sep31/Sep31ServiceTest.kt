@@ -977,7 +977,10 @@ class Sep31ServiceTest {
     val ex =
       assertThrows<SepValidationException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
-    assertEquals("memo_type is required if memo is specified", ex.message)
+    assertEquals(
+      "refund_memo and refund_memo_type must both be specified or both be omitted",
+      ex.message
+    )
     verify(exactly = 0) { txnStore.save(any()) }
   }
 
@@ -990,7 +993,10 @@ class Sep31ServiceTest {
     val ex =
       assertThrows<SepValidationException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
-    assertEquals("refund_memo is required if refund_memo_type is specified", ex.message)
+    assertEquals(
+      "refund_memo and refund_memo_type must both be specified or both be omitted",
+      ex.message
+    )
     verify(exactly = 0) { txnStore.save(any()) }
   }
 
