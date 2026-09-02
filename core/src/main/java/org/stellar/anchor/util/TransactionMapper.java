@@ -23,6 +23,12 @@ public class TransactionMapper {
     if (txn.getRefunds() != null) {
       refunds = toRefunds(txn.getRefunds(), txn.getAmountInAsset());
     }
+    // Per SEP-31: refund_memo/refund_memo_type are a pair — if specified, both must be specified
+    // together. Only honor the sending anchor's override when both fields are present; otherwise
+    // (including an incomplete pair, which this endpoint doesn't reject) fall back to the same
+    // memo the sending anchor used for the original payment, so refund_memo and refund_memo_type
+    // always come from the same source and are never mismatched.
+    boolean hasRefundMemoOverride = txn.getRefundMemo() != null && txn.getRefundMemoType() != null;
 
     return GetTransactionResponse.builder()
         .id(txn.getId())
@@ -51,12 +57,8 @@ public class TransactionMapper {
         .clientDomain(txn.getClientDomain())
         .clientName(txn.getClientName())
         .requestClientIpAddress(txn.getRequestClientIpAddress())
-        // Per SEP-31: refund_memo/refund_memo_type are a pair — if specified, both must be
-        // specified together. If the sending anchor didn't specify a refund memo, the receiving
-        // anchor should use the same memo the sending anchor used for the original payment.
-        .refundMemo(txn.getRefundMemo() != null ? txn.getRefundMemo() : txn.getStellarMemo())
-        .refundMemoType(
-            txn.getRefundMemo() != null ? txn.getRefundMemoType() : txn.getStellarMemoType())
+        .refundMemo(hasRefundMemoOverride ? txn.getRefundMemo() : txn.getStellarMemo())
+        .refundMemoType(hasRefundMemoOverride ? txn.getRefundMemoType() : txn.getStellarMemoType())
         .customers(txn.getCustomers())
         .creator(txn.getCreator())
         .build();

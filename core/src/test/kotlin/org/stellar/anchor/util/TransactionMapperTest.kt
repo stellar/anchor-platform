@@ -198,6 +198,36 @@ class TransactionMapperTest {
   }
 
   @Test
+  fun `test SEP-31 transaction mapping falls back to the original memo when the refund memo override is incomplete`() {
+    val sepTxn =
+      PojoSep31Transaction().apply {
+        id = UUID.randomUUID().toString()
+        status = "completed"
+        amountIn = "100.0"
+        amountInAsset = "USDC"
+        amountOut = "100.0"
+        amountOutAsset = "USD"
+        feeDetails = FeeDetails("10.0", "USD")
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        stellarMemo = "originalMemo"
+        stellarMemoType = "text"
+        refundMemo = "overrideMemo"
+        refundMemoType = null
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        amountExpected = "100.0"
+        receiverId = "receiverId"
+        senderId = "senderId"
+      }
+
+    val actual = TransactionMapper.toGetTransactionResponse(sepTxn)
+
+    assertEquals("originalMemo", actual.refundMemo)
+    assertEquals("text", actual.refundMemoType)
+  }
+
+  @Test
   fun `test SEP-24 transaction mapping`() {
     val sepTxn =
       PojoSep24Transaction().apply {
