@@ -11,6 +11,7 @@ import static org.stellar.anchor.util.Log.info;
 import static org.stellar.anchor.util.Log.infoF;
 import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MathHelper.formatAmount;
+import static org.stellar.anchor.util.MemoHelper.makeMemo;
 import static org.stellar.anchor.util.MetricConstants.SEP31_TRANSACTION_CREATED;
 import static org.stellar.anchor.util.MetricConstants.SEP31_TRANSACTION_PATCHED;
 import static org.stellar.anchor.util.SepHelper.*;
@@ -138,6 +139,9 @@ public class Sep31Service {
         request.getFundingMethod(),
         assetInfo.getSep31().getReceive().getMethods());
     validateLanguage(languageConfig, request.getLang());
+    // Validates the refund_memo/refund_memo_type pair: rejects a memo without a type (or vice
+    // versa) and an invalid type/value combination, matching SEP-24's validation of this pair.
+    makeMemo(request.getRefundMemo(), request.getRefundMemoType());
 
     /*
      * TODO:

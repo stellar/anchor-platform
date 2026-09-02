@@ -969,6 +969,35 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test postTransaction rejects a refund memo without a refund memo type`() {
+    useNoSep12AssetService()
+    val postTxRequest = ownershipTestRequest().apply { refundMemo = "my-refund-memo" }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex =
+      assertThrows<SepValidationException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertEquals("memo_type is required if memo is specified", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction rejects a refund memo type without a refund memo`() {
+    useNoSep12AssetService()
+    val postTxRequest = ownershipTestRequest().apply { refundMemoType = "text" }
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    verify(exactly = 1) { txnStore.save(any()) }
+  }
+
+  @Test
   fun `test postTransaction rejects a missing sender_id when the asset requires SEP-12 KYC for senders`() {
     useQuotesNotSupportedAssetService()
     val postTxRequest = ownershipTestRequest()
