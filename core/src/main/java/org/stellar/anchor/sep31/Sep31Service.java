@@ -36,6 +36,7 @@ import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.NotFoundException;
 import org.stellar.anchor.api.exception.Sep31CustomerInfoNeededException;
 import org.stellar.anchor.api.exception.Sep31MissingFieldException;
+import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.exception.ServerErrorException;
@@ -149,7 +150,18 @@ public class Sep31Service {
       throw new SepValidationException(
           "refund_memo and refund_memo_type must both be specified or both be omitted");
     }
-    makeMemo(request.getRefundMemo(), request.getRefundMemoType());
+    // makeMemo doesn't consistently report malformed values as SepValidationException (some
+    // failures surface as a plain SepException or IllegalArgumentException, both of which the
+    // global exception handler maps to 500 instead of the 400 required for bad request input) —
+    // preserve an existing validation exception as-is, and wrap anything else as one.
+    try {
+      makeMemo(request.getRefundMemo(), request.getRefundMemoType());
+    } catch (SepValidationException e) {
+      throw e;
+    } catch (SepException | IllegalArgumentException e) {
+      throw new SepValidationException(
+          String.format("Invalid refund_memo/refund_memo_type: %s", e.getMessage()), e);
+    }
 
     /*
      * TODO:

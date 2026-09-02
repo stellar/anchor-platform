@@ -985,6 +985,40 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test postTransaction rejects an unsupported refund memo type as a 400`() {
+    useNoSep12AssetService()
+    val postTxRequest =
+      ownershipTestRequest().apply {
+        refundMemo = "my-refund-memo"
+        refundMemoType = "return"
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex =
+      assertThrows<SepValidationException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertTrue(ex.message!!.contains("Invalid refund_memo/refund_memo_type"))
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction rejects a malformed hash refund memo as a 400`() {
+    useNoSep12AssetService()
+    val postTxRequest =
+      ownershipTestRequest().apply {
+        refundMemo = "not-valid-base64!!"
+        refundMemoType = "hash"
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex =
+      assertThrows<SepValidationException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertTrue(ex.message!!.contains("Invalid refund_memo/refund_memo_type"))
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
   fun `test postTransaction rejects a refund memo type without a refund memo`() {
     useNoSep12AssetService()
     val postTxRequest = ownershipTestRequest().apply { refundMemoType = "text" }
