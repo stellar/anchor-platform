@@ -42,6 +42,14 @@
         },
         "quotes_supported": false,
         "quotes_required": false,
+        "sep12": {
+          "sender": {
+            "description": "the sender's KYC information"
+          },
+          "receiver": {
+            "description": "the receiver's KYC information"
+          }
+        },
         "fields": {
           "transaction": {
             "type": {
