@@ -947,6 +947,28 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test postTransaction stores the sending anchor's requested refund memo`() {
+    useNoSep12AssetService()
+    val postTxRequest =
+      ownershipTestRequest().apply {
+        refundMemo = "my-refund-memo"
+        refundMemoType = "text"
+      }
+
+    val txnSlot = slot<Sep31Transaction>()
+    every { txnStore.save(capture(txnSlot)) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertEquals("my-refund-memo", txnSlot.captured.refundMemo)
+    assertEquals("text", txnSlot.captured.refundMemoType)
+  }
+
+  @Test
   fun `test postTransaction rejects a missing sender_id when the asset requires SEP-12 KYC for senders`() {
     useQuotesNotSupportedAssetService()
     val postTxRequest = ownershipTestRequest()

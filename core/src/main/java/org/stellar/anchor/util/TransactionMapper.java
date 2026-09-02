@@ -51,9 +51,11 @@ public class TransactionMapper {
         .clientDomain(txn.getClientDomain())
         .clientName(txn.getClientName())
         .requestClientIpAddress(txn.getRequestClientIpAddress())
-        // TODO: SEP-31 supports refund memo but we don't use it
-        .refundMemo(txn.getStellarMemo())
-        .refundMemoType(txn.getStellarMemoType())
+        // Per SEP-31: if the sending anchor didn't specify a refund memo, the receiving anchor
+        // should use the same memo the sending anchor used for the original payment.
+        .refundMemo(txn.getRefundMemo() != null ? txn.getRefundMemo() : txn.getStellarMemo())
+        .refundMemoType(
+            txn.getRefundMemo() != null ? txn.getRefundMemoType() : txn.getStellarMemoType())
         .customers(txn.getCustomers())
         .creator(txn.getCreator())
         .build();

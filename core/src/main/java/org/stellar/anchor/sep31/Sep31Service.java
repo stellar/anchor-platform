@@ -230,6 +230,8 @@ public class Sep31Service {
             .amountOut(null)
             .amountOutAsset(null)
             .requestClientIpAddress(request.getRequestClientIpAddress())
+            .refundMemo(request.getRefundMemo())
+            .refundMemoType(request.getRefundMemoType())
             .build();
 
     Context.get().setTransaction(txn);

@@ -167,6 +167,36 @@ class TransactionMapperTest {
   }
 
   @Test
+  fun `test SEP-31 transaction mapping uses refund memo override when specified`() {
+    val sepTxn =
+      PojoSep31Transaction().apply {
+        id = UUID.randomUUID().toString()
+        status = "completed"
+        amountIn = "100.0"
+        amountInAsset = "USDC"
+        amountOut = "100.0"
+        amountOutAsset = "USD"
+        feeDetails = FeeDetails("10.0", "USD")
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        stellarMemo = "originalMemo"
+        stellarMemoType = "text"
+        refundMemo = "overrideMemo"
+        refundMemoType = "id"
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        amountExpected = "100.0"
+        receiverId = "receiverId"
+        senderId = "senderId"
+      }
+
+    val actual = TransactionMapper.toGetTransactionResponse(sepTxn)
+
+    assert(actual.refundMemo == "overrideMemo")
+    assert(actual.refundMemoType == "id")
+  }
+
+  @Test
   fun `test SEP-24 transaction mapping`() {
     val sepTxn =
       PojoSep24Transaction().apply {
