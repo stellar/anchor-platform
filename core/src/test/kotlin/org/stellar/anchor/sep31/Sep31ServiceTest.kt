@@ -986,15 +986,12 @@ class Sep31ServiceTest {
     useNoSep12AssetService()
     val postTxRequest = ownershipTestRequest().apply { refundMemoType = "text" }
 
-    every { txnStore.save(any()) } answers
-      {
-        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
-      }
-
     val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
-    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+    val ex =
+      assertThrows<SepValidationException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
-    verify(exactly = 1) { txnStore.save(any()) }
+    assertEquals("refund_memo is required if refund_memo_type is specified", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
   }
 
   @Test

@@ -1,6 +1,7 @@
 package org.stellar.anchor.util;
 
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*;
+import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import jakarta.annotation.Nullable;
 import org.stellar.anchor.api.asset.AssetInfo;
@@ -24,11 +25,13 @@ public class TransactionMapper {
       refunds = toRefunds(txn.getRefunds(), txn.getAmountInAsset());
     }
     // Per SEP-31: refund_memo/refund_memo_type are a pair — if specified, both must be specified
-    // together. Only honor the sending anchor's override when both fields are present; otherwise
-    // (including an incomplete pair, which this endpoint doesn't reject) fall back to the same
-    // memo the sending anchor used for the original payment, so refund_memo and refund_memo_type
-    // always come from the same source and are never mismatched.
-    boolean hasRefundMemoOverride = txn.getRefundMemo() != null && txn.getRefundMemoType() != null;
+    // together. Only honor the sending anchor's override when both fields are non-empty
+    // (mirroring MemoHelper.makeMemo's own empty-is-absent semantics); otherwise (including an
+    // incomplete pair, which this endpoint doesn't reject) fall back to the same memo the sending
+    // anchor used for the original payment, so refund_memo and refund_memo_type always come from
+    // the same source and are never mismatched.
+    boolean hasRefundMemoOverride =
+        !isEmpty(txn.getRefundMemo()) && !isEmpty(txn.getRefundMemoType());
 
     return GetTransactionResponse.builder()
         .id(txn.getId())

@@ -16,6 +16,7 @@ import static org.stellar.anchor.util.MetricConstants.SEP31_TRANSACTION_CREATED;
 import static org.stellar.anchor.util.MetricConstants.SEP31_TRANSACTION_PATCHED;
 import static org.stellar.anchor.util.SepHelper.*;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
+import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.micrometer.core.instrument.Counter;
 import jakarta.transaction.Transactional;
@@ -139,8 +140,12 @@ public class Sep31Service {
         request.getFundingMethod(),
         assetInfo.getSep31().getReceive().getMethods());
     validateLanguage(languageConfig, request.getLang());
-    // Validates the refund_memo/refund_memo_type pair: rejects a memo without a type (or vice
-    // versa) and an invalid type/value combination, matching SEP-24's validation of this pair.
+    // Validates the refund_memo/refund_memo_type pair: rejects either field specified without the
+    // other, and an invalid type/value combination. makeMemo alone only rejects a memo without a
+    // type, so a type without a memo is rejected explicitly here first.
+    if (isEmpty(request.getRefundMemo()) && !isEmpty(request.getRefundMemoType())) {
+      throw new SepValidationException("refund_memo is required if refund_memo_type is specified");
+    }
     makeMemo(request.getRefundMemo(), request.getRefundMemoType());
 
     /*
