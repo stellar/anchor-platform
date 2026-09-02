@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import java.time.Instant
 import java.util.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.skyscreamer.jsonassert.JSONAssert
@@ -192,8 +193,8 @@ class TransactionMapperTest {
 
     val actual = TransactionMapper.toGetTransactionResponse(sepTxn)
 
-    assert(actual.refundMemo == "overrideMemo")
-    assert(actual.refundMemoType == "id")
+    assertEquals("overrideMemo", actual.refundMemo)
+    assertEquals("id", actual.refundMemoType)
   }
 
   @Test
