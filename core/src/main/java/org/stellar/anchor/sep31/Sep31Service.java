@@ -524,7 +524,9 @@ public class Sep31Service {
         .getTransaction()
         .forEach((fieldName, fieldValue) -> txn.getFields().put(fieldName, fieldValue));
 
-    AssetInfo assetInfo = assetService.getAsset(txn.getAmountInAsset());
+    // txn.getAmountInAsset() stores the full asset id (e.g. "stellar:USDC:G...", as set by
+    // postTransaction), not a bare code, so it must be looked up via getAssetById.
+    AssetInfo assetInfo = assetService.getAssetById(txn.getAmountInAsset());
     Context.get().setAsset(assetInfo);
     Context.get().setTransactionFields(txn.getFields());
     validateRequiredFields();

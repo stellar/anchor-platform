@@ -11,6 +11,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode.LENIENT
 import org.springframework.data.domain.Sort.Direction
 import org.springframework.data.domain.Sort.Direction.DESC
 import org.stellar.anchor.api.exception.SepException
+import org.stellar.anchor.api.exception.SepNotFoundException
 import org.stellar.anchor.api.platform.*
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep.SEP_31
 import org.stellar.anchor.api.platform.PlatformTransactionData.builder
@@ -19,7 +20,9 @@ import org.stellar.anchor.api.sep.SepTransactionStatus.*
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerResponse
 import org.stellar.anchor.api.sep.sep31.Sep31GetTransactionResponse
+import org.stellar.anchor.api.sep.sep31.Sep31PatchTransactionRequest
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest
+import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest.Sep31TxnFields
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionResponse
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
@@ -224,6 +227,102 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
         )
         .build()
     )
+  }
+
+  // The transaction just created by createTx() may still be concurrently touched by an async
+  // event/observer, racing this PATCH into the same OptimisticLockingFailureException
+  // TransactionService throws as "Transaction was modified by another request. Please re-read
+  // the transaction state and retry if appropriate." — so retry on that exact message.
+  private fun requestInfoUpdate(txId: String, vararg fieldNames: String) {
+    val request =
+      PatchTransactionsRequest.builder()
+        .records(
+          listOf(
+            PatchTransactionRequest(
+              builder()
+                .id(txId)
+                .status(PENDING_TRANSACTION_INFO_UPDATE)
+                .requiredInfoUpdates(fieldNames.toList())
+                .build()
+            )
+          )
+        )
+        .build()
+
+    var attempt = 0
+    while (true) {
+      try {
+        platformApiClient.patchTransaction(request)
+        return
+      } catch (ex: SepException) {
+        attempt++
+        if (attempt >= 5 || ex.message?.contains("modified by another request") != true) {
+          throw ex
+        }
+        Thread.sleep(500)
+      }
+    }
+  }
+
+  @Test
+  fun `test PATCH sep31 transactions endpoint updates a requested field`() {
+    val (senderCustomer, receiverCustomer) = mkCustomers()
+    val postTxResponse = createTx(senderCustomer, receiverCustomer)
+
+    // Simulate the business server requesting corrected info via the internal Platform API.
+    requestInfoUpdate(postTxResponse.id, "receiver_account_number")
+
+    // Submit the corrected field via the real SEP-31 PATCH /transactions/{id} endpoint.
+    val patchResponse =
+      sep31Client.patchTransaction(
+        postTxResponse.id,
+        Sep31PatchTransactionRequest.builder()
+          .fields(Sep31TxnFields(hashMapOf("receiver_account_number" to "a9999")))
+          .build()
+      )
+    assertEquals(postTxResponse.id, patchResponse.transaction.id)
+
+    // Patching a field that was never requested is rejected with a 400.
+    val ex =
+      assertThrows<SepException> {
+        sep31Client.patchTransaction(
+          postTxResponse.id,
+          Sep31PatchTransactionRequest.builder()
+            .fields(Sep31TxnFields(hashMapOf("not_a_requested_field" to "value")))
+            .build()
+        )
+      }
+    assertTrue(ex.message!!.contains("not a expected field"))
+  }
+
+  @Test
+  fun `test PATCH sep31 transactions endpoint rejects a transaction not awaiting info`() {
+    val (senderCustomer, receiverCustomer) = mkCustomers()
+    val postTxResponse = createTx(senderCustomer, receiverCustomer)
+
+    // Transaction is still pending_receiver, never entered pending_transaction_info_update.
+    val ex =
+      assertThrows<SepException> {
+        sep31Client.patchTransaction(
+          postTxResponse.id,
+          Sep31PatchTransactionRequest.builder()
+            .fields(Sep31TxnFields(hashMapOf("receiver_account_number" to "a9999")))
+            .build()
+        )
+      }
+    assertTrue(ex.message!!.contains("does not need update"))
+  }
+
+  @Test
+  fun `test PATCH sep31 transactions endpoint rejects an unknown id`() {
+    assertThrows<SepNotFoundException> {
+      sep31Client.patchTransaction(
+        "does-not-exist",
+        Sep31PatchTransactionRequest.builder()
+          .fields(Sep31TxnFields(hashMapOf("receiver_account_number" to "a9999")))
+          .build()
+      )
+    }
   }
 
   @Test

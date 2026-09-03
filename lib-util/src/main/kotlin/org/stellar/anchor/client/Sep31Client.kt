@@ -3,6 +3,7 @@ package org.stellar.anchor.client
 import com.google.gson.reflect.TypeToken
 import org.stellar.anchor.api.sep.sep31.Sep31GetTransactionResponse
 import org.stellar.anchor.api.sep.sep31.Sep31InfoResponse
+import org.stellar.anchor.api.sep.sep31.Sep31PatchTransactionRequest
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionResponse
 
@@ -28,5 +29,18 @@ class Sep31Client(private val endpoint: String, private val jwt: String) : SepCl
 
     val responseBody = httpPost(url, requestBody, jwt)
     return gson.fromJson(responseBody, Sep31PostTransactionResponse::class.java)
+  }
+
+  fun patchTransaction(
+    txId: String,
+    txnRequest: Sep31PatchTransactionRequest
+  ): Sep31GetTransactionResponse {
+    val url = "$endpoint/transactions/$txId"
+
+    val type = object : TypeToken<Map<String?, *>?>() {}.type
+    val requestBody: Map<String, Any> = gson.fromJson(gson.toJson(txnRequest), type)
+
+    val responseBody = httpPatch(url, requestBody, jwt)
+    return gson.fromJson(responseBody, Sep31GetTransactionResponse::class.java)
   }
 }

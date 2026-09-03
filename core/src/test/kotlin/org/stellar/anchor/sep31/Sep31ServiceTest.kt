@@ -120,7 +120,7 @@ class Sep31ServiceTest {
       "status": "pending_sender",
       "statusEta": "100",
       "amountIn": "100",
-      "amountInAsset": "USDC",
+      "amountInAsset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       "amountOut": "98",
       "amountOutAsset": "USD",
       "amountFee": "2",
@@ -407,7 +407,7 @@ class Sep31ServiceTest {
           .status("pending_sender")
           .statusEta(100)
           .amountIn("100")
-          .amountInAsset("USDC")
+          .amountInAsset("stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP")
           .amountOut("98")
           .amountOutAsset("USD")
           .feeDetails(FeeDetails("2", "USDC"))
@@ -435,7 +435,8 @@ class Sep31ServiceTest {
     txn.status = "pending_transaction_info_update"
     every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
     sep31Service.patchTransaction(token, patchRequest)
-    // TODO: Add more saved transaction field validation
+
+    assertEquals("SEPA", txn.fields["type"])
   }
 
   @Test
