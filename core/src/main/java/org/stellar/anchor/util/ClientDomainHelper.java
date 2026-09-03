@@ -270,7 +270,7 @@ public class ClientDomainHelper {
         return false;
       }
     }
-    return (a[10] & 0xFF) != 0xFF || (a[11] & 0xFF) != 0xFF;
+    return a[10] == 0 && a[11] == 0;
   }
 
   private static boolean isThisNetwork(InetAddress address) {
