@@ -202,6 +202,19 @@ platform_server:
   management_server_port: 9085
 
 ######################
+# Rate Limit Configuration
+######################
+rate_limit:
+  # Whether to rate limit transaction-creation requests (SEP-6/24/31) per authenticated SEP-10
+  # identity. Disabled by default.
+  enabled: false
+  # The maximum number of transaction-creation requests a single identity may make within
+  # window_seconds before being rejected with a 429.
+  max_transactions_per_window: 10
+  # The length, in seconds, of the rate-limit window.
+  window_seconds: 60
+
+######################
 # SEP Server Configuration
 ######################
 sep_server:
