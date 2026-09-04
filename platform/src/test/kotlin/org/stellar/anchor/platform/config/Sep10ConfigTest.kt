@@ -11,6 +11,7 @@ import org.junit.jupiter.params.provider.*
 import org.springframework.validation.BindException
 import org.springframework.validation.Errors
 import org.stellar.anchor.client.ClientService
+import org.stellar.anchor.client.CustodialClient
 import org.stellar.anchor.client.DefaultClientService
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.platform.utils.setupMock
@@ -124,6 +125,63 @@ class Sep10ConfigTest {
   fun `test required known custodial account`() {
     config.validateCustodialAccounts(errors)
     assertFalse(errors.hasErrors())
+  }
+
+  @Test
+  fun `test known custodial account list filters out a malformed signing key instead of keeping it`() {
+    val badClientService = mockk<ClientService>()
+    every { badClientService.custodialClients } returns
+      listOf(
+        CustodialClient.builder()
+          .name("legacy-bad")
+          .signingKeys(setOf("GALICE", "GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"))
+          .build()
+      )
+
+    val badConfig = PropertySep10Config(stellarNetworkConfig, badClientService, secretConfig)
+
+    assertEquals(
+      listOf("GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"),
+      badConfig.knownCustodialAccountList,
+    )
+  }
+
+  @Test
+  fun `test known custodial account list filters out a signing key that throws ArrayIndexOutOfBoundsException`() {
+    val aioobeTriggeringKey = "A".repeat(54) + "é"
+    val badClientService = mockk<ClientService>()
+    every { badClientService.custodialClients } returns
+      listOf(
+        CustodialClient.builder()
+          .name("legacy-bad")
+          .signingKeys(
+            setOf(aioobeTriggeringKey, "GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2")
+          )
+          .build()
+      )
+
+    val badConfig = PropertySep10Config(stellarNetworkConfig, badClientService, secretConfig)
+
+    assertEquals(
+      listOf("GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"),
+      badConfig.knownCustodialAccountList,
+    )
+  }
+
+  @Test
+  fun `test config starts successfully even with a malformed signing key already in the client table`() {
+    val badClientService = mockk<ClientService>()
+    every { badClientService.custodialClients } returns
+      listOf(CustodialClient.builder().name("legacy-bad").signingKeys(setOf("GALICE")).build())
+
+    val badConfig = PropertySep10Config(stellarNetworkConfig, badClientService, secretConfig)
+    badConfig.enabled = true
+    badConfig.homeDomains = listOf("stellar.org")
+
+    badConfig.validateCustodialAccounts(errors)
+
+    assertFalse(errors.hasErrors())
+    assertTrue(badConfig.knownCustodialAccountList.isEmpty())
   }
 
   @ParameterizedTest
