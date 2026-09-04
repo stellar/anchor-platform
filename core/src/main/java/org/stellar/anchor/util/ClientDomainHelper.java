@@ -237,6 +237,7 @@ public class ClientDomainHelper {
         || isBenchmarkingRange(unwrapped)
         || isThisNetwork(unwrapped)
         || isNat64WellKnown(address)
+        || isNat64LocalUse(address)
         || is6to4(address);
   }
 
@@ -284,6 +285,20 @@ public class ClientDomainHelper {
       return false;
     }
     byte[] prefix = {0, 0x64, (byte) 0xff, (byte) 0x9b, 0, 0, 0, 0, 0, 0, 0, 0};
+    for (int i = 0; i < prefix.length; i++) {
+      if (a[i] != prefix[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static boolean isNat64LocalUse(InetAddress address) {
+    byte[] a = address.getAddress();
+    if (a.length != 16) {
+      return false;
+    }
+    byte[] prefix = {0, 0x64, (byte) 0xff, (byte) 0x9b, 0, 1};
     for (int i = 0; i < prefix.length; i++) {
       if (a[i] != prefix[i]) {
         return false;

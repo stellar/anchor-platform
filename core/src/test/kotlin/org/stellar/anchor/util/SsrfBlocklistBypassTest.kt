@@ -56,6 +56,14 @@ class SsrfBlocklistBypassTest {
   }
 
   @Test
+  fun `additional - NAT64 local-use prefix (64_ff9b_1__48, RFC 8215) is blocked`() {
+    assertTrue(
+      guardBlocks("64:ff9b:1::a00:1"),
+      "64:ff9b:1::/48 is the RFC 8215 local-use NAT64 prefix and must be blocked outright"
+    )
+  }
+
+  @Test
   fun `additional - 0_0_0_0_8 range is blocked`() {
     assertTrue(guardBlocks("0.1.2.3"), "0.1.2.3 is in 0.0.0.0/8 and must be blocked")
   }
