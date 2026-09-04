@@ -24,17 +24,13 @@ import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.event.EventService;
+import org.stellar.anchor.sep31.CustomerOwnershipReconciliation;
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.MemoHelper;
 import org.stellar.sdk.xdr.MemoType;
 
 public class Sep12Service {
-  /** Shared with {@code Sep31Service}, the sole source of truth for these two SEP-12 types. */
-  public static final String TYPE_SEP31_SENDER = "sep31-sender";
-
-  public static final String TYPE_SEP31_RECEIVER = "sep31-receiver";
-
   private final CustomerIntegration customerIntegration;
   private final Counter sep12GetCustomerCounter =
       Metrics.counter(SEP12_CUSTOMER, TYPE, TV_SEP12_GET_CUSTOMER);
@@ -81,20 +77,22 @@ public class Sep12Service {
 
   public Sep12PutCustomerResponse putCustomer(WebAuthJwt token, Sep12PutCustomerRequest request)
       throws AnchorException {
-    boolean isNewSep31Customer =
-        request.getId() == null
-            && request.getTransactionId() == null
-            && (TYPE_SEP31_SENDER.equals(request.getType())
-                || TYPE_SEP31_RECEIVER.equals(request.getType()));
 
-    validateGetOrPutRequest(request, token);
+    boolean isNewCustomer = request.getId() == null && request.getTransactionId() == null;
 
     if (request.getAccount() == null
         && token.getAccount() != null
         && request.getId() == null
         && request.getTransactionId() == null) {
       request.setAccount(token.getAccount());
+
+      if (request.getMemo() == null && token.getOwnerMemo() != null) {
+        request.setMemo(token.getOwnerMemo());
+        request.setMemoType(MemoHelper.memoTypeAsString(MemoType.MEMO_ID));
+      }
     }
+
+    validateGetOrPutRequest(request, token);
 
     if (StringUtils.isNotEmpty(request.getBirthDate())) {
       if (!isValidISO8601Date(request.getBirthDate())) {
@@ -115,20 +113,80 @@ public class Sep12Service {
       }
     }
 
+    if (isNewCustomer) {
+      GetCustomerResponse existing;
+      try {
+        existing =
+            customerIntegration.getCustomer(
+                GetCustomerRequest.builder()
+                    .account(request.getAccount())
+                    .memo(request.getMemo())
+                    .memoType(request.getMemoType())
+                    .type(request.getType())
+                    .build());
+      } catch (NotFoundException e) {
+        existing = null;
+      } catch (Exception e) {
+        Log.warnEx(e);
+        throw new ServerErrorException("unable to verify customer ownership", e);
+      }
+
+      if (existing != null
+          && existing.getId() != null
+          && customerIdOwnerStore.isClaimed(existing.getId())
+          && !customerIdOwnerStore.verify(
+              existing.getId(), token.getOwnerKey(), token.getOwnerMemo())
+          && !CustomerOwnershipReconciliation.tryReconcile(
+              customerIdOwnerStore,
+              customerIntegration,
+              existing.getId(),
+              token,
+              request.getType())) {
+        throw new SepNotAuthorizedException(
+            "customer id returned by the business server is already claimed by another client");
+      }
+    }
+
     PutCustomerResponse updatedCustomer =
         customerIntegration.putCustomer(PutCustomerRequest.from(request));
 
     String clientName = token.getClientName();
 
-    if (isNewSep31Customer) {
-      String ownerAccount = token.getOwnerAccount();
+    if (isNewCustomer) {
       String ownerMemo = token.getOwnerMemo();
+      String claimant = token.getOwnerKey();
+
+      if (!customerIdOwnerStore.isClaimed(updatedCustomer.getId())) {
+        GetCustomerResponse callbackCustomer;
+        try {
+          callbackCustomer =
+              customerIntegration.getCustomer(
+                  GetCustomerRequest.builder()
+                      .account(request.getAccount())
+                      .memo(request.getMemo())
+                      .memoType(request.getMemoType())
+                      .type(request.getType())
+                      .build());
+        } catch (Exception e) {
+          Log.warnEx(e);
+          throw new ServerErrorException("unable to verify customer ownership", e);
+        }
+        if (callbackCustomer == null || !updatedCustomer.getId().equals(callbackCustomer.getId())) {
+          throw new SepNotAuthorizedException(
+              "customer id returned by the business server is already claimed by another client");
+        }
+      }
 
       boolean owned =
-          customerIdOwnerStore.verifyOrClaim(
-              updatedCustomer.getId(), clientName != null ? clientName : ownerAccount, ownerMemo);
+          customerIdOwnerStore.verifyOrClaim(updatedCustomer.getId(), claimant, ownerMemo);
 
-      if (!owned) {
+      if (!owned
+          && !CustomerOwnershipReconciliation.tryReconcile(
+              customerIdOwnerStore,
+              customerIntegration,
+              updatedCustomer.getId(),
+              token,
+              request.getType())) {
         throw new SepNotAuthorizedException(
             "customer id returned by the business server is already claimed by another client");
       }
@@ -176,7 +234,7 @@ public class Sep12Service {
     GetCustomerResponse existingCustomer =
         customerIntegration.getCustomer(
             GetCustomerRequest.builder().account(account).memo(memo).memoType(memoType).build());
-    if (existingCustomer.getId() != null) {
+    if (existingCustomer != null && existingCustomer.getId() != null) {
       existingCustomerMatch = true;
       customerIntegration.deleteCustomer(existingCustomer.getId());
     }
@@ -196,6 +254,10 @@ public class Sep12Service {
   void validateGetOrPutRequest(Sep12CustomerRequestBase requestBase, WebAuthJwt token)
       throws SepException {
     boolean isIdPath = false;
+    boolean isSep31TransactionLookup =
+        requestBase.getTransactionId() != null
+            && ("sep31-sender".equals(requestBase.getType())
+                || "sep31-receiver".equals(requestBase.getType()));
     if (requestBase.getTransactionId() != null) {
       try {
         // `transactionId` should be used in conjunction with customer type `type` (sep6,
@@ -228,36 +290,55 @@ public class Sep12Service {
       } catch (Exception e) {
         throw new SepNotAuthorizedException("The transaction specified does not exist");
       }
-    } else if (requestBase.getId() != null) {
+    }
+
+    if (requestBase.getId() != null) {
       isIdPath = true;
 
-      try {
-        String tokenAccount =
-            token.getMuxedAccount() != null ? token.getMuxedAccount() : token.getAccount();
-        String tokenMemo =
-            token.getMuxedAccountId() != null
-                ? token.getMuxedAccountId().toString()
-                : token.getAccountMemo();
-
-        GetCustomerResponse owned =
-            customerIntegration.getCustomer(
-                GetCustomerRequest.builder()
-                    .memo(tokenMemo)
-                    .memoType(tokenMemo != null ? "id" : null)
-                    .account(tokenAccount)
-                    .type(requestBase.getType())
-                    .build());
-
-        if (owned == null || !requestBase.getId().equals(owned.getId())) {
+      if (customerIdOwnerStore.isClaimed(requestBase.getId())) {
+        if (!customerIdOwnerStore.verify(
+                requestBase.getId(),
+                token.getOwnerKey(),
+                token.getOwnerMemo(),
+                isSep31TransactionLookup)
+            && !CustomerOwnershipReconciliation.tryReconcile(
+                customerIdOwnerStore,
+                customerIntegration,
+                requestBase.getId(),
+                token,
+                requestBase.getType())) {
           throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
         }
 
-        requestBase.setAccount(tokenAccount);
-      } catch (SepNotAuthorizedException e) {
-        throw e;
-      } catch (Exception e) {
-        Log.warnEx(e);
-        throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+        requestBase.setAccount(null);
+        requestBase.setMemo(null);
+      } else {
+        try {
+          String tokenMemo =
+              token.getMuxedAccountId() != null
+                  ? token.getMuxedAccountId().toString()
+                  : token.getAccountMemo();
+
+          GetCustomerResponse owned =
+              customerIntegration.getCustomer(
+                  GetCustomerRequest.builder()
+                      .memo(tokenMemo)
+                      .memoType(tokenMemo != null ? "id" : null)
+                      .account(token.getAccount())
+                      .type(requestBase.getType())
+                      .build());
+
+          if (owned == null || !requestBase.getId().equals(owned.getId())) {
+            throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+          }
+
+          requestBase.setAccount(token.getAccount());
+        } catch (SepNotAuthorizedException e) {
+          throw e;
+        } catch (Exception e) {
+          Log.warnEx(e);
+          throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+        }
       }
     }
 

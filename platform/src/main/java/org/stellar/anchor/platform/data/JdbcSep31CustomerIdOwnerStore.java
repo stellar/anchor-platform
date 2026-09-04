@@ -11,7 +11,8 @@ public class JdbcSep31CustomerIdOwnerStore implements Sep31CustomerIdOwnerStore 
   }
 
   @Override
-  public boolean verifyOrClaim(String customerId, String creatorAccount, String creatorMemo) {
+  public boolean verifyOrClaim(
+      String customerId, String creatorAccount, String creatorMemo, boolean ignoreMemo) {
     if (repo.claimIfAbsent(customerId, creatorAccount, creatorMemo) == 1) {
       return true;
     }
@@ -25,6 +26,39 @@ public class JdbcSep31CustomerIdOwnerStore implements Sep31CustomerIdOwnerStore 
                             + customerId));
 
     return Objects.equals(owner.getCreatorAccount(), creatorAccount)
-        && Objects.equals(owner.getCreatorMemo(), creatorMemo);
+        && (ignoreMemo || Objects.equals(owner.getCreatorMemo(), creatorMemo));
+  }
+
+  @Override
+  public boolean isClaimed(String customerId) {
+    return repo.findById(customerId).isPresent();
+  }
+
+  @Override
+  public boolean verify(
+      String customerId, String creatorAccount, String creatorMemo, boolean ignoreMemo) {
+    return repo.findById(customerId)
+        .map(
+            owner ->
+                Objects.equals(owner.getCreatorAccount(), creatorAccount)
+                    && (ignoreMemo || Objects.equals(owner.getCreatorMemo(), creatorMemo)))
+        .orElse(false);
+  }
+
+  @Override
+  public String getCreatorMemo(String customerId) {
+    return repo.findById(customerId).map(JdbcSep31CustomerIdOwner::getCreatorMemo).orElse(null);
+  }
+
+  @Override
+  public boolean reconcileLegacyKey(
+      String customerId,
+      String legacyCreatorAccount,
+      String legacyCreatorMemo,
+      String newCreatorAccount,
+      String newCreatorMemo) {
+    repo.reassignIfCreatorAccountMatches(
+        customerId, legacyCreatorAccount, legacyCreatorMemo, newCreatorAccount, newCreatorMemo);
+    return verify(customerId, newCreatorAccount, newCreatorMemo);
   }
 }
