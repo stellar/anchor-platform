@@ -169,7 +169,7 @@ public class Sep12Service {
                       .build());
         } catch (Exception e) {
           Log.warnEx(e);
-          callbackCustomer = null;
+          throw new ServerErrorException("unable to verify customer ownership", e);
         }
         if (callbackCustomer == null || !updatedCustomer.getId().equals(callbackCustomer.getId())) {
           throw new SepNotAuthorizedException(

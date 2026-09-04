@@ -187,7 +187,7 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
                         .build());
           } catch (Exception e) {
             Log.warnEx(e);
-            callbackCustomer = null;
+            throw new ServerErrorException("unable to verify customer ownership", e);
           }
           if (callbackCustomer == null || !forwarded.getId().equals(callbackCustomer.getId())) {
             throw new SepNotAuthorizedException("customer id already claimed by another client");
