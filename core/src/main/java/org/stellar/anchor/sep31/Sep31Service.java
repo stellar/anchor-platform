@@ -11,10 +11,12 @@ import static org.stellar.anchor.util.Log.info;
 import static org.stellar.anchor.util.Log.infoF;
 import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MathHelper.formatAmount;
+import static org.stellar.anchor.util.MemoHelper.makeMemo;
 import static org.stellar.anchor.util.MetricConstants.SEP31_TRANSACTION_CREATED;
 import static org.stellar.anchor.util.MetricConstants.SEP31_TRANSACTION_PATCHED;
 import static org.stellar.anchor.util.SepHelper.*;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
+import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.micrometer.core.instrument.Counter;
 import jakarta.transaction.Transactional;
@@ -34,6 +36,7 @@ import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.NotFoundException;
 import org.stellar.anchor.api.exception.Sep31CustomerInfoNeededException;
 import org.stellar.anchor.api.exception.Sep31MissingFieldException;
+import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.exception.ServerErrorException;
@@ -138,6 +141,27 @@ public class Sep31Service {
         request.getFundingMethod(),
         assetInfo.getSep31().getReceive().getMethods());
     validateLanguage(languageConfig, request.getLang());
+    // Validates the refund_memo/refund_memo_type pair: both must be specified together, or both
+    // omitted. The presence check is done explicitly (with the correct field names) rather than
+    // relying on makeMemo's own message, which assumes a "memo_type" field that doesn't exist on
+    // this endpoint. makeMemo is still used to validate the type/value combination once both are
+    // known to be present.
+    if (isEmpty(request.getRefundMemo()) != isEmpty(request.getRefundMemoType())) {
+      throw new SepValidationException(
+          "refund_memo and refund_memo_type must both be specified or both be omitted");
+    }
+    // makeMemo doesn't consistently report malformed values as SepValidationException (some
+    // failures surface as a plain SepException or IllegalArgumentException, both of which the
+    // global exception handler maps to 500 instead of the 400 required for bad request input) —
+    // preserve an existing validation exception as-is, and wrap anything else as one.
+    try {
+      makeMemo(request.getRefundMemo(), request.getRefundMemoType());
+    } catch (SepValidationException e) {
+      throw e;
+    } catch (SepException | IllegalArgumentException e) {
+      throw new SepValidationException(
+          String.format("Invalid refund_memo/refund_memo_type: %s", e.getMessage()), e);
+    }
 
     /*
      * TODO:
@@ -230,6 +254,8 @@ public class Sep31Service {
             .amountOut(null)
             .amountOutAsset(null)
             .requestClientIpAddress(request.getRequestClientIpAddress())
+            .refundMemo(request.getRefundMemo())
+            .refundMemoType(request.getRefundMemoType())
             .build();
 
     Context.get().setTransaction(txn);

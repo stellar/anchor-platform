@@ -41,6 +41,12 @@ public class Sep31PostTransactionRequest {
   @SerializedName("funding_method")
   String fundingMethod;
 
+  @SerializedName("refund_memo")
+  String refundMemo;
+
+  @SerializedName("refund_memo_type")
+  String refundMemoType;
+
   /** The request client IP address. */
   String requestClientIpAddress;
 
