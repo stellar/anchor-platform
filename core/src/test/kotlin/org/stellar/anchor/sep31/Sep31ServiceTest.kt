@@ -29,7 +29,6 @@ import org.stellar.anchor.api.exception.*
 import org.stellar.anchor.api.sep.sep12.Sep12Status
 import org.stellar.anchor.api.sep.sep31.*
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest.Sep31TxnFields
-import org.stellar.anchor.api.shared.Amount
 import org.stellar.anchor.api.shared.FeeDescription
 import org.stellar.anchor.api.shared.FeeDetails
 import org.stellar.anchor.api.shared.SepDepositInfo
@@ -81,7 +80,7 @@ class Sep31ServiceTest {
     private const val feeJson =
       """
         {
-          "amount": "2",
+          "total": "2",
           "asset": "USDC"
         }
     """
@@ -234,7 +233,7 @@ class Sep31ServiceTest {
   private lateinit var sep31Service: Sep31Service
   private lateinit var request: Sep31PostTransactionRequest
   private lateinit var txn: Sep31Transaction
-  private lateinit var fee: Amount
+  private lateinit var fee: FeeDetails
   private lateinit var asset: AssetInfo
   private lateinit var quote: PojoSep38Quote
   private lateinit var patchRequest: Sep31PatchTransactionRequest
@@ -272,7 +271,7 @@ class Sep31ServiceTest {
     request = gson.fromJson(requestJson, Sep31PostTransactionRequest::class.java)
     txn = gson.fromJson(txnJson, PojoSep31Transaction::class.java)
     txn.creator = StellarId.builder().account(TestHelper.TEST_ACCOUNT).memo(null).build()
-    fee = gson.fromJson(feeJson, Amount::class.java)
+    fee = gson.fromJson(feeJson, FeeDetails::class.java)
     asset = gson.fromJson(assetJson, StellarAssetInfo::class.java)
     quote = gson.fromJson(quoteJson, PojoSep38Quote::class.java)
     patchRequest = gson.fromJson(patchTxnRequestJson, Sep31PatchTransactionRequest::class.java)
@@ -289,7 +288,7 @@ class Sep31ServiceTest {
     every { sep31Config.paymentType } returns STRICT_SEND
 
     request.amount = "100"
-    fee.amount = "2"
+    fee.total = "2"
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
     assertEquals(txn.amountIn, "100")
     assertEquals(txn.amountOut, "98")
@@ -306,16 +305,19 @@ class Sep31ServiceTest {
       "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
     Context.get().transaction = txn
     Context.get().request = request
+    fee.details = listOf(FeeDescription("Sell fee", null, "2"))
     Context.get().fee = fee
-    Context.get().feeDetailsList = listOf(FeeDescription("Sell fee", null, "2"))
     Context.get().asset = asset
     every { sep31Config.paymentType } returns STRICT_SEND
 
     request.amount = "100"
-    fee.amount = "2"
+    fee.total = "2"
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
 
-    assertEquals(listOf(FeeDescription("Sell fee", null, "2")), txn.feeDetails.details)
+    assertEquals(
+      FeeDetails("2", "USDC", listOf(FeeDescription("Sell fee", null, "2"))),
+      txn.feeDetails
+    )
   }
 
   @Test
@@ -1106,6 +1108,29 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test postTransaction carries the fee breakdown through the no-quote path`() {
+    useNoSep12AssetService()
+    every { rateIntegration.getRate(any()) } returns
+      GetRateResponse(
+        GetRateResponse.Rate.builder()
+          .fee(FeeDetails("2", "stellar:USDC", listOf(FeeDescription("Sell fee", null, "2"))))
+          .build()
+      )
+    val postTxRequest = ownershipTestRequest()
+
+    val txnSlot = slot<Sep31Transaction>()
+    every { txnStore.save(capture(txnSlot)) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertEquals(listOf(FeeDescription("Sell fee", null, "2")), txnSlot.captured.feeDetails.details)
+  }
+
+  @Test
   fun `test postTransaction rejects a refund memo without a refund memo type`() {
     useNoSep12AssetService()
     val postTxRequest = ownershipTestRequest().apply { refundMemo = "my-refund-memo" }
@@ -1419,6 +1444,7 @@ class Sep31ServiceTest {
     verify(exactly = 1) {
       customerIdOwnerStore.verifyOrClaim("needs-info-but-not-required", any(), any(), any())
     }
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
   }
 
   @Test
@@ -1737,7 +1763,7 @@ class Sep31ServiceTest {
     request.destinationAsset = "USDC"
     sep31Service.updateFee()
     var fee = Context.get().fee
-    assertEquals(quote.fee.total, fee.amount)
+    assertEquals(quote.fee.total, fee.total)
     assertEquals(quote.fee.asset, fee.asset)
 
     // No quote
@@ -1757,13 +1783,13 @@ class Sep31ServiceTest {
     request.destinationAsset = "USDC"
     sep31Service.updateFee()
     fee = Context.get().fee
-    assertEquals("10", fee.amount)
+    assertEquals("10", fee.total)
     assertEquals("stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN", fee.asset)
 
     request.destinationAsset = null
     sep31Service.updateFee()
     fee = Context.get().fee
-    assertEquals("10", fee.amount)
+    assertEquals("10", fee.total)
     assertEquals("stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN", fee.asset)
   }
 

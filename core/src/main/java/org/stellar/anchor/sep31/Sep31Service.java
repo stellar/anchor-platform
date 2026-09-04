@@ -47,8 +47,6 @@ import org.stellar.anchor.api.sep.sep31.Sep31InfoResponse;
 import org.stellar.anchor.api.sep.sep31.Sep31PatchTransactionRequest;
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest;
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionResponse;
-import org.stellar.anchor.api.shared.Amount;
-import org.stellar.anchor.api.shared.FeeDescription;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
@@ -214,16 +212,7 @@ public class Sep31Service {
         sep12Config != null && sep12Config.getReceiver() != null);
 
     Sep38Quote quote = Context.get().getQuote();
-    FeeDetails feeDetails;
-
-    if (quote != null) {
-      feeDetails = quote.getFee();
-    } else {
-      Amount fee = Context.get().getFee();
-
-      feeDetails =
-          new FeeDetails(fee.getAmount(), fee.getAsset(), Context.get().getFeeDetailsList());
-    }
+    FeeDetails feeDetails = quote != null ? quote.getFee() : Context.get().getFee();
 
     Instant now = Instant.now();
     Sep31Transaction txn =
@@ -464,12 +453,12 @@ public class Sep31Service {
   void updateTxAmountsWhenNoQuoteWasUsed() {
     Sep31PostTransactionRequest request = Context.get().getRequest();
     Sep31Transaction txn = Context.get().getTransaction();
-    Amount feeResponse = Context.get().getFee();
+    FeeDetails feeResponse = Context.get().getFee();
 
     AssetInfo reqAsset = Context.get().getAsset();
     int scale = reqAsset.getSignificantDecimals();
     BigDecimal reqAmount = decimal(request.getAmount(), scale);
-    BigDecimal fee = decimal(feeResponse.getAmount(), scale);
+    BigDecimal fee = decimal(feeResponse.getTotal(), scale);
 
     BigDecimal amountIn;
     BigDecimal amountOut;
@@ -503,9 +492,8 @@ public class Sep31Service {
 
     // Update fee
     String feeStr = formatAmount(fee, scale);
-    txn.setFeeDetails(
-        new FeeDetails(feeStr, feeResponse.getAsset(), Context.get().getFeeDetailsList()));
-    Context.get().getFee().setAmount(feeStr);
+    txn.setFeeDetails(new FeeDetails(feeStr, feeResponse.getAsset(), feeResponse.getDetails()));
+    Context.get().getFee().setTotal(feeStr);
   }
 
   public Sep31GetTransactionResponse getTransaction(WebAuthJwt token, String id)
@@ -720,8 +708,7 @@ public class Sep31Service {
         infoF("Quote: ({}) is missing the 'fee' field", quote.getId());
         throw new SepValidationException("Quote is missing the 'fee' field");
       }
-      Amount fee = new Amount(quote.getFee().getTotal(), quote.getFee().getAsset());
-      Context.get().setFee(fee);
+      Context.get().setFee(quote.getFee());
       return;
     }
 
@@ -748,9 +735,7 @@ public class Sep31Service {
       throw new SepValidationException("Fee is not present in /rate response");
     }
     infoF("Fee for request ({}) is ({})", request, fee);
-    Amount amountFee = Amount.create(fee.getTotal(), fee.getAsset());
-    Context.get().setFee(amountFee);
-    Context.get().setFeeDetailsList(fee.getDetails());
+    Context.get().setFee(fee);
   }
 
   String getClientName() {
@@ -859,8 +844,7 @@ public class Sep31Service {
     private Sep31PostTransactionRequest request;
     private Sep38Quote quote;
     private WebAuthJwt webAuthJwt;
-    private Amount fee;
-    private List<FeeDescription> feeDetailsList;
+    private FeeDetails fee;
     private AssetInfo asset;
     private Map<String, String> transactionFields;
     private static ThreadLocal<Context> context = new ThreadLocal<>();
