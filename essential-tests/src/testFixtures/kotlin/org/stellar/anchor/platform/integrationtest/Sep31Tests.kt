@@ -386,7 +386,14 @@ private const val expectedTxn =
     "amount_out_asset": "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
     "fee_details": {
       "total": "1.00",
-      "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+      "details": [
+        {
+          "name": "Sell fee",
+          "description": "Fee related to selling the asset.",
+          "amount": "1.00"
+        }
+      ]
     }
   }
 }

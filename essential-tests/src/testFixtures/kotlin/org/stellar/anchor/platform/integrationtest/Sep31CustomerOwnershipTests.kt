@@ -95,6 +95,22 @@ class Sep31CustomerOwnershipTests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  // Per ANCHOR-1279's audit: sender_id/receiver_id are never validated against a real SEP-12
+  // customer record when the asset doesn't advertise sep12.<role> (KYC not required for that
+  // role) — a receiver_id claim only checks that no *other* caller has claimed it before, not
+  // that it corresponds to a customer that actually exists. This is spec-compliant (SEP-31 only
+  // requires the id correspond to a real customer when the anchor requires SEP-12 KYC for that
+  // role), so this test locks in the current, intentional behavior rather than treating it as a
+  // bug — see the essential-tests asset config (no `sep12:` block on the USDC/JPYC test assets).
+  @Test
+  fun `test caller can claim a receiver_id with no SEP-12 customer record when KYC is not required`() {
+    val neverRegisteredReceiverId = java.util.UUID.randomUUID().toString()
+
+    val txn = sep31Client.postTransaction(mkTxnRequest(neverRegisteredReceiverId))
+
+    assertNotNull(txn.id)
+  }
+
   @Test
   fun `test same caller can reuse a receiver_id it already owns`() {
     val receiverCustomerRequest =

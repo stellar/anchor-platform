@@ -29,6 +29,7 @@ import org.stellar.anchor.api.sep.sep12.Sep12Status
 import org.stellar.anchor.api.sep.sep31.*
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest.Sep31TxnFields
 import org.stellar.anchor.api.shared.Amount
+import org.stellar.anchor.api.shared.FeeDescription
 import org.stellar.anchor.api.shared.FeeDetails
 import org.stellar.anchor.api.shared.SepDepositInfo
 import org.stellar.anchor.api.shared.StellarId
@@ -295,6 +296,24 @@ class Sep31ServiceTest {
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
     assertEquals("102", txn.amountIn)
     assertEquals("100", txn.amountOut)
+  }
+
+  @Test
+  fun `test update transaction amounts when no quote was used carries the fee breakdown`() {
+    request.destinationAsset =
+      "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+    Context.get().transaction = txn
+    Context.get().request = request
+    Context.get().fee = fee
+    Context.get().feeDetailsList = listOf(FeeDescription("Sell fee", null, "2"))
+    Context.get().asset = asset
+    every { sep31Config.paymentType } returns STRICT_SEND
+
+    request.amount = "100"
+    fee.amount = "2"
+    sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
+
+    assertEquals(listOf(FeeDescription("Sell fee", null, "2")), txn.feeDetails.details)
   }
 
   @Test

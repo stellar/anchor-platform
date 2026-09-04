@@ -48,6 +48,7 @@ import org.stellar.anchor.api.sep.sep31.Sep31PatchTransactionRequest;
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest;
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionResponse;
 import org.stellar.anchor.api.shared.Amount;
+import org.stellar.anchor.api.shared.FeeDescription;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
@@ -220,7 +221,8 @@ public class Sep31Service {
     } else {
       Amount fee = Context.get().getFee();
 
-      feeDetails = new FeeDetails(fee.getAmount(), fee.getAsset(), null);
+      feeDetails =
+          new FeeDetails(fee.getAmount(), fee.getAsset(), Context.get().getFeeDetailsList());
     }
 
     Instant now = Instant.now();
@@ -477,7 +479,8 @@ public class Sep31Service {
 
     // Update fee
     String feeStr = formatAmount(fee, scale);
-    txn.setFeeDetails(new FeeDetails(feeStr, feeResponse.getAsset()));
+    txn.setFeeDetails(
+        new FeeDetails(feeStr, feeResponse.getAsset(), Context.get().getFeeDetailsList()));
     Context.get().getFee().setAmount(feeStr);
   }
 
@@ -725,6 +728,7 @@ public class Sep31Service {
     infoF("Fee for request ({}) is ({})", request, fee);
     Amount amountFee = Amount.create(fee.getTotal(), fee.getAsset());
     Context.get().setFee(amountFee);
+    Context.get().setFeeDetailsList(fee.getDetails());
   }
 
   String getClientName() {
@@ -836,6 +840,7 @@ public class Sep31Service {
     private Sep38Quote quote;
     private WebAuthJwt webAuthJwt;
     private Amount fee;
+    private List<FeeDescription> feeDetailsList;
     private AssetInfo asset;
     private Map<String, String> transactionFields;
     private static ThreadLocal<Context> context = new ThreadLocal<>();
