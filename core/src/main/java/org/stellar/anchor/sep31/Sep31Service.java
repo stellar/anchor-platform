@@ -52,7 +52,6 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.sep12.Sep12Service;
 import org.stellar.anchor.sep38.Sep38Quote;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.util.ExchangeAmountsCalculator;
@@ -170,22 +169,23 @@ public class Sep31Service {
             .memo(webAuthJwt.getAccountMemo())
             .build();
 
-    String ownerClientName = webAuthJwt.getClientName();
-    String ownerAccount = ownerClientName != null ? ownerClientName : webAuthJwt.getOwnerAccount();
+    String ownerAccount = webAuthJwt.getOwnerKey();
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
     Sep31Info.Sep12Info sep12Config = assetInfo.getSep31().getSep12();
     verifyCustomerOwnershipAndKyc(
         request.getSenderId(),
-        Sep12Service.TYPE_SEP31_SENDER,
+        "sep31-sender",
         ownerAccount,
         ownerMemo,
+        webAuthJwt,
         sep12Config != null && sep12Config.getSender() != null);
     verifyCustomerOwnershipAndKyc(
         request.getReceiverId(),
-        Sep12Service.TYPE_SEP31_RECEIVER,
+        "sep31-receiver",
         ownerAccount,
         ownerMemo,
+        webAuthJwt,
         sep12Config != null && sep12Config.getReceiver() != null);
 
     Sep38Quote quote = Context.get().getQuote();
@@ -294,16 +294,16 @@ public class Sep31Service {
    * `receiver_id` are never validated against real SEP-12 customer records" finding).
    *
    * @param customerId the `sender_id` or `receiver_id` from the request, or null if not provided
-   * @param customerType the SEP-12 `type` to request -- {@link Sep12Service#TYPE_SEP31_SENDER} or
-   *     {@link Sep12Service#TYPE_SEP31_RECEIVER}, also advertised in `GET /info`'s
-   *     `sep12.sender`/`sep12.receiver` (see {@link
-   *     org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse#getSep12()}), and echoed
-   *     back in {@link Sep31CustomerInfoNeededException#getType()} so the sending anchor knows
-   *     which SEP-12 `type` to use when it re-fetches the customer
-   * @param ownerAccount the authenticated caller's ownership-store identity (may be a resolved
-   *     client name instead of a raw Stellar account -- see the {@code ownerAccount} computed in
-   *     {@link #postTransaction})
+   * @param customerType the SEP-12 `type` to request -- {@code sep31-sender} or {@code
+   *     sep31-receiver}, also advertised in `GET /info`'s `sep12.sender`/`sep12.receiver` (see
+   *     {@link org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse#getSep12()}), and
+   *     echoed back in {@link Sep31CustomerInfoNeededException#getType()} so the sending anchor
+   *     knows which SEP-12 `type` to use when it re-fetches the customer
+   * @param ownerAccount the authenticated caller's per-user ownership-store identity (see the
+   *     {@code ownerAccount} computed in {@link #postTransaction})
    * @param ownerMemo the authenticated caller's ownership-store memo
+   * @param webAuthJwt the authenticated caller's token, used both for the unclaimed-id reverse
+   *     lookup and for legacy-key reconciliation
    * @param kycRequired whether this asset's config actually advertises a SEP-12 type for this role
    *     (`assetInfo.getSep31().getSep12()`'s `sender`/`receiver` is non-null) -- per SEP-31, an
    *     absent `sep12.sender`/`sep12.receiver` in `GET /info` means KYC isn't required for that
@@ -318,6 +318,7 @@ public class Sep31Service {
       String customerType,
       String ownerAccount,
       String ownerMemo,
+      WebAuthJwt webAuthJwt,
       boolean kycRequired)
       throws AnchorException {
     if (customerId == null) {
@@ -327,7 +328,30 @@ public class Sep31Service {
       return;
     }
 
-    if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
+    if (!customerIdOwnerStore.isClaimed(customerId)) {
+      GetCustomerResponse owned;
+      try {
+        owned =
+            customerIntegration.getCustomer(
+                GetCustomerRequest.builder()
+                    .account(webAuthJwt.getAccount())
+                    .memo(webAuthJwt.getOwnerMemo())
+                    .memoType(webAuthJwt.getOwnerMemo() != null ? "id" : null)
+                    .type(customerType)
+                    .build());
+      } catch (Exception e) {
+        Log.warnEx(e);
+        owned = null;
+      }
+      if (owned == null || !customerId.equals(owned.getId())) {
+        throw new SepNotAuthorizedException(
+            "sender_id/receiver_id does not belong to the authenticated client");
+      }
+    }
+
+    if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo, true)
+        && !CustomerOwnershipReconciliation.tryReconcile(
+            customerIdOwnerStore, customerIntegration, customerId, webAuthJwt, customerType)) {
       throw new SepNotAuthorizedException(
           "sender_id/receiver_id does not belong to the authenticated client");
     }
@@ -782,13 +806,11 @@ public class Sep31Service {
     sep12Response.setSender(
         sep12Config.getSender() == null
             ? new Sep31InfoResponse.Sep12TypesResponse()
-            : sep12TypesResponse(
-                Sep12Service.TYPE_SEP31_SENDER, sep12Config.getSender().getDescription()));
+            : sep12TypesResponse("sep31-sender", sep12Config.getSender().getDescription()));
     sep12Response.setReceiver(
         sep12Config.getReceiver() == null
             ? new Sep31InfoResponse.Sep12TypesResponse()
-            : sep12TypesResponse(
-                Sep12Service.TYPE_SEP31_RECEIVER, sep12Config.getReceiver().getDescription()));
+            : sep12TypesResponse("sep31-receiver", sep12Config.getReceiver().getDescription()));
     return sep12Response;
   }
 
