@@ -29,10 +29,13 @@ public interface JdbcSep6TransactionRepo
       String withdrawAnchorAccount, String memo, String status);
 
   /**
-   * Matches only transactions whose caller authenticated without a memo (bare {@code G...} SEP-10
-   * subject). Use {@link #findTransactionsWithMemoAndFilters} for a memo-scoped caller — the two
-   * are not interchangeable: a caller's memo (or lack of one) is part of their identity, so mixing
-   * them would leak transactions across users sharing the same underlying Stellar account.
+   * Matches only transactions whose {@code webAuthAccountMemo} column is null — i.e. the caller's
+   * SEP-10 token carried no memo, whether the token's subject was a bare {@code G...} account or a
+   * muxed {@code M...} account (muxed callers never populate this column; their disambiguator lives
+   * in the {@code webAuthAccount} value itself). Use {@link #findTransactionsWithMemoAndFilters}
+   * for a memo-scoped caller — the two are not interchangeable: a caller's memo (or lack of one) is
+   * part of their identity, so mixing them would leak transactions across users sharing the same
+   * underlying Stellar account.
    */
   @Query(
       "SELECT t FROM JdbcSep6Transaction t WHERE t.webAuthAccount = :account"
