@@ -18,13 +18,16 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.stellar.anchor.api.asset.AssetInfo;
+import org.stellar.anchor.api.asset.Sep31Info;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
@@ -434,6 +437,22 @@ public class TransactionService {
         }
 
         JdbcSep31Transaction sep31Txn = (JdbcSep31Transaction) txn;
+        // update required_info_updates: PlatformTransactionData only carries a flat list of field
+        // names (shared with SEP-6), so it's expanded into the Sep31Info.Fields shape SEP-31's own
+        // PATCH validation expects (Sep31Service#validatePatchTransactionFields only checks field
+        // names, not the field metadata, so a placeholder AssetInfo.Field per name is sufficient).
+        if (patch.getRequiredInfoUpdates() != null) {
+          Map<String, AssetInfo.Field> requiredFields = new HashMap<>();
+          for (String fieldName : patch.getRequiredInfoUpdates()) {
+            requiredFields.put(fieldName, AssetInfo.Field.builder().build());
+          }
+          Sep31Info.Fields requiredInfoUpdates = new Sep31Info.Fields();
+          requiredInfoUpdates.setTransaction(requiredFields);
+          if (!Objects.equals(sep31Txn.getRequiredInfoUpdates(), requiredInfoUpdates)) {
+            sep31Txn.setRequiredInfoUpdates(requiredInfoUpdates);
+            txnUpdated = true;
+          }
+        }
         // update sender and receiver
         txnUpdated = updateField(patch, "customers.sender", txn, "senderId", txnUpdated);
         txnUpdated = updateField(patch, "customers.receiver", txn, "receiverId", txnUpdated);

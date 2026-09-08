@@ -10,6 +10,7 @@ import org.apache.hc.core5.http.HttpStatus
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepNotFoundException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.sep.SepExceptionResponse
 import org.stellar.anchor.util.GsonUtils
 
@@ -59,6 +60,29 @@ open class SepClient {
     return httpPost(url, gson.toJson(requestBody), headers)
   }
 
+  fun httpPatch(url: String, requestBody: Map<String, Any>, jwt: String? = null): String? {
+    val headers = if (jwt != null) mapOf("Authorization" to "Bearer $jwt") else mapOf()
+    return httpPatch(url, requestBody, headers)
+  }
+
+  fun httpPatch(url: String, requestBodyStr: String, headers: Map<String, String>): String? {
+    val requestBody = requestBodyStr.toRequestBody(TYPE_JSON)
+    val request =
+      Request.Builder()
+        .url(url)
+        .header("Content-Type", "application/json")
+        .apply { headers.forEach { (key, value) -> header(key, value) } }
+        .patch(requestBody)
+        .build()
+
+    val response = client.newCall(request).execute()
+    return handleResponse(response)
+  }
+
+  fun httpPatch(url: String, requestBody: Map<String, Any>, headers: Map<String, String>): String? {
+    return httpPatch(url, gson.toJson(requestBody), headers)
+  }
+
   fun handleResponse(response: Response): String? {
     val responseBody = response.body?.string()
 
@@ -70,6 +94,10 @@ open class SepClient {
       HttpStatus.SC_NOT_FOUND -> {
         val sepException = gson.fromJson(responseBody, SepExceptionResponse::class.java)
         throw SepNotFoundException(sepException.error)
+      }
+      HttpStatus.SC_BAD_REQUEST -> {
+        val sepException = gson.fromJson(responseBody, SepExceptionResponse::class.java)
+        throw SepValidationException(sepException.error)
       }
       else -> throw SepException(responseBody)
     }
