@@ -16,7 +16,6 @@ import org.stellar.anchor.client.NonCustodialClient;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.config.Sep45Config;
 import org.stellar.anchor.config.StellarNetworkConfig;
-import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.NetUtil;
 import org.stellar.sdk.Address;
 import org.stellar.sdk.scval.Scv;
@@ -132,15 +131,19 @@ public class PropertySep45Config implements Sep45Config, Validator {
       for (String clientName : clientAllowList) {
         var clientConfig = clientService.getClientConfigByName(clientName);
         if (clientConfig == null) {
-          Log.errorF(
-              "Ignoring client name {} in sep45.client_allow_list; it does not match any configured client.",
-              clientName);
+          errors.reject(
+              "sep45-client-allow-list-invalid",
+              String.format(
+                  "Invalid client name:%s in sep45.client_allow_list; it does not match any configured client.",
+                  clientName));
         } else if (!(clientConfig instanceof NonCustodialClient)
             || ((NonCustodialClient) clientConfig).getDomains() == null
             || ((NonCustodialClient) clientConfig).getDomains().isEmpty()) {
-          Log.errorF(
-              "Ignoring client name {} in sep45.client_allow_list; it must be a non-custodial client with at least one domain.",
-              clientName);
+          errors.reject(
+              "sep45-client-allow-list-invalid",
+              String.format(
+                  "Invalid client name:%s in sep45.client_allow_list; it must be a non-custodial client with at least one domain.",
+                  clientName));
         }
       }
     }
