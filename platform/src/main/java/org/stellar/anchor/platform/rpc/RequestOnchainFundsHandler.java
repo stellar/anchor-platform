@@ -300,6 +300,9 @@ public class RequestOnchainFundsHandler
           txn6.setMemo(sep6DepositInfo.getMemo());
           txn6.setMemoType("id");
         }
+
+        paymentObservingAccountsManager.upsert(
+            txn6.getToAccount(), PaymentObservingAccountsManager.AccountType.TRANSIENT);
         break;
       case SEP_24:
         JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
@@ -323,6 +326,9 @@ public class RequestOnchainFundsHandler
           txn24.setMemo(sep24DepositInfo.getMemo());
           txn24.setMemoType("id");
         }
+
+        paymentObservingAccountsManager.upsert(
+            txn24.getToAccount(), PaymentObservingAccountsManager.AccountType.TRANSIENT);
         break;
       case SEP_31:
         JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
