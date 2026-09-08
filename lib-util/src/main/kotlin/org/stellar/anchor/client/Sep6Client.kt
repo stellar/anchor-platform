@@ -1,5 +1,6 @@
 package org.stellar.anchor.client
 
+import org.stellar.anchor.api.sep.sep6.GetTransactionsResponse
 import org.stellar.anchor.api.sep.sep6.InfoResponse
 import org.stellar.anchor.api.sep.sep6.Sep6GetTransactionResponse
 import org.stellar.anchor.api.sep.sep6.StartDepositResponse
@@ -33,5 +34,13 @@ class Sep6Client(private val endpoint: String, var jwt: String) : SepClient() {
 
     val responseBody = httpGet(url, jwt)
     return gson.fromJson(responseBody, Sep6GetTransactionResponse::class.java)
+  }
+
+  fun getTransactions(request: Map<String, String>): GetTransactionsResponse {
+    val baseUrl = "$endpoint/transactions?"
+    val url = request.entries.fold(baseUrl) { acc, entry -> "$acc${entry.key}=${entry.value}&" }
+
+    val responseBody = httpGet(url, jwt)
+    return gson.fromJson(responseBody, GetTransactionsResponse::class.java)
   }
 }

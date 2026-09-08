@@ -28,6 +28,7 @@ public interface JdbcSep24TransactionRepo
 
   @Query(
       "SELECT t FROM JdbcSep24Transaction t WHERE t.webAuthAccount = :account"
+          + " AND t.webAuthAccountMemo IS NULL"
           + " AND t.requestAssetCode = :assetCode"
           + " AND (:kind IS NULL OR t.kind = :kind)"
           + " AND t.startedAt > :noOlderThan"

@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.integrationtest
 
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -15,11 +16,21 @@ import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.gson
 import org.stellar.anchor.util.Log
 import org.stellar.sdk.KeyPair
+import org.stellar.walletsdk.anchor.auth
+import org.stellar.walletsdk.horizon.SigningKeyPair
 
 class Sep6Tests : IntegrationTestBase(TestConfig()) {
   private val sep6Client = Sep6Client(toml.getString("TRANSFER_SERVER"), token.token)
   private val sep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
+
+  private fun authenticateWithMemo(keyPair: SigningKeyPair, memoId: ULong): String {
+    return runBlocking { anchor.auth().authenticate(keyPair, memoId = memoId) }.token
+  }
+
+  private fun authenticateWithoutMemo(keyPair: SigningKeyPair): String {
+    return runBlocking { anchor.auth().authenticate(keyPair) }.token
+  }
 
   @Test
   fun `test Sep6 info endpoint`() {
@@ -47,6 +58,46 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       JSONCompareMode.LENIENT,
     )
     Assertions.assertNotNull(savedDepositTxn.transaction.moreInfoUrl)
+  }
+
+  @Test
+  fun `test sep6 GET transactions does not leak another memo's transactions on a shared account`() {
+    val sharedKeyPair = SigningKeyPair(KeyPair.random())
+    val noMemoJwt = authenticateWithoutMemo(sharedKeyPair)
+    val memoAJwt = authenticateWithMemo(sharedKeyPair, 111UL)
+    val memoBJwt = authenticateWithMemo(sharedKeyPair, 222UL)
+
+    val noMemoClient = Sep6Client(toml.getString("TRANSFER_SERVER"), noMemoJwt)
+    val memoAClient = Sep6Client(toml.getString("TRANSFER_SERVER"), memoAJwt)
+    val memoBClient = Sep6Client(toml.getString("TRANSFER_SERVER"), memoBJwt)
+
+    fun depositRequest() =
+      mapOf(
+        "asset_code" to "USDC",
+        "account" to sharedKeyPair.address,
+        "amount" to "1",
+        "type" to "SWIFT",
+      )
+
+    val noMemoTxnId = noMemoClient.deposit(depositRequest()).id!!
+    val memoATxnId = memoAClient.deposit(depositRequest()).id!!
+    val memoBTxnId = memoBClient.deposit(depositRequest()).id!!
+
+    val listedIds =
+      noMemoClient
+        .getTransactions(mapOf("asset_code" to "USDC", "account" to sharedKeyPair.address))
+        .transactions
+        .map { it.id }
+
+    Assertions.assertTrue(listedIds.contains(noMemoTxnId)) {
+      "caller's own no-memo transaction should be visible in its own list"
+    }
+    Assertions.assertFalse(listedIds.contains(memoATxnId)) {
+      "GET /transactions leaked another memo's transaction ($memoATxnId) to a bare-account caller sharing the same Stellar account"
+    }
+    Assertions.assertFalse(listedIds.contains(memoBTxnId)) {
+      "GET /transactions leaked another memo's transaction ($memoBTxnId) to a bare-account caller sharing the same Stellar account"
+    }
   }
 
   @Test
