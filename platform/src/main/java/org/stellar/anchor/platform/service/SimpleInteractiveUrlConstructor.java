@@ -15,8 +15,14 @@ import lombok.SneakyThrows;
 import org.apache.http.client.utils.URIBuilder;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.callback.CustomerIntegration;
+import org.stellar.anchor.api.callback.GetCustomerRequest;
+import org.stellar.anchor.api.callback.GetCustomerResponse;
 import org.stellar.anchor.api.callback.PutCustomerRequest;
+import org.stellar.anchor.api.callback.PutCustomerResponse;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.NotFoundException;
+import org.stellar.anchor.api.exception.SepNotAuthorizedException;
+import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt;
@@ -26,7 +32,10 @@ import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.platform.config.PropertySep24Config;
 import org.stellar.anchor.sep24.InteractiveUrlConstructor;
 import org.stellar.anchor.sep24.Sep24Transaction;
+import org.stellar.anchor.sep31.CustomerOwnershipReconciliation;
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.util.GsonUtils;
+import org.stellar.anchor.util.Log;
 
 public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
   public static final String FORWARD_KYC_CUSTOMER_TYPE = "sep24-customer";
@@ -35,18 +44,21 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
   private final PropertySep24Config sep24Config;
   private final CustomerIntegration customerIntegration;
   private final JwtService jwtService;
+  private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
 
   public SimpleInteractiveUrlConstructor(
       AssetService assetService,
       ClientService clientsService,
       PropertySep24Config sep24Config,
       CustomerIntegration customerIntegration,
-      JwtService jwtService) {
+      JwtService jwtService,
+      Sep31CustomerIdOwnerStore customerIdOwnerStore) {
     this.assetService = assetService;
     this.clientsService = clientsService;
     this.sep24Config = sep24Config;
     this.customerIntegration = customerIntegration;
     this.jwtService = jwtService;
+    this.customerIdOwnerStore = customerIdOwnerStore;
   }
 
   @Override
@@ -116,18 +128,82 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
       Map<String, String> sep9 = extractSep9Fields(request);
       // Putting SEP-9 into JWT exposes PII
       if (!sep9.isEmpty()) {
+        GetCustomerResponse existing;
+        try {
+          existing =
+              customerIntegration.getCustomer(
+                  GetCustomerRequest.builder()
+                      .account(jwt.getAccount())
+                      .memo(jwt.getOwnerMemo())
+                      .memoType(jwt.getOwnerMemo() != null ? "id" : null)
+                      .type(FORWARD_KYC_CUSTOMER_TYPE)
+                      .build());
+        } catch (NotFoundException e) {
+          existing = null;
+        } catch (Exception e) {
+          Log.warnEx(e);
+          throw new ServerErrorException("unable to verify customer ownership", e);
+        }
+
+        if (existing != null
+            && existing.getId() != null
+            && customerIdOwnerStore.isClaimed(existing.getId())
+            && !customerIdOwnerStore.verify(existing.getId(), jwt.getOwnerKey(), jwt.getOwnerMemo())
+            && !CustomerOwnershipReconciliation.tryReconcile(
+                customerIdOwnerStore,
+                customerIntegration,
+                existing.getId(),
+                jwt,
+                FORWARD_KYC_CUSTOMER_TYPE)) {
+          throw new SepNotAuthorizedException("customer id already claimed by another client");
+        }
+
         Gson gson = GsonUtils.getInstance();
         String gsonRequest = gson.toJson(sep9);
         PutCustomerRequest putCustomerRequest =
             gson.fromJson(gsonRequest, PutCustomerRequest.class);
         putCustomerRequest.setType(FORWARD_KYC_CUSTOMER_TYPE);
         putCustomerRequest.setAccount(jwt.getAccount());
-        if (jwt.getAccountMemo() != null) {
-          putCustomerRequest.setMemo(jwt.getAccountMemo());
+        if (jwt.getOwnerMemo() != null) {
+          putCustomerRequest.setMemo(jwt.getOwnerMemo());
           putCustomerRequest.setMemoType("id");
         }
-        // forward kyc fields to PUT /customer
-        customerIntegration.putCustomer(putCustomerRequest);
+        PutCustomerResponse forwarded = customerIntegration.putCustomer(putCustomerRequest);
+        if (forwarded == null || forwarded.getId() == null) {
+          throw new ServerErrorException(
+              "business server returned an empty PUT /customer response");
+        }
+
+        if (!customerIdOwnerStore.isClaimed(forwarded.getId())) {
+          GetCustomerResponse callbackCustomer;
+          try {
+            callbackCustomer =
+                customerIntegration.getCustomer(
+                    GetCustomerRequest.builder()
+                        .account(jwt.getAccount())
+                        .memo(jwt.getOwnerMemo())
+                        .memoType(jwt.getOwnerMemo() != null ? "id" : null)
+                        .type(FORWARD_KYC_CUSTOMER_TYPE)
+                        .build());
+          } catch (Exception e) {
+            Log.warnEx(e);
+            throw new ServerErrorException("unable to verify customer ownership", e);
+          }
+          if (callbackCustomer == null || !forwarded.getId().equals(callbackCustomer.getId())) {
+            throw new SepNotAuthorizedException("customer id already claimed by another client");
+          }
+        }
+
+        if (!customerIdOwnerStore.verifyOrClaim(
+                forwarded.getId(), jwt.getOwnerKey(), jwt.getOwnerMemo())
+            && !CustomerOwnershipReconciliation.tryReconcile(
+                customerIdOwnerStore,
+                customerIntegration,
+                forwarded.getId(),
+                jwt,
+                FORWARD_KYC_CUSTOMER_TYPE)) {
+          throw new SepNotAuthorizedException("customer id already claimed by another client");
+        }
       }
     }
   }
