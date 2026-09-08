@@ -557,19 +557,22 @@ public class Sep31Service {
 
     // Per SEP-31 "PATCH Transaction": once every field named in required_info_updates has been
     // supplied, the transaction returns to pending_receiver. A partial patch (some, not all,
-    // fields provided) still succeeds but leaves the transaction awaiting the rest. This must be
-    // judged against the fields actually supplied in *this* request, not against txn.getFields()'s
-    // current values -- a flagged field's existing value can already be non-empty (that's often
-    // exactly why the receiving anchor flagged it as invalid and requested a correction).
-    boolean allRequiredFieldsProvided =
-        request
-            .getFields()
-            .getTransaction()
-            .keySet()
-            .containsAll(txn.getRequiredInfoUpdates().getTransaction().keySet());
-    if (allRequiredFieldsProvided) {
+    // fields provided) still succeeds but narrows required_info_updates down to the fields still
+    // outstanding, so a later, separate PATCH completing the rest can still succeed -- correction
+    // is judged cumulatively across PATCH calls, not against a single request's fields, and not
+    // against txn.getFields()'s current values (a flagged field's existing value can already be
+    // non-empty, often exactly why the receiving anchor flagged it as invalid in the first place).
+    Map<String, AssetInfo.Field> remainingFields =
+        new HashMap<>(txn.getRequiredInfoUpdates().getTransaction());
+    remainingFields.keySet().removeAll(request.getFields().getTransaction().keySet());
+    if (remainingFields.isEmpty()) {
       txn.setStatus(SepTransactionStatus.PENDING_RECEIVER.toString());
       txn.setRequiredInfoUpdates(null);
+      txn.setUpdatedAt(clock.instant());
+    } else {
+      Sep31Info.Fields stillRequired = new Sep31Info.Fields();
+      stillRequired.setTransaction(remainingFields);
+      txn.setRequiredInfoUpdates(stillRequired);
     }
 
     Sep31GetTransactionResponse response =

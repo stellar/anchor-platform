@@ -435,14 +435,17 @@ class Sep31ServiceTest {
   fun `test PATCH transaction ok`() {
     val token = TestHelper.createWebAuthJwt()
     txn.status = "pending_transaction_info_update"
+    val originalUpdatedAt = txn.updatedAt
     every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
     sep31Service.patchTransaction(token, patchRequest)
 
     assertEquals("SEPA", txn.fields["type"])
     // Per SEP-31, patching every field named in required_info_updates returns the transaction to
-    // pending_receiver and clears required_info_updates.
+    // pending_receiver, clears required_info_updates, and bumps updated_at (SEP-31 defines it as
+    // when the transaction reached its current status).
     assertEquals("pending_receiver", txn.status)
     assertEquals(null, txn.requiredInfoUpdates)
+    assertTrue(txn.updatedAt.isAfter(originalUpdatedAt))
   }
 
   @Test
@@ -461,7 +464,38 @@ class Sep31ServiceTest {
 
     assertEquals("SEPA", txn.fields["type"])
     assertEquals("pending_transaction_info_update", txn.status)
-    assertEquals(true, txn.requiredInfoUpdates != null)
+    // The satisfied field is narrowed out of required_info_updates, leaving only the outstanding
+    // one -- a later, separate PATCH supplying just that field must still be able to complete.
+    assertEquals(setOf("receiver_bank_account"), txn.requiredInfoUpdates.transaction.keys)
+  }
+
+  @Test
+  fun `test PATCH transaction completes across two separate cumulative patches`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates.transaction =
+      mapOf(
+        "type" to Field("type of deposit to make", listOf("SEPA", "SWIFT"), false),
+        "receiver_bank_account" to Field("bank account", null, false),
+      )
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    // First PATCH supplies only "type".
+    sep31Service.patchTransaction(token, patchRequest)
+    assertEquals("pending_transaction_info_update", txn.status)
+
+    // Second, separate PATCH supplies only the remaining "receiver_bank_account" -- this must
+    // still be judged against what's left outstanding, not the original full required set.
+    val secondPatch =
+      Sep31PatchTransactionRequest.builder()
+        .id(patchRequest.id)
+        .fields(Sep31TxnFields(hashMapOf("receiver_bank_account" to "12345")))
+        .build()
+    sep31Service.patchTransaction(token, secondPatch)
+
+    assertEquals("12345", txn.fields["receiver_bank_account"])
+    assertEquals("pending_receiver", txn.status)
+    assertEquals(null, txn.requiredInfoUpdates)
   }
 
   @Test

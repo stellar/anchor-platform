@@ -286,11 +286,16 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     // pending_receiver.
     assertEquals(PENDING_RECEIVER.status, patchResponse.transaction.status)
 
-    // Patching a field that was never requested is rejected with a 400.
+    // Patching a field that was never requested is rejected with a 400. Uses a fresh transaction:
+    // the one above already left pending_transaction_info_update once every requested field was
+    // patched, so it would otherwise fail on the "does not need update" check instead of the
+    // unexpected-field check this case means to exercise.
+    val otherTxResponse = createTx(senderCustomer, receiverCustomer)
+    requestInfoUpdate(otherTxResponse.id, "receiver_account_number")
     val ex =
       assertThrows<SepValidationException> {
         sep31Client.patchTransaction(
-          postTxResponse.id,
+          otherTxResponse.id,
           Sep31PatchTransactionRequest.builder()
             .fields(Sep31TxnFields(hashMapOf("not_a_requested_field" to "value")))
             .build()
