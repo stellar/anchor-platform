@@ -28,6 +28,12 @@ public interface JdbcSep6TransactionRepo
   List<JdbcSep6Transaction> findAllByWithdrawAnchorAccountAndMemoAndStatus(
       String withdrawAnchorAccount, String memo, String status);
 
+  /**
+   * Matches only transactions whose caller authenticated without a memo (bare {@code G...} SEP-10
+   * subject). Use {@link #findTransactionsWithMemoAndFilters} for a memo-scoped caller — the two
+   * are not interchangeable: a caller's memo (or lack of one) is part of their identity, so mixing
+   * them would leak transactions across users sharing the same underlying Stellar account.
+   */
   @Query(
       "SELECT t FROM JdbcSep6Transaction t WHERE t.webAuthAccount = :account"
           + " AND t.webAuthAccountMemo IS NULL"
@@ -44,6 +50,10 @@ public interface JdbcSep6TransactionRepo
       @Param("olderThan") Instant olderThan,
       Pageable pageable);
 
+  /**
+   * Matches only transactions whose caller authenticated with the given memo. Use {@link
+   * #findTransactionsWithFilters} for a memo-less caller.
+   */
   @Query(
       "SELECT t FROM JdbcSep6Transaction t WHERE t.webAuthAccount = :account"
           + " AND t.webAuthAccountMemo = :accountMemo"
