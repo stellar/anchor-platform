@@ -47,6 +47,11 @@ public abstract class WebAuthJwt extends AbstractJwt {
     return muxedAccount != null ? muxedAccount : account;
   }
 
+  public String getOwnerKey() {
+    String clientName = getClientName();
+    return (clientName != null ? clientName + ":" : "") + getOwnerAccount();
+  }
+
   public boolean hasClientNameClaim() {
     return claims.containsKey(CLIENT_NAME);
   }
