@@ -555,6 +555,17 @@ public class Sep31Service {
     Context.get().setTransactionFields(txn.getFields());
     validateRequiredFields();
 
+    // Per SEP-31 "PATCH Transaction": once every field named in required_info_updates has been
+    // supplied, the transaction returns to pending_receiver. A partial patch (some, not all,
+    // fields provided) still succeeds but leaves the transaction awaiting the rest.
+    boolean allRequiredFieldsProvided =
+        txn.getRequiredInfoUpdates().getTransaction().keySet().stream()
+            .allMatch(fieldName -> !isEmpty(txn.getFields().get(fieldName)));
+    if (allRequiredFieldsProvided) {
+      txn.setStatus(SepTransactionStatus.PENDING_RECEIVER.toString());
+      txn.setRequiredInfoUpdates(null);
+    }
+
     Sep31GetTransactionResponse response =
         sep31TransactionStore.save(txn).toSep31GetTransactionResponse();
     // increment counter
@@ -609,6 +620,11 @@ public class Sep31Service {
       infoF("Transaction ({}) is not expecting any updates", txn.getId());
       throw new BadRequestException(
           String.format("Transaction (%s) is not expecting any updates", txn.getId()));
+    }
+
+    if (request.getFields() == null || request.getFields().getTransaction() == null) {
+      infoF("Transaction ({}) patch request is missing fields", txn.getId());
+      throw new BadRequestException("fields.transaction must be specified");
     }
 
     Map<String, AssetInfo.Field> expectedFields = txn.getRequiredInfoUpdates().getTransaction();

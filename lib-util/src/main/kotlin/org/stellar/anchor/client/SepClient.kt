@@ -96,8 +96,11 @@ open class SepClient {
         throw SepNotFoundException(sepException.error)
       }
       HttpStatus.SC_BAD_REQUEST -> {
+        // Not every 400 body has an "error" field (e.g. SEP-31's customer_info_needed is just
+        // {"type": "..."}) -- fall back to the raw body so callers that need the full payload
+        // (not just a message) can still recover it from the exception.
         val sepException = gson.fromJson(responseBody, SepExceptionResponse::class.java)
-        throw SepValidationException(sepException.error)
+        throw SepValidationException(sepException.error ?: responseBody)
       }
       else -> throw SepException(responseBody)
     }

@@ -282,6 +282,9 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
           .build()
       )
     assertEquals(postTxResponse.id, patchResponse.transaction.id)
+    // Per SEP-31, once every requested field is patched, the transaction returns to
+    // pending_receiver.
+    assertEquals(PENDING_RECEIVER.status, patchResponse.transaction.status)
 
     // Patching a field that was never requested is rejected with a 400.
     val ex =
@@ -312,6 +315,23 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
         )
       }
     assertTrue(ex.message!!.contains("does not need update"))
+  }
+
+  @Test
+  fun `test PATCH sep31 transactions endpoint rejects malformed data as a 400`() {
+    val (senderCustomer, receiverCustomer) = mkCustomers()
+    val postTxResponse = createTx(senderCustomer, receiverCustomer)
+    requestInfoUpdate(postTxResponse.id, "receiver_account_number")
+
+    // A PATCH request with no `fields.transaction` at all must be rejected with a 400, not a 500.
+    val ex =
+      assertThrows<SepValidationException> {
+        sep31Client.patchTransaction(
+          postTxResponse.id,
+          Sep31PatchTransactionRequest.builder().build()
+        )
+      }
+    assertTrue(ex.message!!.contains("fields.transaction must be specified"))
   }
 
   @Test

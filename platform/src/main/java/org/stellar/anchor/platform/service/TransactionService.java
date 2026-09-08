@@ -439,12 +439,16 @@ public class TransactionService {
         JdbcSep31Transaction sep31Txn = (JdbcSep31Transaction) txn;
         // update required_info_updates: PlatformTransactionData only carries a flat list of field
         // names (shared with SEP-6), so it's expanded into the Sep31Info.Fields shape SEP-31's own
-        // PATCH validation expects (Sep31Service#validatePatchTransactionFields only checks field
-        // names, not the field metadata, so a placeholder AssetInfo.Field per name is sufficient).
+        // PATCH validation expects. SEP-31 requires a human-readable `description` per field (it's
+        // the only non-optional attribute in the fields schema), but the business server has no way
+        // to supply one through this flat-list API -- fall back to a humanized version of the field
+        // name rather than shipping a blank description.
         if (patch.getRequiredInfoUpdates() != null) {
           Map<String, AssetInfo.Field> requiredFields = new HashMap<>();
           for (String fieldName : patch.getRequiredInfoUpdates()) {
-            requiredFields.put(fieldName, AssetInfo.Field.builder().build());
+            requiredFields.put(
+                fieldName,
+                AssetInfo.Field.builder().description(humanizeFieldName(fieldName)).build());
           }
           Sep31Info.Fields requiredInfoUpdates = new Sep31Info.Fields();
           requiredInfoUpdates.setTransaction(requiredFields);
@@ -478,6 +482,15 @@ public class TransactionService {
     if (txnUpdated) {
       txn.setUpdatedAt(now);
     }
+  }
+
+  /** Turns a snake_case field name like "receiver_bank_account" into "Receiver bank account". */
+  private static String humanizeFieldName(String fieldName) {
+    String withSpaces = fieldName.replace('_', ' ');
+    if (withSpaces.isEmpty()) {
+      return withSpaces;
+    }
+    return Character.toUpperCase(withSpaces.charAt(0)) + withSpaces.substring(1);
   }
 
   /**
