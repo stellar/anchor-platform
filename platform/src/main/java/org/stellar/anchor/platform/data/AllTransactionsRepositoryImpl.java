@@ -16,6 +16,7 @@ public class AllTransactionsRepositoryImpl<T> implements AllTransactionsReposito
   private static final String NL = System.lineSeparator();
   static final int DEFAULT_PAGE_SIZE = 20;
   static final int MAX_PAGE_SIZE = 200;
+  static final long MAX_OFFSET = 1_000_000L;
 
   public AllTransactionsRepositoryImpl(EntityManager em) {
     this.em = em;
@@ -34,7 +35,7 @@ public class AllTransactionsRepositoryImpl<T> implements AllTransactionsReposito
 
     List<SepTransactionStatus> statuses = params.getStatuses();
     int pageSize = boundedPageSize(params.getPageSize());
-    int pageNumber = params.getPageNumber() == null ? 0 : Math.max(params.getPageNumber(), 0);
+    long offset = boundedOffset(params.getPageNumber(), pageSize);
 
     // Create query
     String nativeQuery =
@@ -45,7 +46,7 @@ public class AllTransactionsRepositoryImpl<T> implements AllTransactionsReposito
             params.getOrderBy().getTableName(),
             params.getOrder().name(),
             pageSize,
-            pageNumber * pageSize);
+            offset);
 
     Query query = em.createNativeQuery(nativeQuery, entityClass);
 
@@ -59,5 +60,13 @@ public class AllTransactionsRepositoryImpl<T> implements AllTransactionsReposito
       return DEFAULT_PAGE_SIZE;
     }
     return Math.min(requested, MAX_PAGE_SIZE);
+  }
+
+  private static long boundedOffset(Integer pageNumber, int pageSize) {
+    if (pageNumber == null || pageNumber <= 0) {
+      return 0L;
+    }
+    long offset = (long) pageNumber * pageSize;
+    return Math.min(offset, MAX_OFFSET);
   }
 }

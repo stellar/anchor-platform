@@ -99,4 +99,17 @@ class AllTransactionsRepositoryImplTest {
     repo.findAllTransactions(params(null, 50), JdbcSep24Transaction::class.java)
     assertTrue(querySlot.captured.contains("LIMIT 50 OFFSET 0"))
   }
+
+  @Test
+  fun `huge page_number is capped instead of overflowing into a negative offset`() {
+    repo.findAllTransactions(params(Int.MAX_VALUE, 200), JdbcSep24Transaction::class.java)
+    assertTrue(querySlot.captured.contains("OFFSET ${AllTransactionsRepositoryImpl.MAX_OFFSET}"))
+    assertTrue(!querySlot.captured.contains("OFFSET -"))
+  }
+
+  @Test
+  fun `a large but non-overflowing page_number is still capped at the max offset`() {
+    repo.findAllTransactions(params(1_000_000, 200), JdbcSep24Transaction::class.java)
+    assertTrue(querySlot.captured.contains("OFFSET ${AllTransactionsRepositoryImpl.MAX_OFFSET}"))
+  }
 }
