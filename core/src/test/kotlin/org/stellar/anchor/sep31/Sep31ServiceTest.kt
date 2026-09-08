@@ -465,12 +465,52 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test PATCH transaction leaves status alone when an unpatched field already has a stale value`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates.transaction =
+      mapOf(
+        "type" to Field("type of deposit to make", listOf("SEPA", "SWIFT"), false),
+        "receiver_bank_account" to Field("bank account", null, false),
+      )
+    // "receiver_bank_account" already has a value -- often exactly why the receiving anchor
+    // flagged it as invalid and requested a correction in the first place. Completion must be
+    // judged by what this PATCH actually supplied, not by whether txn.fields happens to be
+    // non-empty already.
+    txn.fields["receiver_bank_account"] = "stale-invalid-value"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    // Only "type" is patched; "receiver_bank_account" is left untouched.
+    sep31Service.patchTransaction(token, patchRequest)
+
+    assertEquals("SEPA", txn.fields["type"])
+    assertEquals("stale-invalid-value", txn.fields["receiver_bank_account"])
+    assertEquals("pending_transaction_info_update", txn.status)
+    assertEquals(true, txn.requiredInfoUpdates != null)
+  }
+
+  @Test
   fun `test PATCH transaction rejects malformed data missing fields as a 400`() {
     val token = TestHelper.createWebAuthJwt()
     txn.status = "pending_transaction_info_update"
     every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
 
     val request = Sep31PatchTransactionRequest.builder().id(patchRequest.id).build()
+    val ex = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, request) }
+    assertEquals("fields.transaction must be specified", ex.message)
+  }
+
+  @Test
+  fun `test PATCH transaction rejects an empty fields map as a 400`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    val request =
+      Sep31PatchTransactionRequest.builder()
+        .id(patchRequest.id)
+        .fields(Sep31TxnFields(hashMapOf()))
+        .build()
     val ex = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, request) }
     assertEquals("fields.transaction must be specified", ex.message)
   }

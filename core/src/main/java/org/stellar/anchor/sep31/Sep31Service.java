@@ -557,10 +557,16 @@ public class Sep31Service {
 
     // Per SEP-31 "PATCH Transaction": once every field named in required_info_updates has been
     // supplied, the transaction returns to pending_receiver. A partial patch (some, not all,
-    // fields provided) still succeeds but leaves the transaction awaiting the rest.
+    // fields provided) still succeeds but leaves the transaction awaiting the rest. This must be
+    // judged against the fields actually supplied in *this* request, not against txn.getFields()'s
+    // current values -- a flagged field's existing value can already be non-empty (that's often
+    // exactly why the receiving anchor flagged it as invalid and requested a correction).
     boolean allRequiredFieldsProvided =
-        txn.getRequiredInfoUpdates().getTransaction().keySet().stream()
-            .allMatch(fieldName -> !isEmpty(txn.getFields().get(fieldName)));
+        request
+            .getFields()
+            .getTransaction()
+            .keySet()
+            .containsAll(txn.getRequiredInfoUpdates().getTransaction().keySet());
     if (allRequiredFieldsProvided) {
       txn.setStatus(SepTransactionStatus.PENDING_RECEIVER.toString());
       txn.setRequiredInfoUpdates(null);
@@ -622,7 +628,9 @@ public class Sep31Service {
           String.format("Transaction (%s) is not expecting any updates", txn.getId()));
     }
 
-    if (request.getFields() == null || request.getFields().getTransaction() == null) {
+    if (request.getFields() == null
+        || request.getFields().getTransaction() == null
+        || request.getFields().getTransaction().isEmpty()) {
       infoF("Transaction ({}) patch request is missing fields", txn.getId());
       throw new BadRequestException("fields.transaction must be specified");
     }

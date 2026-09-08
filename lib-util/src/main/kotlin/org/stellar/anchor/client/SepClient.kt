@@ -96,11 +96,11 @@ open class SepClient {
         throw SepNotFoundException(sepException.error)
       }
       HttpStatus.SC_BAD_REQUEST -> {
-        // Not every 400 body has an "error" field (e.g. SEP-31's customer_info_needed is just
-        // {"type": "..."}) -- fall back to the raw body so callers that need the full payload
-        // (not just a message) can still recover it from the exception.
-        val sepException = gson.fromJson(responseBody, SepExceptionResponse::class.java)
-        throw SepValidationException(sepException.error ?: responseBody)
+        // 400 bodies vary in shape across SEPs (a plain "error" string, SEP-31's
+        // customer_info_needed {"type": ...}, transaction_info_needed {"error", "fields"}, etc.),
+        // so the raw body is preserved as-is rather than parsed and reduced to a single field --
+        // that also sidesteps a null-body edge case a strict parse would need to guard against.
+        throw SepValidationException(responseBody)
       }
       else -> throw SepException(responseBody)
     }
