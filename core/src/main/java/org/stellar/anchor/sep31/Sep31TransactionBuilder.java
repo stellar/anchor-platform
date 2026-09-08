@@ -81,6 +81,16 @@ public class Sep31TransactionBuilder {
     return this;
   }
 
+  public Sep31TransactionBuilder refundMemo(String refundMemo) {
+    txn.setRefundMemo(refundMemo);
+    return this;
+  }
+
+  public Sep31TransactionBuilder refundMemoType(String refundMemoType) {
+    txn.setRefundMemoType(refundMemoType);
+    return this;
+  }
+
   public Sep31TransactionBuilder updatedAt(Instant updatedAt) {
     txn.setUpdatedAt(updatedAt);
     return this;
