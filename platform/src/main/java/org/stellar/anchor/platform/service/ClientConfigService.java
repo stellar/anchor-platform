@@ -17,6 +17,7 @@ import org.stellar.anchor.platform.controller.platform.ClientConfigRequest;
 import org.stellar.anchor.platform.controller.platform.ClientConfigResponse;
 import org.stellar.anchor.platform.data.JdbcClientConfig;
 import org.stellar.anchor.platform.data.JdbcClientConfigRepo;
+import org.stellar.sdk.KeyPair;
 
 @RequiredArgsConstructor
 public class ClientConfigService {
@@ -51,6 +52,7 @@ public class ClientConfigService {
 
   public ClientConfigResponse addDestinationAccount(String name, String account)
       throws NotFoundException, BadRequestException {
+    validateStellarAccount(account, "destination account");
     JdbcClientConfig entity = findOrThrow(name);
     entity.getDestinationAccounts().add(account);
     return saveHandlingConflict(entity);
@@ -67,6 +69,7 @@ public class ClientConfigService {
 
   public ClientConfigResponse addSigningKey(String name, String signingKey)
       throws NotFoundException, BadRequestException {
+    validateStellarAccount(signingKey, "signing key");
     JdbcClientConfig entity = findOrThrow(name);
     entity.getSigningKeys().add(signingKey);
     return saveHandlingConflict(entity);
@@ -153,7 +156,26 @@ public class ClientConfigService {
         && (request.getDomains() == null || request.getDomains().isEmpty())) {
       throw new BadRequestException("Noncustodial clients must have at least one domain");
     }
+    if (request.getSigningKeys() != null) {
+      for (String signingKey : request.getSigningKeys()) {
+        validateStellarAccount(signingKey, "signing key");
+      }
+    }
+    if (request.getDestinationAccounts() != null) {
+      for (String account : request.getDestinationAccounts()) {
+        validateStellarAccount(account, "destination account");
+      }
+    }
     validateCallbackUrls(request.getCallbackUrls());
+  }
+
+  private void validateStellarAccount(String account, String fieldLabel)
+      throws BadRequestException {
+    try {
+      KeyPair.fromAccountId(account);
+    } catch (Exception e) {
+      throw new BadRequestException(String.format("Invalid %s: %s", fieldLabel, account));
+    }
   }
 
   private void validateCallbackUrls(CallbackUrls callbackUrls) throws BadRequestException {

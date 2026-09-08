@@ -25,6 +25,8 @@ public class PojoSep31Transaction implements Sep31Transaction {
   String toAccount;
   String stellarMemo;
   String stellarMemoType;
+  String refundMemo;
+  String refundMemoType;
   Instant startedAt;
   Instant completedAt;
   Instant userActionRequiredBy;

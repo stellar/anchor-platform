@@ -54,6 +54,14 @@ public interface Sep31Transaction extends SepTransaction {
 
   void setStellarMemoType(String stellarMemoType);
 
+  String getRefundMemo();
+
+  void setRefundMemo(String refundMemo);
+
+  String getRefundMemoType();
+
+  void setRefundMemoType(String refundMemoType);
+
   Instant getTransferReceivedAt();
 
   void setTransferReceivedAt(Instant transferReceivedAt);
