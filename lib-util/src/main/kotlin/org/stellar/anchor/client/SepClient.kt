@@ -10,6 +10,7 @@ import org.apache.hc.core5.http.HttpStatus
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepNotFoundException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.sep.SepExceptionResponse
 import org.stellar.anchor.util.GsonUtils
 
@@ -93,6 +94,10 @@ open class SepClient {
       HttpStatus.SC_NOT_FOUND -> {
         val sepException = gson.fromJson(responseBody, SepExceptionResponse::class.java)
         throw SepNotFoundException(sepException.error)
+      }
+      HttpStatus.SC_BAD_REQUEST -> {
+        val sepException = gson.fromJson(responseBody, SepExceptionResponse::class.java)
+        throw SepValidationException(sepException.error)
       }
       else -> throw SepException(responseBody)
     }

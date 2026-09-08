@@ -12,6 +12,7 @@ import org.springframework.data.domain.Sort.Direction
 import org.springframework.data.domain.Sort.Direction.DESC
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotFoundException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.*
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep.SEP_31
 import org.stellar.anchor.api.platform.PlatformTransactionData.builder
@@ -284,7 +285,7 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
 
     // Patching a field that was never requested is rejected with a 400.
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep31Client.patchTransaction(
           postTxResponse.id,
           Sep31PatchTransactionRequest.builder()
@@ -302,7 +303,7 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
 
     // Transaction is still pending_receiver, never entered pending_transaction_info_update.
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep31Client.patchTransaction(
           postTxResponse.id,
           Sep31PatchTransactionRequest.builder()
