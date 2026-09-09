@@ -447,6 +447,13 @@ public class TransactionService {
         if (patch.getRequiredInfoUpdates() != null) {
           Map<String, AssetInfo.Field> requiredFields = new HashMap<>();
           for (String fieldName : patch.getRequiredInfoUpdates()) {
+            // A null entry would NPE inside humanizeSnakeCase; a blank one would produce a
+            // required field with no usable name. Reject both outright instead of persisting an
+            // unusable entry.
+            if (fieldName == null || fieldName.trim().isEmpty()) {
+              throw new BadRequestException(
+                  "required_info_updates must not contain null or blank field names");
+            }
             requiredFields.put(
                 fieldName,
                 AssetInfo.Field.builder()

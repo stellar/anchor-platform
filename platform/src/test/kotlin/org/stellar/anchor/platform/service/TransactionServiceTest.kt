@@ -601,6 +601,58 @@ class TransactionServiceTest {
   }
 
   @Test
+  fun `test updateSepTransaction rejects a null field name in required_info_updates`() {
+    val txn = JdbcSep31Transaction()
+    txn.id = "my-tx-id"
+
+    val patch = PlatformTransactionData()
+    patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    patch.requiredInfoUpdates = listOf("receiver_account_number", null)
+
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+
+    val ex = assertThrows<AnchorException> { transactionService.updateSepTransaction(patch, txn) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+  }
+
+  @Test
+  fun `test updateSepTransaction rejects a blank field name in required_info_updates`() {
+    val txn = JdbcSep31Transaction()
+    txn.id = "my-tx-id"
+
+    val patch = PlatformTransactionData()
+    patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    patch.requiredInfoUpdates = listOf("receiver_account_number", "   ")
+
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+
+    val ex = assertThrows<AnchorException> { transactionService.updateSepTransaction(patch, txn) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+  }
+
+  @Test
   fun `test updateSepTransaction rejects a transition to pending_transaction_info_update with no required_info_updates`() {
     val txn = JdbcSep31Transaction()
     txn.id = "my-tx-id"
