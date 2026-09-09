@@ -132,6 +132,9 @@ class TransactionMapperTest {
             .userActionRequiredBy(sepTxn.userActionRequiredBy)
             .transferReceivedAt(sepTxn.transferReceivedAt)
             .message(sepTxn.requiredInfoMessage)
+            // GetTransactionResponse only carries the outstanding field names, not the richer
+            // Sep31Info.Fields metadata sepTxn.requiredInfoUpdates itself holds.
+            .requiredInfoUpdates(listOf("field"))
             .refunds(
               Refunds.builder()
                 .amountRefunded(Amount("90.0", "USDC"))

@@ -448,7 +448,9 @@ public class TransactionService {
           for (String fieldName : patch.getRequiredInfoUpdates()) {
             requiredFields.put(
                 fieldName,
-                AssetInfo.Field.builder().description(humanizeFieldName(fieldName)).build());
+                AssetInfo.Field.builder()
+                    .description(StringHelper.humanizeSnakeCase(fieldName))
+                    .build());
           }
           Sep31Info.Fields requiredInfoUpdates = new Sep31Info.Fields();
           requiredInfoUpdates.setTransaction(requiredFields);
@@ -482,15 +484,6 @@ public class TransactionService {
     if (txnUpdated) {
       txn.setUpdatedAt(now);
     }
-  }
-
-  /** Turns a snake_case field name like "receiver_bank_account" into "Receiver bank account". */
-  private static String humanizeFieldName(String fieldName) {
-    String withSpaces = fieldName.replace('_', ' ');
-    if (withSpaces.isEmpty()) {
-      return withSpaces;
-    }
-    return Character.toUpperCase(withSpaces.charAt(0)) + withSpaces.substring(1);
   }
 
   /**

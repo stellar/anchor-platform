@@ -567,6 +567,7 @@ class ClientStatusCallbackHandlerTest {
         .clientDomain("client.com")
         .quoteId("quote-id")
         .message("message")
+        .requiredInfoUpdates(listOf("receiver_bank_account"))
         .build()
 
     // Act
@@ -587,5 +588,13 @@ class ClientStatusCallbackHandlerTest {
     assertEquals("client.com", sep31Txn.clientDomain)
     assertEquals("quote-id", sep31Txn.quoteId)
     assertEquals("message", sep31Txn.requiredInfoMessage)
+    // The flat field-name list from GetTransactionResponse is expanded back into the
+    // Sep31Info.Fields shape a SEP-31 client callback body expects, with a humanized description
+    // standing in for the per-field metadata this shared DTO has no slot for.
+    assertEquals(setOf("receiver_bank_account"), sep31Txn.requiredInfoUpdates.transaction.keys)
+    assertEquals(
+      "Receiver bank account",
+      sep31Txn.requiredInfoUpdates.transaction["receiver_bank_account"]!!.description,
+    )
   }
 }
