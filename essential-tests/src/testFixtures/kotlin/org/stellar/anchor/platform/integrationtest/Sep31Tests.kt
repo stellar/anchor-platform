@@ -10,7 +10,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.skyscreamer.jsonassert.JSONCompareMode.LENIENT
 import org.springframework.data.domain.Sort.Direction
 import org.springframework.data.domain.Sort.Direction.DESC
-import org.stellar.anchor.api.exception.SepException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.*
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep.SEP_31
 import org.stellar.anchor.api.platform.PlatformTransactionData.builder
@@ -236,7 +236,7 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     val txnRequest = gson.fromJson(postTxnRequest, Sep31PostTransactionRequest::class.java)
     txnRequest.assetCode = "bad-asset-code"
     txnRequest.receiverId = pr!!.id
-    assertThrows<SepException> { sep31Client.postTransaction(txnRequest) }
+    assertThrows<SepValidationException> { sep31Client.postTransaction(txnRequest) }
   }
 
   @Test

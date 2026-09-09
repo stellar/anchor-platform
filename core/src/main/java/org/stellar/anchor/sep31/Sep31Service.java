@@ -490,10 +490,13 @@ public class Sep31Service {
     }
     txn.setAmountOutAsset(amountOutAsset);
 
-    // Update fee
-    String feeStr = formatAmount(fee, scale);
-    txn.setFeeDetails(new FeeDetails(feeStr, feeResponse.getAsset(), feeResponse.getDetails()));
-    Context.get().getFee().setTotal(feeStr);
+    // Persist the callback's fee exactly as received: feeResponse.getTotal() is validated against
+    // the sum of feeResponse.getDetails() at the fee asset's own precision, which need not match
+    // reqAsset's scale (RestRateIntegration permits a fee denominated in the buy asset). `fee`
+    // above is only a reqAsset-scaled approximation for the amountIn/amountOut arithmetic -- if it
+    // were persisted as the fee total instead, a fee asset with more precision than reqAsset would
+    // desync the stored total from the stored breakdown.
+    txn.setFeeDetails(feeResponse);
   }
 
   public Sep31GetTransactionResponse getTransaction(WebAuthJwt token, String id)
