@@ -138,19 +138,59 @@ class PaymentObservingAccountsManagerTest {
     assertTrue(obs.lookupAndUpdate(testMuxAcct100))
     assertTrue(obs.lookupAndUpdate(testMuxAcct200))
   }
+
+  @Test
+  fun `test loading a legacy muxed row canonicalizes and deletes the stale row`() {
+    paymentObservingAccountStore.upsert(testMuxAcct100, Instant.now())
+    assertEquals(1, paymentObservingAccountStore.list().size)
+    assertEquals(testMuxAcct100, paymentObservingAccountStore.list()[0].account)
+
+    val obs = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    obs.initialize()
+
+    val persisted = paymentObservingAccountStore.list()
+    assertEquals(1, persisted.size)
+    assertEquals(testAcct4, persisted[0].account)
+    assertTrue(obs.lookupAndUpdate(testAcct4))
+  }
+
+  @Test
+  fun `test upsert does not throw when the store fails to persist`() {
+    val obs = PaymentObservingAccountsManager(ThrowingPaymentObservingAccountStore())
+    obs.initialize()
+
+    assertDoesNotThrow { obs.upsert(testAcct1, TRANSIENT) }
+    assertEquals(1, obs.accounts.size)
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+
+    assertDoesNotThrow { obs.evict(Duration.ZERO) }
+    assertEquals(0, obs.accounts.size)
+  }
 }
 
 class MemoryPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
   private val accounts = mutableListOf<PaymentObservingAccount>()
 
-  override fun list(): List<PaymentObservingAccount> = accounts
+  public override fun list(): List<PaymentObservingAccount> = accounts
 
-  override fun upsert(account: String?, lastObserved: Instant?) {
+  public override fun upsert(account: String?, lastObserved: Instant?) {
     accounts.removeIf { it.account == account }
     accounts.add(PaymentObservingAccount(account, lastObserved))
   }
 
-  override fun delete(account: String) {
+  public override fun delete(account: String) {
     accounts.removeIf { it.account == account }
+  }
+}
+
+class ThrowingPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
+  override fun list(): List<PaymentObservingAccount> = emptyList()
+
+  override fun upsert(account: String?, lastObserved: Instant?) {
+    throw RuntimeException("store unavailable")
+  }
+
+  override fun delete(account: String) {
+    throw RuntimeException("store unavailable")
   }
 }

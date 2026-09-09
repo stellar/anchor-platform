@@ -60,7 +60,7 @@ public class PaymentObservingAccountsManager {
     this.evict(getEvictMaxIdleTime());
     Log.debug("Persisting accounts...");
     for (ObservingAccount account : this.getAccounts()) {
-      store.upsert(account.account, account.lastObserved);
+      persistUpsert(account.account, account.lastObserved);
     }
   }
 
@@ -83,21 +83,23 @@ public class PaymentObservingAccountsManager {
    */
   public void upsert(ObservingAccount observingAccount) {
     if (observingAccount != null) {
-      String canonicalAccount = canonicalize(observingAccount.account);
+      String canonicalAccount = safeCanonicalize(observingAccount.account);
       ObservingAccount existingAccount = allAccounts.get(canonicalAccount);
       if (existingAccount == null) {
         ObservingAccount toStore =
             new ObservingAccount(
                 canonicalAccount, observingAccount.lastObserved, observingAccount.type);
         allAccounts.put(canonicalAccount, toStore);
-        // update the database
-        store.upsert(canonicalAccount, observingAccount.lastObserved);
+        persistUpsert(canonicalAccount, observingAccount.lastObserved);
       } else {
         existingAccount.account = canonicalAccount;
         existingAccount.lastObserved = observingAccount.lastObserved;
         if (existingAccount.type == AccountType.TRANSIENT) {
           existingAccount.type = observingAccount.type;
         }
+      }
+      if (!canonicalAccount.equals(observingAccount.account)) {
+        persistDelete(observingAccount.account);
       }
     }
   }
@@ -107,6 +109,31 @@ public class PaymentObservingAccountsManager {
       return new MuxedAccount(account).getAccountId();
     }
     return account;
+  }
+
+  private static String safeCanonicalize(String account) {
+    try {
+      return canonicalize(account);
+    } catch (RuntimeException ex) {
+      Log.errorEx(String.format("Failed to canonicalize observing account %s", account), ex);
+      return account;
+    }
+  }
+
+  private void persistUpsert(String account, Instant lastObserved) {
+    try {
+      store.upsert(account, lastObserved);
+    } catch (RuntimeException ex) {
+      Log.errorEx(String.format("Failed to persist observing account %s", account), ex);
+    }
+  }
+
+  private void persistDelete(String account) {
+    try {
+      store.delete(account);
+    } catch (RuntimeException ex) {
+      Log.errorEx(String.format("Failed to delete stale observing account %s", account), ex);
+    }
   }
 
   /**
@@ -150,7 +177,7 @@ public class PaymentObservingAccountsManager {
       Duration idleTime = Duration.between(Instant.now(), acct.lastObserved).abs();
       if (idleTime.compareTo(maxIdleTime) > 0) {
         allAccounts.remove(acct.account);
-        store.delete(acct.account);
+        persistDelete(acct.account);
       }
     }
   }
