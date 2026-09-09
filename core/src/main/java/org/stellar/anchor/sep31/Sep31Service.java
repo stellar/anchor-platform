@@ -2,6 +2,7 @@ package org.stellar.anchor.sep31;
 
 import static io.micrometer.core.instrument.Metrics.counter;
 import static org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_CREATED;
+import static org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED;
 import static org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse;
 import static org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_SEND;
 import static org.stellar.anchor.event.EventService.EventQueue.TRANSACTION;
@@ -565,7 +566,8 @@ public class Sep31Service {
     Map<String, AssetInfo.Field> remainingFields =
         new HashMap<>(txn.getRequiredInfoUpdates().getTransaction());
     remainingFields.keySet().removeAll(request.getFields().getTransaction().keySet());
-    if (remainingFields.isEmpty()) {
+    boolean completed = remainingFields.isEmpty();
+    if (completed) {
       txn.setStatus(SepTransactionStatus.PENDING_RECEIVER.toString());
       txn.setRequiredInfoUpdates(null);
       txn.setUpdatedAt(clock.instant());
@@ -575,8 +577,19 @@ public class Sep31Service {
       txn.setRequiredInfoUpdates(stillRequired);
     }
 
-    Sep31GetTransactionResponse response =
-        sep31TransactionStore.save(txn).toSep31GetTransactionResponse();
+    Sep31Transaction savedTxn = sep31TransactionStore.save(txn);
+    if (completed) {
+      // Without this, the corrected data is only stored locally -- the receiving anchor's
+      // business server (the callback/event consumer) is never told processing can resume.
+      eventSession.publish(
+          AnchorEvent.builder()
+              .id(UUID.randomUUID().toString())
+              .sep("31")
+              .type(TRANSACTION_STATUS_CHANGED)
+              .transaction(TransactionMapper.toGetTransactionResponse(savedTxn))
+              .build());
+    }
+    Sep31GetTransactionResponse response = savedTxn.toSep31GetTransactionResponse();
     // increment counter
     sep31TransactionPatchedCounter.increment();
     return response;
@@ -641,11 +654,19 @@ public class Sep31Service {
     Map<String, AssetInfo.Field> expectedFields = txn.getRequiredInfoUpdates().getTransaction();
     Map<String, String> requestFields = request.getFields().getTransaction();
 
-    // validate if any of the fields from the request is not expected in the transaction.
-    for (String fieldName : requestFields.keySet()) {
+    for (Map.Entry<String, String> entry : requestFields.entrySet()) {
+      String fieldName = entry.getKey();
+      // validate if the field from the request is not expected in the transaction.
       if (!expectedFields.containsKey(fieldName)) {
         infoF("{} is not a expected field", fieldName);
         throw new BadRequestException(String.format("[%s] is not a expected field", fieldName));
+      }
+      // A JSON null value deserializes to a null map entry -- without this check it would still
+      // count as "supplied" below and could move the transaction to pending_receiver despite no
+      // corrected value actually being given.
+      if (entry.getValue() == null) {
+        infoF("{} was patched with a null value", fieldName);
+        throw new BadRequestException(String.format("[%s] must not be null", fieldName));
       }
     }
   }

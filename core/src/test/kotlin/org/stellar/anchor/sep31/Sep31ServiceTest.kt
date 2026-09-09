@@ -437,6 +437,7 @@ class Sep31ServiceTest {
     txn.status = "pending_transaction_info_update"
     val originalUpdatedAt = txn.updatedAt
     every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
     sep31Service.patchTransaction(token, patchRequest)
 
     assertEquals("SEPA", txn.fields["type"])
@@ -446,6 +447,8 @@ class Sep31ServiceTest {
     assertEquals("pending_receiver", txn.status)
     assertEquals(null, txn.requiredInfoUpdates)
     assertTrue(txn.updatedAt.isAfter(originalUpdatedAt))
+    // The receiving anchor's business server learns processing can resume via this event.
+    verify(exactly = 1) { eventSession.publish(any()) }
   }
 
   @Test
@@ -467,6 +470,8 @@ class Sep31ServiceTest {
     // The satisfied field is narrowed out of required_info_updates, leaving only the outstanding
     // one -- a later, separate PATCH supplying just that field must still be able to complete.
     assertEquals(setOf("receiver_bank_account"), txn.requiredInfoUpdates.transaction.keys)
+    // No status change yet, so no event should be published.
+    verify(exactly = 0) { eventSession.publish(any()) }
   }
 
   @Test
@@ -479,6 +484,7 @@ class Sep31ServiceTest {
         "receiver_bank_account" to Field("bank account", null, false),
       )
     every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
 
     // First PATCH supplies only "type".
     sep31Service.patchTransaction(token, patchRequest)
@@ -547,6 +553,24 @@ class Sep31ServiceTest {
         .build()
     val ex = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, request) }
     assertEquals("fields.transaction must be specified", ex.message)
+  }
+
+  @Test
+  fun `test PATCH transaction rejects a null field value as a 400`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    // A JSON `"type": null` in the request body deserializes to a null map entry -- this must not
+    // silently count as the field having been supplied.
+    val request =
+      gson.fromJson(
+        """{"id": "${patchRequest.id}", "fields": {"transaction": {"type": null}}}""",
+        Sep31PatchTransactionRequest::class.java,
+      )
+    val ex = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, request) }
+    assertEquals("[type] must not be null", ex.message)
+    verify(exactly = 0) { eventSession.publish(any()) }
   }
 
   @Test
