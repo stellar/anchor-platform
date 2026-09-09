@@ -70,13 +70,19 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
       directPaymentServerUrl.endsWith("/"),
       "DIRECT_PAYMENT_SERVER must not end with a '/'"
     )
-    // Parse the URI rather than substring-matching it, so a value like "httpsx://example.com" or
-    // "http://evil.example/?localhost" isn't mistaken for a compliant/exempted URL.
+    // Parse the URI rather than substring-matching it, so a value like "httpsx://example.com",
+    // "http://evil.example/?localhost", "https:foo" (no host), or "ftp://localhost" (wrong scheme
+    // for the local exemption) isn't mistaken for a compliant/exempted URL.
     val uri = java.net.URI(directPaymentServerUrl)
-    val isLocalException = uri.host == "localhost" || uri.host == "host.docker.internal"
     assertTrue(
-      uri.scheme == "https" || isLocalException,
-      "DIRECT_PAYMENT_SERVER must use https (localhost/host.docker.internal exempted for local testing)"
+      !uri.host.isNullOrBlank(),
+      "DIRECT_PAYMENT_SERVER must be an absolute URI with a non-blank host"
+    )
+    val isLocalHttpException =
+      uri.scheme == "http" && (uri.host == "localhost" || uri.host == "host.docker.internal")
+    assertTrue(
+      uri.scheme == "https" || isLocalHttpException,
+      "DIRECT_PAYMENT_SERVER must use https (http exempted only for localhost/host.docker.internal, for local testing)"
     )
   }
 
@@ -88,43 +94,148 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     val postTxResponse = createTx(senderCustomer, receiverCustomer)
 
     // GET Sep31 transaction
-    savedTxn = sep31Client.getTransaction(postTxResponse.id)
-    JSONAssert.assertEquals(expectedTxn, json(savedTxn), LENIENT)
+    val rawTxnJson = fetchRawTransaction(postTxResponse.id)
+    savedTxn = gson.fromJson(rawTxnJson, Sep31GetTransactionResponse::class.java)
+    JSONAssert.assertEquals(expectedTxn, rawTxnJson, LENIENT)
     assertEquals(postTxResponse.id, savedTxn.transaction.id)
     assertEquals(PENDING_RECEIVER.status, savedTxn.transaction.status)
-    assertCompliesWithProtocolSchema(savedTxn)
+    assertCompliesWithProtocolSchema(rawTxnJson, savedTxn)
+  }
+
+  private fun fetchRawTransaction(txId: String): String {
+    return sep31Client.httpGet(
+      "${toml.getString("DIRECT_PAYMENT_SERVER")}/transactions/$txId",
+      this.token.token
+    )!!
   }
 
   /**
-   * Beyond the field-subset LENIENT check above, verify the structural properties the SEP-31
-   * GET-transaction schema actually constrains: `status` is one of the protocol's defined values,
-   * and `stellar_account_id`/`stellar_memo`+`stellar_memo_type` (when present) are well-formed --
-   * Gson already guarantees `started_at`/`completed_at` parse as valid date-times, since a
-   * malformed value would have failed deserialization before this method is even reached.
+   * Validates the *raw* response body against the SEP-31 GET-transaction schema before any
+   * deserialization can drop unknown properties or coerce types -- `rawJson` is the exact string
+   * the server returned. `txn` (already deserialized by the caller) is only used for the semantic
+   * checks below that a structural schema can't express: `stellar_account_id` /
+   * `stellar_memo`+`stellar_memo_type` well-formedness. Gson already guarantees `started_at`/
+   * `completed_at` parse as valid date-times on `txn`, since a malformed value would have failed
+   * deserialization before this method is even reached.
    */
-  private fun assertCompliesWithProtocolSchema(txn: Sep31GetTransactionResponse) {
+  private fun assertCompliesWithProtocolSchema(rawJson: String, txn: Sep31GetTransactionResponse) {
+    val root = com.google.gson.JsonParser.parseString(rawJson).asJsonObject
+    assertTrue(root.has("transaction"), "response body must have a 'transaction' object")
+    val transaction = root.getAsJsonObject("transaction")
+
+    assertTrue(transaction.has("id") && !transaction.get("id").isJsonNull, "'id' is required")
+    assertFalse(transaction.get("id").asString.isBlank(), "'id' must not be blank")
+
     val validStatuses = SepHelper.sep31Statuses.map { it.status }.toSet()
-    val transaction = txn.transaction
-    assertNotNull(transaction.id)
     assertTrue(
-      validStatuses.contains(transaction.status),
-      "'${transaction.status}' is not a status defined by the SEP-31 GET-transaction schema"
+      transaction.has("status") && !transaction.get("status").isJsonNull,
+      "'status' is required"
     )
-    transaction.stellarAccountId?.let {
+    assertTrue(
+      validStatuses.contains(transaction.get("status").asString),
+      "'${transaction.get("status").asString}' is not a status defined by the SEP-31 GET-transaction schema"
+    )
+
+    assertTrue(
+      transaction.has("fee_details") && !transaction.get("fee_details").isJsonNull,
+      "'fee_details' is required"
+    )
+    val feeDetails = transaction.getAsJsonObject("fee_details")
+    assertTrue(
+      feeDetails.has("total") && feeDetails.get("total").asJsonPrimitive.isString,
+      "'fee_details.total' is required and must be a string"
+    )
+    assertTrue(
+      feeDetails.has("asset") && feeDetails.get("asset").asJsonPrimitive.isString,
+      "'fee_details.asset' is required and must be a string"
+    )
+    if (feeDetails.has("details") && !feeDetails.get("details").isJsonNull) {
+      assertTrue(feeDetails.get("details").isJsonArray, "'fee_details.details' must be an array")
+      feeDetails.getAsJsonArray("details").forEach { detail ->
+        val detailObj = detail.asJsonObject
+        assertTrue(
+          detailObj.has("name") && detailObj.get("name").asJsonPrimitive.isString,
+          "'fee_details.details[].name' is required and must be a string"
+        )
+        assertTrue(
+          detailObj.has("amount") && detailObj.get("amount").asJsonPrimitive.isString,
+          "'fee_details.details[].amount' is required and must be a string"
+        )
+      }
+    }
+
+    val optionalStringFields =
+      listOf(
+        "status_message",
+        "amount_in",
+        "amount_in_asset",
+        "amount_out",
+        "amount_out_asset",
+        "amount_fee",
+        "amount_fee_asset",
+        "quote_id",
+        "stellar_account_id",
+        "stellar_memo_type",
+        "stellar_memo",
+        "started_at",
+        "updated_at",
+        "completed_at",
+        "stellar_transaction_id",
+        "external_transaction_id",
+        "required_info_message",
+      )
+    for (field in optionalStringFields) {
+      if (transaction.has(field) && !transaction.get(field).isJsonNull) {
+        assertTrue(
+          transaction.get(field).asJsonPrimitive.isString,
+          "'$field' must be a string when present"
+        )
+      }
+    }
+    if (transaction.has("status_eta") && !transaction.get("status_eta").isJsonNull) {
+      assertTrue(
+        transaction.get("status_eta").asJsonPrimitive.isNumber,
+        "'status_eta' must be a number when present"
+      )
+    }
+    if (transaction.has("refunded") && !transaction.get("refunded").isJsonNull) {
+      assertTrue(
+        transaction.get("refunded").asJsonPrimitive.isBoolean,
+        "'refunded' must be a boolean when present"
+      )
+    }
+    if (transaction.has("refunds") && !transaction.get("refunds").isJsonNull) {
+      assertTrue(
+        transaction.get("refunds").isJsonObject,
+        "'refunds' must be an object when present"
+      )
+    }
+    if (
+      transaction.has("required_info_updates") &&
+        !transaction.get("required_info_updates").isJsonNull
+    ) {
+      assertTrue(
+        transaction.get("required_info_updates").isJsonObject,
+        "'required_info_updates' must be an object when present"
+      )
+    }
+
+    // Semantic checks a structural schema can't express.
+    txn.transaction.stellarAccountId?.let {
       try {
         KeyPair.fromAccountId(it)
       } catch (e: Exception) {
         fail<Unit>("'stellar_account_id' must be a valid Stellar public key", e)
       }
     }
-    transaction.stellarMemo?.let {
+    txn.transaction.stellarMemo?.let {
       try {
         // MemoHelper.makeMemo (not Memo.id's Long overload) supports the full uint64 range SEP-31
         // memo ids can carry, not just what fits in a signed 64-bit Long.
-        MemoHelper.makeMemo(it, transaction.stellarMemoType)
+        MemoHelper.makeMemo(it, txn.transaction.stellarMemoType)
       } catch (e: Exception) {
         fail<Unit>(
-          "invalid 'stellar_memo' for 'stellar_memo_type' (${transaction.stellarMemoType})",
+          "invalid 'stellar_memo' for 'stellar_memo_type' (${txn.transaction.stellarMemoType})",
           e
         )
       }
@@ -354,10 +465,11 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     val postTxResponse = sep31Client.postTransaction(txnRequest)
     assertNotNull(postTxResponse.id)
 
-    val fetchedTxn = sep31Client.getTransaction(postTxResponse.id)
+    val rawTxnJson = fetchRawTransaction(postTxResponse.id)
+    val fetchedTxn = gson.fromJson(rawTxnJson, Sep31GetTransactionResponse::class.java)
     assertEquals(postTxResponse.id, fetchedTxn.transaction.id)
     assertEquals(PENDING_RECEIVER.status, fetchedTxn.transaction.status)
-    assertCompliesWithProtocolSchema(fetchedTxn)
+    assertCompliesWithProtocolSchema(rawTxnJson, fetchedTxn)
   }
 
   @Test

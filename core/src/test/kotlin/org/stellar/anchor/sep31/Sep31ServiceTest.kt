@@ -1801,6 +1801,79 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test asset config silently drops a null field definition instead of crashing`() {
+    // A bare "receiver_account_number:" in YAML (or a literal JSON null) deserializes to a null
+    // map value, but DefaultAssetService's internal round-trip (raw Map -> gson.toJson ->
+    // JsonObject -> gson.toJson -> StellarAssetInfo) uses a default (non-serializeNulls) Gson,
+    // which drops null map entries when re-serializing -- confirmed by reproducing the exact
+    // pipeline standalone. So a null field entry never reaches AssetValidator or Sep31Service at
+    // all: it's silently absent from the loaded config rather than rejected at startup or causing
+    // an NPE. This is a pre-existing quirk of the shared parsing pipeline (affects any Map-valued
+    // asset config, not unique to `fields`); documenting the actual behavior here rather than
+    // fixing the broader pipeline, which is outside this field-validation work's scope.
+    val nullFieldDefinitionJson =
+      """
+      {
+        "items": [
+          {
+            "id": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+            "distribution_account": "GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I",
+            "significant_decimals": 2,
+            "sep31": {
+              "enabled": true,
+              "receive": {"min_amount": 1, "max_amount": 1000000, "methods": ["SEPA", "SWIFT"]},
+              "quotes_supported": false,
+              "quotes_required": false,
+              "fields": {
+                "transaction": {
+                  "receiver_account_number": null
+                }
+              }
+            }
+          }
+        ]
+      }
+      """
+        .trimIndent()
+
+    val nullFieldAssetService = DefaultAssetService.fromJsonContent(nullFieldDefinitionJson)
+    val fields = nullFieldAssetService.getAssets().first().sep31.fields
+    assertTrue(fields == null || fields.transaction.isEmpty())
+  }
+
+  @Test
+  fun `test asset config rejects a blank field description`() {
+    val blankFieldDescriptionJson =
+      """
+      {
+        "items": [
+          {
+            "id": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+            "distribution_account": "GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I",
+            "significant_decimals": 2,
+            "sep31": {
+              "enabled": true,
+              "receive": {"min_amount": 1, "max_amount": 1000000, "methods": ["SEPA", "SWIFT"]},
+              "quotes_supported": false,
+              "quotes_required": false,
+              "fields": {
+                "transaction": {
+                  "receiver_account_number": {"optional": false}
+                }
+              }
+            }
+          }
+        ]
+      }
+      """
+        .trimIndent()
+
+    assertThrows<InvalidConfigException> {
+      DefaultAssetService.fromJsonContent(blankFieldDescriptionJson)
+    }
+  }
+
+  @Test
   fun `test asset config rejects a blank sep12 description`() {
     val blankSep12DescriptionJson =
       """
