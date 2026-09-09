@@ -4,6 +4,7 @@ import static org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_C
 import static org.stellar.anchor.api.sep.SepTransactionStatus.ERROR;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.EXPIRED;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE;
+import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_USR_TRANSFER_START;
 import static org.stellar.anchor.event.EventService.EventQueue.TRANSACTION;
 import static org.stellar.anchor.sep31.Sep31Helper.allAmountAvailable;
@@ -457,6 +458,22 @@ public class TransactionService {
           if (!Objects.equals(sep31Txn.getRequiredInfoUpdates(), requiredInfoUpdates)) {
             sep31Txn.setRequiredInfoUpdates(requiredInfoUpdates);
             txnUpdated = true;
+          }
+        }
+        // A transition into pending_transaction_info_update with no fields to correct would leave
+        // the transaction unrecoverable through SEP-31 PATCH: a null required_info_updates is
+        // rejected as "not expecting any updates", while an empty one rejects every field the
+        // client tries to patch as unexpected. Require a non-empty effective field set -- from
+        // this patch, or already present on the transaction from an earlier partial update --
+        // whenever this status is applied.
+        if (PENDING_TRANSACTION_INFO_UPDATE.getStatus().equals(sep31Txn.getStatus())) {
+          Sep31Info.Fields effectiveRequiredInfoUpdates = sep31Txn.getRequiredInfoUpdates();
+          if (effectiveRequiredInfoUpdates == null
+              || effectiveRequiredInfoUpdates.getTransaction() == null
+              || effectiveRequiredInfoUpdates.getTransaction().isEmpty()) {
+            throw new BadRequestException(
+                "required_info_updates must not be empty when status is "
+                    + "pending_transaction_info_update");
           }
         }
         // update sender and receiver
