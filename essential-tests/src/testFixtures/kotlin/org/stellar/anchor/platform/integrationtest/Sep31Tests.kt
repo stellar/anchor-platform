@@ -236,6 +236,14 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
         fail<Unit>("'stellar_account_id' must be a valid Stellar public key", e)
       }
     }
+    // Validated independently of whether `stellar_memo` is present, so a response carrying an
+    // invalid `stellar_memo_type` with no memo doesn't slip past this check unnoticed.
+    txn.transaction.stellarMemoType?.let {
+      assertTrue(
+        it == "text" || it == "id" || it == "hash",
+        "'$it' is not a stellar_memo_type defined by the SEP-31 GET-transaction schema"
+      )
+    }
     txn.transaction.stellarMemo?.let {
       try {
         // MemoHelper.makeMemo (not Memo.id's Long overload) supports the full uint64 range SEP-31
