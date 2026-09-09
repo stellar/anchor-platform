@@ -79,11 +79,15 @@ items:
           - SWIFT
       quotes_supported: true
       quotes_required: false
+      # optional: true because Sep31Service#validateRequiredFields deliberately does not enforce
+      # individual field-level requirements -- the SEP-31 spec deprecates this `fields` mechanism
+      # in favor of SEP-12 customer fields, so advertising optional: false here would promise
+      # enforcement the server does not perform.
       fields:
         transaction:
           receiver_account_number:
             description: Bank account number of the receiver.
-            optional: false
+            optional: true
     sep38:
       enabled: true
       exchangeable_assets:

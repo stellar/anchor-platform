@@ -321,6 +321,31 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test update transaction amounts when no quote was used preserves fee precision higher than the requested asset's scale`() {
+    // `asset` (the requested/sell asset) has significant_decimals=2, but a fee denominated in a
+    // different, higher-precision asset (e.g. the buy asset, per RestRateIntegration) must be
+    // persisted exactly as received rather than rounded down to the requested asset's scale.
+    request.destinationAsset =
+      "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+    Context.get().transaction = txn
+    Context.get().request = request
+    fee.asset = "JPYC"
+    fee.details = listOf(FeeDescription("Sell fee", null, "1.2345"))
+    Context.get().fee = fee
+    Context.get().asset = asset
+    every { sep31Config.paymentType } returns STRICT_SEND
+
+    request.amount = "100"
+    fee.total = "1.2345"
+    sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
+
+    assertEquals(
+      FeeDetails("1.2345", "JPYC", listOf(FeeDescription("Sell fee", null, "1.2345"))),
+      txn.feeDetails
+    )
+  }
+
+  @Test
   fun `test quotes supported and required validation`() {
     val ex: AnchorException = assertThrows {
       DefaultAssetService.fromJsonResource("test_assets.json.quotes_required_but_not_supported")

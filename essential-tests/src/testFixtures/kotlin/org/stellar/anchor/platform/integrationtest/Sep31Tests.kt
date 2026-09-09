@@ -36,9 +36,10 @@ import org.stellar.anchor.platform.integrationtest.Sep12Tests.Companion.testCust
 import org.stellar.anchor.platform.printRequest
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.debug
+import org.stellar.anchor.util.MemoHelper
+import org.stellar.anchor.util.SepHelper
 import org.stellar.anchor.util.StringHelper.json
 import org.stellar.sdk.KeyPair
-import org.stellar.sdk.Memo
 
 lateinit var savedTxn: Sep31GetTransactionResponse
 
@@ -69,10 +70,12 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
       directPaymentServerUrl.endsWith("/"),
       "DIRECT_PAYMENT_SERVER must not end with a '/'"
     )
+    // Parse the URI rather than substring-matching it, so a value like "httpsx://example.com" or
+    // "http://evil.example/?localhost" isn't mistaken for a compliant/exempted URL.
+    val uri = java.net.URI(directPaymentServerUrl)
+    val isLocalException = uri.host == "localhost" || uri.host == "host.docker.internal"
     assertTrue(
-      directPaymentServerUrl.startsWith("https") ||
-        directPaymentServerUrl.contains("localhost") ||
-        directPaymentServerUrl.contains("host.docker.internal"),
+      uri.scheme == "https" || isLocalException,
       "DIRECT_PAYMENT_SERVER must use https (localhost/host.docker.internal exempted for local testing)"
     )
   }
@@ -100,17 +103,7 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
    * malformed value would have failed deserialization before this method is even reached.
    */
   private fun assertCompliesWithProtocolSchema(txn: Sep31GetTransactionResponse) {
-    val validStatuses =
-      setOf(
-        "pending_sender",
-        "pending_stellar",
-        "pending_customer_info_update",
-        "pending_transaction_info_update",
-        "pending_receiver",
-        "pending_external",
-        "completed",
-        "error",
-      )
+    val validStatuses = SepHelper.sep31Statuses.map { it.status }.toSet()
     val transaction = txn.transaction
     assertNotNull(transaction.id)
     assertTrue(
@@ -126,15 +119,9 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     }
     transaction.stellarMemo?.let {
       try {
-        when (transaction.stellarMemoType) {
-          "text" -> Memo.text(it)
-          "id" -> Memo.id(it.toLong())
-          "hash" -> Memo.hash(java.util.Base64.getDecoder().decode(it))
-          else ->
-            throw IllegalArgumentException(
-              "unrecognized stellar_memo_type: ${transaction.stellarMemoType}"
-            )
-        }
+        // MemoHelper.makeMemo (not Memo.id's Long overload) supports the full uint64 range SEP-31
+        // memo ids can carry, not just what fits in a signed 64-bit Long.
+        MemoHelper.makeMemo(it, transaction.stellarMemoType)
       } catch (e: Exception) {
         fail<Unit>(
           "invalid 'stellar_memo' for 'stellar_memo_type' (${transaction.stellarMemoType})",
@@ -459,7 +446,7 @@ private const val expectedSep31Info =
           "transaction": {
             "receiver_account_number": {
               "description": "Bank account number of the receiver.",
-              "optional": false
+              "optional": true
             }
           }
         }
