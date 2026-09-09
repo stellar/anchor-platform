@@ -350,6 +350,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
     sep31Txn.setToAccount(txn.getDestinationAccount());
     sep31Txn.setClientDomain(txn.getClientDomain());
     sep31Txn.setQuoteId(txn.getQuoteId());
+    sep31Txn.setFields(txn.getFields());
 
     // GetTransactionResponse.requiredInfoUpdates is a flat field-name list (shared with SEP-6),
     // so it's expanded back into the Sep31Info.Fields shape a SEP-31 client callback body expects

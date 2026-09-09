@@ -568,6 +568,7 @@ class ClientStatusCallbackHandlerTest {
         .quoteId("quote-id")
         .message("message")
         .requiredInfoUpdates(listOf("receiver_bank_account"))
+        .fields(mapOf("receiver_bank_account" to "12345"))
         .build()
 
     // Act
@@ -596,5 +597,6 @@ class ClientStatusCallbackHandlerTest {
       "Receiver bank account",
       sep31Txn.requiredInfoUpdates.transaction["receiver_bank_account"]!!.description,
     )
+    assertEquals(mapOf("receiver_bank_account" to "12345"), sep31Txn.fields)
   }
 }

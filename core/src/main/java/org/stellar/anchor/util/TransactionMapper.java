@@ -64,6 +64,7 @@ public class TransactionMapper {
         .transferReceivedAt(txn.getTransferReceivedAt())
         .message(txn.getRequiredInfoMessage()) // Assuming these are meant to be the same.
         .requiredInfoUpdates(requiredInfoUpdates)
+        .fields(txn.getFields())
         .refunds(refunds)
         .stellarTransactions(txn.getStellarTransactions())
         .sourceAccount(txn.getFromAccount())
