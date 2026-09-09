@@ -452,7 +452,7 @@ class Sep31ServiceTest {
   }
 
   @Test
-  fun `test PATCH transaction leaves status alone when fields are still missing`() {
+  fun `test PATCH transaction rejects a partial patch missing a required field as a 400`() {
     val token = TestHelper.createWebAuthJwt()
     txn.status = "pending_transaction_info_update"
     txn.requiredInfoUpdates.transaction =
@@ -462,71 +462,32 @@ class Sep31ServiceTest {
       )
     every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
 
-    // Only one of the two required fields is patched.
-    sep31Service.patchTransaction(token, patchRequest)
-
-    assertEquals("SEPA", txn.fields["type"])
+    // Per SEP-31, a 200 is only defined when every required field is patched in one request --
+    // this request only supplies "type", leaving "receiver_bank_account" unaddressed.
+    val ex =
+      assertThrows<BadRequestException> { sep31Service.patchTransaction(token, patchRequest) }
+    assertEquals("[receiver_bank_account] is required", ex.message)
     assertEquals("pending_transaction_info_update", txn.status)
-    // The satisfied field is narrowed out of required_info_updates, leaving only the outstanding
-    // one -- a later, separate PATCH supplying just that field must still be able to complete.
-    assertEquals(setOf("receiver_bank_account"), txn.requiredInfoUpdates.transaction.keys)
-    // No status change yet, so no event should be published.
+    verify(exactly = 0) { txnStore.save(any()) }
     verify(exactly = 0) { eventSession.publish(any()) }
   }
 
   @Test
-  fun `test PATCH transaction completes across two separate cumulative patches`() {
+  fun `test PATCH transaction completes regardless of an unpatched field's stale prior value`() {
     val token = TestHelper.createWebAuthJwt()
     txn.status = "pending_transaction_info_update"
-    txn.requiredInfoUpdates.transaction =
-      mapOf(
-        "type" to Field("type of deposit to make", listOf("SEPA", "SWIFT"), false),
-        "receiver_bank_account" to Field("bank account", null, false),
-      )
     every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
     every { txnStore.save(any()) } answers { firstArg() }
 
-    // First PATCH supplies only "type".
-    sep31Service.patchTransaction(token, patchRequest)
-    assertEquals("pending_transaction_info_update", txn.status)
+    // patchRequest already supplies every field named in txn's fixture required_info_updates
+    // ("type"); completion must be judged by presence of the field as a request key, not by
+    // whether txn.fields already happens to hold some other (possibly stale) value for it.
+    txn.fields["type"] = "stale-invalid-value"
 
-    // Second, separate PATCH supplies only the remaining "receiver_bank_account" -- this must
-    // still be judged against what's left outstanding, not the original full required set.
-    val secondPatch =
-      Sep31PatchTransactionRequest.builder()
-        .id(patchRequest.id)
-        .fields(Sep31TxnFields(hashMapOf("receiver_bank_account" to "12345")))
-        .build()
-    sep31Service.patchTransaction(token, secondPatch)
-
-    assertEquals("12345", txn.fields["receiver_bank_account"])
-    assertEquals("pending_receiver", txn.status)
-    assertEquals(null, txn.requiredInfoUpdates)
-  }
-
-  @Test
-  fun `test PATCH transaction leaves status alone when an unpatched field already has a stale value`() {
-    val token = TestHelper.createWebAuthJwt()
-    txn.status = "pending_transaction_info_update"
-    txn.requiredInfoUpdates.transaction =
-      mapOf(
-        "type" to Field("type of deposit to make", listOf("SEPA", "SWIFT"), false),
-        "receiver_bank_account" to Field("bank account", null, false),
-      )
-    // "receiver_bank_account" already has a value -- often exactly why the receiving anchor
-    // flagged it as invalid and requested a correction in the first place. Completion must be
-    // judged by what this PATCH actually supplied, not by whether txn.fields happens to be
-    // non-empty already.
-    txn.fields["receiver_bank_account"] = "stale-invalid-value"
-    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
-
-    // Only "type" is patched; "receiver_bank_account" is left untouched.
     sep31Service.patchTransaction(token, patchRequest)
 
     assertEquals("SEPA", txn.fields["type"])
-    assertEquals("stale-invalid-value", txn.fields["receiver_bank_account"])
-    assertEquals("pending_transaction_info_update", txn.status)
-    assertEquals(true, txn.requiredInfoUpdates != null)
+    assertEquals("pending_receiver", txn.status)
   }
 
   @Test
