@@ -78,10 +78,14 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
       !uri.host.isNullOrBlank(),
       "DIRECT_PAYMENT_SERVER must be an absolute URI with a non-blank host"
     )
+    // URI schemes and hosts are case-insensitive (RFC 3986), so "HTTPS://" or "http://LOCALHOST"
+    // are equally valid -- compare case-insensitively rather than rejecting them.
+    val scheme = uri.scheme?.lowercase()
+    val host = uri.host?.lowercase()
     val isLocalHttpException =
-      uri.scheme == "http" && (uri.host == "localhost" || uri.host == "host.docker.internal")
+      scheme == "http" && (host == "localhost" || host == "host.docker.internal")
     assertTrue(
-      uri.scheme == "https" || isLocalHttpException,
+      scheme == "https" || isLocalHttpException,
       "DIRECT_PAYMENT_SERVER must use https (http exempted only for localhost/host.docker.internal, for local testing)"
     )
   }
@@ -474,6 +478,17 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     assertEquals(postTxResponse.id, fetchedTxn.transaction.id)
     assertEquals(PENDING_RECEIVER.status, fetchedTxn.transaction.status)
     assertCompliesWithProtocolSchema(rawTxnJson, fetchedTxn)
+
+    // Beyond id/status, verify the transaction actually reflects the quote used to create it --
+    // rather than merely accepting quote_id while computing amounts independently.
+    val transaction = fetchedTxn.transaction
+    assertEquals(quote.id, transaction.quoteId)
+    assertEquals(quote.sellAmount, transaction.amountIn)
+    assertEquals(quote.sellAsset, transaction.amountInAsset)
+    assertEquals(quote.buyAmount, transaction.amountOut)
+    assertEquals(quote.buyAsset, transaction.amountOutAsset)
+    assertEquals(quote.fee.total, transaction.feeDetails.total)
+    assertEquals(quote.fee.asset, transaction.feeDetails.asset)
   }
 
   @Test
