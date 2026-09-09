@@ -83,19 +83,30 @@ public class PaymentObservingAccountsManager {
    */
   public void upsert(ObservingAccount observingAccount) {
     if (observingAccount != null) {
-      ObservingAccount existingAccount = allAccounts.get(observingAccount.account);
+      String canonicalAccount = canonicalize(observingAccount.account);
+      ObservingAccount existingAccount = allAccounts.get(canonicalAccount);
       if (existingAccount == null) {
-        allAccounts.put(observingAccount.account, observingAccount);
+        ObservingAccount toStore =
+            new ObservingAccount(
+                canonicalAccount, observingAccount.lastObserved, observingAccount.type);
+        allAccounts.put(canonicalAccount, toStore);
         // update the database
-        store.upsert(observingAccount.account, observingAccount.lastObserved);
+        store.upsert(canonicalAccount, observingAccount.lastObserved);
       } else {
-        existingAccount.account = observingAccount.account;
+        existingAccount.account = canonicalAccount;
         existingAccount.lastObserved = observingAccount.lastObserved;
         if (existingAccount.type == AccountType.TRANSIENT) {
           existingAccount.type = observingAccount.type;
         }
       }
     }
+  }
+
+  private static String canonicalize(String account) {
+    if (account != null && account.startsWith("M")) {
+      return new MuxedAccount(account).getAccountId();
+    }
+    return account;
   }
 
   /**
@@ -119,12 +130,7 @@ public class PaymentObservingAccountsManager {
       return false;
     }
 
-    // MuxedAccount handles both muxed and non-muxed accounts
-    if (account.startsWith("M")) {
-      // If the account is a muxed account, we need to extract the G-account ID
-      MuxedAccount muxedAccount = new MuxedAccount(account);
-      account = muxedAccount.getAccountId();
-    }
+    account = canonicalize(account);
 
     ObservingAccount acct = allAccounts.get(account);
     if (acct == null) return false;

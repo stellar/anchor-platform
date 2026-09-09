@@ -21,8 +21,8 @@ class PaymentObservingAccountsManagerTest {
   private val testAcct2 = KeyPair.random().accountId
   private val testAcct3 = KeyPair.random().accountId
   private val testAcct4 = KeyPair.random().accountId
-  private val testMuxAcct100 = MuxedAccount(testAcct4, BigInteger("100")).accountId
-  private val testMuxAcct200 = MuxedAccount(testAcct4, BigInteger("100")).accountId
+  private val testMuxAcct100 = MuxedAccount(testAcct4, BigInteger("100")).address
+  private val testMuxAcct200 = MuxedAccount(testAcct4, BigInteger("200")).address
 
   @Test
   fun `test add and lookup`() {
@@ -122,6 +122,19 @@ class PaymentObservingAccountsManagerTest {
     obs.initialize()
 
     obs.upsert(testAcct4, TRANSIENT)
+    assertTrue(obs.lookupAndUpdate(testMuxAcct100))
+    assertTrue(obs.lookupAndUpdate(testMuxAcct200))
+  }
+
+  @Test
+  fun `test registering by muxed account is found by the base account`() {
+    val obs = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    obs.initialize()
+
+    obs.upsert(testMuxAcct100, TRANSIENT)
+    assertEquals(1, obs.accounts.size)
+
+    assertTrue(obs.lookupAndUpdate(testAcct4))
     assertTrue(obs.lookupAndUpdate(testMuxAcct100))
     assertTrue(obs.lookupAndUpdate(testMuxAcct200))
   }
