@@ -23,6 +23,7 @@ import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.callback.CustomerIntegration
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.callback.GetCustomerResponse
+import org.stellar.anchor.api.callback.GetRateRequest
 import org.stellar.anchor.api.callback.GetRateResponse
 import org.stellar.anchor.api.callback.RateIntegration
 import org.stellar.anchor.api.exception.*
@@ -278,55 +279,33 @@ class Sep31ServiceTest {
   }
 
   @Test
-  fun `test update transaction amounts when no quote was used`() {
+  fun `test update transaction amounts when no quote was used trusts the rate response's sell_amount and buy_amount`() {
+    // amount_in/amount_out now come directly from the /rate response's own sell_amount/buy_amount
+    // (as validated by RestRateIntegration) rather than being recomputed locally from
+    // request.getAmount() and the fee -- mirroring how the quote-based path trusts the quote's
+    // sell_amount/buy_amount. paymentType no longer affects this method at all; it only affects
+    // which of sell_amount/buy_amount updateFee() fixes to request.getAmount() when querying
+    // /rate.
     request.destinationAsset =
       "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
     Context.get().transaction = txn
     Context.get().request = request
     Context.get().fee = fee
+    Context.get().rate =
+      GetRateResponse.Rate.builder().sellAmount("100").buyAmount("98").fee(fee).build()
     Context.get().asset = asset
-    every { sep31Config.paymentType } returns STRICT_SEND
 
     request.amount = "100"
-    fee.total = "2"
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
-    assertEquals(txn.amountIn, "100")
-    assertEquals(txn.amountOut, "98")
-
-    every { sep31Config.paymentType } returns STRICT_RECEIVE
-    sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
-    assertEquals("102", txn.amountIn)
-    assertEquals("100", txn.amountOut)
+    assertEquals("100", txn.amountIn)
+    assertEquals("98", txn.amountOut)
   }
 
   @Test
-  fun `test update transaction amounts when no quote was used carries the fee breakdown`() {
-    request.destinationAsset =
-      "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
-    Context.get().transaction = txn
-    Context.get().request = request
-    fee.details = listOf(FeeDescription("Sell fee", null, "2"))
-    Context.get().fee = fee
-    Context.get().asset = asset
-    every { sep31Config.paymentType } returns STRICT_SEND
-
-    request.amount = "100"
-    fee.total = "2"
-    sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
-
-    assertEquals(
-      FeeDetails("2", asset.id, listOf(FeeDescription("Sell fee", null, "2"))),
-      txn.feeDetails
-    )
-  }
-
-  @Test
-  fun `test update transaction amounts when no quote was used allows a cross-asset fee for a cross-currency STRICT_SEND transaction`() {
-    // STRICT_SEND only combines the fee into amount_out, and amount_out is only ever persisted
-    // when isSimpleQuote (destination_asset matches the requested asset) -- with a genuinely
-    // different destination_asset, the fee combination is computed but discarded, so a
-    // higher-precision, different-asset fee (as RestRateIntegration permits for a buy-asset fee)
-    // is harmless here and must be let through, not rejected.
+  fun `test update transaction amounts when no quote was used carries the fee breakdown exactly as received, even across assets`() {
+    // The persisted fee is never reformatted/rescaled -- unaffected by which asset it's
+    // denominated in, since amount_in/amount_out come from the /rate response's own amounts, not
+    // from combining the fee with request.getAmount() locally.
     request.destinationAsset =
       "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     Context.get().transaction = txn
@@ -335,15 +314,15 @@ class Sep31ServiceTest {
     fee.total = "1.2345"
     fee.details = listOf(FeeDescription("Sell fee", null, "1.2345"))
     Context.get().fee = fee
+    Context.get().rate =
+      GetRateResponse.Rate.builder().sellAmount("100").buyAmount("12345.6789").fee(fee).build()
     Context.get().asset = asset
-    every { sep31Config.paymentType } returns STRICT_SEND
-    txn.amountOut = null // the fixture pre-populates this; clear it to prove it's left untouched.
 
     request.amount = "100"
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
 
     assertEquals("100", txn.amountIn)
-    assertNull(txn.amountOut)
+    assertEquals("12345.6789", txn.amountOut)
     assertEquals(
       FeeDetails(
         "1.2345",
@@ -355,60 +334,45 @@ class Sep31ServiceTest {
   }
 
   @Test
-  fun `test update transaction amounts when no quote was used rejects a cross-asset fee for a same-currency transaction`() {
-    // Unlike the cross-currency case above, destination_asset here matches the requested asset
-    // (isSimpleQuote), so STRICT_SEND's amount_out *is* persisted and combines the fee with
-    // amount_in -- only valid when both are in the same asset. Reject rather than silently mixing
-    // units (e.g. subtracting a JPYC fee from a USDC amount).
-    request.destinationAsset = asset.id
-    Context.get().transaction = txn
+  fun `test updateFee fixes sell_amount to request amount for STRICT_SEND`() {
+    Context.reset()
     Context.get().request = request
-    fee.asset = "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-    fee.total = "2"
-    Context.get().fee = fee
+    Context.get().webAuthJwt = TestHelper.createWebAuthJwt()
     Context.get().asset = asset
     every { sep31Config.paymentType } returns STRICT_SEND
+    val rateRequestSlot = slot<GetRateRequest>()
+    every { rateIntegration.getRate(capture(rateRequestSlot)) } returns
+      GetRateResponse(GetRateResponse.Rate.builder().fee(fee).build())
 
     request.amount = "100"
-    assertThrows<ServerErrorException> { sep31Service.updateTxAmountsWhenNoQuoteWasUsed() }
+    request.destinationAsset = null
+    sep31Service.updateFee()
+
+    assertEquals("100", rateRequestSlot.captured.sellAmount)
+    assertNull(rateRequestSlot.captured.buyAmount)
   }
 
   @Test
-  fun `test update transaction amounts when no quote was used rejects a cross-asset fee for STRICT_RECEIVE`() {
-    // STRICT_RECEIVE always combines the fee into amount_in, which is persisted unconditionally
-    // -- regardless of destination_asset -- so a mismatched fee asset must always be rejected
-    // here, not just in the same-currency case.
-    request.destinationAsset =
-      "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-    Context.get().transaction = txn
+  fun `test updateFee fixes buy_amount to request amount for STRICT_RECEIVE`() {
+    // request.getAmount() means "what the receiver should net" for STRICT_RECEIVE (see
+    // Sep31Config.PaymentType) -- that's the /rate response's buy_amount, not its sell_amount, so
+    // the /rate request must fix buy_amount, not sell_amount, to it. RestRateIntegration validates
+    // buy_amount symmetrically to sell_amount, so this is an equally supported request shape.
+    Context.reset()
     Context.get().request = request
-    fee.asset = "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-    fee.total = "2"
-    Context.get().fee = fee
+    Context.get().webAuthJwt = TestHelper.createWebAuthJwt()
     Context.get().asset = asset
     every { sep31Config.paymentType } returns STRICT_RECEIVE
+    val rateRequestSlot = slot<GetRateRequest>()
+    every { rateIntegration.getRate(capture(rateRequestSlot)) } returns
+      GetRateResponse(GetRateResponse.Rate.builder().fee(fee).build())
 
     request.amount = "100"
-    assertThrows<ServerErrorException> { sep31Service.updateTxAmountsWhenNoQuoteWasUsed() }
-  }
+    request.destinationAsset = null
+    sep31Service.updateFee()
 
-  @Test
-  fun `test update transaction amounts when no quote was used rejects an over-precision fee when combined with the requested amount`() {
-    // `asset` (the requested asset) has significant_decimals=2. When the fee is actually combined
-    // with the requested amount (same-currency STRICT_SEND here), a fee with more decimal
-    // precision than the requested asset supports can't be combined losslessly -- reject rather
-    // than silently truncating it, which would desync amount_in/amount_out from fee_details.total.
-    request.destinationAsset = asset.id
-    Context.get().transaction = txn
-    Context.get().request = request
-    fee.asset = asset.id
-    fee.total = "1.2345"
-    Context.get().fee = fee
-    Context.get().asset = asset
-    every { sep31Config.paymentType } returns STRICT_SEND
-
-    request.amount = "100"
-    assertThrows<ServerErrorException> { sep31Service.updateTxAmountsWhenNoQuoteWasUsed() }
+    assertEquals("100", rateRequestSlot.captured.buyAmount)
+    assertNull(rateRequestSlot.captured.sellAmount)
   }
 
   @Test
