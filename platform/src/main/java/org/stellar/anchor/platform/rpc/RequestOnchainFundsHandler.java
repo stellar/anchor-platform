@@ -346,12 +346,30 @@ public class RequestOnchainFundsHandler
         }
 
         Log.infoF("Memo set to {} {}", txn31.getStellarMemoType(), txn31.getStellarMemo());
-
-        paymentObservingAccountsManager.upsert(
-            txn31.getToAccount(), PaymentObservingAccountsManager.AccountType.TRANSIENT);
         break;
       default:
         break;
     }
+  }
+
+  @Override
+  protected void afterTransactionSaved(JdbcSepTransaction txn, RequestOnchainFundsRequest request)
+      throws AnchorException {
+    String toAccount;
+    switch (Sep.from(txn.getProtocol())) {
+      case SEP_6:
+        toAccount = ((JdbcSep6Transaction) txn).getToAccount();
+        break;
+      case SEP_24:
+        toAccount = ((JdbcSep24Transaction) txn).getToAccount();
+        break;
+      case SEP_31:
+        toAccount = ((JdbcSep31Transaction) txn).getToAccount();
+        break;
+      default:
+        return;
+    }
+    paymentObservingAccountsManager.upsert(
+        toAccount, PaymentObservingAccountsManager.AccountType.TRANSIENT);
   }
 }
