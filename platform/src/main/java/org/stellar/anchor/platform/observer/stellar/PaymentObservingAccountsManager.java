@@ -90,15 +90,18 @@ public class PaymentObservingAccountsManager {
             new ObservingAccount(
                 canonicalAccount, observingAccount.lastObserved, observingAccount.type);
         allAccounts.put(canonicalAccount, toStore);
-        persistUpsert(canonicalAccount, observingAccount.lastObserved);
       } else {
         existingAccount.account = canonicalAccount;
-        existingAccount.lastObserved = observingAccount.lastObserved;
+        if (observingAccount.lastObserved.isAfter(existingAccount.lastObserved)) {
+          existingAccount.lastObserved = observingAccount.lastObserved;
+        }
         if (existingAccount.type == AccountType.TRANSIENT) {
           existingAccount.type = observingAccount.type;
         }
       }
-      if (!canonicalAccount.equals(observingAccount.account)) {
+      ObservingAccount current = allAccounts.get(canonicalAccount);
+      boolean persisted = persistUpsert(current.account, current.lastObserved);
+      if (persisted && !canonicalAccount.equals(observingAccount.account)) {
         persistDelete(observingAccount.account);
       }
     }
@@ -120,11 +123,13 @@ public class PaymentObservingAccountsManager {
     }
   }
 
-  private void persistUpsert(String account, Instant lastObserved) {
+  private boolean persistUpsert(String account, Instant lastObserved) {
     try {
       store.upsert(account, lastObserved);
+      return true;
     } catch (RuntimeException ex) {
       Log.errorEx(String.format("Failed to persist observing account %s", account), ex);
+      return false;
     }
   }
 

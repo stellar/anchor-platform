@@ -166,6 +166,37 @@ class PaymentObservingAccountsManagerTest {
     assertDoesNotThrow { obs.evict(Duration.ZERO) }
     assertEquals(0, obs.accounts.size)
   }
+
+  @Test
+  fun `test legacy muxed row is not deleted when the canonical write fails`() {
+    val store = FlakyPaymentObservingAccountStore()
+    store.upsert(testMuxAcct100, Instant.now())
+    assertEquals(1, store.list().size)
+
+    store.failNextUpsert = true
+    val obs = PaymentObservingAccountsManager(store)
+    obs.initialize()
+
+    val persisted = store.list()
+    assertEquals(1, persisted.size)
+    assertEquals(testMuxAcct100, persisted[0].account)
+    assertTrue(obs.lookupAndUpdate(testAcct4))
+  }
+
+  @Test
+  fun `test a stale duplicate does not clobber a newer lastObserved timestamp`() {
+    val obs = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    obs.initialize()
+
+    val newer = Instant.now()
+    val older = newer.minusSeconds(60)
+
+    obs.upsert(PaymentObservingAccountsManager.ObservingAccount(testAcct4, newer, TRANSIENT))
+    obs.upsert(PaymentObservingAccountsManager.ObservingAccount(testMuxAcct100, older, TRANSIENT))
+
+    assertEquals(1, obs.accounts.size)
+    assertEquals(newer, obs.accounts[0].lastObserved)
+  }
 }
 
 class MemoryPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
@@ -192,5 +223,25 @@ class ThrowingPaymentObservingAccountStore : PaymentObservingAccountStore(null) 
 
   override fun delete(account: String) {
     throw RuntimeException("store unavailable")
+  }
+}
+
+class FlakyPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
+  private val accounts = mutableListOf<PaymentObservingAccount>()
+  var failNextUpsert = false
+
+  public override fun list(): List<PaymentObservingAccount> = accounts
+
+  public override fun upsert(account: String?, lastObserved: Instant?) {
+    if (failNextUpsert) {
+      failNextUpsert = false
+      throw RuntimeException("store unavailable")
+    }
+    accounts.removeIf { it.account == account }
+    accounts.add(PaymentObservingAccount(account, lastObserved))
+  }
+
+  public override fun delete(account: String) {
+    accounts.removeIf { it.account == account }
   }
 }
