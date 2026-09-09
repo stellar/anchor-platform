@@ -81,7 +81,7 @@ class Sep31ServiceTest {
       """
         {
           "total": "2",
-          "asset": "USDC"
+          "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
         }
     """
 
@@ -315,21 +315,22 @@ class Sep31ServiceTest {
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
 
     assertEquals(
-      FeeDetails("2", "USDC", listOf(FeeDescription("Sell fee", null, "2"))),
+      FeeDetails("2", asset.id, listOf(FeeDescription("Sell fee", null, "2"))),
       txn.feeDetails
     )
   }
 
   @Test
   fun `test update transaction amounts when no quote was used preserves fee precision higher than the requested asset's scale`() {
-    // `asset` (the requested/sell asset) has significant_decimals=2, but a fee denominated in a
-    // different, higher-precision asset (e.g. the buy asset, per RestRateIntegration) must be
-    // persisted exactly as received rather than rounded down to the requested asset's scale.
+    // `asset` (the requested asset, id "stellar:USDC:GBBD...") has significant_decimals=2, but a
+    // fee callback response can still return a more-precise total for that same asset than its
+    // configured scale suggests -- it must be persisted exactly as received rather than rounded
+    // down to the requested asset's scale.
     request.destinationAsset =
       "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
     Context.get().transaction = txn
     Context.get().request = request
-    fee.asset = "JPYC"
+    fee.asset = asset.id
     fee.details = listOf(FeeDescription("Sell fee", null, "1.2345"))
     Context.get().fee = fee
     Context.get().asset = asset
@@ -340,9 +341,29 @@ class Sep31ServiceTest {
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
 
     assertEquals(
-      FeeDetails("1.2345", "JPYC", listOf(FeeDescription("Sell fee", null, "1.2345"))),
+      FeeDetails("1.2345", asset.id, listOf(FeeDescription("Sell fee", null, "1.2345"))),
       txn.feeDetails
     )
+  }
+
+  @Test
+  fun `test update transaction amounts when no quote was used rejects a fee denominated in a different asset`() {
+    // RestRateIntegration permits the /rate callback to denominate the fee in the buy asset, but
+    // this method's amount_in/amount_out arithmetic combines the fee's numeric value directly
+    // with the requested amount -- only valid when both are in the same asset. Reject outright
+    // rather than silently mixing units (e.g. subtracting a JPYC fee from a USDC amount).
+    request.destinationAsset =
+      "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    Context.get().transaction = txn
+    Context.get().request = request
+    fee.asset = "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    fee.total = "2"
+    Context.get().fee = fee
+    Context.get().asset = asset
+    every { sep31Config.paymentType } returns STRICT_SEND
+
+    request.amount = "100"
+    assertThrows<ServerErrorException> { sep31Service.updateTxAmountsWhenNoQuoteWasUsed() }
   }
 
   @Test
@@ -789,7 +810,13 @@ class Sep31ServiceTest {
         customerIntegration,
       )
     every { rateIntegration.getRate(any()) } returns
-      GetRateResponse(GetRateResponse.Rate.builder().fee(FeeDetails("2", "stellar:USDC")).build())
+      GetRateResponse(
+        GetRateResponse.Rate.builder()
+          .fee(
+            FeeDetails("2", "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+          )
+          .build()
+      )
   }
 
   private val noSep12AssetJson =
@@ -828,7 +855,13 @@ class Sep31ServiceTest {
         customerIntegration,
       )
     every { rateIntegration.getRate(any()) } returns
-      GetRateResponse(GetRateResponse.Rate.builder().fee(FeeDetails("2", "stellar:USDC")).build())
+      GetRateResponse(
+        GetRateResponse.Rate.builder()
+          .fee(
+            FeeDetails("2", "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+          )
+          .build()
+      )
   }
 
   private fun ownershipTestRequest(senderId: String? = null, receiverId: String? = null) =
@@ -1138,7 +1171,13 @@ class Sep31ServiceTest {
     every { rateIntegration.getRate(any()) } returns
       GetRateResponse(
         GetRateResponse.Rate.builder()
-          .fee(FeeDetails("2", "stellar:USDC", listOf(FeeDescription("Sell fee", null, "2"))))
+          .fee(
+            FeeDetails(
+              "2",
+              "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+              listOf(FeeDescription("Sell fee", null, "2"))
+            )
+          )
           .build()
       )
     val postTxRequest = ownershipTestRequest()
@@ -1640,7 +1679,13 @@ class Sep31ServiceTest {
 
     // Provide fee response.
     every { rateIntegration.getRate(any()) } returns
-      GetRateResponse(GetRateResponse.Rate.builder().fee(FeeDetails("2", "stellar:USDC")).build())
+      GetRateResponse(
+        GetRateResponse.Rate.builder()
+          .fee(
+            FeeDetails("2", "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+          )
+          .build()
+      )
 
     // Make sure we can get the sender and receiver customers
     val mockCustomer = GetCustomerResponse()

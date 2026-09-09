@@ -124,6 +124,10 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     val transaction = root.getAsJsonObject("transaction")
 
     assertTrue(transaction.has("id") && !transaction.get("id").isJsonNull, "'id' is required")
+    assertTrue(
+      transaction.get("id").asJsonPrimitive.isString,
+      "'id' must be a string, not a coerced numeric/boolean value"
+    )
     assertFalse(transaction.get("id").asString.isBlank(), "'id' must not be blank")
 
     val validStatuses = SepHelper.sep31Statuses.map { it.status }.toSet()

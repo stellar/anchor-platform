@@ -449,13 +449,29 @@ public class Sep31Service {
   /**
    * updateTxAmountsWhenNoQuoteWasUsed will update the transaction amountIn and amountOut based on
    * the request amount and the fee.
+   *
+   * @throws ServerErrorException if the /rate response's fee is denominated in an asset other than
+   *     the requested asset -- RestRateIntegration permits this (the fee can be in the buy asset),
+   *     but this method's amount_in/amount_out arithmetic combines the fee's numeric value directly
+   *     with the requested amount, which is only valid when both are in the same asset. Properly
+   *     supporting a buy-asset fee here requires using the /rate response's own
+   *     sell_amount/buy_amount (as the quote-based path already does with the quote's), which in
+   *     turn depends on how the /rate request itself represents STRICT_SEND vs STRICT_RECEIVE -- a
+   *     larger, separate change. Rejecting outright avoids silently corrupting amounts.
    */
-  void updateTxAmountsWhenNoQuoteWasUsed() {
+  void updateTxAmountsWhenNoQuoteWasUsed() throws ServerErrorException {
     Sep31PostTransactionRequest request = Context.get().getRequest();
     Sep31Transaction txn = Context.get().getTransaction();
     FeeDetails feeResponse = Context.get().getFee();
 
     AssetInfo reqAsset = Context.get().getAsset();
+    if (!reqAsset.getId().equals(feeResponse.getAsset())) {
+      throw new ServerErrorException(
+          String.format(
+              "the /rate response's fee is denominated in %s, but no-quote payment amounts "
+                  + "require it to be denominated in the requested asset (%s)",
+              feeResponse.getAsset(), reqAsset.getId()));
+    }
     int scale = reqAsset.getSignificantDecimals();
     BigDecimal reqAmount = decimal(request.getAmount(), scale);
     BigDecimal fee = decimal(feeResponse.getTotal(), scale);
