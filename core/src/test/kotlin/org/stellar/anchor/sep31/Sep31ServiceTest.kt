@@ -321,43 +321,88 @@ class Sep31ServiceTest {
   }
 
   @Test
-  fun `test update transaction amounts when no quote was used preserves fee precision higher than the requested asset's scale`() {
-    // `asset` (the requested asset, id "stellar:USDC:GBBD...") has significant_decimals=2, but a
-    // fee callback response can still return a more-precise total for that same asset than its
-    // configured scale suggests -- it must be persisted exactly as received rather than rounded
-    // down to the requested asset's scale.
+  fun `test update transaction amounts when no quote was used allows a cross-asset fee for a cross-currency STRICT_SEND transaction`() {
+    // STRICT_SEND only combines the fee into amount_out, and amount_out is only ever persisted
+    // when isSimpleQuote (destination_asset matches the requested asset) -- with a genuinely
+    // different destination_asset, the fee combination is computed but discarded, so a
+    // higher-precision, different-asset fee (as RestRateIntegration permits for a buy-asset fee)
+    // is harmless here and must be let through, not rejected.
     request.destinationAsset =
-      "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+      "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     Context.get().transaction = txn
     Context.get().request = request
-    fee.asset = asset.id
+    fee.asset = "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    fee.total = "1.2345"
     fee.details = listOf(FeeDescription("Sell fee", null, "1.2345"))
     Context.get().fee = fee
     Context.get().asset = asset
     every { sep31Config.paymentType } returns STRICT_SEND
+    txn.amountOut = null // the fixture pre-populates this; clear it to prove it's left untouched.
 
     request.amount = "100"
-    fee.total = "1.2345"
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
 
+    assertEquals("100", txn.amountIn)
+    assertNull(txn.amountOut)
     assertEquals(
-      FeeDetails("1.2345", asset.id, listOf(FeeDescription("Sell fee", null, "1.2345"))),
+      FeeDetails(
+        "1.2345",
+        "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        listOf(FeeDescription("Sell fee", null, "1.2345"))
+      ),
       txn.feeDetails
     )
   }
 
   @Test
-  fun `test update transaction amounts when no quote was used rejects a fee denominated in a different asset`() {
-    // RestRateIntegration permits the /rate callback to denominate the fee in the buy asset, but
-    // this method's amount_in/amount_out arithmetic combines the fee's numeric value directly
-    // with the requested amount -- only valid when both are in the same asset. Reject outright
-    // rather than silently mixing units (e.g. subtracting a JPYC fee from a USDC amount).
+  fun `test update transaction amounts when no quote was used rejects a cross-asset fee for a same-currency transaction`() {
+    // Unlike the cross-currency case above, destination_asset here matches the requested asset
+    // (isSimpleQuote), so STRICT_SEND's amount_out *is* persisted and combines the fee with
+    // amount_in -- only valid when both are in the same asset. Reject rather than silently mixing
+    // units (e.g. subtracting a JPYC fee from a USDC amount).
+    request.destinationAsset = asset.id
+    Context.get().transaction = txn
+    Context.get().request = request
+    fee.asset = "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    fee.total = "2"
+    Context.get().fee = fee
+    Context.get().asset = asset
+    every { sep31Config.paymentType } returns STRICT_SEND
+
+    request.amount = "100"
+    assertThrows<ServerErrorException> { sep31Service.updateTxAmountsWhenNoQuoteWasUsed() }
+  }
+
+  @Test
+  fun `test update transaction amounts when no quote was used rejects a cross-asset fee for STRICT_RECEIVE`() {
+    // STRICT_RECEIVE always combines the fee into amount_in, which is persisted unconditionally
+    // -- regardless of destination_asset -- so a mismatched fee asset must always be rejected
+    // here, not just in the same-currency case.
     request.destinationAsset =
       "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     Context.get().transaction = txn
     Context.get().request = request
     fee.asset = "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     fee.total = "2"
+    Context.get().fee = fee
+    Context.get().asset = asset
+    every { sep31Config.paymentType } returns STRICT_RECEIVE
+
+    request.amount = "100"
+    assertThrows<ServerErrorException> { sep31Service.updateTxAmountsWhenNoQuoteWasUsed() }
+  }
+
+  @Test
+  fun `test update transaction amounts when no quote was used rejects an over-precision fee when combined with the requested amount`() {
+    // `asset` (the requested asset) has significant_decimals=2. When the fee is actually combined
+    // with the requested amount (same-currency STRICT_SEND here), a fee with more decimal
+    // precision than the requested asset supports can't be combined losslessly -- reject rather
+    // than silently truncating it, which would desync amount_in/amount_out from fee_details.total.
+    request.destinationAsset = asset.id
+    Context.get().transaction = txn
+    Context.get().request = request
+    fee.asset = asset.id
+    fee.total = "1.2345"
     Context.get().fee = fee
     Context.get().asset = asset
     every { sep31Config.paymentType } returns STRICT_SEND
