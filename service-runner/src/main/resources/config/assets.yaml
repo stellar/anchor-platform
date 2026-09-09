@@ -79,6 +79,11 @@ items:
           - SWIFT
       quotes_supported: true
       quotes_required: false
+      fields:
+        transaction:
+          receiver_account_number:
+            description: Bank account number of the receiver.
+            optional: false
     sep38:
       enabled: true
       exchangeable_assets:
@@ -132,6 +137,27 @@ items:
       quotes_supported: true
       quotes_required: false
 
+    sep38:
+      enabled: true
+      exchangeable_assets:
+        - iso4217:USD
+
+  # SEP-31-only asset dedicated to exercising quotes_required: true -- kept separate from
+  # USDC/JPYC above (both quotes_required: false) so this doesn't change their behavior for any
+  # other test. The reference rate server already has a hardcoded price for this pair (SRT/USD).
+  - id: stellar:SRT:GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B
+    distribution_account: GBN4NNCDGJO4XW4KQU3CBIESUJWFVBUZPOKUZHT7W7WRB7CWOA7BXVQF
+    significant_decimals: 4
+    sep31:
+      enabled: true
+      receive:
+        min_amount: 0
+        max_amount: 1000000
+        methods:
+          - SEPA
+          - SWIFT
+      quotes_supported: true
+      quotes_required: true
     sep38:
       enabled: true
       exchangeable_assets:

@@ -26,6 +26,14 @@ public class Sep31Info {
    */
   Sep12Info sep12;
 
+  /**
+   * Advertised in `GET /info`'s `fields.transaction` so a sending anchor can discover which
+   * `fields.transaction` entries to supply on `POST /transactions` -- SEP-31 requires this per the
+   * `/info` response's fields object schema. Null (the default) means this asset advertises no
+   * transaction fields.
+   */
+  Fields fields;
+
   @Data
   public static class ReceiveOperation {
     @SerializedName("min_amount")

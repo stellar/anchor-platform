@@ -10,6 +10,8 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.skyscreamer.jsonassert.JSONCompareMode.LENIENT
 import org.springframework.data.domain.Sort.Direction
 import org.springframework.data.domain.Sort.Direction.DESC
+import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.SepNotFoundException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.*
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep.SEP_31
@@ -35,6 +37,8 @@ import org.stellar.anchor.platform.printRequest
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.StringHelper.json
+import org.stellar.sdk.KeyPair
+import org.stellar.sdk.Memo
 
 lateinit var savedTxn: Sep31GetTransactionResponse
 
@@ -58,6 +62,22 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test DIRECT_PAYMENT_SERVER has expected format`() {
+    val directPaymentServerUrl = toml.getString("DIRECT_PAYMENT_SERVER")
+    assertNotNull(directPaymentServerUrl)
+    assertFalse(
+      directPaymentServerUrl.endsWith("/"),
+      "DIRECT_PAYMENT_SERVER must not end with a '/'"
+    )
+    assertTrue(
+      directPaymentServerUrl.startsWith("https") ||
+        directPaymentServerUrl.contains("localhost") ||
+        directPaymentServerUrl.contains("host.docker.internal"),
+      "DIRECT_PAYMENT_SERVER must use https (localhost/host.docker.internal exempted for local testing)"
+    )
+  }
+
+  @Test
   @Order(30)
   fun `test post and get transactions`() {
     val (senderCustomer, receiverCustomer) = mkCustomers()
@@ -69,6 +89,59 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     JSONAssert.assertEquals(expectedTxn, json(savedTxn), LENIENT)
     assertEquals(postTxResponse.id, savedTxn.transaction.id)
     assertEquals(PENDING_RECEIVER.status, savedTxn.transaction.status)
+    assertCompliesWithProtocolSchema(savedTxn)
+  }
+
+  /**
+   * Beyond the field-subset LENIENT check above, verify the structural properties the SEP-31
+   * GET-transaction schema actually constrains: `status` is one of the protocol's defined values,
+   * and `stellar_account_id`/`stellar_memo`+`stellar_memo_type` (when present) are well-formed --
+   * Gson already guarantees `started_at`/`completed_at` parse as valid date-times, since a
+   * malformed value would have failed deserialization before this method is even reached.
+   */
+  private fun assertCompliesWithProtocolSchema(txn: Sep31GetTransactionResponse) {
+    val validStatuses =
+      setOf(
+        "pending_sender",
+        "pending_stellar",
+        "pending_customer_info_update",
+        "pending_transaction_info_update",
+        "pending_receiver",
+        "pending_external",
+        "completed",
+        "error",
+      )
+    val transaction = txn.transaction
+    assertNotNull(transaction.id)
+    assertTrue(
+      validStatuses.contains(transaction.status),
+      "'${transaction.status}' is not a status defined by the SEP-31 GET-transaction schema"
+    )
+    transaction.stellarAccountId?.let {
+      try {
+        KeyPair.fromAccountId(it)
+      } catch (e: Exception) {
+        fail<Unit>("'stellar_account_id' must be a valid Stellar public key", e)
+      }
+    }
+    transaction.stellarMemo?.let {
+      try {
+        when (transaction.stellarMemoType) {
+          "text" -> Memo.text(it)
+          "id" -> Memo.id(it.toLong())
+          "hash" -> Memo.hash(java.util.Base64.getDecoder().decode(it))
+          else ->
+            throw IllegalArgumentException(
+              "unrecognized stellar_memo_type: ${transaction.stellarMemoType}"
+            )
+        }
+      } catch (e: Exception) {
+        fail<Unit>(
+          "invalid 'stellar_memo' for 'stellar_memo_type' (${transaction.stellarMemoType})",
+          e
+        )
+      }
+    }
   }
 
   private fun mkCustomers(): Pair<Sep12PutCustomerResponse, Sep12PutCustomerResponse> {
@@ -240,6 +313,67 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test returns 400 when no asset_code is given`() {
+    // The asset lookup (and its 400 rejection) happens before any SEP-12 customer check, so a
+    // mock sender/receiver id is enough -- no real customer needs to be registered.
+    val txnRequest = gson.fromJson(postTxnRequest, Sep31PostTransactionRequest::class.java)
+    txnRequest.assetCode = null
+    assertThrows<SepValidationException> { sep31Client.postTransaction(txnRequest) }
+  }
+
+  @Test
+  fun `test returns 400 when no amount is given`() {
+    // amount validation happens before any SEP-12 customer check, so a mock sender/receiver id is
+    // enough -- no real customer needs to be registered.
+    val txnRequest = gson.fromJson(postTxnRequest, Sep31PostTransactionRequest::class.java)
+    txnRequest.amount = null
+    assertThrows<SepValidationException> { sep31Client.postTransaction(txnRequest) }
+  }
+
+  @Test
+  fun `test requires a SEP-10 JWT`() {
+    val unauthenticatedClient = Sep31Client(toml.getString("DIRECT_PAYMENT_SERVER"), "")
+    val txnRequest = gson.fromJson(postTxnRequest, Sep31PostTransactionRequest::class.java)
+    assertThrows<SepNotAuthorizedException> { unauthenticatedClient.postTransaction(txnRequest) }
+  }
+
+  @Test
+  fun `test returns 404 for a non-existent transaction`() {
+    assertThrows<SepNotFoundException> { sep31Client.getTransaction("not-an-id") }
+  }
+
+  @Test
+  fun `test quotes_required rejects a transaction with no quote_id`() {
+    // preValidateQuote's quote_id check runs before any SEP-12 customer check, so mock
+    // sender/receiver ids are enough -- no real customer needs to be registered.
+    val txnRequest = gson.fromJson(postTxnRequest, Sep31PostTransactionRequest::class.java)
+    txnRequest.assetCode = "SRT"
+    txnRequest.assetIssuer = srtAssetIssuer
+    txnRequest.quoteId = null
+    assertThrows<SepValidationException> { sep31Client.postTransaction(txnRequest) }
+  }
+
+  @Test
+  fun `test quotes_required can create and fetch a transaction with a quote`() {
+    val (senderCustomer, receiverCustomer) = mkCustomers()
+    val quote = sep38Client.postQuote("stellar:SRT:$srtAssetIssuer", "10", "iso4217:USD")
+
+    val txnRequest = gson.fromJson(postTxnRequest, Sep31PostTransactionRequest::class.java)
+    txnRequest.assetCode = "SRT"
+    txnRequest.assetIssuer = srtAssetIssuer
+    txnRequest.senderId = senderCustomer.id
+    txnRequest.receiverId = receiverCustomer.id
+    txnRequest.quoteId = quote.id
+    val postTxResponse = sep31Client.postTransaction(txnRequest)
+    assertNotNull(postTxResponse.id)
+
+    val fetchedTxn = sep31Client.getTransaction(postTxResponse.id)
+    assertEquals(postTxResponse.id, fetchedTxn.transaction.id)
+    assertEquals(PENDING_RECEIVER.status, fetchedTxn.transaction.status)
+    assertCompliesWithProtocolSchema(fetchedTxn)
+  }
+
+  @Test
   @Order(40)
   fun `test patch, get and compare`() {
     val patch = gson.fromJson(patchRequest, PatchTransactionsRequest::class.java)
@@ -258,6 +392,8 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     JSONAssert.assertEquals(expectedAfterPatch, json(afterPatch), LENIENT)
   }
 }
+
+private const val srtAssetIssuer = "GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B"
 
 private const val postTxnRequest =
   """{
@@ -318,6 +454,22 @@ private const val expectedSep31Info =
         "quotes_required": false,
         "min_amount": 0,
         "max_amount": 10,
+        "funding_methods": ["SEPA","SWIFT"],
+        "fields": {
+          "transaction": {
+            "receiver_account_number": {
+              "description": "Bank account number of the receiver.",
+              "optional": false
+            }
+          }
+        }
+      },
+      "SRT": {
+        "enabled": true,
+        "quotes_supported": true,
+        "quotes_required": true,
+        "min_amount": 0,
+        "max_amount": 1000000,
         "funding_methods": ["SEPA","SWIFT"]
       }
     }

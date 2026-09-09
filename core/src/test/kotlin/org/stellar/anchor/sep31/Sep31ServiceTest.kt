@@ -1639,7 +1639,22 @@ class Sep31ServiceTest {
 
   private val usdcJson =
     """
-    {"enabled":true,"quotes_supported":true,"quotes_required":true,"min_amount":1,"max_amount":1000000,"funding_methods":["SEPA","SWIFT"]}
+    {
+      "enabled":true,
+      "quotes_supported":true,
+      "quotes_required":true,
+      "min_amount":1,
+      "max_amount":1000000,
+      "funding_methods":["SEPA","SWIFT"],
+      "fields": {
+        "transaction": {
+          "receiver_account_number": {"description": "bank account number of the destination", "optional": false},
+          "type": {"description": "type of deposit to make", "choices": ["SEPA", "SWIFT"], "optional": false},
+          "receiver_routing_number": {"description": "routing number of the destination bank account", "optional": false},
+          "receiver_phone_number": {"description": "phone number of the receiver", "optional": true}
+        }
+      }
+    }
   """
       .trimIndent()
 
@@ -1702,6 +1717,62 @@ class Sep31ServiceTest {
       "the receiver's KYC information",
       sep12.receiver.types["sep31-receiver"]!!.description
     )
+  }
+
+  @Test
+  fun `test INFO response advertises fields when the asset configures it`() {
+    val withFieldsAssetJson =
+      """
+      {
+        "items": [
+          {
+            "id": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+            "distribution_account": "GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I",
+            "significant_decimals": 2,
+            "sep31": {
+              "enabled": true,
+              "receive": {"min_amount": 1, "max_amount": 1000000, "methods": ["SEPA", "SWIFT"]},
+              "quotes_supported": false,
+              "quotes_required": false,
+              "fields": {
+                "transaction": {
+                  "receiver_account_number": {
+                    "description": "Bank account number of the receiver.",
+                    "optional": false
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+      """
+        .trimIndent()
+    val infoOnlyService =
+      Sep31Service(
+        languageConfig,
+        sep31Config,
+        txnStore,
+        quoteStore,
+        DefaultAssetService.fromJsonContent(withFieldsAssetJson),
+        rateIntegration,
+        eventService,
+        Clock.systemUTC(),
+        exchangeAmountsCalculator,
+        customerIdOwnerStore,
+        customerIntegration,
+      )
+
+    val fields = infoOnlyService.info.receive["USDC"]!!.fields
+    assertEquals(setOf("receiver_account_number"), fields.transaction.keys)
+    val field = fields.transaction["receiver_account_number"]!!
+    assertEquals("Bank account number of the receiver.", field.description)
+    assertFalse(field.isOptional)
+  }
+
+  @Test
+  fun `test INFO response omits fields when the asset doesn't configure it`() {
+    assertNull(sep31Service.info.receive["JPYC"]!!.fields)
   }
 
   @Test

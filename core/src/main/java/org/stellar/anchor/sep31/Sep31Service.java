@@ -801,6 +801,7 @@ public class Sep31Service {
         assetResponse.setMaxAmount(assetInfo.getSep31().getReceive().getMaxAmount());
         assetResponse.setFundingMethods(methods);
         assetResponse.setSep12(sep12ResponseFromConfig(assetInfo.getSep31().getSep12()));
+        assetResponse.setFields(fieldsResponseFromConfig(assetInfo.getSep31().getFields()));
         response.getReceive().put(assetInfo.getCode(), assetResponse);
       }
     }
@@ -839,6 +840,32 @@ public class Sep31Service {
     Sep31InfoResponse.Sep12TypesResponse typesResponse = new Sep31InfoResponse.Sep12TypesResponse();
     typesResponse.setTypes(Map.of(type, typeResponse));
     return typesResponse;
+  }
+
+  /**
+   * Advertises the `fields.transaction` entries a sending anchor must/may supply on `POST
+   * /transactions`, per SEP-31's `/info` fields object schema -- null (omitted from `GET /info`) if
+   * the asset's config doesn't set a `fields` block.
+   */
+  private static Sep31InfoResponse.FieldsResponse fieldsResponseFromConfig(
+      Sep31Info.Fields fieldsConfig) {
+    if (fieldsConfig == null || fieldsConfig.getTransaction() == null) {
+      return null;
+    }
+    Map<String, Sep31InfoResponse.FieldResponse> transaction = new HashMap<>();
+    fieldsConfig
+        .getTransaction()
+        .forEach(
+            (fieldName, field) -> {
+              Sep31InfoResponse.FieldResponse fieldResponse = new Sep31InfoResponse.FieldResponse();
+              fieldResponse.setDescription(field.getDescription());
+              fieldResponse.setChoices(field.getChoices());
+              fieldResponse.setOptional(field.isOptional());
+              transaction.put(fieldName, fieldResponse);
+            });
+    Sep31InfoResponse.FieldsResponse fieldsResponse = new Sep31InfoResponse.FieldsResponse();
+    fieldsResponse.setTransaction(transaction);
+    return fieldsResponse;
   }
 
   @Data
