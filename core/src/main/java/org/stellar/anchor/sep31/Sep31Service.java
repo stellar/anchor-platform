@@ -9,6 +9,8 @@ import static org.stellar.anchor.util.Log.debug;
 import static org.stellar.anchor.util.Log.debugF;
 import static org.stellar.anchor.util.Log.info;
 import static org.stellar.anchor.util.Log.infoF;
+import static org.stellar.anchor.util.MathHelper.decimal;
+import static org.stellar.anchor.util.MathHelper.formatAmount;
 import static org.stellar.anchor.util.MemoHelper.makeMemo;
 import static org.stellar.anchor.util.MetricConstants.SEP31_TRANSACTION_CREATED;
 import static org.stellar.anchor.util.MetricConstants.SEP31_TRANSACTION_PATCHED;
@@ -18,6 +20,7 @@ import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.micrometer.core.instrument.Counter;
 import jakarta.transaction.Transactional;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
@@ -445,34 +448,55 @@ public class Sep31Service {
 
   /**
    * updateTxAmountsWhenNoQuoteWasUsed will update the transaction amountIn and amountOut based on
-   * the /rate response's own sell_amount/buy_amount -- mirroring how {@link
-   * #updateTxAmountsBasedOnQuote} trusts the quote's sell_amount/buy_amount, rather than
-   * recomputing them locally from {@code request.getAmount()} and the fee. Recomputing locally
-   * previously required assuming the fee was denominated in the requested asset, which {@link
-   * RestRateIntegration} does not guarantee (a fee may be denominated in the buy asset) -- using
-   * the /rate response's own amounts sidesteps that assumption entirely, since {@code
-   * RestRateIntegration} already validates them against whichever asset the fee is in. {@link
-   * #updateFee()} requests these amounts with the correct one of sell_amount/buy_amount fixed to
-   * {@code request.getAmount()} depending on {@code paymentType}.
+   * the request amount and the fee.
+   *
+   * <p>{@code request.getAmount()} is always denominated in the sell asset ({@code asset_code}),
+   * regardless of {@code paymentType} -- see {@link #updateFee()}. {@code paymentType} only
+   * controls whether the fee is added into amount_in (STRICT_RECEIVE) or subtracted out of
+   * amount_out (STRICT_SEND), and that combination is only performed when the fee is itself
+   * denominated in the sell asset -- {@link RestRateIntegration} also permits a fee denominated in
+   * the buy asset, which cannot be combined with the sell-side amount without mixing units. When
+   * destination_asset requests a real conversion, amount_out is left unset here: the /rate used is
+   * only INDICATIVE, and per SEP-31 amount_out for a destination_asset conversion is only known
+   * once the Receiving Anchor actually receives the incoming payment and can apply a firm rate.
    */
   void updateTxAmountsWhenNoQuoteWasUsed() {
     Sep31PostTransactionRequest request = Context.get().getRequest();
     Sep31Transaction txn = Context.get().getTransaction();
     FeeDetails feeResponse = Context.get().getFee();
-    GetRateResponse.Rate rate = Context.get().getRate();
     AssetInfo reqAsset = Context.get().getAsset();
+    int scale = reqAsset.getSignificantDecimals();
+    BigDecimal reqAmount = decimal(request.getAmount(), scale);
 
     String amountInAsset = reqAsset.getId();
     String amountOutAsset =
         (request.getDestinationAsset() == null) ? amountInAsset : request.getDestinationAsset();
+    boolean isSameAsset = amountInAsset.equals(amountOutAsset);
+    boolean strictSend = sep31Config.getPaymentType() == STRICT_SEND;
+    boolean feeInSellAsset = amountInAsset.equals(feeResponse.getAsset());
 
-    debugF("Updating transaction ({}) with rate ({}) - reqAsset ({})", txn.getId(), rate, reqAsset);
+    BigDecimal amountIn;
+    if (strictSend || !feeInSellAsset) {
+      amountIn = reqAmount;
+    } else {
+      // STRICT_RECEIVE, fee denominated in the sell asset: amount_in = amount + fee.
+      amountIn = reqAmount.add(decimal(feeResponse.getTotal(), scale));
+    }
+    debugF(
+        "Updating transaction ({}) with fee ({}) - reqAsset ({})",
+        txn.getId(),
+        feeResponse,
+        reqAsset);
 
-    txn.setAmountIn(rate.getSellAmount());
-    txn.setAmountExpected(rate.getSellAmount());
+    txn.setAmountIn(formatAmount(amountIn, scale));
+    txn.setAmountExpected(formatAmount(amountIn, scale));
     txn.setAmountInAsset(amountInAsset);
-    txn.setAmountOut(rate.getBuyAmount());
     txn.setAmountOutAsset(amountOutAsset);
+    if (isSameAsset) {
+      BigDecimal amountOut =
+          strictSend ? amountIn.subtract(decimal(feeResponse.getTotal(), scale)) : reqAmount;
+      txn.setAmountOut(formatAmount(amountOut, scale));
+    }
 
     // Persist the callback's fee exactly as received -- feeResponse.getTotal() is validated
     // against the sum of feeResponse.getDetails() at the fee asset's own precision by
@@ -702,34 +726,26 @@ public class Sep31Service {
     String destAsset =
         (request.getDestinationAsset() == null) ? assetName : request.getDestinationAsset();
     infoF("Requesting fee for request ({})", request);
-    // `paymentType` determines what `request.getAmount()` means (see Sep31Config.PaymentType):
-    // STRICT_SEND -- it's the sell amount, so ask /rate for the resulting buy amount.
-    // STRICT_RECEIVE -- it's the buy amount the receiver should net, so ask /rate for the sell
-    // amount needed to cover it (RestRateIntegration validates buy_amount symmetrically to
-    // sell_amount, so this is an equally supported request shape). Sending the wrong one of the
-    // two here previously made every no-quote STRICT_RECEIVE request implicitly mean "sell
-    // exactly this much", silently misinterpreting the client's requested amount whenever a real
-    // conversion (not just a same-asset fee) was involved.
-    boolean strictSend = sep31Config.getPaymentType() == STRICT_SEND;
-    GetRateRequest.GetRateRequestBuilder rateRequestBuilder =
-        GetRateRequest.builder()
-            .type(GetRateRequest.Type.INDICATIVE)
-            .sellAsset(assetName)
-            .buyAsset(destAsset)
-            .clientId(getClientName());
-    if (strictSend) {
-      rateRequestBuilder.sellAmount(request.getAmount());
-    } else {
-      rateRequestBuilder.buyAmount(request.getAmount());
-    }
-    var rate = rateIntegration.getRate(rateRequestBuilder.build()).getRate();
+    // request.getAmount() is always denominated in asset_code (the sell asset) per SEP-31,
+    // regardless of paymentType -- so sell_amount is always what's fixed here. paymentType only
+    // affects how the fee combines with it afterward, in updateTxAmountsWhenNoQuoteWasUsed.
+    var rate =
+        rateIntegration
+            .getRate(
+                GetRateRequest.builder()
+                    .type(GetRateRequest.Type.INDICATIVE)
+                    .sellAsset(assetName)
+                    .sellAmount(request.getAmount())
+                    .buyAsset(destAsset)
+                    .clientId(getClientName())
+                    .build())
+            .getRate();
     FeeDetails fee = rate.getFee();
     if (fee == null) {
       throw new SepValidationException("Fee is not present in /rate response");
     }
     infoF("Fee for request ({}) is ({})", request, fee);
     Context.get().setFee(fee);
-    Context.get().setRate(rate);
   }
 
   String getClientName() {
@@ -866,7 +882,6 @@ public class Sep31Service {
     private Sep38Quote quote;
     private WebAuthJwt webAuthJwt;
     private FeeDetails fee;
-    private GetRateResponse.Rate rate;
     private AssetInfo asset;
     private Map<String, String> transactionFields;
     private static ThreadLocal<Context> context = new ThreadLocal<>();

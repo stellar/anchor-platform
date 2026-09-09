@@ -279,62 +279,99 @@ class Sep31ServiceTest {
   }
 
   @Test
-  fun `test update transaction amounts when no quote was used trusts the rate response's sell_amount and buy_amount`() {
-    // amount_in/amount_out now come directly from the /rate response's own sell_amount/buy_amount
-    // (as validated by RestRateIntegration) rather than being recomputed locally from
-    // request.getAmount() and the fee -- mirroring how the quote-based path trusts the quote's
-    // sell_amount/buy_amount. paymentType no longer affects this method at all; it only affects
-    // which of sell_amount/buy_amount updateFee() fixes to request.getAmount() when querying
-    // /rate.
-    request.destinationAsset =
-      "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+  fun `test update transaction amounts when no quote was used for STRICT_SEND, same asset`() {
+    // request.getAmount() is always denominated in the sell asset -- for STRICT_SEND, amount_in is
+    // exactly that, and amount_out (known immediately since no real conversion is involved) is the
+    // fee subtracted out.
+    every { sep31Config.paymentType } returns STRICT_SEND
+    request.amount = "100"
+    request.destinationAsset = null
+    fee.total = "2"
+    fee.asset = asset.id
     Context.get().transaction = txn
     Context.get().request = request
     Context.get().fee = fee
-    Context.get().rate =
-      GetRateResponse.Rate.builder().sellAmount("100").buyAmount("98").fee(fee).build()
     Context.get().asset = asset
 
-    request.amount = "100"
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
+
     assertEquals("100", txn.amountIn)
     assertEquals("98", txn.amountOut)
+    assertEquals(asset.id, txn.amountInAsset)
+    assertEquals(asset.id, txn.amountOutAsset)
   }
 
   @Test
-  fun `test update transaction amounts when no quote was used carries the fee breakdown exactly as received, even across assets`() {
-    // The persisted fee is never reformatted/rescaled -- unaffected by which asset it's
-    // denominated in, since amount_in/amount_out come from the /rate response's own amounts, not
-    // from combining the fee with request.getAmount() locally.
-    request.destinationAsset =
-      "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+  fun `test update transaction amounts when no quote was used for STRICT_RECEIVE, same asset`() {
+    // For STRICT_RECEIVE, the fee is added into amount_in (see Sep31Config.PaymentType) --
+    // safe here since, with no destination_asset, the fee can only be denominated in the same
+    // (sell) asset as the request.
+    every { sep31Config.paymentType } returns STRICT_RECEIVE
+    request.amount = "100"
+    request.destinationAsset = null
+    fee.total = "2"
+    fee.asset = asset.id
     Context.get().transaction = txn
     Context.get().request = request
-    fee.asset = "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
-    fee.total = "1.2345"
-    fee.details = listOf(FeeDescription("Sell fee", null, "1.2345"))
     Context.get().fee = fee
-    Context.get().rate =
-      GetRateResponse.Rate.builder().sellAmount("100").buyAmount("12345.6789").fee(fee).build()
     Context.get().asset = asset
 
-    request.amount = "100"
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
 
-    assertEquals("100", txn.amountIn)
-    assertEquals("12345.6789", txn.amountOut)
-    assertEquals(
-      FeeDetails(
-        "1.2345",
-        "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
-        listOf(FeeDescription("Sell fee", null, "1.2345"))
-      ),
-      txn.feeDetails
-    )
+    assertEquals("102", txn.amountIn)
+    assertEquals("100", txn.amountOut)
   }
 
   @Test
-  fun `test updateFee fixes sell_amount to request amount for STRICT_SEND`() {
+  fun `test update transaction amounts when no quote was used defers amount_out for a cross-asset conversion`() {
+    // The /rate used here is only INDICATIVE, not firm. Per SEP-31, when destination_asset
+    // requests a real conversion, amount_out is only known once the Receiving Anchor actually
+    // receives the incoming payment and can apply a firm rate -- so it must be left unset here,
+    // regardless of paymentType.
+    every { sep31Config.paymentType } returns STRICT_RECEIVE
+    request.amount = "100"
+    request.destinationAsset = stellarJPYC
+    fee.total = "2"
+    fee.asset = stellarJPYC // fee denominated in the buy asset -- a valid /rate response shape.
+    txn.amountOut = null
+    Context.get().transaction = txn
+    Context.get().request = request
+    Context.get().fee = fee
+    Context.get().asset = asset
+
+    sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
+
+    // Cannot be combined with the sell-side amount_in without mixing units, and isn't needed to
+    // compute amount_out anyway since amount_out is deferred.
+    assertEquals("100", txn.amountIn)
+    assertNull(txn.amountOut)
+    assertEquals(stellarJPYC, txn.amountOutAsset)
+  }
+
+  @Test
+  fun `test update transaction amounts when no quote was used still combines a sell-side fee for STRICT_RECEIVE even in a cross-asset conversion`() {
+    // The fee happens to be denominated in the sell asset here even though destination_asset
+    // requests a real conversion -- combining it into amount_in is still safe (same units), even
+    // though amount_out itself remains deferred (see the test above).
+    every { sep31Config.paymentType } returns STRICT_RECEIVE
+    request.amount = "100"
+    request.destinationAsset = stellarJPYC
+    fee.total = "2"
+    fee.asset = asset.id
+    txn.amountOut = null
+    Context.get().transaction = txn
+    Context.get().request = request
+    Context.get().fee = fee
+    Context.get().asset = asset
+
+    sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
+
+    assertEquals("102", txn.amountIn)
+    assertNull(txn.amountOut)
+  }
+
+  @Test
+  fun `test updateFee always fixes sell_amount to request amount for STRICT_SEND`() {
     Context.reset()
     Context.get().request = request
     Context.get().webAuthJwt = TestHelper.createWebAuthJwt()
@@ -353,11 +390,12 @@ class Sep31ServiceTest {
   }
 
   @Test
-  fun `test updateFee fixes buy_amount to request amount for STRICT_RECEIVE`() {
-    // request.getAmount() means "what the receiver should net" for STRICT_RECEIVE (see
-    // Sep31Config.PaymentType) -- that's the /rate response's buy_amount, not its sell_amount, so
-    // the /rate request must fix buy_amount, not sell_amount, to it. RestRateIntegration validates
-    // buy_amount symmetrically to sell_amount, so this is an equally supported request shape.
+  fun `test updateFee always fixes sell_amount to request amount for STRICT_RECEIVE too`() {
+    // request.getAmount() is always denominated in the sell asset per SEP-31, regardless of
+    // paymentType -- so the /rate request always fixes sell_amount, never buy_amount, to it.
+    // Fixing buy_amount instead for STRICT_RECEIVE would ask /rate for exactly request.getAmount()
+    // of the *destination* asset, which is a different, unrelated quantity whenever a real
+    // cross-asset conversion is involved.
     Context.reset()
     Context.get().request = request
     Context.get().webAuthJwt = TestHelper.createWebAuthJwt()
@@ -368,11 +406,11 @@ class Sep31ServiceTest {
       GetRateResponse(GetRateResponse.Rate.builder().fee(fee).build())
 
     request.amount = "100"
-    request.destinationAsset = null
+    request.destinationAsset = stellarJPYC
     sep31Service.updateFee()
 
-    assertEquals("100", rateRequestSlot.captured.buyAmount)
-    assertNull(rateRequestSlot.captured.sellAmount)
+    assertEquals("100", rateRequestSlot.captured.sellAmount)
+    assertNull(rateRequestSlot.captured.buyAmount)
   }
 
   @Test
