@@ -84,23 +84,24 @@ public class PaymentObservingAccountsManager {
   public void upsert(ObservingAccount observingAccount) {
     if (observingAccount != null) {
       String canonicalAccount = safeCanonicalize(observingAccount.account);
-      ObservingAccount existingAccount = allAccounts.get(canonicalAccount);
-      if (existingAccount == null) {
-        ObservingAccount toStore =
-            new ObservingAccount(
-                canonicalAccount, observingAccount.lastObserved, observingAccount.type);
-        allAccounts.put(canonicalAccount, toStore);
-      } else {
-        existingAccount.account = canonicalAccount;
-        if (observingAccount.lastObserved.isAfter(existingAccount.lastObserved)) {
-          existingAccount.lastObserved = observingAccount.lastObserved;
-        }
-        if (existingAccount.type == AccountType.TRANSIENT) {
-          existingAccount.type = observingAccount.type;
-        }
-      }
-      ObservingAccount current = allAccounts.get(canonicalAccount);
-      boolean persisted = persistUpsert(current.account, current.lastObserved);
+      ObservingAccount merged =
+          allAccounts.compute(
+              canonicalAccount,
+              (key, existing) -> {
+                if (existing == null) {
+                  return new ObservingAccount(
+                      canonicalAccount, observingAccount.lastObserved, observingAccount.type);
+                }
+                Instant lastObserved =
+                    observingAccount.lastObserved.isAfter(existing.lastObserved)
+                        ? observingAccount.lastObserved
+                        : existing.lastObserved;
+                AccountType type =
+                    existing.type == AccountType.TRANSIENT ? observingAccount.type : existing.type;
+                return new ObservingAccount(canonicalAccount, lastObserved, type);
+              });
+
+      boolean persisted = persistUpsert(merged.account, merged.lastObserved);
       if (persisted && !canonicalAccount.equals(observingAccount.account)) {
         persistDelete(observingAccount.account);
       }
@@ -162,12 +163,14 @@ public class PaymentObservingAccountsManager {
       return false;
     }
 
-    account = canonicalize(account);
+    String canonicalAccount = canonicalize(account);
 
-    ObservingAccount acct = allAccounts.get(account);
-    if (acct == null) return false;
-    acct.lastObserved = Instant.now();
-    return true;
+    ObservingAccount updated =
+        allAccounts.computeIfPresent(
+            canonicalAccount,
+            (key, existing) ->
+                new ObservingAccount(existing.account, Instant.now(), existing.type));
+    return updated != null;
   }
 
   /**

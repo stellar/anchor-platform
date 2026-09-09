@@ -7,6 +7,9 @@ import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit.DAYS
 import java.time.temporal.ChronoUnit.HOURS
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 import org.stellar.anchor.platform.data.PaymentObservingAccount
@@ -197,6 +200,39 @@ class PaymentObservingAccountsManagerTest {
     assertEquals(1, obs.accounts.size)
     assertEquals(newer, obs.accounts[0].lastObserved)
   }
+
+  @Test
+  fun `test concurrent upserts never lose the newest lastObserved under race`() {
+    val obs = PaymentObservingAccountsManager(NoopPaymentObservingAccountStore())
+    obs.initialize()
+
+    val threadCount = 32
+    val perThread = 500
+    val pool = Executors.newFixedThreadPool(threadCount)
+    val start = CountDownLatch(1)
+    val base = Instant.now()
+
+    try {
+      repeat(threadCount) { threadIndex ->
+        pool.submit {
+          start.await()
+          for (i in 0 until perThread) {
+            val ts = base.plusNanos((threadIndex.toLong() * perThread + i) * 1000)
+            obs.upsert(PaymentObservingAccountsManager.ObservingAccount(testAcct1, ts, TRANSIENT))
+          }
+        }
+      }
+      start.countDown()
+      pool.shutdown()
+      assertTrue(pool.awaitTermination(30, TimeUnit.SECONDS), "upsert pool did not finish in time")
+    } finally {
+      pool.shutdownNow()
+    }
+
+    val expectedMax = base.plusNanos((threadCount.toLong() * perThread - 1) * 1000)
+    val finalAccount = obs.accounts.first { it.account == testAcct1 }
+    assertEquals(expectedMax, finalAccount.lastObserved)
+  }
 }
 
 class MemoryPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
@@ -224,6 +260,14 @@ class ThrowingPaymentObservingAccountStore : PaymentObservingAccountStore(null) 
   override fun delete(account: String) {
     throw RuntimeException("store unavailable")
   }
+}
+
+class NoopPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
+  override fun list(): List<PaymentObservingAccount> = emptyList()
+
+  override fun upsert(account: String?, lastObserved: Instant?) {}
+
+  override fun delete(account: String) {}
 }
 
 class FlakyPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
