@@ -177,6 +177,12 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
           detailObj.has("amount") && detailObj.get("amount").asJsonPrimitive.isString,
           "'fee_details.details[].amount' is required and must be a string"
         )
+        if (detailObj.has("description") && !detailObj.get("description").isJsonNull) {
+          assertTrue(
+            detailObj.get("description").asJsonPrimitive.isString,
+            "'fee_details.details[].description' must be a string when present"
+          )
+        }
       }
     }
 
@@ -225,6 +231,32 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
         transaction.get("refunds").isJsonObject,
         "'refunds' must be an object when present"
       )
+      val refunds = transaction.getAsJsonObject("refunds")
+      assertTrue(
+        refunds.has("amount_refunded") && refunds.get("amount_refunded").asJsonPrimitive.isString,
+        "'refunds.amount_refunded' is required and must be a string"
+      )
+      assertTrue(
+        refunds.has("amount_fee") && refunds.get("amount_fee").asJsonPrimitive.isString,
+        "'refunds.amount_fee' is required and must be a string"
+      )
+      assertTrue(refunds.has("payments"), "'refunds.payments' is required")
+      assertTrue(refunds.get("payments").isJsonArray, "'refunds.payments' must be an array")
+      refunds.getAsJsonArray("payments").forEach { payment ->
+        val paymentObj = payment.asJsonObject
+        assertTrue(
+          paymentObj.has("id") && paymentObj.get("id").asJsonPrimitive.isString,
+          "'refunds.payments[].id' is required and must be a string"
+        )
+        assertTrue(
+          paymentObj.has("amount") && paymentObj.get("amount").asJsonPrimitive.isString,
+          "'refunds.payments[].amount' is required and must be a string"
+        )
+        assertTrue(
+          paymentObj.has("fee") && paymentObj.get("fee").asJsonPrimitive.isString,
+          "'refunds.payments[].fee' is required and must be a string"
+        )
+      }
     }
     if (
       transaction.has("required_info_updates") &&
