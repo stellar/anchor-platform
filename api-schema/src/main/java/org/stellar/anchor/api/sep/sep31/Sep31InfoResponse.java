@@ -34,5 +34,23 @@ public class Sep31InfoResponse {
 
     @SerializedName("funding_methods")
     List<String> fundingMethods;
+
+    Sep12Response sep12;
+  }
+
+  @Data
+  public static class Sep12Response {
+    Sep12TypesResponse sender;
+    Sep12TypesResponse receiver;
+  }
+
+  @Data
+  public static class Sep12TypesResponse {
+    Map<String, Sep12TypeResponse> types;
+  }
+
+  @Data
+  public static class Sep12TypeResponse {
+    String description;
   }
 }

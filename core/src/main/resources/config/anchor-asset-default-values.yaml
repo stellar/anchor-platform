@@ -102,6 +102,16 @@ items:
         #   - SEPA
         #   - SWIFT
         methods: []
+      # Optional. Advertises, in `GET /info`, the SEP-12 customer types this asset uses for
+      # `sender_id`/`receiver_id` (`sep31-sender`/`sep31-receiver` -- fixed, not configurable).
+      # Omit `sender`/`receiver` (or the whole `sep12` block) if this asset doesn't require SEP-12
+      # KYC for that role.
+      # Example:
+      #   sep12:
+      #     sender:
+      #       description: KYC information required for the sending customer
+      #     receiver:
+      #       description: KYC information required for the receiving customer
 
     # The configuration for the SEP-38 transactions.
     sep38:

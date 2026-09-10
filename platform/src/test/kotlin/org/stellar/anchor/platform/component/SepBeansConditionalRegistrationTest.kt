@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.component
 
+import io.mockk.every
 import io.mockk.mockk
 import java.time.Clock
 import java.util.function.Supplier
@@ -14,6 +15,8 @@ import org.stellar.anchor.api.callback.CustomerIntegration
 import org.stellar.anchor.api.callback.RateIntegration
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.auth.JwtService
+import org.stellar.anchor.auth.NonceManager
+import org.stellar.anchor.auth.NonceStore
 import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.client.ClientService
 import org.stellar.anchor.config.LanguageConfig
@@ -21,10 +24,12 @@ import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep6Config
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.event.EventService
+import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.platform.component.sep.SepBeans
 import org.stellar.anchor.platform.config.CallbackApiConfig
 import org.stellar.anchor.platform.config.PropertySep24Config
 import org.stellar.anchor.platform.config.PropertySep31Config
+import org.stellar.anchor.sep10.Sep10Service
 import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
 import org.stellar.anchor.sep31.Sep31TransactionStore
@@ -54,7 +59,18 @@ class SepBeansConditionalRegistrationTest {
         StellarNetworkConfig::class.java,
         Supplier { mockk<StellarNetworkConfig>(relaxed = true) },
       )
-      .withBean(SecretConfig::class.java, Supplier { mockk<SecretConfig>(relaxed = true) })
+      .withBean(
+        SecretConfig::class.java,
+        Supplier {
+          mockk<SecretConfig>(relaxed = true) {
+            // Valid enough to satisfy PropertySep10Config/PropertySep45Config's validation when
+            // sep10/sep45 are enabled; unused (and irrelevant) when they're disabled.
+            every { sep10SigningSeed } returns
+              "SBVEOFAHGJCKGR4AAM7RTDRCP6RMYYV5YUV32ZK7ZD3VPDGGHYLXTZRZ"
+            every { sep10JwtSecretKey } returns "sep10_jwt_secret_key_for_tests_only_______"
+          }
+        },
+      )
       .withBean(ClientService::class.java, Supplier { mockk<ClientService>(relaxed = true) })
       .withBean(
         CallbackApiConfig::class.java,
@@ -154,6 +170,30 @@ class SepBeansConditionalRegistrationTest {
         }
         assert(context.getBeanNamesForType(SepRequestValidator::class.java).isEmpty()) {
           "expected no SepRequestValidator bean when sep6/sep24 are both disabled"
+        }
+      }
+  }
+
+  @Test
+  fun `context exposes NonceManager and Sep10Service when only sep10 is enabled`() {
+    baseRunner()
+      .withBean(LedgerClient::class.java, Supplier { mockk<LedgerClient>(relaxed = true) })
+      .withBean(NonceStore::class.java, Supplier { mockk<NonceStore>(relaxed = true) })
+      .withPropertyValues(
+        "sep6.enabled=false",
+        "sep24.enabled=false",
+        "sep31.enabled=false",
+        "sep10.enabled=true",
+      )
+      .run { context ->
+        assert(context.startupFailure == null) {
+          "context failed to start with only sep10 enabled: ${context.startupFailure}"
+        }
+        assert(context.getBeanNamesForType(NonceManager::class.java).size == 1) {
+          "expected exactly one NonceManager bean when only sep10 is enabled"
+        }
+        assert(context.getBeanNamesForType(Sep10Service::class.java).size == 1) {
+          "expected exactly one Sep10Service bean when only sep10 is enabled"
         }
       }
   }

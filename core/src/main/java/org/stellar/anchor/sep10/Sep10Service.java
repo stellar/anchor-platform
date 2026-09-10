@@ -28,6 +28,7 @@ import org.stellar.anchor.api.sep.sep10.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep10.ValidationRequest;
 import org.stellar.anchor.api.sep.sep10.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
+import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep10Jwt;
 import org.stellar.anchor.client.ClientFinder;
 import org.stellar.anchor.config.SecretConfig;
@@ -44,12 +45,19 @@ import org.stellar.sdk.operations.Operation;
 
 /** The Sep-10 protocol service. */
 public class Sep10Service implements ISep10Service {
+  // How long a claimed nonce is retained, at minimum, past the moment it's claimed -- one of two
+  // floors combined at the claim site (see generateWebAuthJwt); only needs to outlast how long a
+  // single /auth validation can plausibly still be in flight (ledger lookups, JWT signing), not
+  // the challenge's own signed max_time or sep10Config.getAuthTimeout() (that's the other floor).
+  private static final int SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS = 3600;
+
   final StellarNetworkConfig stellarNetworkConfig;
   final SecretConfig secretConfig;
   final Sep10Config sep10Config;
   final LedgerClient ledgerClient;
   final JwtService jwtService;
   final ClientFinder clientFinder;
+  final NonceManager nonceManager;
   final String serverAccountId;
   final Counter sep10ChallengeCreatedCounter = Metrics.counter(SEP10_CHALLENGE_CREATED);
   final Counter sep10ChallengeValidatedCounter = Metrics.counter(SEP10_CHALLENGE_VALIDATED);
@@ -60,7 +68,8 @@ public class Sep10Service implements ISep10Service {
       Sep10Config sep10Config,
       LedgerClient ledgerClient,
       JwtService jwtService,
-      ClientFinder clientFinder) {
+      ClientFinder clientFinder,
+      NonceManager nonceManager) {
     debug("appConfig:", stellarNetworkConfig);
     debug("sep10Config:", sep10Config);
     this.stellarNetworkConfig = stellarNetworkConfig;
@@ -69,6 +78,7 @@ public class Sep10Service implements ISep10Service {
     this.ledgerClient = ledgerClient;
     this.jwtService = jwtService;
     this.clientFinder = clientFinder;
+    this.nonceManager = nonceManager;
     this.serverAccountId =
         KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed()).getAccountId();
     Log.info("Sep10Service initialized.");
@@ -121,6 +131,7 @@ public class Sep10Service implements ISep10Service {
     info("Validating SEP-10 challenge.");
 
     ChallengeTransaction challenge = parseChallenge(request);
+
     // pre validation to be defined by the anchor
     preValidateRequestValidation(request, challenge);
 
@@ -137,8 +148,6 @@ public class Sep10Service implements ISep10Service {
     }
     // Since the account exists, we should check the signers and the client domain
     validateChallengeRequest(request, account, clientDomain);
-    // increment counter
-    incrementValidationRequestValidatedCounter();
     // Generate the JWT token
     return ValidationResponse.of(generateWebAuthJwt(challenge, clientDomain, homeDomain));
   }
@@ -392,6 +401,10 @@ public class Sep10Service implements ISep10Service {
 
   void validateAccountFormat(ChallengeRequest request) throws SepException {
     // Validate account
+    if (isEmpty(request.getAccount())) {
+      info("client wallet account is required");
+      throw new SepValidationException("Invalid account.");
+    }
     try {
       KeyPair.fromAccountId(request.getAccount());
     } catch (IllegalArgumentException ex) {
@@ -444,7 +457,6 @@ public class Sep10Service implements ISep10Service {
       infoF("Checking if {} exists in the Stellar network", challenge.getClientAccountId());
       account = ledgerClient.getAccount(challenge.getClientAccountId());
       traceF("challenge account: {}", account);
-      sep10ChallengeValidatedCounter.increment();
       return account;
     } catch (AccountNotFoundException ex) {
       infoF("Account {} does not exist in the Stellar Network", challenge.getClientAccountId());
@@ -492,7 +504,6 @@ public class Sep10Service implements ISep10Service {
     } catch (LedgerException ex) {
       throw new SepValidationException("Failed to fetch account: " + ex.getMessage(), ex);
     }
-    sep10ChallengeValidatedCounter.increment();
     return null;
   }
 
@@ -554,6 +565,7 @@ public class Sep10Service implements ISep10Service {
       throws SepException {
     long issuedAt = challenge.getTransaction().getTimeBounds().getMinTime().longValue();
     Memo memo = challenge.getTransaction().getMemo();
+    String hash = challenge.getTransaction().hashHex();
     Sep10Jwt webAuthJwt =
         Sep10Jwt.of(
             authUrl(),
@@ -562,15 +574,68 @@ public class Sep10Service implements ISep10Service {
                 : challenge.getClientAccountId() + ":" + memo,
             issuedAt,
             issuedAt + sep10Config.getJwtTimeout(),
-            challenge.getTransaction().hashHex(),
+            hash,
             clientDomain,
             homeDomain);
 
+    // Resolve the client name (which itself can fail authorization, e.g. SepNotAuthorizedException)
+    // before claiming the nonce below.
     webAuthJwt.setClientName(
         clientFinder.getClientName(clientDomain, challenge.getClientAccountId()));
 
+    // Encode the token before claiming the nonce: encoding is pure (no shared state), so if it
+    // fails (e.g. a signing error) the challenge is untouched and a retry can still succeed. Once
+    // the nonce is claimed below, that's irreversible -- a failure after that point would burn the
+    // challenge without ever handing the client a token.
     debug("jwtToken:", webAuthJwt);
-    return jwtService.encode(webAuthJwt);
+    String token = jwtService.encode(webAuthJwt);
+
+    // Claim the challenge's transaction hash as a nonce only now, immediately before returning the
+    // token -- not earlier in this method or in validateChallenge(). Everything above (home
+    // domain, account, signers, threshold, client name resolution, and JWT encoding) must succeed
+    // first, so that a submission that fails for an unrelated reason doesn't burn the nonce and
+    // cause a subsequent, correctly signed retry of the same challenge to be wrongly rejected as a
+    // replay.
+    //
+    // The hash isn't pre-registered when the challenge is created (unlike SEP-45's nonces): it's
+    // derivable independently by anyone holding the challenge, so the first successful validation
+    // simply claims it directly as used. This avoids an unauthenticated DB write on every
+    // GET /auth, and avoids a replay window across a rolling deploy where an old-code replica
+    // would otherwise create a challenge with no nonce row for a new-code replica to find.
+    //
+    // The claim's retention takes the later of two floors -- neither alone is sufficient:
+    //
+    // 1) A fixed window from the moment of this claim (SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS).
+    //    Anchoring retention only to the challenge's own signed max_time was tried and leaves a
+    //    gap: two near-simultaneous submissions of the same challenge can both pass validation up
+    //    to this point, and if the first claims the hash and cleanup then removes that row (because
+    //    it was retained only until a deadline computed from the challenge's own timing) while the
+    //    second is still validating -- a slow ledger lookup or JWT encode is enough -- the second
+    //    claim succeeds too, minting a second token for one challenge.
+    //
+    // 2) The challenge's own signed max_time (plus a second for the SDK's whole-second truncation
+    //    of "now" when it checks max_time). Relying only on the fixed window above is *also*
+    //    insufficient on its own: sep10.auth_timeout is anchor-configurable with no enforced
+    //    ceiling (PropertySep10Config only requires it to be positive), and it determines the
+    //    challenge's max_time -- so a longer-than-default auth_timeout can leave the challenge
+    //    still validly within its own time bounds well after the fixed window alone would have
+    //    let cleanup remove the claim, letting the same hash be claimed again for a second token.
+    //
+    // Together, the claim can never be removed before both the in-flight-validation window has
+    // passed AND the challenge's own signed validity has ended, regardless of how auth_timeout is
+    // configured.
+    long maxTimeEpochSecond = challenge.getTransaction().getTimeBounds().getMaxTime().longValue();
+    Instant challengeNotBefore = Instant.ofEpochSecond(maxTimeEpochSecond).plusSeconds(1);
+    if (!nonceManager.claim(hash, SEP10_NONCE_CLAIM_MIN_RETENTION_SECONDS, challengeNotBefore)) {
+      throw new SepValidationException("Challenge has already been used or has expired.");
+    }
+
+    // Only count a challenge as validated once it's actually going to be redeemed for a JWT --
+    // incrementing any earlier (e.g. right after the account/signers are confirmed) would inflate
+    // this counter for a challenge that's later rejected as a replay.
+    incrementValidationRequestValidatedCounter();
+
+    return token;
   }
 
   private String authUrl() {

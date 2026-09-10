@@ -141,7 +141,7 @@ public class SepBeans {
   }
 
   @Bean
-  @OnAnySepsEnabled(seps = {"sep45"})
+  @OnAnySepsEnabled(seps = {"sep10", "sep45"})
   NonceManager nonceService(NonceStore nonceStore, Clock clock) {
     return new NonceManager(nonceStore, clock);
   }
@@ -177,9 +177,16 @@ public class SepBeans {
       Sep10Config sep10Config,
       LedgerClient ledgerClient,
       JwtService jwtService,
-      ClientFinder clientFinder) {
+      ClientFinder clientFinder,
+      NonceManager nonceManager) {
     return new Sep10Service(
-        stellarNetworkConfig, secretConfig, sep10Config, ledgerClient, jwtService, clientFinder);
+        stellarNetworkConfig,
+        secretConfig,
+        sep10Config,
+        ledgerClient,
+        jwtService,
+        clientFinder,
+        nonceManager);
   }
 
   @Bean
@@ -235,9 +242,15 @@ public class SepBeans {
       ClientService clientService,
       PropertySep24Config sep24Config,
       CustomerIntegration customerIntegration,
-      JwtService jwtService) {
+      JwtService jwtService,
+      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore) {
     return new SimpleInteractiveUrlConstructor(
-        assetService, clientService, sep24Config, customerIntegration, jwtService);
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        sep31CustomerIdOwnerStore);
   }
 
   @Bean
@@ -251,7 +264,8 @@ public class SepBeans {
       RateIntegration rateIntegration,
       Clock clock,
       EventService eventService,
-      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore) {
+      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore,
+      CustomerIntegration customerIntegration) {
     return new Sep31Service(
         languageConfig,
         sep31Config,
@@ -262,7 +276,8 @@ public class SepBeans {
         eventService,
         clock,
         exchangeAmountsCalculator(sep38QuoteStore, clock),
-        sep31CustomerIdOwnerStore);
+        sep31CustomerIdOwnerStore,
+        customerIntegration);
   }
 
   @Bean

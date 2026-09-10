@@ -14,6 +14,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_SIGNING_SEED
 import org.stellar.anchor.TestConstants.Companion.TEST_WEB_AUTH_DOMAIN
 import org.stellar.anchor.api.sep.sep10.ValidationRequest
 import org.stellar.anchor.auth.JwtService
+import org.stellar.anchor.auth.NonceManager
 import org.stellar.anchor.client.ClientFinder
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep10Config
@@ -64,6 +65,8 @@ class Sep10RpcThresholdSignExtensionTest {
 
     val clientFinder = mockk<ClientFinder>(relaxed = true)
     val jwtService = JwtService(secretConfig)
+    val nonceManager = mockk<NonceManager>(relaxed = true)
+    every { nonceManager.claim(any(), any(), any()) } returns true
 
     return Sep10Service(
       stellarNetworkConfig,
@@ -71,7 +74,8 @@ class Sep10RpcThresholdSignExtensionTest {
       sep10Config,
       stellarRpc,
       jwtService,
-      clientFinder
+      clientFinder,
+      nonceManager
     )
   }
 

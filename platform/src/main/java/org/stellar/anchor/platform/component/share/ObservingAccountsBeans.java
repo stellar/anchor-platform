@@ -20,10 +20,16 @@ public class ObservingAccountsBeans {
     PaymentObservingAccountsManager bean =
         new PaymentObservingAccountsManager(paymentObservingAccountStore);
 
-    if (env.getProperty("sep31.enabled", Boolean.class, false)) {
+    if (shouldStartEvictionScheduler(env)) {
       bean.start();
     }
 
     return bean;
+  }
+
+  static boolean shouldStartEvictionScheduler(Environment env) {
+    return env.getProperty("sep6.enabled", Boolean.class, false)
+        || env.getProperty("sep24.enabled", Boolean.class, false)
+        || env.getProperty("sep31.enabled", Boolean.class, false);
   }
 }
