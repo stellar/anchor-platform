@@ -39,7 +39,7 @@ import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.MemoHelper
 import org.stellar.anchor.util.SepHelper
 import org.stellar.anchor.util.StringHelper.json
-import org.stellar.sdk.KeyPair
+import org.stellar.sdk.MuxedAccount
 
 lateinit var savedTxn: Sep31GetTransactionResponse
 
@@ -238,10 +238,14 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
 
     // Semantic checks a structural schema can't express.
     txn.transaction.stellarAccountId?.let {
+      // stellar_account_id can be a muxed M... destination (the production request validator
+      // accepts these, see SepRequestValidator#validateAccount) as well as a classic G... account
+      // -- MuxedAccount accepts both encodings, unlike KeyPair.fromAccountId which only accepts
+      // classic accounts.
       try {
-        KeyPair.fromAccountId(it)
+        MuxedAccount(it)
       } catch (e: Exception) {
-        fail<Unit>("'stellar_account_id' must be a valid Stellar public key", e)
+        fail<Unit>("'stellar_account_id' must be a valid Stellar account (classic or muxed)", e)
       }
     }
     // Validated independently of whether `stellar_memo` is present, so a response carrying an

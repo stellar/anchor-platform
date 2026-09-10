@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.*;
 import lombok.Data;
 import lombok.SneakyThrows;
+import org.apache.commons.lang3.StringUtils;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.Sep31Info;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
@@ -801,7 +802,7 @@ public class Sep31Service {
         Sep31InfoResponse.FieldResponse fieldResponse = entry.getValue();
         if (fieldResponse != null
             && !fieldResponse.isOptional()
-            && isEmpty(requestFields.get(fieldName))) {
+            && StringUtils.isBlank(requestFields.get(fieldName))) {
           infoF(
               "Missing required transaction field [{}] for request ({})",
               fieldName,

@@ -2018,6 +2018,12 @@ class Sep31ServiceTest {
     val ex4 = assertThrows<BadRequestException> { sep31Service.validateRequiredFields() }
     assertEquals("missing required transaction field: receiver_account_number", ex4.message)
 
+    // A whitespace-only value must not satisfy a required field either.
+    Context.get().transactionFields =
+      mapOf("receiver_routing_number" to "123", "receiver_account_number" to "   ")
+    val ex5 = assertThrows<BadRequestException> { sep31Service.validateRequiredFields() }
+    assertEquals("missing required transaction field: receiver_account_number", ex5.message)
+
     Context.get().transactionFields =
       mapOf(
         "receiver_routing_number" to "123",
