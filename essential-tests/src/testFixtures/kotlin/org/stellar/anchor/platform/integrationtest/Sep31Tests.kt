@@ -125,6 +125,14 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
   private fun assertCompliesWithProtocolSchema(rawJson: String, txn: Sep31GetTransactionResponse) {
     val root = com.google.gson.JsonParser.parseString(rawJson).asJsonObject
     assertTrue(root.has("transaction"), "response body must have a 'transaction' object")
+    // The stellar-anchor-tests getTransactionSchema sets `additionalProperties: false` on the
+    // root object -- deserialization alone can't catch a violation of that (Gson silently drops
+    // unknown fields), so the raw JSON's key set must be checked explicitly here.
+    assertEquals(
+      setOf("transaction"),
+      root.keySet(),
+      "response body must not have top-level properties other than 'transaction'"
+    )
     val transaction = root.getAsJsonObject("transaction")
 
     assertTrue(transaction.has("id") && !transaction.get("id").isJsonNull, "'id' is required")
@@ -585,7 +593,7 @@ private const val expectedSep31Info =
           "transaction": {
             "receiver_account_number": {
               "description": "Bank account number of the receiver.",
-              "optional": true
+              "optional": false
             }
           }
         }

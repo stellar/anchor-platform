@@ -35,7 +35,6 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.NotFoundException;
 import org.stellar.anchor.api.exception.Sep31CustomerInfoNeededException;
-import org.stellar.anchor.api.exception.Sep31MissingFieldException;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.api.exception.SepValidationException;
@@ -753,21 +752,25 @@ public class Sep31Service {
   }
 
   /**
-   * validateRequiredFields validates only that the `POST /transactions` or `PATCH
-   * /transactions/{id}` request body's `fields.transaction` map is present and that the requested
-   * asset is configured for SEP-31 receive.
+   * validateRequiredFields validates that the `POST /transactions` or `PATCH /transactions/{id}`
+   * request body's `fields.transaction` map is present, that the requested asset is configured for
+   * SEP-31 receive, and that every configured field with {@code optional: false} is actually
+   * present (and non-blank) in the request.
    *
-   * <p>It intentionally does NOT validate individual field values against a per-asset "required
-   * fields" spec, and never throws {@link Sep31MissingFieldException} -- the SEP-31 spec itself
-   * deprecates the `/info` `fields` key and the request's `fields.transaction` map (see {@link
+   * <p>The SEP-31 spec deprecates the whole `/info` `fields` key and the request's
+   * `fields.transaction` map (see {@link
    * org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest#fields}, marked
    * {@code @Deprecated}) in favor of SEP-12 customer fields: "Pass SEP-9 fields via SEP-12 PUT
    * /customer instead." KYC completeness for `sender_id`/`receiver_id` is instead enforced by
    * {@link #verifyCustomerOwnershipAndKyc}, which throws {@link Sep31CustomerInfoNeededException}
-   * -- the spec-compliant replacement for this mechanism.
+   * -- the spec-compliant replacement for this mechanism. But as long as an asset's config still
+   * sets {@code optional: false} on a field, `/info` advertises it as required (see {@link
+   * #fieldsResponseFromConfig}) -- leaving it unenforced here would let a client see a field
+   * promised as required and still have its omission silently accepted, contrary to the
+   * `transaction_info_needed` contract the config implies.
    *
-   * @throws BadRequestException if the asset is invalid or the `fields` map is missing from the
-   *     request
+   * @throws BadRequestException if the asset is invalid, the `fields` map is missing from the
+   *     request, or a field configured with {@code optional: false} is missing/blank
    */
   void validateRequiredFields() throws BadRequestException {
     AssetInfo assetInfo = Context.get().getAsset();
@@ -789,6 +792,24 @@ public class Sep31Service {
           "'fields' field must have one 'transaction' field for request ({})",
           Context.get().getRequest());
       throw new BadRequestException("'fields' field must have one 'transaction' field");
+    }
+
+    if (fieldSpecs.getFields() != null && fieldSpecs.getFields().getTransaction() != null) {
+      for (Map.Entry<String, Sep31InfoResponse.FieldResponse> entry :
+          fieldSpecs.getFields().getTransaction().entrySet()) {
+        String fieldName = entry.getKey();
+        Sep31InfoResponse.FieldResponse fieldResponse = entry.getValue();
+        if (fieldResponse != null
+            && !fieldResponse.isOptional()
+            && isEmpty(requestFields.get(fieldName))) {
+          infoF(
+              "Missing required transaction field [{}] for request ({})",
+              fieldName,
+              Context.get().getRequest());
+          throw new BadRequestException(
+              String.format("missing required transaction field: %s", fieldName));
+        }
+      }
     }
   }
 

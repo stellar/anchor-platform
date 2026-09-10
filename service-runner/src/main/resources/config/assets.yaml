@@ -79,15 +79,14 @@ items:
           - SWIFT
       quotes_supported: true
       quotes_required: false
-      # optional: true because Sep31Service#validateRequiredFields deliberately does not enforce
-      # individual field-level requirements -- the SEP-31 spec deprecates this `fields` mechanism
-      # in favor of SEP-12 customer fields, so advertising optional: false here would promise
-      # enforcement the server does not perform.
+      # optional: false is enforced by Sep31Service#validateRequiredFields -- a POST /transactions
+      # request missing this field is rejected with 400. The essential-tests fixture always
+      # supplies it (see Sep31Tests.kt), so this also exercises that enforcement end-to-end.
       fields:
         transaction:
           receiver_account_number:
             description: Bank account number of the receiver.
-            optional: true
+            optional: false
     sep38:
       enabled: true
       exchangeable_assets:

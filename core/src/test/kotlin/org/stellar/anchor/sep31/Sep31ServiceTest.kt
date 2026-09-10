@@ -2011,6 +2011,20 @@ class Sep31ServiceTest {
     assetInfo.id = originalId
     val ex3 = assertThrows<BadRequestException> { sep31Service.validateRequiredFields() }
     assertEquals("'fields' field must have one 'transaction' field", ex3.message)
+
+    // USDC's config (test_assets.json) marks receiver_routing_number/receiver_account_number as
+    // optional: false -- /info advertises that, so it must actually be enforced here.
+    Context.get().transactionFields = mapOf("receiver_routing_number" to "123")
+    val ex4 = assertThrows<BadRequestException> { sep31Service.validateRequiredFields() }
+    assertEquals("missing required transaction field: receiver_account_number", ex4.message)
+
+    Context.get().transactionFields =
+      mapOf(
+        "receiver_routing_number" to "123",
+        "receiver_account_number" to "456",
+        "type" to "SWIFT"
+      )
+    assertDoesNotThrow { sep31Service.validateRequiredFields() }
   }
 
   @Test
