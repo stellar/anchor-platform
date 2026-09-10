@@ -611,6 +611,16 @@ class RequestOnchainFundsHandlerTest {
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn31Store.save(any()) }
     verify(exactly = 1) { sepTransactionCounter.increment() }
+    verify(exactly = 1) {
+      paymentObservingAccountsManager.upsert(
+        DESTINATION_ACCOUNT,
+        PaymentObservingAccountsManager.AccountType.TRANSIENT,
+      )
+    }
+    verifyOrder {
+      txn24Store.save(any())
+      paymentObservingAccountsManager.upsert(any(), any())
+    }
 
     val expectedSep24Txn = JdbcSep24Transaction()
     expectedSep24Txn.kind = WITHDRAWAL.kind
@@ -1329,6 +1339,16 @@ class RequestOnchainFundsHandlerTest {
     verify(exactly = 0) { txn24Store.save(any()) }
     verify(exactly = 0) { txn31Store.save(any()) }
     verify(exactly = 1) { sepTransactionCounter.increment() }
+    verify(exactly = 1) {
+      paymentObservingAccountsManager.upsert(
+        DESTINATION_ACCOUNT,
+        PaymentObservingAccountsManager.AccountType.TRANSIENT,
+      )
+    }
+    verifyOrder {
+      txn6Store.save(any())
+      paymentObservingAccountsManager.upsert(any(), any())
+    }
 
     val expectedSep6Txn = JdbcSep6Transaction()
     expectedSep6Txn.kind = kind
@@ -1736,6 +1756,16 @@ class RequestOnchainFundsHandlerTest {
     verify(exactly = 0) { txn6Store.save(any()) }
     verify(exactly = 0) { txn24Store.save(any()) }
     verify(exactly = 1) { sepTransactionCounter.increment() }
+    verify(exactly = 1) {
+      paymentObservingAccountsManager.upsert(
+        DESTINATION_ACCOUNT,
+        PaymentObservingAccountsManager.AccountType.TRANSIENT,
+      )
+    }
+    verifyOrder {
+      txn31Store.save(any())
+      paymentObservingAccountsManager.upsert(any(), any())
+    }
 
     val expectedSep31Txn = JdbcSep31Transaction()
     expectedSep31Txn.status = PENDING_SENDER.toString()
