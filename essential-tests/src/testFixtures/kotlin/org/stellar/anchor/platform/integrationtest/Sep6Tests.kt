@@ -6,6 +6,7 @@ import org.junit.jupiter.api.assertThrows
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.exception.SepException
+import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
@@ -248,6 +249,86 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       }
     assert(ex.message!!.contains("Provided 'account' is not allowed")) {
       "Expected destination policy error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit rejects request without JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.deposit(
+        mapOf(
+          "asset_code" to "USDC",
+          "account" to clientWalletAccount,
+          "amount" to "1",
+          "type" to "SWIFT",
+        )
+      )
+    }
+  }
+
+  @Test
+  fun `test sep6 withdraw rejects request without JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.withdraw(
+        mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")
+      )
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.deposit(
+          mapOf("account" to clientWalletAccount, "amount" to "1", "type" to "SWIFT")
+        )
+      }
+    assert(ex.message!!.contains("asset_code")) {
+      "Expected a missing 'asset_code' parameter error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 withdraw rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.withdraw(mapOf("type" to "bank_account", "amount" to "1"))
+      }
+    assert(ex.message!!.contains("asset_code")) {
+      "Expected a missing 'asset_code' parameter error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.deposit(
+          mapOf(
+            "asset_code" to "DOES_NOT_EXIST",
+            "account" to clientWalletAccount,
+            "amount" to "1",
+            "type" to "SWIFT",
+          )
+        )
+      }
+    assert(ex.message!!.contains("invalid operation for asset")) {
+      "Expected an unsupported-asset error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 withdraw rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.withdraw(
+          mapOf("asset_code" to "DOES_NOT_EXIST", "type" to "bank_account", "amount" to "1")
+        )
+      }
+    assert(ex.message!!.contains("invalid operation for asset")) {
+      "Expected an unsupported-asset error but got: ${ex.message}"
     }
   }
 
