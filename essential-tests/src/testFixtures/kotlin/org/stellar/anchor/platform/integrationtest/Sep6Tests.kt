@@ -105,6 +105,34 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 deposit falls back to the JWT's own account when account param is omitted`() {
+    val request = mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")
+    val response = sep6Client.deposit(request)
+    Log.info("GET /deposit response: $response")
+    assert(!response.id.isNullOrEmpty())
+
+    val savedDepositTxn = sep6Client.getTransaction(mapOf("id" to response.id!!))
+    Assertions.assertEquals(clientWalletAccount, savedDepositTxn.transaction.to)
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange falls back to the JWT's own account when account param is omitted`() {
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "1",
+        "type" to "SWIFT",
+      )
+    val response = sep6Client.deposit(request, exchange = true)
+    Log.info("GET /deposit-exchange response: $response")
+    assert(!response.id.isNullOrEmpty())
+
+    val savedDepositTxn = sep6Client.getTransaction(mapOf("id" to response.id!!))
+    Assertions.assertEquals(clientWalletAccount, savedDepositTxn.transaction.to)
+  }
+
+  @Test
   fun `test sep6 withdraw`() {
     val request = mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")
     val response = sep6Client.withdraw(request)
