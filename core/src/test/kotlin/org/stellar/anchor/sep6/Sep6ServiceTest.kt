@@ -324,6 +324,40 @@ class Sep6ServiceTest {
   }
 
   @Test
+  fun `test deposit with empty account defaults to token subject`() {
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartDepositRequest.builder().assetCode(TEST_ASSET).account("").fundingMethod("SWIFT").build()
+    sep6Service.deposit(token, request)
+
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
+    assertEquals(TEST_ACCOUNT, slotTxn.captured.toAccount)
+  }
+
+  @Test
+  fun `test depositExchange with empty account defaults to token subject`() {
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .amount("100")
+        .account("")
+        .fundingMethod("SWIFT")
+        .build()
+    sep6Service.depositExchange(token, request)
+
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
+    assertEquals(TEST_ACCOUNT, slotTxn.captured.toAccount)
+  }
+
+  @Test
   fun `test withdrawExchange with empty account defaults to token subject`() {
     val slotTxn = slot<Sep6Transaction>()
     every { txnStore.save(capture(slotTxn)) } returns null
