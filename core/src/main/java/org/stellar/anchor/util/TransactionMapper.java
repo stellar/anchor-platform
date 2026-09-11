@@ -4,6 +4,8 @@ import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import jakarta.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.platform.GetTransactionResponse;
 import org.stellar.anchor.api.platform.PlatformTransactionData;
@@ -33,6 +35,17 @@ public class TransactionMapper {
     boolean hasRefundMemoOverride =
         !isEmpty(txn.getRefundMemo()) && !isEmpty(txn.getRefundMemoType());
 
+    // GetTransactionResponse.requiredInfoUpdates is a flat field-name list (shared with SEP-6),
+    // unlike SEP-31's own richer Sep31Info.Fields (name -> description/choices/optional) -- so a
+    // client status callback or status-changed event can at least tell the caller which fields
+    // are outstanding, even though it can't carry the full per-field metadata this shared DTO has
+    // no slot for.
+    List<String> requiredInfoUpdates = null;
+    if (txn.getRequiredInfoUpdates() != null
+        && txn.getRequiredInfoUpdates().getTransaction() != null) {
+      requiredInfoUpdates = new ArrayList<>(txn.getRequiredInfoUpdates().getTransaction().keySet());
+    }
+
     return GetTransactionResponse.builder()
         .id(txn.getId())
         .sep(PlatformTransactionData.Sep.SEP_31)
@@ -50,6 +63,8 @@ public class TransactionMapper {
         .userActionRequiredBy(txn.getUserActionRequiredBy())
         .transferReceivedAt(txn.getTransferReceivedAt())
         .message(txn.getRequiredInfoMessage()) // Assuming these are meant to be the same.
+        .requiredInfoUpdates(requiredInfoUpdates)
+        .fields(txn.getFields())
         .refunds(refunds)
         .stellarTransactions(txn.getStellarTransactions())
         .sourceAccount(txn.getFromAccount())

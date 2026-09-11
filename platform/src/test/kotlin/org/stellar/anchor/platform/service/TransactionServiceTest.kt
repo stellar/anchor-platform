@@ -16,6 +16,8 @@ import org.junit.jupiter.params.provider.ValueSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode.LENIENT
 import org.springframework.dao.OptimisticLockingFailureException
+import org.stellar.anchor.api.asset.AssetInfo
+import org.stellar.anchor.api.asset.Sep31Info
 import org.stellar.anchor.api.exception.AnchorException
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.NotFoundException
@@ -568,6 +570,176 @@ class TransactionServiceTest {
     )
 
     assertTrue(testSep31Transaction.updatedAt > testSep31Transaction.startedAt)
+  }
+
+  @Test
+  fun `test updateSepTransaction sets requiredInfoUpdates for SEP-31`() {
+    val txn = JdbcSep31Transaction()
+    txn.id = "my-tx-id"
+
+    val patch = PlatformTransactionData()
+    patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    patch.requiredInfoUpdates = listOf("receiver_account_number", "receiver_routing_number")
+
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+
+    assertDoesNotThrow { transactionService.updateSepTransaction(patch, txn) }
+
+    val expectedFields = txn.requiredInfoUpdates.transaction
+    assertEquals(setOf("receiver_account_number", "receiver_routing_number"), expectedFields.keys)
+  }
+
+  @Test
+  fun `test updateSepTransaction rejects a null field name in required_info_updates`() {
+    val txn = JdbcSep31Transaction()
+    txn.id = "my-tx-id"
+
+    val patch = PlatformTransactionData()
+    patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    patch.requiredInfoUpdates = listOf("receiver_account_number", null)
+
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+
+    val ex = assertThrows<AnchorException> { transactionService.updateSepTransaction(patch, txn) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+  }
+
+  @Test
+  fun `test updateSepTransaction rejects a blank field name in required_info_updates`() {
+    val txn = JdbcSep31Transaction()
+    txn.id = "my-tx-id"
+
+    val patch = PlatformTransactionData()
+    patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    patch.requiredInfoUpdates = listOf("receiver_account_number", "   ")
+
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+
+    val ex = assertThrows<AnchorException> { transactionService.updateSepTransaction(patch, txn) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+  }
+
+  @Test
+  fun `test updateSepTransaction rejects a transition to pending_transaction_info_update with no required_info_updates`() {
+    val txn = JdbcSep31Transaction()
+    txn.id = "my-tx-id"
+
+    val patch = PlatformTransactionData()
+    patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+
+    val ex = assertThrows<AnchorException> { transactionService.updateSepTransaction(patch, txn) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+  }
+
+  @Test
+  fun `test updateSepTransaction rejects a transition to pending_transaction_info_update with an empty required_info_updates`() {
+    val txn = JdbcSep31Transaction()
+    txn.id = "my-tx-id"
+
+    val patch = PlatformTransactionData()
+    patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    patch.requiredInfoUpdates = emptyList()
+
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+
+    val ex = assertThrows<AnchorException> { transactionService.updateSepTransaction(patch, txn) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+  }
+
+  @Test
+  fun `test updateSepTransaction preserves an existing required_info_updates across a partial update`() {
+    val txn = JdbcSep31Transaction()
+    txn.id = "my-tx-id"
+    txn.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE.toString()
+    txn.requiredInfoUpdates =
+      Sep31Info.Fields().apply {
+        transaction =
+          mapOf("receiver_account_number" to AssetInfo.Field("description", null, false))
+      }
+
+    // A patch that re-affirms the same status but doesn't touch required_info_updates -- e.g.
+    // only updating a message. (Every real PATCH transaction request carries a status --
+    // validateIfStatusIsSupported would already reject a missing one before this method is ever
+    // reached.)
+    val patch = PlatformTransactionData()
+    patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    patch.requiredInfoMessage = "please update your bank account number"
+
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+
+    assertDoesNotThrow { transactionService.updateSepTransaction(patch, txn) }
+    assertEquals(
+      setOf("receiver_account_number"),
+      txn.requiredInfoUpdates.transaction.keys,
+    )
   }
 
   private val jsonSep6Transaction =

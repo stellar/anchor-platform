@@ -10,7 +10,9 @@ import static org.stellar.anchor.util.StringHelper.json;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -21,6 +23,8 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.apache.commons.lang3.StringUtils;
 import org.stellar.anchor.MoreInfoUrlConstructor;
+import org.stellar.anchor.api.asset.AssetInfo;
+import org.stellar.anchor.api.asset.Sep31Info;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.InternalServerErrorException;
@@ -41,6 +45,7 @@ import org.stellar.anchor.sep31.Sep31Transaction;
 import org.stellar.anchor.sep6.Sep6Transaction;
 import org.stellar.anchor.sep6.Sep6TransactionUtils;
 import org.stellar.anchor.util.Log;
+import org.stellar.anchor.util.StringHelper;
 import org.stellar.sdk.KeyPair;
 
 public class ClientStatusCallbackHandler extends EventHandler {
@@ -345,6 +350,24 @@ public class ClientStatusCallbackHandler extends EventHandler {
     sep31Txn.setToAccount(txn.getDestinationAccount());
     sep31Txn.setClientDomain(txn.getClientDomain());
     sep31Txn.setQuoteId(txn.getQuoteId());
+    sep31Txn.setFields(txn.getFields());
+
+    // GetTransactionResponse.requiredInfoUpdates is a flat field-name list (shared with SEP-6),
+    // so it's expanded back into the Sep31Info.Fields shape a SEP-31 client callback body expects
+    // -- see TransactionMapper.toGetTransactionResponse(Sep31Transaction) for the other direction.
+    if (txn.getRequiredInfoUpdates() != null && !txn.getRequiredInfoUpdates().isEmpty()) {
+      Map<String, AssetInfo.Field> requiredFields = new HashMap<>();
+      for (String fieldName : txn.getRequiredInfoUpdates()) {
+        requiredFields.put(
+            fieldName,
+            AssetInfo.Field.builder()
+                .description(StringHelper.humanizeSnakeCase(fieldName))
+                .build());
+      }
+      Sep31Info.Fields requiredInfoUpdates = new Sep31Info.Fields();
+      requiredInfoUpdates.setTransaction(requiredFields);
+      sep31Txn.setRequiredInfoUpdates(requiredInfoUpdates);
+    }
 
     if (txn.getRefunds() != null) {
       List<RefundPayment> paymentList =

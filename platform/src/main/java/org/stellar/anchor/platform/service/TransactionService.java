@@ -4,6 +4,7 @@ import static org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_C
 import static org.stellar.anchor.api.sep.SepTransactionStatus.ERROR;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.EXPIRED;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE;
+import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_USR_TRANSFER_START;
 import static org.stellar.anchor.event.EventService.EventQueue.TRANSACTION;
 import static org.stellar.anchor.sep31.Sep31Helper.allAmountAvailable;
@@ -18,13 +19,16 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.stellar.anchor.api.asset.AssetInfo;
+import org.stellar.anchor.api.asset.Sep31Info;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
@@ -434,6 +438,51 @@ public class TransactionService {
         }
 
         JdbcSep31Transaction sep31Txn = (JdbcSep31Transaction) txn;
+        // update required_info_updates: PlatformTransactionData only carries a flat list of field
+        // names (shared with SEP-6), so it's expanded into the Sep31Info.Fields shape SEP-31's own
+        // PATCH validation expects. SEP-31 requires a human-readable `description` per field (it's
+        // the only non-optional attribute in the fields schema), but the business server has no way
+        // to supply one through this flat-list API -- fall back to a humanized version of the field
+        // name rather than shipping a blank description.
+        if (patch.getRequiredInfoUpdates() != null) {
+          Map<String, AssetInfo.Field> requiredFields = new HashMap<>();
+          for (String fieldName : patch.getRequiredInfoUpdates()) {
+            // A null entry would NPE inside humanizeSnakeCase; a blank one would produce a
+            // required field with no usable name. Reject both outright instead of persisting an
+            // unusable entry.
+            if (fieldName == null || fieldName.trim().isEmpty()) {
+              throw new BadRequestException(
+                  "required_info_updates must not contain null or blank field names");
+            }
+            requiredFields.put(
+                fieldName,
+                AssetInfo.Field.builder()
+                    .description(StringHelper.humanizeSnakeCase(fieldName))
+                    .build());
+          }
+          Sep31Info.Fields requiredInfoUpdates = new Sep31Info.Fields();
+          requiredInfoUpdates.setTransaction(requiredFields);
+          if (!Objects.equals(sep31Txn.getRequiredInfoUpdates(), requiredInfoUpdates)) {
+            sep31Txn.setRequiredInfoUpdates(requiredInfoUpdates);
+            txnUpdated = true;
+          }
+        }
+        // A transition into pending_transaction_info_update with no fields to correct would leave
+        // the transaction unrecoverable through SEP-31 PATCH: a null required_info_updates is
+        // rejected as "not expecting any updates", while an empty one rejects every field the
+        // client tries to patch as unexpected. Require a non-empty effective field set -- from
+        // this patch, or already present on the transaction from an earlier partial update --
+        // whenever this status is applied.
+        if (PENDING_TRANSACTION_INFO_UPDATE.getStatus().equals(sep31Txn.getStatus())) {
+          Sep31Info.Fields effectiveRequiredInfoUpdates = sep31Txn.getRequiredInfoUpdates();
+          if (effectiveRequiredInfoUpdates == null
+              || effectiveRequiredInfoUpdates.getTransaction() == null
+              || effectiveRequiredInfoUpdates.getTransaction().isEmpty()) {
+            throw new BadRequestException(
+                "required_info_updates must not be empty when status is "
+                    + "pending_transaction_info_update");
+          }
+        }
         // update sender and receiver
         txnUpdated = updateField(patch, "customers.sender", txn, "senderId", txnUpdated);
         txnUpdated = updateField(patch, "customers.receiver", txn, "receiverId", txnUpdated);
