@@ -54,6 +54,13 @@ public abstract class AbstractControllerExceptionHandler {
     return new CustomerInfoNeededResponse(ex.getFields());
   }
 
+  @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
+  @ExceptionHandler(SepRateLimitExceededException.class)
+  public SepExceptionResponse handleRateLimitExceeded(SepRateLimitExceededException ex) {
+    debugF("Rate limit exceeded: {}", ex.getMessage());
+    return new SepExceptionResponse(ex.getMessage());
+  }
+
   @ResponseStatus(HttpStatus.NOT_IMPLEMENTED)
   @ExceptionHandler({SepNotImplementedException.class, NotSupportedException.class})
   public SepExceptionResponse handleNotImplementedError(Exception ex) {

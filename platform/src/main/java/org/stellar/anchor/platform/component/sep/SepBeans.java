@@ -26,6 +26,7 @@ import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.platform.condition.OnAnySepsEnabled;
 import org.stellar.anchor.platform.config.*;
 import org.stellar.anchor.platform.service.SimpleInteractiveUrlConstructor;
+import org.stellar.anchor.platform.utils.TransactionCreationRateLimiter;
 import org.stellar.anchor.sep1.Sep1Service;
 import org.stellar.anchor.sep10.Sep10Service;
 import org.stellar.anchor.sep12.Sep12Service;
@@ -75,6 +76,17 @@ public class SepBeans {
   @ConfigurationProperties(prefix = "sep38")
   Sep38Config sep38Config() {
     return new PropertySep38Config();
+  }
+
+  @Bean
+  @ConfigurationProperties(prefix = "rate-limit")
+  RateLimitConfig rateLimitConfig() {
+    return new PropertyRateLimitConfig();
+  }
+
+  @Bean
+  TransactionCreationRateLimiter transactionCreationRateLimiter(RateLimitConfig rateLimitConfig) {
+    return new TransactionCreationRateLimiter(rateLimitConfig);
   }
 
   @Bean

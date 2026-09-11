@@ -16,6 +16,7 @@ import org.stellar.anchor.api.exception.Sep31MissingFieldException;
 import org.stellar.anchor.api.sep.sep31.*;
 import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
+import org.stellar.anchor.platform.utils.TransactionCreationRateLimiter;
 import org.stellar.anchor.sep31.Sep31Service;
 
 @RestController
@@ -24,9 +25,11 @@ import org.stellar.anchor.sep31.Sep31Service;
 @OnAllSepsEnabled(seps = {"sep31"})
 public class Sep31Controller {
   private final Sep31Service sep31Service;
+  private final TransactionCreationRateLimiter rateLimiter;
 
-  public Sep31Controller(Sep31Service sep31Service) {
+  public Sep31Controller(Sep31Service sep31Service, TransactionCreationRateLimiter rateLimiter) {
     this.sep31Service = sep31Service;
+    this.rateLimiter = rateLimiter;
   }
 
   @CrossOrigin(origins = "*")
@@ -49,6 +52,7 @@ public class Sep31Controller {
       HttpServletRequest servletRequest, @RequestBody Sep31PostTransactionRequest request)
       throws AnchorException {
     WebAuthJwt webAuthJwt = SepRequestHelper.getToken(servletRequest);
+    rateLimiter.checkAndRecord(webAuthJwt);
     request.setRequestClientIpAddress(getClientIpAddress(servletRequest));
     debugF("POST /transactions request={}", request);
     return sep31Service.postTransaction(webAuthJwt, request);
