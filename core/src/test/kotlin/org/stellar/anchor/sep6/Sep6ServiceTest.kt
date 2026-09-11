@@ -10,6 +10,7 @@ import kotlin.test.assertNotNull
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
@@ -338,6 +339,29 @@ class Sep6ServiceTest {
   }
 
   @Test
+  fun `test deposit with null account defaults to token subject`() {
+    // Unlike the empty-string case above, a null account also exercises that
+    // StartDepositRequest.account itself is buildable without one -- a Lombok @NonNull on that
+    // field would throw here even before reaching Sep6Service, independent of the empty-string
+    // path above.
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request = assertDoesNotThrow {
+      StartDepositRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account(null)
+        .fundingMethod("SWIFT")
+        .build()
+    }
+    sep6Service.deposit(token, request)
+
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
+    assertEquals(TEST_ACCOUNT, slotTxn.captured.toAccount)
+  }
+
+  @Test
   fun `test depositExchange with empty account defaults to token subject`() {
     val slotTxn = slot<Sep6Transaction>()
     every { txnStore.save(capture(slotTxn)) } returns null
@@ -351,6 +375,27 @@ class Sep6ServiceTest {
         .account("")
         .fundingMethod("SWIFT")
         .build()
+    sep6Service.depositExchange(token, request)
+
+    verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
+    assertEquals(TEST_ACCOUNT, slotTxn.captured.toAccount)
+  }
+
+  @Test
+  fun `test depositExchange with null account defaults to token subject`() {
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request = assertDoesNotThrow {
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .amount("100")
+        .account(null)
+        .fundingMethod("SWIFT")
+        .build()
+    }
     sep6Service.depositExchange(token, request)
 
     verify(exactly = 1) { requestValidator.validateDestinationAccount(token, TEST_ACCOUNT) }
