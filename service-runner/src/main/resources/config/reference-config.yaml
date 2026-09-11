@@ -18,6 +18,10 @@ app:
   enableTest: true
   # Indicates, that RPC requests should be used instead of PATCH /transactions endpoint
   rpcEnabled: true
+  # Disabled here because essential-tests drives SEP-31 transactions through RPC calls itself
+  # (including error/recovery scenarios); leaving this on races the test's own calls against the
+  # reference server's automatic reactions to the same transaction's status-change events.
+  autoAdvanceSep31: false
 
 # These are secrets shared between Anchor and Platform that are used to safely communicate from `Platform->Anchor`
 # and `Anchor->Platform`, especially when they are in different clusters.
