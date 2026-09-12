@@ -1,6 +1,8 @@
 package org.stellar.anchor.platform.integrationtest
 
+import io.ktor.http.Url
 import java.time.Instant
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.parallel.Execution
@@ -39,6 +41,7 @@ import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.MemoHelper
 import org.stellar.anchor.util.SepHelper
 import org.stellar.anchor.util.StringHelper.json
+import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.sdk.MuxedAccount
 
 lateinit var savedTxn: Sep31GetTransactionResponse
@@ -54,6 +57,8 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
   private val platformApiClient: PlatformApiClient =
     PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
+  private val anchorReferenceServerClient =
+    AnchorReferenceServerClient(Url(config.env["reference.server.url"]!!))
 
   @Test
   fun `test info endpoint`() {
@@ -96,6 +101,11 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     val (senderCustomer, receiverCustomer) = mkCustomers()
 
     val postTxResponse = createTx(senderCustomer, receiverCustomer)
+
+    // `savedTxn` gets patched directly by a later ordered test (`test patch, get and compare`),
+    // so it must opt out of Sep31EventProcessor's automatic advancement -- otherwise the
+    // reference server's own reaction to this transaction's status races that later patch.
+    runBlocking { anchorReferenceServerClient.skipSep31AutoAdvance(postTxResponse.id) }
 
     // GET Sep31 transaction
     val rawTxnJson = fetchRawTransaction(postTxResponse.id)
