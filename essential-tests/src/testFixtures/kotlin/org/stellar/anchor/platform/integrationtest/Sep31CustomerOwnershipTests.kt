@@ -120,6 +120,21 @@ class Sep31CustomerOwnershipTests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  // verifyCustomerOwnershipAndKyc (Sep31Service.java) always reverse-looks-up an unclaimed
+  // customer id through customerIntegration -- using the *authenticated caller's* account/memo,
+  // not the id itself -- before kycRequired is ever considered; only the later KYC-status
+  // enforcement is skipped when the asset doesn't advertise sep12.<role>. A never-registered
+  // random id can't match the caller's own customer record, so the claim is rejected regardless
+  // of whether KYC is required for that role.
+  @Test
+  fun `test caller cannot claim a receiver_id with no matching SEP-12 customer record even when KYC is not required`() {
+    val neverRegisteredReceiverId = java.util.UUID.randomUUID().toString()
+
+    assertThrows<SepNotAuthorizedException> {
+      sep31Client.postTransaction(mkTxnRequest(neverRegisteredReceiverId))
+    }
+  }
+
   @Test
   fun `test same caller can reuse a receiver_id it already owns`() {
     val receiverCustomerRequest =

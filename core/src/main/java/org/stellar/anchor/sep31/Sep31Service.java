@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.*;
 import lombok.Data;
 import lombok.SneakyThrows;
+import org.apache.commons.lang3.StringUtils;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.Sep31Info;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
@@ -47,7 +48,6 @@ import org.stellar.anchor.api.sep.sep31.Sep31InfoResponse;
 import org.stellar.anchor.api.sep.sep31.Sep31PatchTransactionRequest;
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest;
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionResponse;
-import org.stellar.anchor.api.shared.Amount;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
@@ -213,15 +213,7 @@ public class Sep31Service {
         sep12Config != null && sep12Config.getReceiver() != null);
 
     Sep38Quote quote = Context.get().getQuote();
-    FeeDetails feeDetails;
-
-    if (quote != null) {
-      feeDetails = quote.getFee();
-    } else {
-      Amount fee = Context.get().getFee();
-
-      feeDetails = new FeeDetails(fee.getAmount(), fee.getAsset(), null);
-    }
+    FeeDetails feeDetails = quote != null ? quote.getFee() : Context.get().getFee();
 
     Instant now = Instant.now();
     Sep31Transaction txn =
@@ -458,51 +450,77 @@ public class Sep31Service {
   /**
    * updateTxAmountsWhenNoQuoteWasUsed will update the transaction amountIn and amountOut based on
    * the request amount and the fee.
+   *
+   * <p>{@code request.getAmount()} is always denominated in the sell asset ({@code asset_code}),
+   * regardless of {@code paymentType} -- see {@link #updateFee()}. {@code paymentType} only
+   * controls whether the fee is added into amount_in (STRICT_RECEIVE) or subtracted out of
+   * amount_out (STRICT_SEND), and that combination is only performed when the fee is itself
+   * denominated in the sell asset -- {@link RestRateIntegration} also permits a fee denominated in
+   * the buy asset, which cannot be combined with the sell-side amount without mixing units. When
+   * destination_asset requests a real conversion, amount_out is left unset here: the /rate used is
+   * only INDICATIVE, and per SEP-31 amount_out for a destination_asset conversion is only known
+   * once the Receiving Anchor actually receives the incoming payment and can apply a firm rate.
+   *
+   * @throws ServerErrorException if the /rate response's fee is denominated in an asset that is
+   *     neither the sell asset nor the buy asset -- an invalid upstream response, not bad input
+   *     from the SEP-31 caller.
    */
-  void updateTxAmountsWhenNoQuoteWasUsed() {
+  void updateTxAmountsWhenNoQuoteWasUsed() throws ServerErrorException {
     Sep31PostTransactionRequest request = Context.get().getRequest();
     Sep31Transaction txn = Context.get().getTransaction();
-    Amount feeResponse = Context.get().getFee();
-
+    FeeDetails feeResponse = Context.get().getFee();
     AssetInfo reqAsset = Context.get().getAsset();
     int scale = reqAsset.getSignificantDecimals();
     BigDecimal reqAmount = decimal(request.getAmount(), scale);
-    BigDecimal fee = decimal(feeResponse.getAmount(), scale);
-
-    BigDecimal amountIn;
-    BigDecimal amountOut;
-    boolean strictSend = sep31Config.getPaymentType() == STRICT_SEND;
-    if (strictSend) {
-      // amount_in = req.amount
-      // amount_out = amount_in - amount fee
-      amountIn = reqAmount;
-      amountOut = amountIn.subtract(fee);
-    } else {
-      // amount_in = req.amount + fee
-      // amount_out = req.amount
-      amountIn = reqAmount.add(fee);
-      amountOut = reqAmount;
-    }
-    debugF("Updating transaction ({}) with fee ({}) - reqAsset ({})", txn.getId(), fee, reqAsset);
 
     String amountInAsset = reqAsset.getId();
-    String amountOutAsset = request.getDestinationAsset();
+    String amountOutAsset =
+        (request.getDestinationAsset() == null) ? amountInAsset : request.getDestinationAsset();
+    boolean isSameAsset = amountInAsset.equals(amountOutAsset);
+    boolean strictSend = sep31Config.getPaymentType() == STRICT_SEND;
+    boolean feeInSellAsset = amountInAsset.equals(feeResponse.getAsset());
+    boolean feeInBuyAsset = amountOutAsset.equals(feeResponse.getAsset());
+    if (!feeInSellAsset && !feeInBuyAsset) {
+      infoF(
+          "Fee asset ({}) from /rate response matches neither the sell asset ({}) nor the buy "
+              + "asset ({})",
+          feeResponse.getAsset(),
+          amountInAsset,
+          amountOutAsset);
+      throw new ServerErrorException(
+          String.format(
+              "Fee asset [%s] must match either the sell asset [%s] or the buy asset [%s]",
+              feeResponse.getAsset(), amountInAsset, amountOutAsset));
+    }
 
-    boolean isSimpleQuote = Objects.equals(amountInAsset, amountOutAsset);
+    BigDecimal amountIn;
+    if (strictSend || !feeInSellAsset) {
+      amountIn = reqAmount;
+    } else {
+      // STRICT_RECEIVE, fee denominated in the sell asset: amount_in = amount + fee.
+      amountIn = reqAmount.add(decimal(feeResponse.getTotal(), scale));
+    }
+    debugF(
+        "Updating transaction ({}) with fee ({}) - reqAsset ({})",
+        txn.getId(),
+        feeResponse,
+        reqAsset);
 
-    // Update transaction
     txn.setAmountIn(formatAmount(amountIn, scale));
     txn.setAmountExpected(formatAmount(amountIn, scale));
     txn.setAmountInAsset(amountInAsset);
-    if (isSimpleQuote) {
+    txn.setAmountOutAsset(amountOutAsset);
+    if (isSameAsset) {
+      BigDecimal amountOut =
+          strictSend ? amountIn.subtract(decimal(feeResponse.getTotal(), scale)) : reqAmount;
       txn.setAmountOut(formatAmount(amountOut, scale));
     }
-    txn.setAmountOutAsset(amountOutAsset);
 
-    // Update fee
-    String feeStr = formatAmount(fee, scale);
-    txn.setFeeDetails(new FeeDetails(feeStr, feeResponse.getAsset()));
-    Context.get().getFee().setAmount(feeStr);
+    // Persist the callback's fee exactly as received -- feeResponse.getTotal() is validated
+    // against the sum of feeResponse.getDetails() at the fee asset's own precision by
+    // RestRateIntegration, independent of reqAsset's scale (a fee may be denominated in the buy
+    // asset). Reformatting it here would risk desyncing the stored total from the breakdown.
+    txn.setFeeDetails(feeResponse);
   }
 
   public Sep31GetTransactionResponse getTransaction(WebAuthJwt token, String id)
@@ -717,26 +735,26 @@ public class Sep31Service {
         infoF("Quote: ({}) is missing the 'fee' field", quote.getId());
         throw new SepValidationException("Quote is missing the 'fee' field");
       }
-      Amount fee = new Amount(quote.getFee().getTotal(), quote.getFee().getAsset());
-      Context.get().setFee(fee);
+      Context.get().setFee(quote.getFee());
       return;
     }
 
     Sep31PostTransactionRequest request = Context.get().getRequest();
     String assetName = Context.get().getAsset().getId();
+    String destAsset =
+        (request.getDestinationAsset() == null) ? assetName : request.getDestinationAsset();
     infoF("Requesting fee for request ({})", request);
+    // request.getAmount() is always denominated in asset_code (the sell asset) per SEP-31,
+    // regardless of paymentType -- so sell_amount is always what's fixed here. paymentType only
+    // affects how the fee combines with it afterward, in updateTxAmountsWhenNoQuoteWasUsed.
     var rate =
         rateIntegration
             .getRate(
                 GetRateRequest.builder()
                     .type(GetRateRequest.Type.INDICATIVE)
-                    .sellAmount(request.getAmount())
                     .sellAsset(assetName)
-                    .buyAsset(
-                        (request.getDestinationAsset() == null)
-                            ? assetName
-                            : request.getDestinationAsset())
-                    .buyAmount(null)
+                    .sellAmount(request.getAmount())
+                    .buyAsset(destAsset)
                     .clientId(getClientName())
                     .build())
             .getRate();
@@ -745,8 +763,7 @@ public class Sep31Service {
       throw new SepValidationException("Fee is not present in /rate response");
     }
     infoF("Fee for request ({}) is ({})", request, fee);
-    Amount amountFee = Amount.create(fee.getTotal(), fee.getAsset());
-    Context.get().setFee(amountFee);
+    Context.get().setFee(fee);
   }
 
   String getClientName() {
@@ -754,23 +771,29 @@ public class Sep31Service {
   }
 
   /**
-   * validateRequiredFields validates only that the `POST /transactions` or `PATCH
-   * /transactions/{id}` request body's `fields.transaction` map is present and that the requested
-   * asset is configured for SEP-31 receive.
+   * validateRequiredFields validates that the `POST /transactions` or `PATCH /transactions/{id}`
+   * request body's `fields.transaction` map is present, that the requested asset is configured for
+   * SEP-31 receive, and that every configured field with {@code optional: false} is actually
+   * present (and non-blank) in the request.
    *
-   * <p>It intentionally does NOT validate individual field values against a per-asset "required
-   * fields" spec, and never throws {@link Sep31MissingFieldException} -- the SEP-31 spec itself
-   * deprecates the `/info` `fields` key and the request's `fields.transaction` map (see {@link
+   * <p>The SEP-31 spec deprecates the whole `/info` `fields` key and the request's
+   * `fields.transaction` map (see {@link
    * org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest#fields}, marked
    * {@code @Deprecated}) in favor of SEP-12 customer fields: "Pass SEP-9 fields via SEP-12 PUT
    * /customer instead." KYC completeness for `sender_id`/`receiver_id` is instead enforced by
    * {@link #verifyCustomerOwnershipAndKyc}, which throws {@link Sep31CustomerInfoNeededException}
-   * -- the spec-compliant replacement for this mechanism.
+   * -- the spec-compliant replacement for this mechanism. But as long as an asset's config still
+   * sets {@code optional: false} on a field, `/info` advertises it as required (see {@link
+   * #fieldsResponseFromConfig}) -- leaving it unenforced here would let a client see a field
+   * promised as required and still have its omission silently accepted, contrary to the
+   * `transaction_info_needed` contract the config implies.
    *
    * @throws BadRequestException if the asset is invalid or the `fields` map is missing from the
    *     request
+   * @throws Sep31MissingFieldException if a field configured with {@code optional: false} is
+   *     missing/blank from the request
    */
-  void validateRequiredFields() throws BadRequestException {
+  void validateRequiredFields() throws BadRequestException, Sep31MissingFieldException {
     AssetInfo assetInfo = Context.get().getAsset();
     if (assetInfo == null) {
       infoF("Missing asset information for request ({})", Context.get().getRequest());
@@ -791,6 +814,35 @@ public class Sep31Service {
           Context.get().getRequest());
       throw new BadRequestException("'fields' field must have one 'transaction' field");
     }
+
+    if (fieldSpecs.getFields() != null && fieldSpecs.getFields().getTransaction() != null) {
+      Map<String, AssetInfo.Field> missingFields = new LinkedHashMap<>();
+      for (Map.Entry<String, Sep31InfoResponse.FieldResponse> entry :
+          fieldSpecs.getFields().getTransaction().entrySet()) {
+        String fieldName = entry.getKey();
+        Sep31InfoResponse.FieldResponse fieldResponse = entry.getValue();
+        if (fieldResponse != null
+            && !fieldResponse.isOptional()
+            && StringUtils.isBlank(requestFields.get(fieldName))) {
+          missingFields.put(
+              fieldName,
+              AssetInfo.Field.builder()
+                  .description(fieldResponse.getDescription())
+                  .choices(fieldResponse.getChoices())
+                  .optional(false)
+                  .build());
+        }
+      }
+      if (!missingFields.isEmpty()) {
+        infoF(
+            "Missing required transaction fields [{}] for request ({})",
+            missingFields.keySet(),
+            Context.get().getRequest());
+        Sep31Info.Fields fields = new Sep31Info.Fields();
+        fields.setTransaction(missingFields);
+        throw new Sep31MissingFieldException(fields);
+      }
+    }
   }
 
   @SneakyThrows
@@ -809,6 +861,7 @@ public class Sep31Service {
         assetResponse.setMaxAmount(assetInfo.getSep31().getReceive().getMaxAmount());
         assetResponse.setFundingMethods(methods);
         assetResponse.setSep12(sep12ResponseFromConfig(assetInfo.getSep31().getSep12()));
+        assetResponse.setFields(fieldsResponseFromConfig(assetInfo.getSep31().getFields()));
         response.getReceive().put(assetInfo.getCode(), assetResponse);
       }
     }
@@ -849,13 +902,39 @@ public class Sep31Service {
     return typesResponse;
   }
 
+  /**
+   * Advertises the `fields.transaction` entries a sending anchor must/may supply on `POST
+   * /transactions`, per SEP-31's `/info` fields object schema -- null (omitted from `GET /info`) if
+   * the asset's config doesn't set a `fields` block.
+   */
+  private static Sep31InfoResponse.FieldsResponse fieldsResponseFromConfig(
+      Sep31Info.Fields fieldsConfig) {
+    if (fieldsConfig == null || fieldsConfig.getTransaction() == null) {
+      return null;
+    }
+    Map<String, Sep31InfoResponse.FieldResponse> transaction = new HashMap<>();
+    fieldsConfig
+        .getTransaction()
+        .forEach(
+            (fieldName, field) -> {
+              Sep31InfoResponse.FieldResponse fieldResponse = new Sep31InfoResponse.FieldResponse();
+              fieldResponse.setDescription(field.getDescription());
+              fieldResponse.setChoices(field.getChoices());
+              fieldResponse.setOptional(field.isOptional());
+              transaction.put(fieldName, fieldResponse);
+            });
+    Sep31InfoResponse.FieldsResponse fieldsResponse = new Sep31InfoResponse.FieldsResponse();
+    fieldsResponse.setTransaction(transaction);
+    return fieldsResponse;
+  }
+
   @Data
   public static class Context {
     private Sep31Transaction transaction;
     private Sep31PostTransactionRequest request;
     private Sep38Quote quote;
     private WebAuthJwt webAuthJwt;
-    private Amount fee;
+    private FeeDetails fee;
     private AssetInfo asset;
     private Map<String, String> transactionFields;
     private static ThreadLocal<Context> context = new ThreadLocal<>();
