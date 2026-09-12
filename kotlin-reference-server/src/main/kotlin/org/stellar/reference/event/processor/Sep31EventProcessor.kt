@@ -60,7 +60,6 @@ class Sep31EventProcessor(
         log.info { "Transaction ${transaction.id} is in pending_sender status" }
       }
       PENDING_RECEIVER -> {
-        if (!config.appSettings.autoAdvanceSep31) return
         if (verifyKyc(transaction).isNotEmpty()) {
           requestKyc(event)
           return
@@ -69,15 +68,13 @@ class Sep31EventProcessor(
           sendExternal(transaction.id)
       }
       PENDING_EXTERNAL ->
-        if (config.appSettings.autoAdvanceSep31) {
-          sepHelper.rpcAction(
-            RpcMethod.NOTIFY_OFFCHAIN_FUNDS_SENT.toString(),
-            NotifyOffchainFundsSentRequest(
-              transactionId = transaction.id,
-              message = "Funds sent to receiver",
-            ),
-          )
-        }
+        sepHelper.rpcAction(
+          RpcMethod.NOTIFY_OFFCHAIN_FUNDS_SENT.toString(),
+          NotifyOffchainFundsSentRequest(
+            transactionId = transaction.id,
+            message = "Funds sent to receiver",
+          ),
+        )
       COMPLETED -> {
         log.info { "Transaction ${transaction.id} is completed" }
       }

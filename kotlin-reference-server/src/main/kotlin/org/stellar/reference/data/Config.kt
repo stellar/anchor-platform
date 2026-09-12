@@ -26,12 +26,6 @@ data class AppSettings(
   val rpcEnabled: Boolean,
   val enableTest: Boolean,
   val paymentSigningSeed: String,
-  // Whether Sep31EventProcessor auto-advances a SEP-31 transaction in reaction to its own status-
-  // change events (requesting/confirming KYC, and notifying offchain funds sent once external
-  // funds are pending). Real anchor integrations rely on this; a suite that drives a transaction
-  // through RPC calls itself (e.g. testing error/recovery) races against it, since both are trying
-  // to advance the same transaction concurrently. Defaults to true to preserve existing behavior.
-  val autoAdvanceSep31: Boolean = true,
 )
 
 data class AuthSettings(

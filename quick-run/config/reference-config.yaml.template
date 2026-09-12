@@ -20,9 +20,6 @@ app:
   custodyEnabled: false
   # Indicates, that RPC requests should be used instead of PATCH /transactions endpoint
   rpcEnabled: true
-  # Whether the reference server auto-advances SEP-31 transactions (requesting/confirming KYC,
-  # notifying offchain funds sent) in reaction to their own status changes.
-  autoAdvanceSep31: true
   # The signing seed for payment operations (set dynamically by ap_start.sh)
   paymentSigningSeed: ${DISTRIBUTION_ACCOUNT_SECRET_KEY}
 
