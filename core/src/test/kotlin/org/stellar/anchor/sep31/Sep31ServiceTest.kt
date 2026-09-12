@@ -384,7 +384,7 @@ class Sep31ServiceTest {
     Context.get().fee = fee
     Context.get().asset = asset
 
-    assertThrows<SepValidationException> { sep31Service.updateTxAmountsWhenNoQuoteWasUsed() }
+    assertThrows<ServerErrorException> { sep31Service.updateTxAmountsWhenNoQuoteWasUsed() }
   }
 
   @Test

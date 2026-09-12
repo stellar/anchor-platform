@@ -460,8 +460,12 @@ public class Sep31Service {
    * destination_asset requests a real conversion, amount_out is left unset here: the /rate used is
    * only INDICATIVE, and per SEP-31 amount_out for a destination_asset conversion is only known
    * once the Receiving Anchor actually receives the incoming payment and can apply a firm rate.
+   *
+   * @throws ServerErrorException if the /rate response's fee is denominated in an asset that is
+   *     neither the sell asset nor the buy asset -- an invalid upstream response, not bad input
+   *     from the SEP-31 caller.
    */
-  void updateTxAmountsWhenNoQuoteWasUsed() throws SepValidationException {
+  void updateTxAmountsWhenNoQuoteWasUsed() throws ServerErrorException {
     Sep31PostTransactionRequest request = Context.get().getRequest();
     Sep31Transaction txn = Context.get().getTransaction();
     FeeDetails feeResponse = Context.get().getFee();
@@ -483,7 +487,7 @@ public class Sep31Service {
           feeResponse.getAsset(),
           amountInAsset,
           amountOutAsset);
-      throw new SepValidationException(
+      throw new ServerErrorException(
           String.format(
               "Fee asset [%s] must match either the sell asset [%s] or the buy asset [%s]",
               feeResponse.getAsset(), amountInAsset, amountOutAsset));
