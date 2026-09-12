@@ -670,6 +670,15 @@ private const val expectedSep31Info =
             "receiver_account_number": {
               "description": "Bank account number of the receiver.",
               "optional": false
+            },
+            "receiver_routing_number": {
+              "description": "Bank routing number of the receiver.",
+              "optional": true
+            },
+            "type": {
+              "description": "Type of the receiver's bank transfer.",
+              "optional": true,
+              "choices": ["SEPA", "SWIFT"]
             }
           }
         }
