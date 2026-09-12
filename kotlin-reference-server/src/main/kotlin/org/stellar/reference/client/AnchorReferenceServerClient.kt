@@ -78,15 +78,25 @@ class AnchorReferenceServerClient(val endpoint: Url) {
   }
 
   // Test-only: opts a SEP-31 transaction out of Sep31EventProcessor's automatic advancement, for a
-  // test that drives it through RPC calls itself instead (see Sep31TestRoute.kt).
+  // test that drives it through RPC calls itself instead (see Sep31TestRoute.kt). Ktor's default
+  // HttpClient doesn't throw on a non-2xx response, and the caller relies on this registration to
+  // avoid racing the reference server -- checking the status here turns a silent no-op (e.g. the
+  // route not being registered) into a clear failure instead of a flaky race down the line.
   suspend fun skipSep31AutoAdvance(transactionId: String) {
-    client.post {
-      url {
-        this.protocol = endpoint.protocol
-        host = endpoint.host
-        port = endpoint.port
-        encodedPath = "/sep31/transactions/$transactionId/skip-auto-advance"
+    val response =
+      client.post {
+        url {
+          this.protocol = endpoint.protocol
+          host = endpoint.host
+          port = endpoint.port
+          encodedPath = "/sep31/transactions/$transactionId/skip-auto-advance"
+        }
       }
+    if (!response.status.isSuccess()) {
+      throw IllegalStateException(
+        "Failed to register transaction($transactionId) to skip auto-advance: " +
+          "${response.status}"
+      )
     }
   }
 }
