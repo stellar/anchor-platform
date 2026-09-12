@@ -371,6 +371,23 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test update transaction amounts when no quote was used rejects a fee denominated in an unrelated third asset`() {
+    // The fee is denominated in neither the sell asset (asset.id) nor the buy asset (stellarJPYC)
+    // -- treating it as the buy asset's amount here would silently mix units.
+    every { sep31Config.paymentType } returns STRICT_RECEIVE
+    request.amount = "100"
+    request.destinationAsset = stellarJPYC
+    fee.total = "2"
+    fee.asset = stellarUSDC
+    Context.get().transaction = txn
+    Context.get().request = request
+    Context.get().fee = fee
+    Context.get().asset = asset
+
+    assertThrows<SepValidationException> { sep31Service.updateTxAmountsWhenNoQuoteWasUsed() }
+  }
+
+  @Test
   fun `test updateFee always fixes sell_amount to request amount for STRICT_SEND`() {
     Context.reset()
     Context.get().request = request
@@ -2012,17 +2029,32 @@ class Sep31ServiceTest {
     val ex3 = assertThrows<BadRequestException> { sep31Service.validateRequiredFields() }
     assertEquals("'fields' field must have one 'transaction' field", ex3.message)
 
-    // USDC's config (test_assets.json) marks receiver_routing_number/receiver_account_number as
-    // optional: false -- /info advertises that, so it must actually be enforced here.
-    Context.get().transactionFields = mapOf("receiver_routing_number" to "123")
-    val ex4 = assertThrows<BadRequestException> { sep31Service.validateRequiredFields() }
-    assertEquals("missing required transaction field: receiver_account_number", ex4.message)
+    // USDC's config (test_assets.json) marks receiver_routing_number/receiver_account_number/type
+    // as required -- /info advertises that, so it must actually be enforced here. A missing
+    // required field must surface as the SEP-31 transaction_info_needed contract, not a plain
+    // BadRequestException, so sending anchors can discover what to add before retrying.
+    Context.get().transactionFields = mapOf("receiver_routing_number" to "123", "type" to "SWIFT")
+    val ex4 = assertThrows<Sep31MissingFieldException> { sep31Service.validateRequiredFields() }
+    assertEquals(setOf("receiver_account_number"), ex4.missingFields.transaction.keys)
+    assertEquals(
+      "bank account number of the destination",
+      ex4.missingFields.transaction["receiver_account_number"]!!.description,
+    )
 
     // A whitespace-only value must not satisfy a required field either.
     Context.get().transactionFields =
-      mapOf("receiver_routing_number" to "123", "receiver_account_number" to "   ")
-    val ex5 = assertThrows<BadRequestException> { sep31Service.validateRequiredFields() }
-    assertEquals("missing required transaction field: receiver_account_number", ex5.message)
+      mapOf(
+        "receiver_routing_number" to "123",
+        "receiver_account_number" to "   ",
+        "type" to "SWIFT",
+      )
+    val ex5 = assertThrows<Sep31MissingFieldException> { sep31Service.validateRequiredFields() }
+    assertEquals(setOf("receiver_account_number"), ex5.missingFields.transaction.keys)
+
+    // Every missing field must be reported together, not just the first one encountered.
+    Context.get().transactionFields = mapOf("receiver_routing_number" to "123")
+    val ex6 = assertThrows<Sep31MissingFieldException> { sep31Service.validateRequiredFields() }
+    assertEquals(setOf("receiver_account_number", "type"), ex6.missingFields.transaction.keys)
 
     Context.get().transactionFields =
       mapOf(

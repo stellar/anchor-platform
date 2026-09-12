@@ -36,6 +36,7 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.NotFoundException;
 import org.stellar.anchor.api.exception.Sep31CustomerInfoNeededException;
+import org.stellar.anchor.api.exception.Sep31MissingFieldException;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.api.exception.SepValidationException;
@@ -460,7 +461,7 @@ public class Sep31Service {
    * only INDICATIVE, and per SEP-31 amount_out for a destination_asset conversion is only known
    * once the Receiving Anchor actually receives the incoming payment and can apply a firm rate.
    */
-  void updateTxAmountsWhenNoQuoteWasUsed() {
+  void updateTxAmountsWhenNoQuoteWasUsed() throws SepValidationException {
     Sep31PostTransactionRequest request = Context.get().getRequest();
     Sep31Transaction txn = Context.get().getTransaction();
     FeeDetails feeResponse = Context.get().getFee();
@@ -474,6 +475,19 @@ public class Sep31Service {
     boolean isSameAsset = amountInAsset.equals(amountOutAsset);
     boolean strictSend = sep31Config.getPaymentType() == STRICT_SEND;
     boolean feeInSellAsset = amountInAsset.equals(feeResponse.getAsset());
+    boolean feeInBuyAsset = amountOutAsset.equals(feeResponse.getAsset());
+    if (!feeInSellAsset && !feeInBuyAsset) {
+      infoF(
+          "Fee asset ({}) from /rate response matches neither the sell asset ({}) nor the buy "
+              + "asset ({})",
+          feeResponse.getAsset(),
+          amountInAsset,
+          amountOutAsset);
+      throw new SepValidationException(
+          String.format(
+              "Fee asset [%s] must match either the sell asset [%s] or the buy asset [%s]",
+              feeResponse.getAsset(), amountInAsset, amountOutAsset));
+    }
 
     BigDecimal amountIn;
     if (strictSend || !feeInSellAsset) {
@@ -770,10 +784,12 @@ public class Sep31Service {
    * promised as required and still have its omission silently accepted, contrary to the
    * `transaction_info_needed` contract the config implies.
    *
-   * @throws BadRequestException if the asset is invalid, the `fields` map is missing from the
-   *     request, or a field configured with {@code optional: false} is missing/blank
+   * @throws BadRequestException if the asset is invalid or the `fields` map is missing from the
+   *     request
+   * @throws Sep31MissingFieldException if a field configured with {@code optional: false} is
+   *     missing/blank from the request
    */
-  void validateRequiredFields() throws BadRequestException {
+  void validateRequiredFields() throws BadRequestException, Sep31MissingFieldException {
     AssetInfo assetInfo = Context.get().getAsset();
     if (assetInfo == null) {
       infoF("Missing asset information for request ({})", Context.get().getRequest());
@@ -796,6 +812,7 @@ public class Sep31Service {
     }
 
     if (fieldSpecs.getFields() != null && fieldSpecs.getFields().getTransaction() != null) {
+      Map<String, AssetInfo.Field> missingFields = new LinkedHashMap<>();
       for (Map.Entry<String, Sep31InfoResponse.FieldResponse> entry :
           fieldSpecs.getFields().getTransaction().entrySet()) {
         String fieldName = entry.getKey();
@@ -803,13 +820,23 @@ public class Sep31Service {
         if (fieldResponse != null
             && !fieldResponse.isOptional()
             && StringUtils.isBlank(requestFields.get(fieldName))) {
-          infoF(
-              "Missing required transaction field [{}] for request ({})",
+          missingFields.put(
               fieldName,
-              Context.get().getRequest());
-          throw new BadRequestException(
-              String.format("missing required transaction field: %s", fieldName));
+              AssetInfo.Field.builder()
+                  .description(fieldResponse.getDescription())
+                  .choices(fieldResponse.getChoices())
+                  .optional(false)
+                  .build());
         }
+      }
+      if (!missingFields.isEmpty()) {
+        infoF(
+            "Missing required transaction fields [{}] for request ({})",
+            missingFields.keySet(),
+            Context.get().getRequest());
+        Sep31Info.Fields fields = new Sep31Info.Fields();
+        fields.setTransaction(missingFields);
+        throw new Sep31MissingFieldException(fields);
       }
     }
   }
