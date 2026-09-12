@@ -76,4 +76,17 @@ class AnchorReferenceServerClient(val endpoint: Url) {
       }
     return gson.fromJson(response.body<String>(), SendEventRequest::class.java)
   }
+
+  // Test-only: opts a SEP-31 transaction out of Sep31EventProcessor's automatic advancement, for a
+  // test that drives it through RPC calls itself instead (see Sep31TestRoute.kt).
+  suspend fun skipSep31AutoAdvance(transactionId: String) {
+    client.post {
+      url {
+        this.protocol = endpoint.protocol
+        host = endpoint.host
+        port = endpoint.port
+        encodedPath = "/sep31/transactions/$transactionId/skip-auto-advance"
+      }
+    }
+  }
 }

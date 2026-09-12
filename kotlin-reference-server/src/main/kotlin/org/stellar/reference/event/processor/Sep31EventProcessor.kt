@@ -1,5 +1,6 @@
 package org.stellar.reference.event.processor
 
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.runBlocking
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.platform.*
@@ -21,10 +22,14 @@ class Sep31EventProcessor(
 
     // Lets a test that drives a transaction through RPC calls itself (e.g. exercising an
     // error/recovery path this processor doesn't know about) opt that one transaction out of
-    // automatic advancement, instead of disabling it for every transaction -- see essential-tests'
-    // Sep31PlatformApiTests, whose recovery-flow fixture tags every RPC call's `message` with this
-    // marker. Real anchor integrations never set it, so this only ever matches test traffic.
-    const val MANUAL_RPC_TEST_MARKER = "[skip-auto-advance]"
+    // automatic advancement, instead of disabling it for every transaction. Populated only via the
+    // test-only `/sep31/transactions/{id}/skip-auto-advance` route (see Sep31TestRoute.kt) -- kept
+    // out of transaction data so this can't be triggered by a real anchor's own message content.
+    private val manualRpcTestTransactions = ConcurrentHashMap.newKeySet<String>()
+
+    fun skipAutoAdvance(transactionId: String) {
+      manualRpcTestTransactions.add(transactionId)
+    }
   }
 
   override suspend fun onQuoteCreated(event: SendEventRequest) {
@@ -62,7 +67,7 @@ class Sep31EventProcessor(
 
   override suspend fun onTransactionStatusChanged(event: SendEventRequest) {
     val transaction = event.payload.transaction!!
-    if (transaction.message?.contains(MANUAL_RPC_TEST_MARKER) == true) {
+    if (manualRpcTestTransactions.contains(transaction.id)) {
       log.info {
         "Transaction ${transaction.id} opts out of automatic advancement -- skipping reaction to" +
           " status ${transaction.status}"

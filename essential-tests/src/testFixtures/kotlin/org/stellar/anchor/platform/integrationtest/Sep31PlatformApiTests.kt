@@ -1,5 +1,7 @@
 package org.stellar.anchor.platform.integrationtest
 
+import io.ktor.http.Url
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
@@ -7,9 +9,12 @@ import org.junit.jupiter.api.TestMethodOrder
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.reference.client.AnchorReferenceServerClient
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class Sep31PlatformApiTests : PlatformApiTests() {
+  private val anchorReferenceServerClient =
+    AnchorReferenceServerClient(Url(config.env["reference.server.url"]!!))
   /**
    * 1. pending_receiver -> request_onchain_funds (called by reference server Sep31EventProcessor)
    * 2. pending_sender -> notify_onchain_funds_received
@@ -62,6 +67,11 @@ class Sep31PlatformApiTests : PlatformApiTests() {
     val receiveRequest = gson.fromJson(receiveRequestJson, Sep31PostTransactionRequest::class.java)
     val receiveResponse = sep31Client.postTransaction(receiveRequest)
 
+    // This flow drives the transaction through RPC calls itself (including an error/recovery
+    // path the reference server doesn't know about), so it must opt out of the reference server's
+    // own automatic advancement -- otherwise both race to advance the same transaction.
+    runBlocking { anchorReferenceServerClient.skipSep31AutoAdvance(receiveResponse.id) }
+
     repeat(5) {
       if (sep31Client.getTransaction(receiveResponse.id).transaction.status == "pending_sender")
         return@repeat
@@ -98,7 +108,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_REQUESTS =
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 1 [skip-auto-advance]",
+      "message": "test message 1",
       "stellar_transaction_id": "%TESTPAYMENT_TXN_HASH%"
     }
   },
@@ -108,7 +118,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_REQUESTS =
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 2 [skip-auto-advance]",
+      "message": "test message 2",
       "refund": {
         "id": "123456",
         "amount": {
@@ -149,7 +159,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_RESPONSES =
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 1 [skip-auto-advance]",
+              "message": "test message 1",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -200,7 +210,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_RESPONSES =
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 2 [skip-auto-advance]",
+              "message": "test message 2",
               "refunds": {
                 "amount_refunded": {
                   "amount": "2",
@@ -266,7 +276,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 1 [skip-auto-advance]",
+      "message": "test message 1",
       "stellar_transaction_id": "%TESTPAYMENT_TXN_HASH%"
     }
   },
@@ -276,7 +286,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 3 [skip-auto-advance]"
+      "message": "test message 3"
     }
   },
   {
@@ -285,7 +295,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 4 [skip-auto-advance]"
+      "message": "test message 4"
     }
   },
   {
@@ -294,7 +304,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 5 [skip-auto-advance]"
+      "message": "test message 5"
     }
   },
   {
@@ -303,7 +313,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 6 [skip-auto-advance]",
+      "message": "test message 6",
       "external_transaction_id": "ext123456789"
     }
   },
@@ -313,7 +323,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 7 [skip-auto-advance]",
+      "message": "test message 7",
       "external_transaction_id": "ext123456789"
     }
   }
@@ -346,7 +356,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:33:17.013738Z",
               "updated_at": "2024-06-25T20:33:18.072040Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 1 [skip-auto-advance]",
+              "message": "test message 1",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -399,7 +409,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:33:17.013738Z",
               "updated_at": "2024-06-25T20:33:20.102730Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 3 [skip-auto-advance]",
+              "message": "test message 3",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -452,7 +462,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:33:17.013738Z",
               "updated_at": "2024-06-25T20:33:21.141947Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 4 [skip-auto-advance]",
+              "message": "test message 4",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -505,7 +515,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:33:17.013738Z",
               "updated_at": "2024-06-25T20:33:22.155595Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 5 [skip-auto-advance]",
+              "message": "test message 5",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -558,7 +568,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:33:17.013738Z",
               "updated_at": "2024-06-25T20:33:23.170709Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 6 [skip-auto-advance]",
+              "message": "test message 6",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -613,7 +623,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "updated_at": "2024-06-25T20:33:24.184182Z",
               "completed_at": "2024-06-25T20:33:24.184180Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 7 [skip-auto-advance]",
+              "message": "test message 7",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
