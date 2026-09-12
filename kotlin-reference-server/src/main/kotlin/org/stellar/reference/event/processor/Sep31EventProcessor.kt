@@ -18,6 +18,13 @@ class Sep31EventProcessor(
   companion object {
     val requiredKyc =
       listOf("bank_account_number", "bank_account_type", "bank_number", "bank_branch_number")
+
+    // Lets a test that drives a transaction through RPC calls itself (e.g. exercising an
+    // error/recovery path this processor doesn't know about) opt that one transaction out of
+    // automatic advancement, instead of disabling it for every transaction -- see essential-tests'
+    // Sep31PlatformApiTests, whose recovery-flow fixture tags every RPC call's `message` with this
+    // marker. Real anchor integrations never set it, so this only ever matches test traffic.
+    const val MANUAL_RPC_TEST_MARKER = "[skip-auto-advance]"
   }
 
   override suspend fun onQuoteCreated(event: SendEventRequest) {
@@ -55,6 +62,13 @@ class Sep31EventProcessor(
 
   override suspend fun onTransactionStatusChanged(event: SendEventRequest) {
     val transaction = event.payload.transaction!!
+    if (transaction.message?.contains(MANUAL_RPC_TEST_MARKER) == true) {
+      log.info {
+        "Transaction ${transaction.id} opts out of automatic advancement -- skipping reaction to" +
+          " status ${transaction.status}"
+      }
+      return
+    }
     when (val status = transaction.status) {
       PENDING_SENDER -> {
         log.info { "Transaction ${transaction.id} is in pending_sender status" }

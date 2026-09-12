@@ -4,10 +4,6 @@ import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestMethodOrder
-import org.skyscreamer.jsonassert.Customization
-import org.skyscreamer.jsonassert.JSONAssert
-import org.skyscreamer.jsonassert.JSONCompareMode
-import org.skyscreamer.jsonassert.comparator.CustomComparator
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest
 import org.stellar.anchor.util.GsonUtils
@@ -21,9 +17,7 @@ class Sep31PlatformApiTests : PlatformApiTests() {
    * 4. pending_receiver -> notify_transaction_error
    * 5. error -> notify_transaction_recovery
    * 6. pending_receiver -> notify_offchain_funds_pending
-   * 7. pending_external -> notify_offchain_funds_sent (called by reference server
-   *    Sep31EventProcessor, which reacts to pending_external unconditionally -- see
-   *    SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FINAL_STATE_RESPONSE)
+   * 7. pending_external -> notify_offchain_funds_sent
    * 8. completed
    */
   @Test
@@ -32,7 +26,6 @@ class Sep31PlatformApiTests : PlatformApiTests() {
     `test sep-31 receive flow`(
       SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUESTS,
       SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONSES,
-      SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FINAL_STATE_RESPONSE,
     )
   }
 
@@ -51,11 +44,7 @@ class Sep31PlatformApiTests : PlatformApiTests() {
     )
   }
 
-  private fun `test sep-31 receive flow`(
-    actionRequests: String,
-    actionResponses: String,
-    expectedFinalState: String? = null,
-  ) {
+  private fun `test sep-31 receive flow`(actionRequests: String, actionResponses: String) {
     val receiverCustomerRequest =
       GsonUtils.getInstance().fromJson(CUSTOMER_1, Sep12PutCustomerRequest::class.java)
     val receiverCustomer = sep12Client.putCustomer(receiverCustomerRequest)
@@ -97,41 +86,6 @@ class Sep31PlatformApiTests : PlatformApiTests() {
       )
 
     `test flow`(receiveResponse.id, updatedActionRequests, updatedActionResponses)
-
-    if (expectedFinalState != null) {
-      repeat(5) {
-        if (
-          platformApiClient.getTransactionByRpc(receiveResponse.id).status.toString() == "completed"
-        )
-          return@repeat
-        Thread.sleep(1000L)
-      }
-
-      val finalTxn = platformApiClient.getTransactionByRpc(receiveResponse.id)
-      if (finalTxn.status.toString() != "completed") {
-        throw IllegalStateException(
-          "Transaction not in completed status after 5 seconds, last status: ${finalTxn.status}"
-        )
-      }
-
-      val updatedExpectedFinalState =
-        inject(
-          expectedFinalState,
-          RECEIVER_ID_KEY to receiverCustomer.id,
-          SENDER_ID_KEY to senderCustomer.id,
-          TX_ID_KEY to receiveResponse.id,
-        )
-      JSONAssert.assertEquals(
-        updatedExpectedFinalState,
-        gson.toJson(finalTxn),
-        CustomComparator(
-          JSONCompareMode.LENIENT,
-          Customization("started_at") { _, _ -> true },
-          Customization("updated_at") { _, _ -> true },
-          Customization("completed_at") { _, _ -> true },
-        ),
-      )
-    }
   }
 }
 
@@ -144,7 +98,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_REQUESTS =
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 1",
+      "message": "test message 1 [skip-auto-advance]",
       "stellar_transaction_id": "%TESTPAYMENT_TXN_HASH%"
     }
   },
@@ -154,7 +108,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_REQUESTS =
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 2",
+      "message": "test message 2 [skip-auto-advance]",
       "refund": {
         "id": "123456",
         "amount": {
@@ -195,7 +149,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_RESPONSES =
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 1",
+              "message": "test message 1 [skip-auto-advance]",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -246,7 +200,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_RESPONSES =
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 2",
+              "message": "test message 2 [skip-auto-advance]",
               "refunds": {
                 "amount_refunded": {
                   "amount": "2",
@@ -312,7 +266,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 1",
+      "message": "test message 1 [skip-auto-advance]",
       "stellar_transaction_id": "%TESTPAYMENT_TXN_HASH%"
     }
   },
@@ -322,7 +276,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 3"
+      "message": "test message 3 [skip-auto-advance]"
     }
   },
   {
@@ -331,7 +285,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 4"
+      "message": "test message 4 [skip-auto-advance]"
     }
   },
   {
@@ -340,7 +294,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 5"
+      "message": "test message 5 [skip-auto-advance]"
     }
   },
   {
@@ -349,7 +303,17 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_REQUEST
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "test message 6",
+      "message": "test message 6 [skip-auto-advance]",
+      "external_transaction_id": "ext123456789"
+    }
+  },
+  {
+    "id": "6",
+    "method": "notify_offchain_funds_sent",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "test message 7 [skip-auto-advance]",
       "external_transaction_id": "ext123456789"
     }
   }
@@ -382,7 +346,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:33:17.013738Z",
               "updated_at": "2024-06-25T20:33:18.072040Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 1",
+              "message": "test message 1 [skip-auto-advance]",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -435,7 +399,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:33:17.013738Z",
               "updated_at": "2024-06-25T20:33:20.102730Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 3",
+              "message": "test message 3 [skip-auto-advance]",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -488,7 +452,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:33:17.013738Z",
               "updated_at": "2024-06-25T20:33:21.141947Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 4",
+              "message": "test message 4 [skip-auto-advance]",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -541,7 +505,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:33:17.013738Z",
               "updated_at": "2024-06-25T20:33:22.155595Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 5",
+              "message": "test message 5 [skip-auto-advance]",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -594,7 +558,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               "started_at": "2024-06-25T20:33:17.013738Z",
               "updated_at": "2024-06-25T20:33:23.170709Z",
               "transfer_received_at": "2024-06-13T20:02:49Z",
-              "message": "test message 6",
+              "message": "test message 6 [skip-auto-advance]",
               "stellar_transactions": [
                 {
                   "id": "%TESTPAYMENT_TXN_HASH%",
@@ -624,66 +588,64 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               }
             },
             "id": "5"
+          },
+          {
+            "jsonrpc": "2.0",
+            "result": {
+              "id": "%TX_ID%",
+              "sep": "31",
+              "kind": "receive",
+              "status": "completed",
+              "amount_expected": {
+                "amount": "10",
+                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+              },
+              "amount_in": {
+                "amount": "10",
+                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+              },
+              "amount_out": {},
+              "fee_details": {
+                "total": "1.00",
+                "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+              },
+              "started_at": "2024-06-25T20:33:17.013738Z",
+              "updated_at": "2024-06-25T20:33:24.184182Z",
+              "completed_at": "2024-06-25T20:33:24.184180Z",
+              "transfer_received_at": "2024-06-13T20:02:49Z",
+              "message": "test message 7 [skip-auto-advance]",
+              "stellar_transactions": [
+                {
+                  "id": "%TESTPAYMENT_TXN_HASH%",
+                  "memo_type": "id",
+                  "payments": [
+                    {
+                      "id": "%TESTPAYMENT_ID%",
+                      "amount": {
+                        "amount": "%TESTPAYMENT_AMOUNT%",
+                        "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
+                      },
+                      "payment_type": "payment",
+                      "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+                      "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
+                    }
+                  ]
+                }
+              ],
+              "external_transaction_id": "ext123456789",
+              "client_name": "referenceCustodial",
+              "customers": {
+                "sender": { "id": "%SENDER_ID%" },
+                "receiver": { "id": "%RECEIVER_ID%" }
+              },
+              "creator": {
+                "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+              }
+            },
+            "id": "6"
           }
         ]
       """
-
-// The reference server's Sep31EventProcessor unconditionally calls notify_offchain_funds_sent
-// itself once a transaction reaches pending_external -- see Sep31EventProcessor.kt's
-// PENDING_EXTERNAL case. Scripting that same call manually here would race the reference
-// server's own call for this transaction, so this flow lets the reference server complete it and
-// asserts the resulting state instead of driving it as a 6th manual RPC step.
-private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FINAL_STATE_RESPONSE =
-  """
-{
-  "id": "%TX_ID%",
-  "sep": "31",
-  "kind": "receive",
-  "status": "completed",
-  "amount_expected": {
-    "amount": "10",
-    "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
-  },
-  "amount_in": {
-    "amount": "10",
-    "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
-  },
-  "amount_out": {},
-  "fee_details": {
-    "total": "1.00",
-    "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
-  },
-  "transfer_received_at": "2024-06-13T20:02:49Z",
-  "message": "Funds sent to receiver",
-  "stellar_transactions": [
-    {
-      "id": "%TESTPAYMENT_TXN_HASH%",
-      "memo_type": "id",
-      "payments": [
-        {
-          "id": "%TESTPAYMENT_ID%",
-          "amount": {
-            "amount": "%TESTPAYMENT_AMOUNT%",
-            "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
-          },
-          "payment_type": "payment",
-          "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
-          "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
-        }
-      ]
-    }
-  ],
-  "external_transaction_id": "ext123456789",
-  "client_name": "referenceCustodial",
-  "customers": {
-    "sender": { "id": "%SENDER_ID%" },
-    "receiver": { "id": "%RECEIVER_ID%" }
-  },
-  "creator": {
-    "account": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
-  }
-}
-  """
 
 private const val SEP_31_RECEIVE_FLOW_REQUEST =
   """
@@ -716,8 +678,7 @@ private const val CUSTOMER_1 =
     "clabe_number": "1234",
     "bank_number": "abcd",
     "bank_account_number": "1234",
-    "bank_account_type": "checking",
-    "bank_branch_number": "0001"
+    "bank_account_type": "checking"
 }
 """
 
