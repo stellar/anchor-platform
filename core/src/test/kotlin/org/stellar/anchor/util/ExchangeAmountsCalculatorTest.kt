@@ -31,7 +31,7 @@ class ExchangeAmountsCalculatorTest {
         "GBJDSMTMG4YBP27ZILV665XBISBBNRP62YB7WZA2IQX2HIPK7ABLF4C2",
         "456",
       )
-    val otherCallerIdentity = SepHelper.webAuthTokenIdentity(otherToken)
+    val otherCallerIdentity = SepHelper.webAuthTokenIdentity(otherToken,TestConstants.TEST_MEMO)
   }
 
   private val assetService: AssetService = DefaultAssetService.fromJsonResource("test_assets.json")
