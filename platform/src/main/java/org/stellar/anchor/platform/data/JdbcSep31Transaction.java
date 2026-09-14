@@ -46,6 +46,14 @@ public class JdbcSep31Transaction extends JdbcSepTransaction implements Sep31Tra
   @Column(name = "stellar_memo_type")
   String stellarMemoType;
 
+  @SerializedName("refund_memo")
+  @Column(name = "refund_memo")
+  String refundMemo;
+
+  @SerializedName("refund_memo_type")
+  @Column(name = "refund_memo_type")
+  String refundMemoType;
+
   @SerializedName("quote_id")
   @Column(name = "quote_id")
   String quoteId;

@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import java.time.Instant
 import java.util.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.skyscreamer.jsonassert.JSONAssert
@@ -164,6 +165,96 @@ class TransactionMapperTest {
         )
 
     JSONAssert.assertEquals(expected, actual, true)
+  }
+
+  @Test
+  fun `test SEP-31 transaction mapping uses refund memo override when specified`() {
+    val sepTxn =
+      PojoSep31Transaction().apply {
+        id = UUID.randomUUID().toString()
+        status = "completed"
+        amountIn = "100.0"
+        amountInAsset = "USDC"
+        amountOut = "100.0"
+        amountOutAsset = "USD"
+        feeDetails = FeeDetails("10.0", "USD")
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        stellarMemo = "originalMemo"
+        stellarMemoType = "text"
+        refundMemo = "overrideMemo"
+        refundMemoType = "id"
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        amountExpected = "100.0"
+        receiverId = "receiverId"
+        senderId = "senderId"
+      }
+
+    val actual = TransactionMapper.toGetTransactionResponse(sepTxn)
+
+    assertEquals("overrideMemo", actual.refundMemo)
+    assertEquals("id", actual.refundMemoType)
+  }
+
+  @Test
+  fun `test SEP-31 transaction mapping falls back to the original memo when the refund memo override is incomplete`() {
+    val sepTxn =
+      PojoSep31Transaction().apply {
+        id = UUID.randomUUID().toString()
+        status = "completed"
+        amountIn = "100.0"
+        amountInAsset = "USDC"
+        amountOut = "100.0"
+        amountOutAsset = "USD"
+        feeDetails = FeeDetails("10.0", "USD")
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        stellarMemo = "originalMemo"
+        stellarMemoType = "text"
+        refundMemo = "overrideMemo"
+        refundMemoType = null
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        amountExpected = "100.0"
+        receiverId = "receiverId"
+        senderId = "senderId"
+      }
+
+    val actual = TransactionMapper.toGetTransactionResponse(sepTxn)
+
+    assertEquals("originalMemo", actual.refundMemo)
+    assertEquals("text", actual.refundMemoType)
+  }
+
+  @Test
+  fun `test SEP-31 transaction mapping treats an empty refund memo as absent`() {
+    val sepTxn =
+      PojoSep31Transaction().apply {
+        id = UUID.randomUUID().toString()
+        status = "completed"
+        amountIn = "100.0"
+        amountInAsset = "USDC"
+        amountOut = "100.0"
+        amountOutAsset = "USD"
+        feeDetails = FeeDetails("10.0", "USD")
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        stellarMemo = "originalMemo"
+        stellarMemoType = "text"
+        refundMemo = ""
+        refundMemoType = ""
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        amountExpected = "100.0"
+        receiverId = "receiverId"
+        senderId = "senderId"
+      }
+
+    val actual = TransactionMapper.toGetTransactionResponse(sepTxn)
+
+    assertEquals("originalMemo", actual.refundMemo)
+    assertEquals("text", actual.refundMemoType)
   }
 
   @Test
