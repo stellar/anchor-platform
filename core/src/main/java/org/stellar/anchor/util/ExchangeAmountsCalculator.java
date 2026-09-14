@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
@@ -29,13 +30,19 @@ public class ExchangeAmountsCalculator {
    * @param sellAsset The asset the user is selling
    * @param buyAsset The asset the user is buying (the request's destination asset)
    * @param sellAmount The amount the user is selling
+   * @param callerIdentity The identity of the caller redeeming the quote
    * @return The amounts
    * @throws AnchorException if the quote is invalid
    */
   public Amounts calculateFromQuote(
-      String quoteId, AssetInfo sellAsset, AssetInfo buyAsset, String sellAmount)
+      String quoteId,
+      AssetInfo sellAsset,
+      AssetInfo buyAsset,
+      String sellAmount,
+      SepHelper.TokenIdentity callerIdentity)
       throws AnchorException {
-    Sep38Quote quote = validateQuoteAgainstRequestInfo(quoteId, sellAsset, buyAsset, sellAmount);
+    Sep38Quote quote =
+        validateQuoteAgainstRequestInfo(quoteId, sellAsset, buyAsset, sellAmount, callerIdentity);
     return Amounts.builder()
         .amountIn(quote.getSellAmount())
         .amountInAsset(quote.getSellAsset())
@@ -53,14 +60,22 @@ public class ExchangeAmountsCalculator {
    * @param buyAsset The amount the user is buying. It can be null for sep24 withdraw request
    * @param sellAmount The amount the user is selling. It can be null for sep24 deposit and withdraw
    *     requests
+   * @param callerIdentity The identity of the caller attempting to redeem the quote
    * @return The quote
    * @throws AnchorException if the quote is invalid
    */
   public Sep38Quote validateQuoteAgainstRequestInfo(
-      String quoteId, AssetInfo sellAsset, AssetInfo buyAsset, String sellAmount)
+      String quoteId,
+      AssetInfo sellAsset,
+      AssetInfo buyAsset,
+      String sellAmount,
+      SepHelper.TokenIdentity callerIdentity)
       throws AnchorException {
     Sep38Quote quote = sep38QuoteStore.findByQuoteId(quoteId);
-    if (quote == null) {
+    if (quote == null
+        || !StringUtils.equals(quote.getCreatorAccountId(), callerIdentity.account())
+        || !StringUtils.equals(quote.getCreatorMemo(), callerIdentity.memo())
+        || !StringUtils.equals(quote.getCreatorMemoType(), callerIdentity.memoType())) {
       throw new BadRequestException("Quote not found");
     }
 
