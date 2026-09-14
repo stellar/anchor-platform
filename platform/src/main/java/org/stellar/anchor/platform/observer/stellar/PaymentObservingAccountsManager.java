@@ -60,7 +60,7 @@ public class PaymentObservingAccountsManager {
     this.evict(getEvictMaxIdleTime());
     Log.debug("Persisting accounts...");
     for (ObservingAccount account : this.getAccounts()) {
-      store.upsert(account.account, account.lastObserved);
+      persistUpsert(account.account, account.lastObserved);
     }
   }
 
@@ -83,18 +83,62 @@ public class PaymentObservingAccountsManager {
    */
   public void upsert(ObservingAccount observingAccount) {
     if (observingAccount != null) {
-      ObservingAccount existingAccount = allAccounts.get(observingAccount.account);
-      if (existingAccount == null) {
-        allAccounts.put(observingAccount.account, observingAccount);
-        // update the database
-        store.upsert(observingAccount.account, observingAccount.lastObserved);
-      } else {
-        existingAccount.account = observingAccount.account;
-        existingAccount.lastObserved = observingAccount.lastObserved;
-        if (existingAccount.type == AccountType.TRANSIENT) {
-          existingAccount.type = observingAccount.type;
-        }
+      String canonicalAccount = safeCanonicalize(observingAccount.account);
+      ObservingAccount merged =
+          allAccounts.compute(
+              canonicalAccount,
+              (key, existing) -> {
+                if (existing == null) {
+                  return new ObservingAccount(
+                      canonicalAccount, observingAccount.lastObserved, observingAccount.type);
+                }
+                Instant lastObserved =
+                    observingAccount.lastObserved.isAfter(existing.lastObserved)
+                        ? observingAccount.lastObserved
+                        : existing.lastObserved;
+                AccountType type =
+                    existing.type == AccountType.TRANSIENT ? observingAccount.type : existing.type;
+                return new ObservingAccount(canonicalAccount, lastObserved, type);
+              });
+
+      boolean persisted = persistUpsert(merged.account, merged.lastObserved);
+      if (persisted && !canonicalAccount.equals(observingAccount.account)) {
+        persistDelete(observingAccount.account);
       }
+    }
+  }
+
+  private static String canonicalize(String account) {
+    if (account != null && account.startsWith("M")) {
+      return new MuxedAccount(account).getAccountId();
+    }
+    return account;
+  }
+
+  private static String safeCanonicalize(String account) {
+    try {
+      return canonicalize(account);
+    } catch (RuntimeException ex) {
+      Log.errorEx(String.format("Failed to canonicalize observing account %s", account), ex);
+      return account;
+    }
+  }
+
+  private boolean persistUpsert(String account, Instant lastObserved) {
+    try {
+      store.upsert(account, lastObserved);
+      return true;
+    } catch (RuntimeException ex) {
+      Log.errorEx(String.format("Failed to persist observing account %s", account), ex);
+      return false;
+    }
+  }
+
+  private void persistDelete(String account) {
+    try {
+      store.delete(account);
+    } catch (RuntimeException ex) {
+      Log.errorEx(String.format("Failed to delete stale observing account %s", account), ex);
     }
   }
 
@@ -119,17 +163,14 @@ public class PaymentObservingAccountsManager {
       return false;
     }
 
-    // MuxedAccount handles both muxed and non-muxed accounts
-    if (account.startsWith("M")) {
-      // If the account is a muxed account, we need to extract the G-account ID
-      MuxedAccount muxedAccount = new MuxedAccount(account);
-      account = muxedAccount.getAccountId();
-    }
+    String canonicalAccount = canonicalize(account);
 
-    ObservingAccount acct = allAccounts.get(account);
-    if (acct == null) return false;
-    acct.lastObserved = Instant.now();
-    return true;
+    ObservingAccount updated =
+        allAccounts.computeIfPresent(
+            canonicalAccount,
+            (key, existing) ->
+                new ObservingAccount(existing.account, Instant.now(), existing.type));
+    return updated != null;
   }
 
   /**
@@ -144,7 +185,7 @@ public class PaymentObservingAccountsManager {
       Duration idleTime = Duration.between(Instant.now(), acct.lastObserved).abs();
       if (idleTime.compareTo(maxIdleTime) > 0) {
         allAccounts.remove(acct.account);
-        store.delete(acct.account);
+        persistDelete(acct.account);
       }
     }
   }

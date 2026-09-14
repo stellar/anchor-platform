@@ -132,6 +132,8 @@ public abstract class RpcTransactionStatusHandler<T extends RpcMethodParamsReque
   protected abstract void updateTransactionWithRpcRequest(JdbcSepTransaction txn, T request)
       throws AnchorException;
 
+  protected void afterTransactionSaved(JdbcSepTransaction txn, T request) throws AnchorException {}
+
   protected JdbcSepTransaction getTransaction(String transactionId) throws AnchorException {
     Sep31Transaction txn31 = txn31Store.findByTransactionId(transactionId);
     if (txn31 != null) {
@@ -215,6 +217,8 @@ public abstract class RpcTransactionStatusHandler<T extends RpcMethodParamsReque
         txn31Store.save(txn31);
         break;
     }
+
+    afterTransactionSaved(txn, request);
 
     updateMetrics(txn);
   }
