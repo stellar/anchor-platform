@@ -219,7 +219,7 @@ public class Sep24Service {
     AssetInfo buyAsset = assetService.getAssetById(withdrawRequest.get("destination_asset"));
     if (quoteId != null) {
       Sep38Quote quote =
-          validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId);
+          validateAndPopulateQuote(quoteId, asset, buyAsset, strAmount, builder, txnId, token);
       validateAmountLimits(quote.getSellAmount(), minAmount, maxAmount);
     } else {
       builder.amountExpected(strAmount);
@@ -381,7 +381,7 @@ public class Sep24Service {
     AssetInfo sellAsset = assetService.getAssetById(depositRequest.get("source_asset"));
     if (quoteId != null) {
       Sep38Quote quote =
-          validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId);
+          validateAndPopulateQuote(quoteId, sellAsset, asset, strAmount, builder, txnId, token);
       validateAmountLimits(quote.getBuyAmount(), minAmount, maxAmount);
     } else {
       builder.amountExpected(strAmount);
@@ -586,11 +586,12 @@ public class Sep24Service {
       AssetInfo buyAsset,
       String strAmount,
       Sep24TransactionBuilder builder,
-      String txnId)
+      String txnId,
+      WebAuthJwt token)
       throws AnchorException {
     Sep38Quote quote =
         exchangeAmountsCalculator.validateQuoteAgainstRequestInfo(
-            quoteId, sellAsset, buyAsset, strAmount);
+            quoteId, sellAsset, buyAsset, strAmount, SepHelper.webAuthTokenIdentity(token));
 
     debugF("Updating transaction ({}) with quote ({})", txnId, quoteId);
     builder.quoteId(quoteId);
