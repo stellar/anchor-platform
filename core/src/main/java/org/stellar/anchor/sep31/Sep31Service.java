@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.*;
 import lombok.Data;
 import lombok.SneakyThrows;
+import org.apache.commons.lang3.StringUtils;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.Sep31Info;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
@@ -651,7 +652,11 @@ public class Sep31Service {
     }
 
     Sep38Quote quote = sep38QuoteStore.findByQuoteId(request.getQuoteId());
-    if (quote == null) {
+    TokenIdentity callerIdentity = webAuthTokenIdentity(Context.get().getWebAuthJwt());
+    if (quote == null
+        || !StringUtils.equals(quote.getCreatorAccountId(), callerIdentity.account())
+        || !StringUtils.equals(quote.getCreatorMemo(), callerIdentity.memo())
+        || !StringUtils.equals(quote.getCreatorMemoType(), callerIdentity.memoType())) {
       infoF("Quote ({}) was not found", request.getQuoteId());
       throw new BadRequestException(
           String.format("quote(id=%s) was not found.", request.getQuoteId()));
