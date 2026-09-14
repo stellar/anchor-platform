@@ -647,7 +647,7 @@ class Sep31ServiceTest {
       )
 
     val jwtToken =
-      TestHelper.createWebAuthJwt("GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO")
+      TestHelper.createWebAuthJwt("GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO", TestHelper.TEST_MEMO)
     val ex =
       assertThrows<BadRequestException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
     assertEquals("quote(id=${quote.id}) was not found.", ex.message)
