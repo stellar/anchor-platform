@@ -42,7 +42,7 @@ public class SacToAssetMapper {
       if (metadata == null) {
         return null;
       }
-    } catch (IOException e) {
+    } catch (IOException | RuntimeException e) {
       return null;
     }
 

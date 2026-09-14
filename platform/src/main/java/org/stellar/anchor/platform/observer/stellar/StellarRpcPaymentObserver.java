@@ -9,6 +9,7 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -47,6 +48,7 @@ import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse.EventInfo;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.scval.Scv;
+import org.stellar.sdk.xdr.Asset;
 import org.stellar.sdk.xdr.SCVal;
 import org.stellar.sdk.xdr.SCValType;
 
@@ -202,7 +204,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             result.event.getOperationIndex());
         return;
       }
-      processOperation(txn, op);
+      processOperation(txn, op, result.event.getContractId(), result.amount);
     } catch (Exception ex) {
       warnF(
           "Error processing transfer event: {}. ex={}",
@@ -374,7 +376,11 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  void processOperation(LedgerTransaction ledgerTxn, LedgerOperation op)
+  void processOperation(
+      LedgerTransaction ledgerTxn,
+      LedgerOperation op,
+      String emittingContractId,
+      long emittingAmount)
       throws IOException, AnchorException {
     PaymentTransferEvent event =
         switch (op.getType()) {
@@ -405,12 +411,20 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           case INVOKE_HOST_FUNCTION -> {
             LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
                 op.getInvokeHostFunctionOperation();
-            invokeOp.setAsset(sacToAssetMapper.getAssetFromSac(invokeOp.getContractId()));
+            Asset asset = sacToAssetMapper.getAssetFromSac(emittingContractId);
+            if (asset == null) {
+              warnF(
+                  "Event-emitting contract {} is not a Stellar Asset Contract. Skipping operation {}.",
+                  emittingContractId,
+                  invokeOp.getId());
+              yield null;
+            }
+            invokeOp.setAsset(asset);
             yield PaymentTransferEvent.builder()
                 .from(invokeOp.getFrom())
                 .to(invokeOp.getTo())
                 .sep11Asset(AssetHelper.getSep11AssetName(invokeOp.getAsset()))
-                .amount(invokeOp.getAmount())
+                .amount(BigInteger.valueOf(emittingAmount))
                 .txHash(ledgerTxn.getHash())
                 .operationId(invokeOp.getId())
                 .ledgerTransaction(ledgerTxn)

@@ -158,4 +158,72 @@ class HorizonPaymentObserverTest {
     val event = observer.toPaymentTransferEvent(op)
     assertNull(event)
   }
+
+  @Test
+  fun `toPaymentTransferEvent returns null instead of throwing when a contract call carries no balance changes`() {
+    val invokeOp = mockk<InvokeHostFunctionOperationResponse>()
+    every { invokeOp.assetBalanceChanges } returns emptyList()
+
+    val event = observer.toPaymentTransferEvent(invokeOp)
+    assertNull(event)
+  }
+
+  @Test
+  fun `toPaymentTransferEvent finds the observed balance change even when it is not the first entry`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val unrelatedChange = mockk<InvokeHostFunctionOperationResponse.AssetContractBalanceChange>()
+    every { unrelatedChange.from } returns KeyPair.random().accountId
+    every { unrelatedChange.to } returns KeyPair.random().accountId
+
+    val observedChange = mockk<InvokeHostFunctionOperationResponse.AssetContractBalanceChange>()
+    every { observedChange.from } returns fromAccount
+    every { observedChange.to } returns toAccount
+    every { observedChange.asset } returns Asset.createNativeAsset()
+    every { observedChange.amount } returns "50.0"
+
+    every { paymentObservingAccountsManager.lookupAndUpdate(unrelatedChange.from) } returns false
+    every { paymentObservingAccountsManager.lookupAndUpdate(unrelatedChange.to) } returns false
+    every { paymentObservingAccountsManager.lookupAndUpdate(fromAccount) } returns true
+    every { paymentObservingAccountsManager.lookupAndUpdate(toAccount) } returns true
+
+    val invokeOp = mockk<InvokeHostFunctionOperationResponse>()
+    every { invokeOp.assetBalanceChanges } returns listOf(unrelatedChange, observedChange)
+    every { invokeOp.transactionHash } returns "txHash4"
+    every { invokeOp.id } returns 321L
+    every { horizon.getTransaction(any()) } returns mockk()
+
+    val event = observer.toPaymentTransferEvent(invokeOp)
+
+    assertNotNull(event)
+    assertEquals(fromAccount, event?.from)
+    assertEquals(toAccount, event?.to)
+    assertEquals("321", event?.operationId)
+  }
+
+  @Test
+  fun `toPaymentTransferEvent captures a contract transfer regardless of the entrypoint name`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val assetBalanceChange = mockk<InvokeHostFunctionOperationResponse.AssetContractBalanceChange>()
+    every { assetBalanceChange.from } returns fromAccount
+    every { assetBalanceChange.to } returns toAccount
+    every { assetBalanceChange.asset } returns Asset.createNativeAsset()
+    every { assetBalanceChange.amount } returns "10.0"
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns true
+
+    val invokeOp = mockk<InvokeHostFunctionOperationResponse>()
+    every { invokeOp.function } returns "pay"
+    every { invokeOp.assetBalanceChanges } returns listOf(assetBalanceChange)
+    every { invokeOp.transactionHash } returns "txHash5"
+    every { invokeOp.id } returns 654L
+    every { invokeOp.parameters } returns null
+    every { horizon.getTransaction(any()) } returns mockk()
+
+    val event = observer.toPaymentTransferEvent(invokeOp)
+
+    assertNotNull(event)
+    assertEquals(fromAccount, event?.from)
+    assertEquals(toAccount, event?.to)
+  }
 }

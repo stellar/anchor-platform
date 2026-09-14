@@ -147,7 +147,11 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
   void handleEvent(PaymentTransferEvent transferEvent) throws AnchorException, IOException {
     // process the payment
     for (PaymentListener listener : paymentListeners) {
-      listener.onReceived(transferEvent);
+      try {
+        listener.onReceived(transferEvent);
+      } catch (RuntimeException rex) {
+        errorEx("Listener failed to process payment transfer event. Skipping.", rex);
+      }
     }
     publishingBackoffTimer.reset();
   }

@@ -43,7 +43,6 @@ public class DefaultPaymentListener implements PaymentListener {
   final JdbcSep6TransactionStore sep6TransactionStore;
   private final PlatformApiClient platformApiClient;
   private final RpcConfig rpcConfig;
-  private final SacToAssetMapper sacToAssetMapper;
 
   public DefaultPaymentListener(
       PaymentObservingAccountsManager paymentObservingAccountsManager,
@@ -51,15 +50,13 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSep24TransactionStore sep24TransactionStore,
       JdbcSep6TransactionStore sep6TransactionStore,
       PlatformApiClient platformApiClient,
-      RpcConfig rpcConfig,
-      SacToAssetMapper sacToAssetMapper) {
+      RpcConfig rpcConfig) {
     this.paymentObservingAccountsManager = paymentObservingAccountsManager;
     this.sep31TransactionStore = sep31TransactionStore;
     this.sep24TransactionStore = sep24TransactionStore;
     this.sep6TransactionStore = sep6TransactionStore;
     this.platformApiClient = platformApiClient;
     this.rpcConfig = rpcConfig;
-    this.sacToAssetMapper = sacToAssetMapper;
   }
 
   @Override
@@ -109,7 +106,7 @@ public class DefaultPaymentListener implements PaymentListener {
       LedgerTransaction ledgerTransaction,
       LedgerPayment ledgerPayment,
       PaymentTransferEvent paymentTransferEvent) {
-    if (!validate(ledgerTransaction, ledgerPayment)) {
+    if (!validate(ledgerTransaction, ledgerPayment, paymentTransferEvent)) {
       return;
     }
 
@@ -394,7 +391,10 @@ public class DefaultPaymentListener implements PaymentListener {
         .increment(ledgerPayment.getAmount().doubleValue());
   }
 
-  boolean validate(LedgerTransaction ledgerTransaction, LedgerPayment ledgerPayment) {
+  boolean validate(
+      LedgerTransaction ledgerTransaction,
+      LedgerPayment ledgerPayment,
+      PaymentTransferEvent paymentTransferEvent) {
     if (isEmpty(ledgerTransaction.getHash())) {
       debugF(
           "Transaction {} does not have a hash. This indicates a potential bug from stellar network events.",
@@ -421,9 +421,15 @@ public class DefaultPaymentListener implements PaymentListener {
     if (ledgerPayment.getType() == OperationType.INVOKE_HOST_FUNCTION) {
       LedgerInvokeHostFunctionOperation invokeOp =
           (LedgerInvokeHostFunctionOperation) ledgerPayment;
-      // Make sure the contract an SAC
       if (invokeOp.getAsset(false) == null) {
-        invokeOp.setAsset(sacToAssetMapper.getAssetFromSac(invokeOp.getContractId()));
+        String eventAsset = paymentTransferEvent.getSep11Asset();
+        if (isEmpty(eventAsset)) {
+          debugF(
+              "Operation {} moved no SAC balance to/from an observed account.",
+              ledgerPayment.getId());
+          return false;
+        }
+        invokeOp.setAsset(org.stellar.sdk.Asset.create(eventAsset).toXdr());
       }
     }
 

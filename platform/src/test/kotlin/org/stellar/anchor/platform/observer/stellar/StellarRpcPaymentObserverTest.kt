@@ -118,7 +118,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op)
+    observer.processOperation(ledgerTxn, op, "ignoredContractId", 0L)
 
     // Assert
     val event = eventSlot.captured
@@ -158,7 +158,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op)
+    observer.processOperation(ledgerTxn, op, "ignoredContractId", 0L)
 
     // Assert
     val event = eventSlot.captured
@@ -198,7 +198,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op)
+    observer.processOperation(ledgerTxn, op, "ignoredContractId", 0L)
 
     // Assert
     val event = eventSlot.captured
@@ -241,7 +241,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op)
+    observer.processOperation(ledgerTxn, op, cId, 400L)
 
     // Assert
     val event = eventSlot.captured
@@ -251,6 +251,104 @@ class StellarRpcPaymentObserverTest {
     assertEquals("txHashInvoke", event.txHash)
     assertEquals(opId, event.operationId)
     assertEquals(ledgerTxn, event.ledgerTransaction)
+  }
+
+  @Test
+  fun `processOperation resolves the asset from the event-emitting contract, not the top-level invoked contract`() {
+    val ledgerTxn = mockk<LedgerTransaction>()
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val routerContractId = "routerContractId"
+    val sacContractId = "realSacContractId"
+    val opId = "opIdRouter"
+
+    sacToAssetMapper.resolvableContracts = setOf(sacContractId)
+
+    val invokeOp =
+      LedgerTransaction.LedgerInvokeHostFunctionOperation().apply {
+        from = fromAccount
+        to = toAccount
+        amount = BigInteger("500")
+        id = opId
+        contractId = routerContractId
+      }
+    val op =
+      LedgerOperation().apply {
+        type = OperationType.INVOKE_HOST_FUNCTION
+        invokeHostFunctionOperation = invokeOp
+      }
+
+    every { ledgerTxn.hash } returns "txHashRouter"
+
+    val eventSlot = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(eventSlot)) } answers {}
+
+    observer.processOperation(ledgerTxn, op, sacContractId, 500L)
+
+    val event = eventSlot.captured
+    assertEquals(fromAccount, event.from)
+    assertEquals(toAccount, event.to)
+    assertEquals(BigInteger.valueOf(500), event.amount)
+  }
+
+  @Test
+  fun `processOperation takes the amount from the verified event, not the top-level declared amount`() {
+    val ledgerTxn = mockk<LedgerTransaction>()
+    val cId = "someSacContractId"
+    sacToAssetMapper.resolvableContracts = setOf(cId)
+
+    val invokeOp =
+      LedgerTransaction.LedgerInvokeHostFunctionOperation().apply {
+        from = KeyPair.random().accountId
+        to = KeyPair.random().accountId
+        amount = BigInteger("999999999999")
+        id = "opIdForgedAmount"
+        contractId = "attackerRouterContractId"
+      }
+    val op =
+      LedgerOperation().apply {
+        type = OperationType.INVOKE_HOST_FUNCTION
+        invokeHostFunctionOperation = invokeOp
+      }
+
+    every { ledgerTxn.hash } returns "txHashForgedAmount"
+
+    val eventSlot = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(eventSlot)) } answers {}
+
+    observer.processOperation(ledgerTxn, op, cId, 1L)
+
+    val event = eventSlot.captured
+    assertEquals(BigInteger.ONE, event.amount)
+    assertEquals(BigInteger("999999999999"), invokeOp.amount)
+  }
+
+  @Test
+  fun `processOperation skips the operation instead of throwing when the event-emitting contract is not a genuine SAC`() {
+    val ledgerTxn = mockk<LedgerTransaction>()
+    val forwarderContractId = "nonSacForwarderContractId"
+
+    sacToAssetMapper.resolvableContracts = setOf("someOtherRealSac")
+
+    val invokeOp =
+      LedgerTransaction.LedgerInvokeHostFunctionOperation().apply {
+        from = KeyPair.random().accountId
+        to = KeyPair.random().accountId
+        amount = BigInteger("999")
+        id = "opIdForwarder"
+        contractId = forwarderContractId
+      }
+    val op =
+      LedgerOperation().apply {
+        type = OperationType.INVOKE_HOST_FUNCTION
+        invokeHostFunctionOperation = invokeOp
+      }
+
+    every { ledgerTxn.hash } returns "txHashForwarder"
+
+    assertDoesNotThrow { observer.processOperation(ledgerTxn, op, forwarderContractId, 999L) }
+
+    verify(exactly = 0) { observer["handleEvent"](any<PaymentTransferEvent>()) }
   }
 
   @Test
@@ -809,7 +907,13 @@ class StellarRpcPaymentObserverTest {
  * [class org.stellar.sdk.xdr.Asset, interface org.stellar.sdk.xdr.XdrElement, class java.lang.Object]
  */
 internal class MockSacToAssetMapper : SacToAssetMapper(null) {
-  override fun getAssetFromSac(sac: String): org.stellar.sdk.xdr.Asset {
-    return Asset.createNativeAsset().toXdr() // Mocking to return a native asset for simplicity
+  var resolvableContracts: Set<String>? = null
+
+  override fun getAssetFromSac(sac: String): org.stellar.sdk.xdr.Asset? {
+    val allowed = resolvableContracts
+    if (allowed != null && sac !in allowed) {
+      return null
+    }
+    return Asset.createNativeAsset().toXdr()
   }
 }
