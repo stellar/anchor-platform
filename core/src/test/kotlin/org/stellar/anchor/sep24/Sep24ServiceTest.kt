@@ -319,7 +319,7 @@ internal class Sep24ServiceTest {
   }
 
   @Test
-  fun `test withdraw rejects a quote_id owned by a different account`() {
+  fun `test withdraw rejects a quote_id owned by the same account with a different memo`() {
     every { sep38QuoteStore.findByQuoteId(any()) } returns withdrawQuote
     val ex =
       assertThrows<BadRequestException> {
@@ -333,11 +333,39 @@ internal class Sep24ServiceTest {
   }
 
   @Test
-  fun `test deposit rejects a quote_id owned by a different account`() {
+  fun `test deposit rejects a quote_id owned by the same account with a different memo`() {
     every { sep38QuoteStore.findByQuoteId(any()) } returns depositQuote
     val ex =
       assertThrows<BadRequestException> {
         sep24Service.deposit(createTestWebAuthJwt(), createTestTransactionRequest(depositQuote.id))
+      }
+    assertEquals("Quote not found", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test withdraw rejects a quote_id owned by a different account`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns withdrawQuote
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.withdraw(
+          createTestWebAuthJwtDifferentAccount(),
+          createTestTransactionRequest(withdrawQuote.id, TestHelper.TEST_ACCOUNT)
+        )
+      }
+    assertEquals("Quote not found", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test deposit rejects a quote_id owned by a different account`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns depositQuote
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.deposit(
+          createTestWebAuthJwtDifferentAccount(),
+          createTestTransactionRequest(depositQuote.id, TestHelper.TEST_ACCOUNT)
+        )
       }
     assertEquals("Quote not found", ex.message)
     verify(exactly = 0) { txnStore.save(any()) }
@@ -1142,6 +1170,16 @@ internal class Sep24ServiceTest {
   private fun createTestWebAuthJwtWithMemo(): WebAuthJwt {
     return TestHelper.createWebAuthJwt(
         TEST_ACCOUNT,
+        TEST_MEMO,
+        TEST_HOME_DOMAIN,
+        TEST_CLIENT_DOMAIN,
+      )
+      .apply { clientName = TEST_CLIENT_NAME }
+  }
+
+  private fun createTestWebAuthJwtDifferentAccount(): WebAuthJwt {
+    return TestHelper.createWebAuthJwt(
+        TestHelper.TEST_ACCOUNT,
         TEST_MEMO,
         TEST_HOME_DOMAIN,
         TEST_CLIENT_DOMAIN,

@@ -26,12 +26,16 @@ class ExchangeAmountsCalculatorTest {
   companion object {
     val token = TestHelper.createWebAuthJwt(TEST_ACCOUNT, TestConstants.TEST_MEMO)
     val callerIdentity = SepHelper.webAuthTokenIdentity(token)
-    val otherToken =
-      TestHelper.createWebAuthJwt(
-        "GBJDSMTMG4YBP27ZILV665XBISBBNRP62YB7WZA2IQX2HIPK7ABLF4C2",
-        "456",
+
+    val differentAccountIdentity =
+      SepHelper.TokenIdentity(
+        TestHelper.TEST_ACCOUNT,
+        callerIdentity.memo(),
+        callerIdentity.memoType(),
       )
-    val otherCallerIdentity = SepHelper.webAuthTokenIdentity(otherToken, TestConstants.TEST_MEMO)
+
+    val differentMemoIdentity =
+      SepHelper.TokenIdentity(callerIdentity.account(), "456", callerIdentity.memoType())
   }
 
   private val assetService: AssetService = DefaultAssetService.fromJsonResource("test_assets.json")
@@ -255,7 +259,7 @@ class ExchangeAmountsCalculatorTest {
   }
 
   @Test
-  fun `test calculateFromQuote rejects a quote owned by a different caller`() {
+  fun `test calculateFromQuote rejects a quote owned by a caller with a different account`() {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
     val ex =
@@ -265,7 +269,24 @@ class ExchangeAmountsCalculatorTest {
           assetService.getAsset("USDC"),
           null,
           "100",
-          otherCallerIdentity,
+          differentAccountIdentity,
+        )
+      }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test calculateFromQuote rejects a quote owned by a caller with a different memo`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
+    val ex =
+      assertThrows<BadRequestException> {
+        calculator.calculateFromQuote(
+          quoteId,
+          assetService.getAsset("USDC"),
+          null,
+          "100",
+          differentMemoIdentity,
         )
       }
     assertEquals("Quote not found", ex.message)
@@ -296,7 +317,7 @@ class ExchangeAmountsCalculatorTest {
             assetService.getAsset("USDC"),
             null,
             "100",
-            otherCallerIdentity,
+            differentAccountIdentity,
           )
         }
         .message
