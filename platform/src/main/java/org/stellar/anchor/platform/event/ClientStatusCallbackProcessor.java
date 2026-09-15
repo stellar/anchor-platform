@@ -2,7 +2,6 @@ package org.stellar.anchor.platform.event;
 
 import static java.lang.Thread.currentThread;
 import static org.stellar.anchor.util.MetricConstants.*;
-import static org.stellar.anchor.util.StringHelper.json;
 
 import java.io.IOException;
 import org.stellar.anchor.api.event.AnchorEvent;
@@ -105,7 +104,11 @@ public class ClientStatusCallbackProcessor extends EventProcessor {
   }
 
   void sendToDLQ(AnchorEvent event, Exception e) {
-    Log.errorF("Failed to process event: {}", json(event));
+    // Redacted the same way as ClientStatusCallbackHandler's own logging -- this runs at ERROR
+    // level, which (unlike DEBUG) is always on, so an unredacted event here would persist raw
+    // SEP-31 field values (e.g. bank account/routing numbers) to production logs on every
+    // DLQ'd event.
+    Log.errorF("Failed to process event: {}", ClientStatusCallbackHandler.redactedJson(event));
     Log.errorEx(e);
   }
 }
