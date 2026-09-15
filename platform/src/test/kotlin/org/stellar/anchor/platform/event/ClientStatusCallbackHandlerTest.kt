@@ -631,7 +631,7 @@ class ClientStatusCallbackHandlerTest {
   }
 
   @Test
-  fun `redactedJson should pass through events with no transaction fields unchanged`() {
+  fun `redactedJson should handle an event with no transaction at all`() {
     val event = AnchorEvent().apply { transaction = null }
 
     // Must not throw when there's no `transaction` object to redact from (e.g. a SEP-12 customer

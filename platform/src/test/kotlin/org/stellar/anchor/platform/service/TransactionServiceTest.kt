@@ -598,6 +598,85 @@ class TransactionServiceTest {
 
     val expectedFields = txn.requiredInfoUpdates.transaction
     assertEquals(setOf("receiver_account_number", "receiver_routing_number"), expectedFields.keys)
+    // No requiredInfoUpdatesFields was supplied -- falls back to a humanized description.
+    assertEquals(
+      "Receiver account number",
+      expectedFields["receiver_account_number"]!!.description,
+    )
+  }
+
+  @Test
+  fun `test updateSepTransaction prefers business-server-supplied field metadata over the humanized default`() {
+    val txn = JdbcSep31Transaction()
+    txn.id = "my-tx-id"
+
+    val patch = PlatformTransactionData()
+    patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    patch.requiredInfoUpdates = listOf("receiver_account_number", "receiver_routing_number")
+    patch.requiredInfoUpdatesFields =
+      mapOf(
+        "receiver_account_number" to
+          AssetInfo.Field.builder()
+            .description("The receiver's bank account number")
+            .optional(false)
+            .build()
+        // receiver_routing_number is intentionally left unsupplied to verify the per-field
+        // fallback still applies only to the fields the business server didn't describe.
+      )
+
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+
+    assertDoesNotThrow { transactionService.updateSepTransaction(patch, txn) }
+
+    val fields = txn.requiredInfoUpdates.transaction
+    assertEquals(
+      "The receiver's bank account number",
+      fields["receiver_account_number"]!!.description,
+    )
+    assertEquals("Receiver routing number", fields["receiver_routing_number"]!!.description)
+  }
+
+  @Test
+  fun `test updateSepTransaction falls back to the humanized description when supplied field metadata has a blank description`() {
+    val txn = JdbcSep31Transaction()
+    txn.id = "my-tx-id"
+
+    val patch = PlatformTransactionData()
+    patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    patch.requiredInfoUpdates = listOf("receiver_account_number")
+    patch.requiredInfoUpdatesFields =
+      mapOf("receiver_account_number" to AssetInfo.Field.builder().description("").build())
+
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+
+    assertDoesNotThrow { transactionService.updateSepTransaction(patch, txn) }
+
+    assertEquals(
+      "Receiver account number",
+      txn.requiredInfoUpdates.transaction["receiver_account_number"]!!.description,
+    )
   }
 
   @Test

@@ -7,6 +7,7 @@ import static org.stellar.anchor.util.NetUtil.getDomainFromURL;
 import static org.stellar.anchor.util.OkHttpUtil.buildJsonRequestBody;
 import static org.stellar.anchor.util.StringHelper.json;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.util.Arrays;
@@ -234,16 +235,15 @@ public class ClientStatusCallbackHandler extends EventHandler {
    * pending_transaction_info_update correction, so they're merged into just this JSON instead.
    */
   private static String sep31CallbackPayload(Sep31Transaction sep31Txn) {
+    Gson gson = GsonUtils.getInstance();
     JsonObject responseJson =
-        GsonUtils.getInstance()
-            .toJsonTree(sep31Txn.toSep31GetTransactionResponse())
-            .getAsJsonObject();
+        gson.toJsonTree(sep31Txn.toSep31GetTransactionResponse()).getAsJsonObject();
     if (sep31Txn.getFields() != null && !sep31Txn.getFields().isEmpty()) {
       responseJson
           .getAsJsonObject("transaction")
-          .add("fields", GsonUtils.getInstance().toJsonTree(sep31Txn.getFields()));
+          .add("fields", gson.toJsonTree(sep31Txn.getFields()));
     }
-    return GsonUtils.getInstance().toJson(responseJson);
+    return gson.toJson(responseJson);
   }
 
   /**
@@ -253,12 +253,13 @@ public class ClientStatusCallbackHandler extends EventHandler {
    * to consumers are built separately and are unaffected.
    */
   static String redactedJson(AnchorEvent event) {
-    JsonObject root = GsonUtils.getInstance().toJsonTree(event).getAsJsonObject();
+    Gson gson = GsonUtils.getInstance();
+    JsonObject root = gson.toJsonTree(event).getAsJsonObject();
     JsonObject transaction = root.getAsJsonObject("transaction");
     if (transaction != null) {
       transaction.remove("fields");
     }
-    return GsonUtils.getInstance().toJson(root);
+    return gson.toJson(root);
   }
 
   static Sep6Transaction fromSep6Txn(GetTransactionResponse txn) {

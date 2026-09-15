@@ -441,10 +441,11 @@ public class TransactionService {
         // update required_info_updates: PlatformTransactionData only carries a flat list of field
         // names (shared with SEP-6), so it's expanded into the Sep31Info.Fields shape SEP-31's own
         // PATCH validation expects. SEP-31 requires a human-readable `description` per field (it's
-        // the only non-optional attribute in the fields schema), but the business server has no way
-        // to supply one through this flat-list API -- fall back to a humanized version of the field
-        // name rather than shipping a blank description.
+        // the only non-optional attribute in the fields schema) -- prefer the real metadata the
+        // business server supplies via requiredInfoUpdatesFields, falling back to a humanized
+        // version of the field name only when it didn't supply one for that field.
         if (patch.getRequiredInfoUpdates() != null) {
+          Map<String, AssetInfo.Field> suppliedFieldMetadata = patch.getRequiredInfoUpdatesFields();
           Map<String, AssetInfo.Field> requiredFields = new HashMap<>();
           for (String fieldName : patch.getRequiredInfoUpdates()) {
             // A null entry would NPE inside humanizeSnakeCase; a blank one would produce a
@@ -454,11 +455,15 @@ public class TransactionService {
               throw new BadRequestException(
                   "required_info_updates must not contain null or blank field names");
             }
+            AssetInfo.Field suppliedField =
+                suppliedFieldMetadata == null ? null : suppliedFieldMetadata.get(fieldName);
             requiredFields.put(
                 fieldName,
-                AssetInfo.Field.builder()
-                    .description(StringHelper.humanizeSnakeCase(fieldName))
-                    .build());
+                (suppliedField != null && StringHelper.isNotEmpty(suppliedField.getDescription()))
+                    ? suppliedField
+                    : AssetInfo.Field.builder()
+                        .description(StringHelper.humanizeSnakeCase(fieldName))
+                        .build());
           }
           Sep31Info.Fields requiredInfoUpdates = new Sep31Info.Fields();
           requiredInfoUpdates.setTransaction(requiredFields);
