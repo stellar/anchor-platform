@@ -430,6 +430,7 @@ public class DefaultPaymentListener implements PaymentListener {
           return false;
         }
         invokeOp.setAsset(org.stellar.sdk.Asset.create(eventAsset).toXdr());
+        invokeOp.setAmount(paymentTransferEvent.getAmount());
       }
     }
 

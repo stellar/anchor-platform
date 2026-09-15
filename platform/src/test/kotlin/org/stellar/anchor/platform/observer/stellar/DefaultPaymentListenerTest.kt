@@ -108,19 +108,26 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  fun `test validate() takes the asset from the event for an invoke-host-function operation`() {
-    val event = createTestInvokeHostFunctionTransferEvent(eventAsset = "native")
+  fun `test validate() takes the asset and amount from the event for an invoke-host-function operation`() {
+    val event =
+      createTestInvokeHostFunctionTransferEvent(
+        eventAsset = "native",
+        ledgerAmount = BigInteger.valueOf(999_999_999_999L),
+        eventAmount = BigInteger.valueOf(1),
+      )
     val ledgerTransaction = event.ledgerTransaction
     val invokeOp = ledgerTransaction.operations[0].invokeHostFunctionOperation
 
     assertTrue(paymentListener.validate(ledgerTransaction, invokeOp, event))
     assertEquals("native", getSep11AssetName(invokeOp.getAsset(false)))
+    assertEquals(BigInteger.valueOf(1), invokeOp.amount)
   }
 
   @Test
-  fun `test onReceived() blocks an invoke-host-function payment when the top-level declared amount differs from the verified event amount`() {
+  fun `test onReceived() credits an invoke-host-function payment using the verified event amount, not the top-level declared amount`() {
     // Regression test for a router-style contract declaring a large top-level amount while only
-    // actually forwarding a small verified amount to the real Stellar Asset Contract.
+    // actually forwarding a small verified amount to the real Stellar Asset Contract: the payment
+    // must be credited from the verified amount, not rejected or credited from the forged one.
     val event =
       createTestInvokeHostFunctionTransferEvent(
         eventAsset = "native",
@@ -131,18 +138,26 @@ class DefaultPaymentListenerTest {
     xdrMemoText.text = XdrString("my_memo_1")
     ledgerTransaction.memo = xdrMemoText
 
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      listOf(JdbcSep31Transaction())
+    every { paymentListener.handleSep31Transaction(any(), any(), any()) } answers {}
+
     val registry = SimpleMeterRegistry()
     Metrics.addRegistry(registry)
     try {
       paymentListener.onReceived(event)
 
-      verify { sep31TransactionStore wasNot Called }
-      verify { sep24TransactionStore wasNot Called }
-      verify { sep6TransactionStore wasNot Called }
       assertEquals(
-        1.0,
+        0.0,
         registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH.toString()).count(),
       )
+      verify(exactly = 1) {
+        paymentListener.handleSep31Transaction(
+          ledgerTransaction,
+          match { it.amount == BigInteger.valueOf(1) },
+          any(),
+        )
+      }
     } finally {
       Metrics.removeRegistry(registry)
     }

@@ -118,7 +118,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op, "ignoredContractId", 0L)
+    observer.processOperation(ledgerTxn, op, "ignoredContractId", BigInteger.ZERO)
 
     // Assert
     val event = eventSlot.captured
@@ -158,7 +158,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op, "ignoredContractId", 0L)
+    observer.processOperation(ledgerTxn, op, "ignoredContractId", BigInteger.ZERO)
 
     // Assert
     val event = eventSlot.captured
@@ -198,7 +198,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op, "ignoredContractId", 0L)
+    observer.processOperation(ledgerTxn, op, "ignoredContractId", BigInteger.ZERO)
 
     // Assert
     val event = eventSlot.captured
@@ -241,7 +241,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op, cId, 400L)
+    observer.processOperation(ledgerTxn, op, cId, BigInteger.valueOf(400L))
 
     // Assert
     val event = eventSlot.captured
@@ -283,7 +283,7 @@ class StellarRpcPaymentObserverTest {
     val eventSlot = slot<PaymentTransferEvent>()
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
-    observer.processOperation(ledgerTxn, op, sacContractId, 500L)
+    observer.processOperation(ledgerTxn, op, sacContractId, BigInteger.valueOf(500L))
 
     val event = eventSlot.captured
     assertEquals(fromAccount, event.from)
@@ -316,7 +316,7 @@ class StellarRpcPaymentObserverTest {
     val eventSlot = slot<PaymentTransferEvent>()
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
-    observer.processOperation(ledgerTxn, op, cId, 1L)
+    observer.processOperation(ledgerTxn, op, cId, BigInteger.ONE)
 
     val event = eventSlot.captured
     assertEquals(BigInteger.ONE, event.amount)
@@ -346,7 +346,9 @@ class StellarRpcPaymentObserverTest {
 
     every { ledgerTxn.hash } returns "txHashForwarder"
 
-    assertDoesNotThrow { observer.processOperation(ledgerTxn, op, forwarderContractId, 999L) }
+    assertDoesNotThrow {
+      observer.processOperation(ledgerTxn, op, forwarderContractId, BigInteger.valueOf(999L))
+    }
 
     verify(exactly = 0) { observer["handleEvent"](any<PaymentTransferEvent>()) }
   }
