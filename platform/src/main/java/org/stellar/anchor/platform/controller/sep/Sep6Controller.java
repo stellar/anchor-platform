@@ -13,6 +13,7 @@ import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.sep.sep6.*;
 import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
+import org.stellar.anchor.platform.utils.TransactionCreationRateLimiter;
 import org.stellar.anchor.sep6.Sep6Service;
 
 @RestController
@@ -21,9 +22,11 @@ import org.stellar.anchor.sep6.Sep6Service;
 @OnAllSepsEnabled(seps = {"sep6"})
 public class Sep6Controller {
   private final Sep6Service sep6Service;
+  private final TransactionCreationRateLimiter rateLimiter;
 
-  public Sep6Controller(Sep6Service sep6Service) {
+  public Sep6Controller(Sep6Service sep6Service, TransactionCreationRateLimiter rateLimiter) {
     this.sep6Service = sep6Service;
+    this.rateLimiter = rateLimiter;
   }
 
   @CrossOrigin(origins = "*")
@@ -60,6 +63,7 @@ public class Sep6Controller {
       throws AnchorException {
     debugF("GET /deposit");
     WebAuthJwt token = SepRequestHelper.getToken(request);
+    rateLimiter.checkAndRecord(token);
     StartDepositRequest startDepositRequest =
         StartDepositRequest.builder()
             .assetCode(assetCode)
@@ -103,6 +107,7 @@ public class Sep6Controller {
       throws AnchorException {
     debugF("GET /deposit-exchange");
     WebAuthJwt token = SepRequestHelper.getToken(request);
+    rateLimiter.checkAndRecord(token);
     StartDepositExchangeRequest startDepositExchangeRequest =
         StartDepositExchangeRequest.builder()
             .destinationAsset(destinationAsset)
@@ -140,6 +145,7 @@ public class Sep6Controller {
       throws AnchorException {
     debugF("GET /withdraw");
     WebAuthJwt token = SepRequestHelper.getToken(request);
+    rateLimiter.checkAndRecord(token);
     StartWithdrawRequest startWithdrawRequest =
         StartWithdrawRequest.builder()
             .assetCode(assetCode)
@@ -175,6 +181,7 @@ public class Sep6Controller {
       throws AnchorException {
     debugF("GET /withdraw-exchange");
     WebAuthJwt token = SepRequestHelper.getToken(request);
+    rateLimiter.checkAndRecord(token);
     StartWithdrawExchangeRequest startWithdrawExchangeRequest =
         StartWithdrawExchangeRequest.builder()
             .sourceAsset(sourceAsset)
