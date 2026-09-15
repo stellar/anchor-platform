@@ -3,6 +3,7 @@ package org.stellar.anchor.ledger;
 import static org.stellar.anchor.api.asset.AssetInfo.NATIVE_ASSET_CODE;
 import static org.stellar.anchor.ledger.LedgerClientHelper.*;
 import static org.stellar.anchor.util.Log.debug;
+import static org.stellar.anchor.util.Log.errorF;
 import static org.stellar.sdk.xdr.SignerKeyType.*;
 import static org.stellar.sdk.xdr.SignerKeyType.SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD;
 
@@ -98,7 +99,20 @@ public class Horizon implements LedgerClient {
     } catch (org.stellar.sdk.exception.AccountNotFoundException e) {
       throw new AccountNotFoundException(account);
     } catch (BadRequestException e) {
-      throw new AccountNotFoundException(account);
+      // Only a genuine 404 means the account is confirmed absent. Every other 4xx (401, 403,
+      // 400, etc. — commonly emitted by a WAF/CDN/proxy in front of Horizon) must fail closed
+      // instead of being treated as "account not found," which would skip SEP-10's
+      // medium-threshold multisig check. See ANCHOR-1291.
+      Integer code = e.getCode();
+      if (code != null && code == 404) {
+        throw new AccountNotFoundException(account);
+      }
+      // Log the upstream status for diagnosability, but keep it out of the exception message:
+      // this exception is surfaced to unauthenticated SEP-10 callers via
+      // Sep10Service.fetchAccount(), and the WAF/CDN/proxy status code in front of Horizon is
+      // an internal infrastructure detail that shouldn't leak into that response.
+      errorF("Error getting account: {}. Code: {}, body: {}", account, code, e.getBody());
+      throw new LedgerException("Error getting account: " + account, e);
     } catch (Exception e) {
       throw new LedgerException("Error getting account: " + account, e);
     }
