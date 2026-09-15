@@ -6,6 +6,7 @@ import static org.stellar.anchor.util.StringHelper.isEmpty;
 import jakarta.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.platform.GetTransactionResponse;
 import org.stellar.anchor.api.platform.PlatformTransactionData;
@@ -35,15 +36,16 @@ public class TransactionMapper {
     boolean hasRefundMemoOverride =
         !isEmpty(txn.getRefundMemo()) && !isEmpty(txn.getRefundMemoType());
 
-    // GetTransactionResponse.requiredInfoUpdates is a flat field-name list (shared with SEP-6),
-    // unlike SEP-31's own richer Sep31Info.Fields (name -> description/choices/optional) -- so a
-    // client status callback or status-changed event can at least tell the caller which fields
-    // are outstanding, even though it can't carry the full per-field metadata this shared DTO has
-    // no slot for.
+    // GetTransactionResponse.requiredInfoUpdates is a flat field-name list (shared with SEP-6), so
+    // it carries the outstanding field names on its own; requiredInfoUpdatesFields carries the
+    // same map's real per-field metadata (description/choices/optional) alongside it, so a client
+    // status callback or status-changed event consumer isn't limited to the names alone.
     List<String> requiredInfoUpdates = null;
+    Map<String, AssetInfo.Field> requiredInfoUpdatesFields = null;
     if (txn.getRequiredInfoUpdates() != null
         && txn.getRequiredInfoUpdates().getTransaction() != null) {
       requiredInfoUpdates = new ArrayList<>(txn.getRequiredInfoUpdates().getTransaction().keySet());
+      requiredInfoUpdatesFields = txn.getRequiredInfoUpdates().getTransaction();
     }
 
     return GetTransactionResponse.builder()
@@ -64,6 +66,7 @@ public class TransactionMapper {
         .transferReceivedAt(txn.getTransferReceivedAt())
         .message(txn.getRequiredInfoMessage()) // Assuming these are meant to be the same.
         .requiredInfoUpdates(requiredInfoUpdates)
+        .requiredInfoUpdatesFields(requiredInfoUpdatesFields)
         .fields(txn.getFields())
         .refunds(refunds)
         .stellarTransactions(txn.getStellarTransactions())

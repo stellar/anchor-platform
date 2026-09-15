@@ -656,7 +656,14 @@ class TransactionServiceTest {
     patch.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
     patch.requiredInfoUpdates = listOf("receiver_account_number")
     patch.requiredInfoUpdatesFields =
-      mapOf("receiver_account_number" to AssetInfo.Field.builder().description("").build())
+      mapOf(
+        "receiver_account_number" to
+          AssetInfo.Field.builder()
+            .description("")
+            .choices(listOf("SEPA", "SWIFT"))
+            .optional(true)
+            .build()
+      )
 
     this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
     transactionService =
@@ -673,10 +680,12 @@ class TransactionServiceTest {
 
     assertDoesNotThrow { transactionService.updateSepTransaction(patch, txn) }
 
-    assertEquals(
-      "Receiver account number",
-      txn.requiredInfoUpdates.transaction["receiver_account_number"]!!.description,
-    )
+    val field = txn.requiredInfoUpdates.transaction["receiver_account_number"]!!
+    assertEquals("Receiver account number", field.description)
+    // Only the missing description is synthesized -- choices/optional the business server did
+    // supply must survive, not be discarded along with the blank description.
+    assertEquals(listOf("SEPA", "SWIFT"), field.choices)
+    assertTrue(field.isOptional)
   }
 
   @Test

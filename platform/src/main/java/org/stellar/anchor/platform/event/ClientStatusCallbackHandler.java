@@ -391,17 +391,24 @@ public class ClientStatusCallbackHandler extends EventHandler {
     sep31Txn.setQuoteId(txn.getQuoteId());
     sep31Txn.setFields(txn.getFields());
 
-    // GetTransactionResponse.requiredInfoUpdates is a flat field-name list (shared with SEP-6),
-    // so it's expanded back into the Sep31Info.Fields shape a SEP-31 client callback body expects
-    // -- see TransactionMapper.toGetTransactionResponse(Sep31Transaction) for the other direction.
+    // GetTransactionResponse.requiredInfoUpdates is a flat field-name list (shared with SEP-6), so
+    // it's expanded back into the Sep31Info.Fields shape a SEP-31 client callback body expects --
+    // see TransactionMapper.toGetTransactionResponse(Sep31Transaction) for the other direction.
+    // requiredInfoUpdatesFields carries that same map's real per-field metadata alongside the flat
+    // list; prefer it over a humanized placeholder whenever it has an entry for the field.
     if (txn.getRequiredInfoUpdates() != null && !txn.getRequiredInfoUpdates().isEmpty()) {
+      Map<String, AssetInfo.Field> realFieldMetadata = txn.getRequiredInfoUpdatesFields();
       Map<String, AssetInfo.Field> requiredFields = new HashMap<>();
       for (String fieldName : txn.getRequiredInfoUpdates()) {
+        AssetInfo.Field realField =
+            realFieldMetadata == null ? null : realFieldMetadata.get(fieldName);
         requiredFields.put(
             fieldName,
-            AssetInfo.Field.builder()
-                .description(StringHelper.humanizeSnakeCase(fieldName))
-                .build());
+            realField != null
+                ? realField
+                : AssetInfo.Field.builder()
+                    .description(StringHelper.humanizeSnakeCase(fieldName))
+                    .build());
       }
       Sep31Info.Fields requiredInfoUpdates = new Sep31Info.Fields();
       requiredInfoUpdates.setTransaction(requiredFields);

@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.stellar.anchor.LockAndMockStatic
 import org.stellar.anchor.LockAndMockTest
+import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.platform.GetTransactionResponse
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
@@ -583,6 +584,14 @@ class ClientStatusCallbackHandlerTest {
               .status(PENDING_RECEIVER)
               .clientName("circle")
               .requiredInfoUpdates(listOf("receiver_bank_account"))
+              .requiredInfoUpdatesFields(
+                mapOf(
+                  "receiver_bank_account" to
+                    AssetInfo.Field.builder()
+                      .description("The receiver's bank account number")
+                      .build()
+                )
+              )
               .fields(mapOf("receiver_bank_account" to "12345"))
               .build()
         }
@@ -597,6 +606,16 @@ class ClientStatusCallbackHandlerTest {
         "12345",
         transaction.getAsJsonObject("fields").get("receiver_bank_account").asString,
         "the callback payload must carry the patched field values, not just the intermediate mapping",
+      )
+      assertEquals(
+        "The receiver's bank account number",
+        transaction
+          .getAsJsonObject("required_info_updates")
+          .getAsJsonObject("transaction")
+          .getAsJsonObject("receiver_bank_account")
+          .get("description")
+          .asString,
+        "the callback payload must carry the real field metadata, not a humanized placeholder",
       )
     } finally {
       server.shutdown()
@@ -691,13 +710,49 @@ class ClientStatusCallbackHandlerTest {
     assertEquals("quote-id", sep31Txn.quoteId)
     assertEquals("message", sep31Txn.requiredInfoMessage)
     // The flat field-name list from GetTransactionResponse is expanded back into the
-    // Sep31Info.Fields shape a SEP-31 client callback body expects, with a humanized description
-    // standing in for the per-field metadata this shared DTO has no slot for.
+    // Sep31Info.Fields shape a SEP-31 client callback body expects. No requiredInfoUpdatesFields
+    // was supplied here, so it falls back to a humanized description -- see the sibling test below
+    // for the case where the real metadata is supplied and must be preferred instead.
     assertEquals(setOf("receiver_bank_account"), sep31Txn.requiredInfoUpdates.transaction.keys)
     assertEquals(
       "Receiver bank account",
       sep31Txn.requiredInfoUpdates.transaction["receiver_bank_account"]!!.description,
     )
     assertEquals(mapOf("receiver_bank_account" to "12345"), sep31Txn.fields)
+  }
+
+  @Test
+  fun `fromSep31Txn should prefer supplied requiredInfoUpdatesFields metadata over a humanized placeholder`() {
+    val txnResponse =
+      GetTransactionResponse.builder()
+        .id("sep31-id")
+        .sep(SEP_31)
+        .kind(Kind.RECEIVE)
+        .status(PENDING_USR_TRANSFER_START)
+        .requiredInfoUpdates(listOf("receiver_bank_account", "receiver_routing_number"))
+        .requiredInfoUpdatesFields(
+          mapOf(
+            "receiver_bank_account" to
+              AssetInfo.Field.builder()
+                .description("The receiver's bank account number")
+                .choices(listOf("SEPA", "SWIFT"))
+                .optional(false)
+                .build()
+            // receiver_routing_number is intentionally left unsupplied to verify it still falls
+            // back to the humanized default on its own, independent of the other field.
+          )
+        )
+        .build()
+
+    val sep31Txn = ClientStatusCallbackHandler.fromSep31Txn(txnResponse)
+
+    val bankAccountField = sep31Txn.requiredInfoUpdates.transaction["receiver_bank_account"]!!
+    assertEquals("The receiver's bank account number", bankAccountField.description)
+    assertEquals(listOf("SEPA", "SWIFT"), bankAccountField.choices)
+
+    assertEquals(
+      "Receiver routing number",
+      sep31Txn.requiredInfoUpdates.transaction["receiver_routing_number"]!!.description,
+    )
   }
 }

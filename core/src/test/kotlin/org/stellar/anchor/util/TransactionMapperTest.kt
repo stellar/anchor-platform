@@ -130,8 +130,6 @@ class TransactionMapperTest {
         .userActionRequiredBy(sepTxn.userActionRequiredBy)
         .transferReceivedAt(sepTxn.transferReceivedAt)
         .message(sepTxn.requiredInfoMessage)
-        // GetTransactionResponse only carries the outstanding field names, not the richer
-        // Sep31Info.Fields metadata sepTxn.requiredInfoUpdates itself holds.
         .requiredInfoUpdates(listOf("field"))
         .refunds(
           Refunds.builder()
@@ -165,9 +163,14 @@ class TransactionMapperTest {
         .build()
 
     val expectedJsonObject = gson.fromJson(gson.toJson(expectedPlatformTxn), JsonObject::class.java)
-    // PlatformTransactionData's builder has no slot for the SEP-31-only `fields` property, so add
-    // it directly rather than switching this whole builder chain to GetTransactionResponse.
+    // PlatformTransactionData's builder has no slot for the SEP-31-only `fields` and
+    // `requiredInfoUpdatesFields` properties (both live on GetTransactionResponse instead), so add
+    // them directly rather than switching this whole builder chain to GetTransactionResponse.
     expectedJsonObject.add("fields", gson.toJsonTree(sepTxn.fields))
+    expectedJsonObject.add(
+      "requiredInfoUpdatesFields",
+      gson.toJsonTree(sepTxn.requiredInfoUpdates.transaction),
+    )
     val expected = gson.toJson(expectedJsonObject)
 
     JSONAssert.assertEquals(expected, actual, true)

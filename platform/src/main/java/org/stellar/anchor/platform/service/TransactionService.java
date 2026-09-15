@@ -457,13 +457,27 @@ public class TransactionService {
             }
             AssetInfo.Field suppliedField =
                 suppliedFieldMetadata == null ? null : suppliedFieldMetadata.get(fieldName);
-            requiredFields.put(
-                fieldName,
-                (suppliedField != null && StringHelper.isNotEmpty(suppliedField.getDescription()))
-                    ? suppliedField
-                    : AssetInfo.Field.builder()
-                        .description(StringHelper.humanizeSnakeCase(fieldName))
-                        .build());
+            AssetInfo.Field resolvedField;
+            if (suppliedField != null) {
+              // Only the description is synthesized when missing -- a blank description must not
+              // discard choices/optional the business server did supply alongside it.
+              String description =
+                  StringHelper.isNotEmpty(suppliedField.getDescription())
+                      ? suppliedField.getDescription()
+                      : StringHelper.humanizeSnakeCase(fieldName);
+              resolvedField =
+                  AssetInfo.Field.builder()
+                      .description(description)
+                      .choices(suppliedField.getChoices())
+                      .optional(suppliedField.isOptional())
+                      .build();
+            } else {
+              resolvedField =
+                  AssetInfo.Field.builder()
+                      .description(StringHelper.humanizeSnakeCase(fieldName))
+                      .build();
+            }
+            requiredFields.put(fieldName, resolvedField);
           }
           Sep31Info.Fields requiredInfoUpdates = new Sep31Info.Fields();
           requiredInfoUpdates.setTransaction(requiredFields);
