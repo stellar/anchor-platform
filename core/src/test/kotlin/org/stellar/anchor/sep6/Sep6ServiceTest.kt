@@ -1730,6 +1730,43 @@ class Sep6ServiceTest {
   }
 
   @Test
+  fun `test deposit with muxed token and omitted account uses muxed address as destination`() {
+    // Regression test: the empty/omitted-account fallback must prefer getOwnerAccount() (which
+    // returns the muxed M-address when present) over getAccount() (always the demuxed base
+    // account), or a muxed JWT's own sub-account destination is silently lost.
+    val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request = StartDepositRequest.builder().assetCode(TEST_ASSET).fundingMethod("SWIFT").build()
+    sep6Service.deposit(muxedJwt, request)
+
+    assertEquals(muxedJwt.muxedAccount, slotTxn.captured.toAccount)
+    Assertions.assertNotEquals(TEST_ACCOUNT, slotTxn.captured.toAccount)
+  }
+
+  @Test
+  fun `test depositExchange with muxed token and omitted account uses muxed address as destination`() {
+    val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .amount("100")
+        .fundingMethod("SWIFT")
+        .build()
+    sep6Service.depositExchange(muxedJwt, request)
+
+    assertEquals(muxedJwt.muxedAccount, slotTxn.captured.toAccount)
+    Assertions.assertNotEquals(TEST_ACCOUNT, slotTxn.captured.toAccount)
+  }
+
+  @Test
   fun `test withdraw with muxed token stores muxed address as webAuthAccount`() {
     val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
     val slotTxn = slot<Sep6Transaction>()

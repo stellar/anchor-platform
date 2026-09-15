@@ -120,8 +120,11 @@ public class Sep6Service {
           asset.getSep6().getDeposit().getMinAmount(),
           asset.getSep6().getDeposit().getMaxAmount());
     }
+    // When omitted, the account established by the JWT is used -- getOwnerAccount() prefers the
+    // muxed (M...) address over the demuxed base account, matching webAuthAccount below, so a
+    // muxed JWT's sub-account destination isn't silently lost when the caller omits `account`.
     String destinationAccount =
-        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, destinationAccount);
 
     String id = generateSepTransactionId();
@@ -208,8 +211,9 @@ public class Sep6Service {
         fundingMethod, buyAsset.getCode(), buyAsset.getSep6().getDeposit().getMethods());
     requestValidator.validateAmount(
         request.getAmount(), sellAsset.getCode(), sellAsset.getSignificantDecimals(), null, null);
+    // See deposit() above for why getOwnerAccount() (not getAccount()) is the correct fallback.
     String destinationAccount =
-        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, destinationAccount);
 
     Amounts amounts;
