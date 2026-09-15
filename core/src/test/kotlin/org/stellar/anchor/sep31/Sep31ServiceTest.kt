@@ -425,6 +425,13 @@ class Sep31ServiceTest {
           .refunds(wantRefunds)
           .requiredInfoMessage("Don't forget to foo bar")
           .requiredInfoUpdates(wantRequiredInfoUpdates)
+          .fields(
+            mapOf(
+              "receiver_account_number" to "1",
+              "type" to "SWIFT",
+              "receiver_routing_number" to "1"
+            )
+          )
           .build()
       )
 

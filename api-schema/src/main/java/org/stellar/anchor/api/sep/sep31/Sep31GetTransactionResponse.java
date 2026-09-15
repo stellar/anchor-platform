@@ -3,6 +3,7 @@ package org.stellar.anchor.api.sep.sep31;
 import com.google.gson.annotations.SerializedName;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -83,6 +84,14 @@ public class Sep31GetTransactionResponse {
 
     @SerializedName("required_info_updates")
     Sep31Info.Fields requiredInfoUpdates;
+
+    /**
+     * The per-transaction field values submitted so far (e.g. via SEP-31 POST/PATCH transactions).
+     * Not part of the SEP-31 protocol response schema itself, but harmless to include: the sending
+     * anchor already knows these values, since it's the one that submitted them. Cross-reference
+     * {@link #requiredInfoUpdates} to see which are still outstanding.
+     */
+    Map<String, String> fields;
   }
 
   @Data

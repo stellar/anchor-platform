@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.event
 
+import com.google.gson.JsonParser
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
@@ -11,6 +12,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -21,6 +23,7 @@ import org.stellar.anchor.api.platform.GetTransactionResponse
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep.*
 import org.stellar.anchor.api.sep.SepTransactionStatus.COMPLETED
+import org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_RECEIVER
 import org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_USR_TRANSFER_START
 import org.stellar.anchor.api.sep.sep12.Sep12GetCustomerResponse
 import org.stellar.anchor.api.sep.sep24.TransactionResponse
@@ -537,6 +540,66 @@ class ClientStatusCallbackHandlerTest {
     } finally {
       circleServer.shutdown()
       walletBServer.shutdown()
+    }
+  }
+
+  @Test
+  fun `handleEvent should carry patched field values in the actual SEP-31 callback JSON`() {
+    // fromSep31Txn's own unit test only asserts on the intermediate Sep31Transaction object,
+    // which doesn't prove the field values survive into the JSON actually POSTed to the client --
+    // this test drives handleEvent end-to-end and inspects the real request body instead.
+    val server = MockWebServer()
+    server.start()
+    try {
+      server.enqueue(MockResponse().setResponseCode(200))
+
+      val circleClient =
+        CustodialClient.builder()
+          .name("circle")
+          .signingKeys(setOf("GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"))
+          .callbackUrls(
+            CallbackUrls.builder().sep31(server.url("/callback/sep31").toString()).build()
+          )
+          .allowAnyDestination(false)
+          .destinationAccounts(emptySet())
+          .build()
+
+      val sep31Handler =
+        ClientStatusCallbackHandler(
+          secretConfig,
+          circleClient,
+          assetService,
+          sep6MoreInfoUrlConstructor,
+          sep24MoreInfoUrlConstructor
+        )
+
+      val sep31Event =
+        AnchorEvent().apply {
+          transaction =
+            GetTransactionResponse.builder()
+              .id("sep31-id")
+              .sep(SEP_31)
+              .kind(Kind.RECEIVE)
+              .status(PENDING_RECEIVER)
+              .clientName("circle")
+              .requiredInfoUpdates(listOf("receiver_bank_account"))
+              .fields(mapOf("receiver_bank_account" to "12345"))
+              .build()
+        }
+
+      sep31Handler.handleEvent(sep31Event)
+
+      val request = server.takeRequest(5, TimeUnit.SECONDS)
+      assertNotNull(request, "circle's callback receiver should have gotten a POST")
+      val body = JsonParser.parseString(request!!.body.readUtf8()).asJsonObject
+      val transaction = body.getAsJsonObject("transaction")
+      assertEquals(
+        "12345",
+        transaction.getAsJsonObject("fields").get("receiver_bank_account").asString,
+        "the callback payload must carry the patched field values, not just the intermediate mapping",
+      )
+    } finally {
+      server.shutdown()
     }
   }
 
