@@ -70,6 +70,9 @@ platform_api.base_url:
 platform_server.context_path:
 platform_server.management_server_port:
 platform_server.port:
+rate_limit.enabled:
+rate_limit.max_transactions_per_window:
+rate_limit.window_seconds:
 rpc.batch_size_limit:
 rpc.custom_messages.incoming_payment_received:
 rpc.custom_messages.outgoing_payment_sent:
