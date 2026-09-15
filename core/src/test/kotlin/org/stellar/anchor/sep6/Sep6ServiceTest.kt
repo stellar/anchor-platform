@@ -1856,6 +1856,48 @@ class Sep6ServiceTest {
   }
 
   @Test
+  fun `test withdraw with muxed token and omitted account uses muxed address as source`() {
+    // Regression test: the empty/omitted-account fallback must prefer getOwnerAccount() (which
+    // returns the muxed M-address when present) over getAccount() (always the demuxed base
+    // account), or a muxed JWT's own sub-account source is silently lost.
+    val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartWithdrawRequest.builder()
+        .assetCode(TEST_ASSET)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+    sep6Service.withdraw(muxedJwt, request)
+
+    assertEquals(muxedJwt.muxedAccount, slotTxn.captured.fromAccount)
+    Assertions.assertNotEquals(TEST_ACCOUNT, slotTxn.captured.fromAccount)
+  }
+
+  @Test
+  fun `test withdrawExchange with muxed token and omitted account uses muxed address as source`() {
+    val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .amount("100")
+        .fundingMethod("bank_account")
+        .build()
+    sep6Service.withdrawExchange(muxedJwt, request)
+
+    assertEquals(muxedJwt.muxedAccount, slotTxn.captured.fromAccount)
+    Assertions.assertNotEquals(TEST_ACCOUNT, slotTxn.captured.fromAccount)
+  }
+
+  @Test
   fun `test find transaction rejects different muxed sub-id on same underlying account`() {
     val muxedAJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
     val muxedBJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 22L)
