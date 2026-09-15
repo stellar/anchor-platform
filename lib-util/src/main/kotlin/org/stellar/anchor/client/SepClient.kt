@@ -10,6 +10,7 @@ import org.apache.hc.core5.http.HttpStatus
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepNotFoundException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.sep.SepExceptionResponse
 import org.stellar.anchor.util.GsonUtils
 
@@ -70,6 +71,13 @@ open class SepClient {
       HttpStatus.SC_NOT_FOUND -> {
         val sepException = gson.fromJson(responseBody, SepExceptionResponse::class.java)
         throw SepNotFoundException(sepException.error)
+      }
+      HttpStatus.SC_BAD_REQUEST -> {
+        // 400 bodies vary in shape across SEPs (a plain "error" string, SEP-31's
+        // customer_info_needed {"type": ...}, transaction_info_needed {"error", "fields"}, etc.),
+        // so the raw body is preserved as-is rather than parsed and reduced to a single field --
+        // that also sidesteps a null-body edge case a strict parse would need to guard against.
+        throw SepValidationException(responseBody)
       }
       else -> throw SepException(responseBody)
     }

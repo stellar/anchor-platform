@@ -23,13 +23,14 @@ import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.callback.CustomerIntegration
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.callback.GetCustomerResponse
+import org.stellar.anchor.api.callback.GetRateRequest
 import org.stellar.anchor.api.callback.GetRateResponse
 import org.stellar.anchor.api.callback.RateIntegration
 import org.stellar.anchor.api.exception.*
 import org.stellar.anchor.api.sep.sep12.Sep12Status
 import org.stellar.anchor.api.sep.sep31.*
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest.Sep31TxnFields
-import org.stellar.anchor.api.shared.Amount
+import org.stellar.anchor.api.shared.FeeDescription
 import org.stellar.anchor.api.shared.FeeDetails
 import org.stellar.anchor.api.shared.SepDepositInfo
 import org.stellar.anchor.api.shared.StellarId
@@ -80,8 +81,8 @@ class Sep31ServiceTest {
     private const val feeJson =
       """
         {
-          "amount": "2",
-          "asset": "USDC"
+          "total": "2",
+          "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
         }
     """
 
@@ -233,7 +234,7 @@ class Sep31ServiceTest {
   private lateinit var sep31Service: Sep31Service
   private lateinit var request: Sep31PostTransactionRequest
   private lateinit var txn: Sep31Transaction
-  private lateinit var fee: Amount
+  private lateinit var fee: FeeDetails
   private lateinit var asset: AssetInfo
   private lateinit var quote: PojoSep38Quote
   private lateinit var patchRequest: Sep31PatchTransactionRequest
@@ -271,32 +272,162 @@ class Sep31ServiceTest {
     request = gson.fromJson(requestJson, Sep31PostTransactionRequest::class.java)
     txn = gson.fromJson(txnJson, PojoSep31Transaction::class.java)
     txn.creator = StellarId.builder().account(TestHelper.TEST_ACCOUNT).memo(null).build()
-    fee = gson.fromJson(feeJson, Amount::class.java)
+    fee = gson.fromJson(feeJson, FeeDetails::class.java)
     asset = gson.fromJson(assetJson, StellarAssetInfo::class.java)
     quote = gson.fromJson(quoteJson, PojoSep38Quote::class.java)
     patchRequest = gson.fromJson(patchTxnRequestJson, Sep31PatchTransactionRequest::class.java)
   }
 
   @Test
-  fun `test update transaction amounts when no quote was used`() {
-    request.destinationAsset =
-      "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+  fun `test update transaction amounts when no quote was used for STRICT_SEND, same asset`() {
+    // request.getAmount() is always denominated in the sell asset -- for STRICT_SEND, amount_in is
+    // exactly that, and amount_out (known immediately since no real conversion is involved) is the
+    // fee subtracted out.
+    every { sep31Config.paymentType } returns STRICT_SEND
+    request.amount = "100"
+    request.destinationAsset = null
+    fee.total = "2"
+    fee.asset = asset.id
     Context.get().transaction = txn
     Context.get().request = request
     Context.get().fee = fee
     Context.get().asset = asset
-    every { sep31Config.paymentType } returns STRICT_SEND
 
-    request.amount = "100"
-    fee.amount = "2"
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
-    assertEquals(txn.amountIn, "100")
-    assertEquals(txn.amountOut, "98")
 
+    assertEquals("100", txn.amountIn)
+    assertEquals("98", txn.amountOut)
+    assertEquals(asset.id, txn.amountInAsset)
+    assertEquals(asset.id, txn.amountOutAsset)
+  }
+
+  @Test
+  fun `test update transaction amounts when no quote was used for STRICT_RECEIVE, same asset`() {
+    // For STRICT_RECEIVE, the fee is added into amount_in (see Sep31Config.PaymentType) --
+    // safe here since, with no destination_asset, the fee can only be denominated in the same
+    // (sell) asset as the request.
     every { sep31Config.paymentType } returns STRICT_RECEIVE
+    request.amount = "100"
+    request.destinationAsset = null
+    fee.total = "2"
+    fee.asset = asset.id
+    Context.get().transaction = txn
+    Context.get().request = request
+    Context.get().fee = fee
+    Context.get().asset = asset
+
     sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
+
     assertEquals("102", txn.amountIn)
     assertEquals("100", txn.amountOut)
+  }
+
+  @Test
+  fun `test update transaction amounts when no quote was used defers amount_out for a cross-asset conversion`() {
+    // The /rate used here is only INDICATIVE, not firm. Per SEP-31, when destination_asset
+    // requests a real conversion, amount_out is only known once the Receiving Anchor actually
+    // receives the incoming payment and can apply a firm rate -- so it must be left unset here,
+    // regardless of paymentType.
+    every { sep31Config.paymentType } returns STRICT_RECEIVE
+    request.amount = "100"
+    request.destinationAsset = stellarJPYC
+    fee.total = "2"
+    fee.asset = stellarJPYC // fee denominated in the buy asset -- a valid /rate response shape.
+    txn.amountOut = null
+    Context.get().transaction = txn
+    Context.get().request = request
+    Context.get().fee = fee
+    Context.get().asset = asset
+
+    sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
+
+    // Cannot be combined with the sell-side amount_in without mixing units, and isn't needed to
+    // compute amount_out anyway since amount_out is deferred.
+    assertEquals("100", txn.amountIn)
+    assertNull(txn.amountOut)
+    assertEquals(stellarJPYC, txn.amountOutAsset)
+  }
+
+  @Test
+  fun `test update transaction amounts when no quote was used still combines a sell-side fee for STRICT_RECEIVE even in a cross-asset conversion`() {
+    // The fee happens to be denominated in the sell asset here even though destination_asset
+    // requests a real conversion -- combining it into amount_in is still safe (same units), even
+    // though amount_out itself remains deferred (see the test above).
+    every { sep31Config.paymentType } returns STRICT_RECEIVE
+    request.amount = "100"
+    request.destinationAsset = stellarJPYC
+    fee.total = "2"
+    fee.asset = asset.id
+    txn.amountOut = null
+    Context.get().transaction = txn
+    Context.get().request = request
+    Context.get().fee = fee
+    Context.get().asset = asset
+
+    sep31Service.updateTxAmountsWhenNoQuoteWasUsed()
+
+    assertEquals("102", txn.amountIn)
+    assertNull(txn.amountOut)
+  }
+
+  @Test
+  fun `test update transaction amounts when no quote was used rejects a fee denominated in an unrelated third asset`() {
+    // The fee is denominated in neither the sell asset (asset.id) nor the buy asset (stellarJPYC)
+    // -- treating it as the buy asset's amount here would silently mix units.
+    every { sep31Config.paymentType } returns STRICT_RECEIVE
+    request.amount = "100"
+    request.destinationAsset = stellarJPYC
+    fee.total = "2"
+    fee.asset = stellarUSDC
+    Context.get().transaction = txn
+    Context.get().request = request
+    Context.get().fee = fee
+    Context.get().asset = asset
+
+    assertThrows<ServerErrorException> { sep31Service.updateTxAmountsWhenNoQuoteWasUsed() }
+  }
+
+  @Test
+  fun `test updateFee always fixes sell_amount to request amount for STRICT_SEND`() {
+    Context.reset()
+    Context.get().request = request
+    Context.get().webAuthJwt = TestHelper.createWebAuthJwt()
+    Context.get().asset = asset
+    every { sep31Config.paymentType } returns STRICT_SEND
+    val rateRequestSlot = slot<GetRateRequest>()
+    every { rateIntegration.getRate(capture(rateRequestSlot)) } returns
+      GetRateResponse(GetRateResponse.Rate.builder().fee(fee).build())
+
+    request.amount = "100"
+    request.destinationAsset = null
+    sep31Service.updateFee()
+
+    assertEquals("100", rateRequestSlot.captured.sellAmount)
+    assertNull(rateRequestSlot.captured.buyAmount)
+  }
+
+  @Test
+  fun `test updateFee always fixes sell_amount to request amount for STRICT_RECEIVE too`() {
+    // request.getAmount() is always denominated in the sell asset per SEP-31, regardless of
+    // paymentType -- so the /rate request always fixes sell_amount, never buy_amount, to it.
+    // Fixing buy_amount instead for STRICT_RECEIVE would ask /rate for exactly request.getAmount()
+    // of the *destination* asset, which is a different, unrelated quantity whenever a real
+    // cross-asset conversion is involved.
+    Context.reset()
+    Context.get().request = request
+    Context.get().webAuthJwt = TestHelper.createWebAuthJwt()
+    Context.get().asset = asset
+    every { sep31Config.paymentType } returns STRICT_RECEIVE
+    val rateRequestSlot = slot<GetRateRequest>()
+    every { rateIntegration.getRate(capture(rateRequestSlot)) } returns
+      GetRateResponse(GetRateResponse.Rate.builder().fee(fee).build())
+
+    request.amount = "100"
+    request.destinationAsset = stellarJPYC
+    sep31Service.updateFee()
+
+    assertEquals("100", rateRequestSlot.captured.sellAmount)
+    assertNull(rateRequestSlot.captured.buyAmount)
   }
 
   @Test
@@ -743,7 +874,13 @@ class Sep31ServiceTest {
         customerIntegration,
       )
     every { rateIntegration.getRate(any()) } returns
-      GetRateResponse(GetRateResponse.Rate.builder().fee(FeeDetails("2", "stellar:USDC")).build())
+      GetRateResponse(
+        GetRateResponse.Rate.builder()
+          .fee(
+            FeeDetails("2", "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+          )
+          .build()
+      )
   }
 
   private val noSep12AssetJson =
@@ -782,7 +919,13 @@ class Sep31ServiceTest {
         customerIntegration,
       )
     every { rateIntegration.getRate(any()) } returns
-      GetRateResponse(GetRateResponse.Rate.builder().fee(FeeDetails("2", "stellar:USDC")).build())
+      GetRateResponse(
+        GetRateResponse.Rate.builder()
+          .fee(
+            FeeDetails("2", "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+          )
+          .build()
+      )
   }
 
   private fun ownershipTestRequest(senderId: String? = null, receiverId: String? = null) =
@@ -1084,6 +1227,35 @@ class Sep31ServiceTest {
 
     assertEquals("my-refund-memo", txnSlot.captured.refundMemo)
     assertEquals("text", txnSlot.captured.refundMemoType)
+  }
+
+  @Test
+  fun `test postTransaction carries the fee breakdown through the no-quote path`() {
+    useNoSep12AssetService()
+    every { rateIntegration.getRate(any()) } returns
+      GetRateResponse(
+        GetRateResponse.Rate.builder()
+          .fee(
+            FeeDetails(
+              "2",
+              "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+              listOf(FeeDescription("Sell fee", null, "2"))
+            )
+          )
+          .build()
+      )
+    val postTxRequest = ownershipTestRequest()
+
+    val txnSlot = slot<Sep31Transaction>()
+    every { txnStore.save(capture(txnSlot)) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertEquals(listOf(FeeDescription("Sell fee", null, "2")), txnSlot.captured.feeDetails.details)
   }
 
   @Test
@@ -1400,6 +1572,7 @@ class Sep31ServiceTest {
     verify(exactly = 1) {
       customerIdOwnerStore.verifyOrClaim("needs-info-but-not-required", any(), any(), any())
     }
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
   }
 
   @Test
@@ -1570,7 +1743,13 @@ class Sep31ServiceTest {
 
     // Provide fee response.
     every { rateIntegration.getRate(any()) } returns
-      GetRateResponse(GetRateResponse.Rate.builder().fee(FeeDetails("2", "stellar:USDC")).build())
+      GetRateResponse(
+        GetRateResponse.Rate.builder()
+          .fee(
+            FeeDetails("2", "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+          )
+          .build()
+      )
 
     // Make sure we can get the sender and receiver customers
     val mockCustomer = GetCustomerResponse()
@@ -1594,7 +1773,22 @@ class Sep31ServiceTest {
 
   private val usdcJson =
     """
-    {"enabled":true,"quotes_supported":true,"quotes_required":true,"min_amount":1,"max_amount":1000000,"funding_methods":["SEPA","SWIFT"]}
+    {
+      "enabled":true,
+      "quotes_supported":true,
+      "quotes_required":true,
+      "min_amount":1,
+      "max_amount":1000000,
+      "funding_methods":["SEPA","SWIFT"],
+      "fields": {
+        "transaction": {
+          "receiver_account_number": {"description": "bank account number of the destination", "optional": false},
+          "type": {"description": "type of deposit to make", "choices": ["SEPA", "SWIFT"], "optional": false},
+          "receiver_routing_number": {"description": "routing number of the destination bank account", "optional": false},
+          "receiver_phone_number": {"description": "phone number of the receiver", "optional": true}
+        }
+      }
+    }
   """
       .trimIndent()
 
@@ -1660,6 +1854,135 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test INFO response advertises fields when the asset configures it`() {
+    val withFieldsAssetJson =
+      """
+      {
+        "items": [
+          {
+            "id": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+            "distribution_account": "GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I",
+            "significant_decimals": 2,
+            "sep31": {
+              "enabled": true,
+              "receive": {"min_amount": 1, "max_amount": 1000000, "methods": ["SEPA", "SWIFT"]},
+              "quotes_supported": false,
+              "quotes_required": false,
+              "fields": {
+                "transaction": {
+                  "receiver_account_number": {
+                    "description": "Bank account number of the receiver.",
+                    "optional": false
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+      """
+        .trimIndent()
+    val infoOnlyService =
+      Sep31Service(
+        languageConfig,
+        sep31Config,
+        txnStore,
+        quoteStore,
+        DefaultAssetService.fromJsonContent(withFieldsAssetJson),
+        rateIntegration,
+        eventService,
+        Clock.systemUTC(),
+        exchangeAmountsCalculator,
+        customerIdOwnerStore,
+        customerIntegration,
+      )
+
+    val fields = infoOnlyService.info.receive["USDC"]!!.fields
+    assertEquals(setOf("receiver_account_number"), fields.transaction.keys)
+    val field = fields.transaction["receiver_account_number"]!!
+    assertEquals("Bank account number of the receiver.", field.description)
+    assertFalse(field.isOptional)
+  }
+
+  @Test
+  fun `test INFO response omits fields when the asset doesn't configure it`() {
+    assertNull(sep31Service.info.receive["JPYC"]!!.fields)
+  }
+
+  @Test
+  fun `test asset config silently drops a null field definition instead of crashing`() {
+    // A bare "receiver_account_number:" in YAML (or a literal JSON null) deserializes to a null
+    // map value, but DefaultAssetService's internal round-trip (raw Map -> gson.toJson ->
+    // JsonObject -> gson.toJson -> StellarAssetInfo) uses a default (non-serializeNulls) Gson,
+    // which drops null map entries when re-serializing -- confirmed by reproducing the exact
+    // pipeline standalone. So a null field entry never reaches AssetValidator or Sep31Service at
+    // all: it's silently absent from the loaded config rather than rejected at startup or causing
+    // an NPE. This is a pre-existing quirk of the shared parsing pipeline (affects any Map-valued
+    // asset config, not unique to `fields`); documenting the actual behavior here rather than
+    // fixing the broader pipeline, which is outside this field-validation work's scope.
+    val nullFieldDefinitionJson =
+      """
+      {
+        "items": [
+          {
+            "id": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+            "distribution_account": "GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I",
+            "significant_decimals": 2,
+            "sep31": {
+              "enabled": true,
+              "receive": {"min_amount": 1, "max_amount": 1000000, "methods": ["SEPA", "SWIFT"]},
+              "quotes_supported": false,
+              "quotes_required": false,
+              "fields": {
+                "transaction": {
+                  "receiver_account_number": null
+                }
+              }
+            }
+          }
+        ]
+      }
+      """
+        .trimIndent()
+
+    val nullFieldAssetService = DefaultAssetService.fromJsonContent(nullFieldDefinitionJson)
+    val fields = nullFieldAssetService.getAssets().first().sep31.fields
+    assertTrue(fields == null || fields.transaction.isEmpty())
+  }
+
+  @Test
+  fun `test asset config rejects a blank field description`() {
+    val blankFieldDescriptionJson =
+      """
+      {
+        "items": [
+          {
+            "id": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+            "distribution_account": "GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I",
+            "significant_decimals": 2,
+            "sep31": {
+              "enabled": true,
+              "receive": {"min_amount": 1, "max_amount": 1000000, "methods": ["SEPA", "SWIFT"]},
+              "quotes_supported": false,
+              "quotes_required": false,
+              "fields": {
+                "transaction": {
+                  "receiver_account_number": {"optional": false}
+                }
+              }
+            }
+          }
+        ]
+      }
+      """
+        .trimIndent()
+
+    assertThrows<InvalidConfigException> {
+      DefaultAssetService.fromJsonContent(blankFieldDescriptionJson)
+    }
+  }
+
+  @Test
   fun `test asset config rejects a blank sep12 description`() {
     val blankSep12DescriptionJson =
       """
@@ -1705,6 +2028,41 @@ class Sep31ServiceTest {
     assetInfo.id = originalId
     val ex3 = assertThrows<BadRequestException> { sep31Service.validateRequiredFields() }
     assertEquals("'fields' field must have one 'transaction' field", ex3.message)
+
+    // USDC's config (test_assets.json) marks receiver_routing_number/receiver_account_number/type
+    // as required -- /info advertises that, so it must actually be enforced here. A missing
+    // required field must surface as the SEP-31 transaction_info_needed contract, not a plain
+    // BadRequestException, so sending anchors can discover what to add before retrying.
+    Context.get().transactionFields = mapOf("receiver_routing_number" to "123", "type" to "SWIFT")
+    val ex4 = assertThrows<Sep31MissingFieldException> { sep31Service.validateRequiredFields() }
+    assertEquals(setOf("receiver_account_number"), ex4.missingFields.transaction.keys)
+    assertEquals(
+      "bank account number of the destination",
+      ex4.missingFields.transaction["receiver_account_number"]!!.description,
+    )
+
+    // A whitespace-only value must not satisfy a required field either.
+    Context.get().transactionFields =
+      mapOf(
+        "receiver_routing_number" to "123",
+        "receiver_account_number" to "   ",
+        "type" to "SWIFT",
+      )
+    val ex5 = assertThrows<Sep31MissingFieldException> { sep31Service.validateRequiredFields() }
+    assertEquals(setOf("receiver_account_number"), ex5.missingFields.transaction.keys)
+
+    // Every missing field must be reported together, not just the first one encountered.
+    Context.get().transactionFields = mapOf("receiver_routing_number" to "123")
+    val ex6 = assertThrows<Sep31MissingFieldException> { sep31Service.validateRequiredFields() }
+    assertEquals(setOf("receiver_account_number", "type"), ex6.missingFields.transaction.keys)
+
+    Context.get().transactionFields =
+      mapOf(
+        "receiver_routing_number" to "123",
+        "receiver_account_number" to "456",
+        "type" to "SWIFT"
+      )
+    assertDoesNotThrow { sep31Service.validateRequiredFields() }
   }
 
   @Test
@@ -1718,7 +2076,7 @@ class Sep31ServiceTest {
     request.destinationAsset = "USDC"
     sep31Service.updateFee()
     var fee = Context.get().fee
-    assertEquals(quote.fee.total, fee.amount)
+    assertEquals(quote.fee.total, fee.total)
     assertEquals(quote.fee.asset, fee.asset)
 
     // No quote
@@ -1738,13 +2096,13 @@ class Sep31ServiceTest {
     request.destinationAsset = "USDC"
     sep31Service.updateFee()
     fee = Context.get().fee
-    assertEquals("10", fee.amount)
+    assertEquals("10", fee.total)
     assertEquals("stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN", fee.asset)
 
     request.destinationAsset = null
     sep31Service.updateFee()
     fee = Context.get().fee
-    assertEquals("10", fee.amount)
+    assertEquals("10", fee.total)
     assertEquals("stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN", fee.asset)
   }
 
