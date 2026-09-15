@@ -121,7 +121,7 @@ class Sep31ServiceTest {
       "status": "pending_sender",
       "statusEta": "100",
       "amountIn": "100",
-      "amountInAsset": "USDC",
+      "amountInAsset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       "amountOut": "98",
       "amountOutAsset": "USD",
       "amountFee": "2",
@@ -409,7 +409,7 @@ class Sep31ServiceTest {
           .status("pending_sender")
           .statusEta(100)
           .amountIn("100")
-          .amountInAsset("USDC")
+          .amountInAsset("stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP")
           .amountOut("98")
           .amountOutAsset("USD")
           .feeDetails(FeeDetails("2", "USDC"))
@@ -435,9 +435,103 @@ class Sep31ServiceTest {
   fun `test PATCH transaction ok`() {
     val token = TestHelper.createWebAuthJwt()
     txn.status = "pending_transaction_info_update"
+    val originalUpdatedAt = txn.updatedAt
     every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
     sep31Service.patchTransaction(token, patchRequest)
-    // TODO: Add more saved transaction field validation
+
+    assertEquals("SEPA", txn.fields["type"])
+    // Per SEP-31, patching every field named in required_info_updates returns the transaction to
+    // pending_receiver, clears required_info_updates, and bumps updated_at (SEP-31 defines it as
+    // when the transaction reached its current status).
+    assertEquals("pending_receiver", txn.status)
+    assertEquals(null, txn.requiredInfoUpdates)
+    assertTrue(txn.updatedAt.isAfter(originalUpdatedAt))
+    // The receiving anchor's business server learns processing can resume via this event.
+    verify(exactly = 1) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test PATCH transaction rejects a partial patch missing a required field as a 400`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates.transaction =
+      mapOf(
+        "type" to Field("type of deposit to make", listOf("SEPA", "SWIFT"), false),
+        "receiver_bank_account" to Field("bank account", null, false),
+      )
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    // Per SEP-31, a 200 is only defined when every required field is patched in one request --
+    // this request only supplies "type", leaving "receiver_bank_account" unaddressed.
+    val ex =
+      assertThrows<BadRequestException> { sep31Service.patchTransaction(token, patchRequest) }
+    assertEquals("[receiver_bank_account] is required", ex.message)
+    assertEquals("pending_transaction_info_update", txn.status)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test PATCH transaction completes regardless of an unpatched field's stale prior value`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
+
+    // patchRequest already supplies every field named in txn's fixture required_info_updates
+    // ("type"); completion must be judged by presence of the field as a request key, not by
+    // whether txn.fields already happens to hold some other (possibly stale) value for it.
+    txn.fields["type"] = "stale-invalid-value"
+
+    sep31Service.patchTransaction(token, patchRequest)
+
+    assertEquals("SEPA", txn.fields["type"])
+    assertEquals("pending_receiver", txn.status)
+  }
+
+  @Test
+  fun `test PATCH transaction rejects malformed data missing fields as a 400`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    val request = Sep31PatchTransactionRequest.builder().id(patchRequest.id).build()
+    val ex = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, request) }
+    assertEquals("fields.transaction must be specified", ex.message)
+  }
+
+  @Test
+  fun `test PATCH transaction rejects an empty fields map as a 400`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    val request =
+      Sep31PatchTransactionRequest.builder()
+        .id(patchRequest.id)
+        .fields(Sep31TxnFields(hashMapOf()))
+        .build()
+    val ex = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, request) }
+    assertEquals("fields.transaction must be specified", ex.message)
+  }
+
+  @Test
+  fun `test PATCH transaction rejects a null field value as a 400`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    // A JSON `"type": null` in the request body deserializes to a null map entry -- this must not
+    // silently count as the field having been supplied.
+    val request =
+      gson.fromJson(
+        """{"id": "${patchRequest.id}", "fields": {"transaction": {"type": null}}}""",
+        Sep31PatchTransactionRequest::class.java,
+      )
+    val ex = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, request) }
+    assertEquals("[type] must not be null", ex.message)
+    verify(exactly = 0) { eventSession.publish(any()) }
   }
 
   @Test

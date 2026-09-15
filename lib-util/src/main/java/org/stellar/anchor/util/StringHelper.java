@@ -67,4 +67,13 @@ public class StringHelper {
   public static String sanitize(String value) {
     return value.replace("\n", "").replace("\r", "");
   }
+
+  /** Turns a snake_case field name like "receiver_bank_account" into "Receiver bank account". */
+  public static String humanizeSnakeCase(String snakeCase) {
+    String withSpaces = snakeCase.replace('_', ' ');
+    if (withSpaces.isEmpty()) {
+      return withSpaces;
+    }
+    return Character.toUpperCase(withSpaces.charAt(0)) + withSpaces.substring(1);
+  }
 }

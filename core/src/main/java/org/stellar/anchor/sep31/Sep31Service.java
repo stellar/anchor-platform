@@ -2,6 +2,7 @@ package org.stellar.anchor.sep31;
 
 import static io.micrometer.core.instrument.Metrics.counter;
 import static org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_CREATED;
+import static org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED;
 import static org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse;
 import static org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_SEND;
 import static org.stellar.anchor.event.EventService.EventQueue.TRANSACTION;
@@ -548,13 +549,33 @@ public class Sep31Service {
         .getTransaction()
         .forEach((fieldName, fieldValue) -> txn.getFields().put(fieldName, fieldValue));
 
-    AssetInfo assetInfo = assetService.getAsset(txn.getAmountInAsset());
+    // txn.getAmountInAsset() stores the full asset id (e.g. "stellar:USDC:G...", as set by
+    // postTransaction), not a bare code, so it must be looked up via getAssetById.
+    AssetInfo assetInfo = assetService.getAssetById(txn.getAmountInAsset());
     Context.get().setAsset(assetInfo);
     Context.get().setTransactionFields(txn.getFields());
     validateRequiredFields();
 
-    Sep31GetTransactionResponse response =
-        sep31TransactionStore.save(txn).toSep31GetTransactionResponse();
+    // Per SEP-31 "PATCH Transaction": a 200 response is only defined for the case where "the
+    // information was successfully updated AND all fields required for the transaction are
+    // patched" -- validatePatchTransactionFields already rejects a request missing any expected
+    // field (400), so reaching this point means every required field was just supplied. The
+    // transaction returns to pending_receiver.
+    txn.setStatus(SepTransactionStatus.PENDING_RECEIVER.toString());
+    txn.setRequiredInfoUpdates(null);
+    txn.setUpdatedAt(clock.instant());
+
+    Sep31Transaction savedTxn = sep31TransactionStore.save(txn);
+    // Without this, the corrected data is only stored locally -- the receiving anchor's business
+    // server (the callback/event consumer) is never told processing can resume.
+    eventSession.publish(
+        AnchorEvent.builder()
+            .id(UUID.randomUUID().toString())
+            .sep("31")
+            .type(TRANSACTION_STATUS_CHANGED)
+            .transaction(TransactionMapper.toGetTransactionResponse(savedTxn))
+            .build());
+    Sep31GetTransactionResponse response = savedTxn.toSep31GetTransactionResponse();
     // increment counter
     sep31TransactionPatchedCounter.increment();
     return response;
@@ -609,14 +630,39 @@ public class Sep31Service {
           String.format("Transaction (%s) is not expecting any updates", txn.getId()));
     }
 
+    if (request.getFields() == null
+        || request.getFields().getTransaction() == null
+        || request.getFields().getTransaction().isEmpty()) {
+      infoF("Transaction ({}) patch request is missing fields", txn.getId());
+      throw new BadRequestException("fields.transaction must be specified");
+    }
+
     Map<String, AssetInfo.Field> expectedFields = txn.getRequiredInfoUpdates().getTransaction();
     Map<String, String> requestFields = request.getFields().getTransaction();
 
-    // validate if any of the fields from the request is not expected in the transaction.
-    for (String fieldName : requestFields.keySet()) {
+    for (Map.Entry<String, String> entry : requestFields.entrySet()) {
+      String fieldName = entry.getKey();
+      // validate if the field from the request is not expected in the transaction.
       if (!expectedFields.containsKey(fieldName)) {
         infoF("{} is not a expected field", fieldName);
         throw new BadRequestException(String.format("[%s] is not a expected field", fieldName));
+      }
+      // A JSON null value deserializes to a null map entry -- without this check it would still
+      // count as "supplied" below and could move the transaction to pending_receiver despite no
+      // corrected value actually being given.
+      if (entry.getValue() == null) {
+        infoF("{} was patched with a null value", fieldName);
+        throw new BadRequestException(String.format("[%s] must not be null", fieldName));
+      }
+    }
+
+    // SEP-31 only defines a 200 response for "all fields required for the transaction are
+    // patched" -- a request missing any currently-required field is rejected outright rather than
+    // accepted as a partial update, since the spec describes no such cumulative-PATCH behavior.
+    for (String fieldName : expectedFields.keySet()) {
+      if (!requestFields.containsKey(fieldName)) {
+        infoF("{} is required but was not provided", fieldName);
+        throw new BadRequestException(String.format("[%s] is required", fieldName));
       }
     }
   }
