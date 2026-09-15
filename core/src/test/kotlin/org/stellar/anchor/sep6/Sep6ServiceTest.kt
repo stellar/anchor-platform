@@ -403,6 +403,76 @@ class Sep6ServiceTest {
   }
 
   @Test
+  fun `test deposit with legacy memo JWT and both account and memo omitted defaults memo to token subject`() {
+    // Regression test: falling back entirely to the JWT's own identity must also default the
+    // memo (not just the account), or the created deposit is addressed to the shared base
+    // account with no memo distinguishing this JWT's specific sub-account. `token` (the default
+    // fixture) already carries a legacy `G...:memo` subject -- see setUp().
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request = StartDepositRequest.builder().assetCode(TEST_ASSET).fundingMethod("SWIFT").build()
+    sep6Service.deposit(token, request)
+
+    assertEquals(TEST_MEMO, slotTxn.captured.memo)
+    assertEquals("id", slotTxn.captured.memoType)
+  }
+
+  @Test
+  fun `test deposit with legacy memo JWT and omitted account keeps an explicitly requested memo`() {
+    // The default-to-token-memo behavior above must not override a memo the caller did supply.
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartDepositRequest.builder()
+        .assetCode(TEST_ASSET)
+        .fundingMethod("SWIFT")
+        .memo("999")
+        .memoType("id")
+        .build()
+    sep6Service.deposit(token, request)
+
+    assertEquals("999", slotTxn.captured.memo)
+  }
+
+  @Test
+  fun `test deposit with muxed JWT and both account and memo omitted does not default a memo`() {
+    // getAccountMemo() is never set for a muxed subject -- the muxed M-address already carries
+    // its own sub-account identifier, so no memo should be synthesized.
+    val muxedJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request = StartDepositRequest.builder().assetCode(TEST_ASSET).fundingMethod("SWIFT").build()
+    sep6Service.deposit(muxedJwt, request)
+
+    Assertions.assertNull(slotTxn.captured.memo)
+  }
+
+  @Test
+  fun `test depositExchange with legacy memo JWT and both account and memo omitted defaults memo to token subject`() {
+    val slotTxn = slot<Sep6Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    every { eventSession.publish(any()) } returns Unit
+
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .amount("100")
+        .fundingMethod("SWIFT")
+        .build()
+    sep6Service.depositExchange(token, request)
+
+    assertEquals(TEST_MEMO, slotTxn.captured.memo)
+    assertEquals("id", slotTxn.captured.memoType)
+  }
+
+  @Test
   fun `test withdrawExchange with empty account defaults to token subject`() {
     val slotTxn = slot<Sep6Transaction>()
     every { txnStore.save(capture(slotTxn)) } returns null

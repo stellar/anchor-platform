@@ -94,6 +94,25 @@ public class Sep6Service {
     return infoResponse;
   }
 
+  /**
+   * Builds the transaction memo for a deposit/deposit-exchange request. When the caller omits both
+   * `account` and `memo` -- falling back entirely to the JWT's own identity -- and the JWT carries
+   * a legacy `G...:memo` subject (accountMemo is only ever set for that form, never for a muxed
+   * subject, since a muxed M-address already carries its own sub-account identifier), default the
+   * memo to that accountMemo (type "id"). Otherwise the created deposit would be addressed to the
+   * shared base account with no memo distinguishing this JWT's specific sub-account.
+   */
+  private Memo resolveDepositMemo(
+      WebAuthJwt token, String requestAccount, String requestMemo, String requestMemoType)
+      throws AnchorException {
+    if (StringHelper.isEmpty(requestAccount)
+        && StringHelper.isEmpty(requestMemo)
+        && token.getAccountMemo() != null) {
+      return makeMemo(token.getAccountMemo(), "id");
+    }
+    return makeMemo(requestMemo, requestMemoType);
+  }
+
   public StartDepositResponse deposit(WebAuthJwt token, StartDepositRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
@@ -160,7 +179,8 @@ public class Sep6Service {
       }
     }
 
-    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
+    Memo memo =
+        resolveDepositMemo(token, request.getAccount(), request.getMemo(), request.getMemoType());
 
     if (memo != null) {
       debug("Set the transaction memo.", memo);
@@ -241,7 +261,8 @@ public class Sep6Service {
               .build();
     }
 
-    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
+    Memo memo =
+        resolveDepositMemo(token, request.getAccount(), request.getMemo(), request.getMemoType());
     String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
