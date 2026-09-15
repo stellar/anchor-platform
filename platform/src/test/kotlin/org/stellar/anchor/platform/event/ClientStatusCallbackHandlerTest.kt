@@ -604,6 +604,44 @@ class ClientStatusCallbackHandlerTest {
   }
 
   @Test
+  fun `redactedJson should strip SEP-31 field values before they reach the logs`() {
+    val event =
+      AnchorEvent().apply {
+        transaction =
+          GetTransactionResponse.builder()
+            .id("sep31-id")
+            .sep(SEP_31)
+            .kind(Kind.RECEIVE)
+            .status(PENDING_RECEIVER)
+            .clientName("circle")
+            .requiredInfoUpdates(listOf("receiver_bank_account"))
+            .fields(mapOf("receiver_bank_account" to "12345"))
+            .build()
+      }
+
+    val redacted =
+      JsonParser.parseString(ClientStatusCallbackHandler.redactedJson(event)).asJsonObject
+    val transaction = redacted.getAsJsonObject("transaction")
+
+    assertEquals("sep31-id", transaction.get("id").asString)
+    Assertions.assertFalse(
+      transaction.has("fields"),
+      "raw field values (e.g. bank account/routing numbers) must not reach the logs",
+    )
+  }
+
+  @Test
+  fun `redactedJson should pass through events with no transaction fields unchanged`() {
+    val event = AnchorEvent().apply { transaction = null }
+
+    // Must not throw when there's no `transaction` object to redact from (e.g. a SEP-12 customer
+    // event).
+    val redacted = ClientStatusCallbackHandler.redactedJson(event)
+
+    Assertions.assertFalse(JsonParser.parseString(redacted).asJsonObject.has("transaction"))
+  }
+
+  @Test
   fun `fromSep31Txn should map GetTransactionResponse to Sep31Transaction correctly`() {
     // Arrange
     val amountIn = Amount("300.0", "USD")

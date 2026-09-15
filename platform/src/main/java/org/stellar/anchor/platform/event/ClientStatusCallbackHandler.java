@@ -7,6 +7,7 @@ import static org.stellar.anchor.util.NetUtil.getDomainFromURL;
 import static org.stellar.anchor.util.OkHttpUtil.buildJsonRequestBody;
 import static org.stellar.anchor.util.StringHelper.json;
 
+import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Base64;
@@ -44,6 +45,7 @@ import org.stellar.anchor.sep31.Sep31Refunds;
 import org.stellar.anchor.sep31.Sep31Transaction;
 import org.stellar.anchor.sep6.Sep6Transaction;
 import org.stellar.anchor.sep6.Sep6TransactionUtils;
+import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.StringHelper;
 import org.stellar.sdk.KeyPair;
@@ -105,7 +107,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
 
     if (request != null) {
       try (Response response = httpClient.newCall(request).execute()) {
-        debugF("Sending event: {} to client status api: {}", json(event), request.url());
+        debugF("Sending event: {} to client status api: {}", redactedJson(event), request.url());
         if (response.code() < 200 || response.code() >= 400) {
           errorF("Failed to send event to client status API. Error code: {}", response.code());
           return false;
@@ -122,7 +124,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
     if (callbackUrl == null) {
       Log.debugF(
           "No callback URL found for event: {} for client: {}",
-          json(event),
+          redactedJson(event),
           clientConfig.getName());
       return null;
     }
@@ -211,7 +213,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
           return json(txn24Response);
         case SEP_31:
           Sep31Transaction sep31Txn = fromSep31Txn(event.getTransaction());
-          return json(sep31Txn.toSep31GetTransactionResponse());
+          return sep31CallbackPayload(sep31Txn);
         default:
           throw new SepException(
               String.format("Unsupported SEP: %s", event.getTransaction().getSep()));
@@ -221,6 +223,42 @@ public class ClientStatusCallbackHandler extends EventHandler {
     } else {
       throw new InternalServerErrorException("Event must have either a transaction or a customer");
     }
+  }
+
+  /**
+   * SEP-31's public GET/PATCH transaction response has no `fields` property -- it's not part of the
+   * protocol, and {@link Sep31Transaction#toSep31GetTransactionResponse()} is the exact type {@code
+   * Sep31Controller} returns to the SEP-31 client for those endpoints, so adding it there would
+   * leak submitted field values into that public response too. The callback recipient (the
+   * receiving anchor's own business server) does need these values to act on a
+   * pending_transaction_info_update correction, so they're merged into just this JSON instead.
+   */
+  private static String sep31CallbackPayload(Sep31Transaction sep31Txn) {
+    JsonObject responseJson =
+        GsonUtils.getInstance()
+            .toJsonTree(sep31Txn.toSep31GetTransactionResponse())
+            .getAsJsonObject();
+    if (sep31Txn.getFields() != null && !sep31Txn.getFields().isEmpty()) {
+      responseJson
+          .getAsJsonObject("transaction")
+          .add("fields", GsonUtils.getInstance().toJsonTree(sep31Txn.getFields()));
+    }
+    return GsonUtils.getInstance().toJson(responseJson);
+  }
+
+  /**
+   * Renders an event as JSON for logging, with SEP-31 `fields` (raw submitted values -- e.g. bank
+   * account/routing numbers) stripped out first, so enabling DEBUG logging doesn't persist those
+   * values to application logs. Only used for log lines -- the actual callback/event payloads sent
+   * to consumers are built separately and are unaffected.
+   */
+  static String redactedJson(AnchorEvent event) {
+    JsonObject root = GsonUtils.getInstance().toJsonTree(event).getAsJsonObject();
+    JsonObject transaction = root.getAsJsonObject("transaction");
+    if (transaction != null) {
+      transaction.remove("fields");
+    }
+    return GsonUtils.getInstance().toJson(root);
   }
 
   static Sep6Transaction fromSep6Txn(GetTransactionResponse txn) {

@@ -161,7 +161,6 @@ public interface Sep31Transaction extends SepTransaction {
                 .refunds(refunds)
                 .requiredInfoMessage(getRequiredInfoMessage())
                 .requiredInfoUpdates(getRequiredInfoUpdates())
-                .fields(getFields())
                 .build())
         .build();
   }
