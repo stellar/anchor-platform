@@ -40,6 +40,22 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   /**
+   * Creates a fresh, isolated keypair, authenticates it, and issues [count] deposits for it -- so
+   * count/order/filter assertions run against an account with an exact, deterministic transaction
+   * set instead of the shared `sep6Client` wallet used by other tests in this file.
+   */
+  private fun createAccountWithDeposits(count: Int): Pair<Sep6Client, List<String>> {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val ids =
+      (1..count).map {
+        client.deposit(mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")).id!!
+      }
+    return client to ids
+  }
+
+  /**
    * Fetches GET /transactions as a raw JSON array, bypassing [Sep6Client.getTransactions]'s parsed
    * response -- Gson silently nulls absent fields on a parsed object, which would hide a missing
    * required field from schema assertions.
@@ -250,6 +266,15 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
     Assertions.assertNotNull(response.transactions)
     Assertions.assertEquals(0, response.transactions.size)
+  }
+
+  @Test
+  fun `test sep6 GET transactions honors limit parameter exactly`() {
+    val (client, _) = createAccountWithDeposits(3)
+
+    val response = client.getTransactions(mapOf("asset_code" to "USDC", "limit" to "1"))
+
+    Assertions.assertEquals(1, response.transactions.size)
   }
 
   @Test
