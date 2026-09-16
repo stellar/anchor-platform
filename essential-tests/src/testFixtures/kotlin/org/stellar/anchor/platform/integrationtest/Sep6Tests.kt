@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.time.Instant
 import kotlinx.coroutines.runBlocking
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
@@ -56,13 +57,6 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     return client to ids
   }
 
-  /**
-   * Creates a fresh, isolated keypair, authenticates it, and issues one deposit, one withdrawal,
-   * and one deposit-exchange for it -- so kind-filter assertions run against an account holding
-   * `deposit`, `withdrawal`, and `deposit-exchange` with a deterministic id for each, proving the
-   * `kind` filter distinguishes `deposit` from the similarly-named `deposit-exchange` rather than
-   * matching it as a prefix.
-   */
   private data class DepositWithdrawFixture(
     val client: Sep6Client,
     val depositId: String,
@@ -70,6 +64,13 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     val depositExchangeId: String,
   )
 
+  /**
+   * Creates a fresh, isolated keypair, authenticates it, and issues one deposit, one withdrawal,
+   * and one deposit-exchange for it -- so kind-filter assertions run against an account holding
+   * `deposit`, `withdrawal`, and `deposit-exchange` with a deterministic id for each, proving the
+   * `kind` filter distinguishes `deposit` from the similarly-named `deposit-exchange` rather than
+   * matching it as a prefix.
+   */
   private fun createAccountWithDepositAndWithdrawal(): DepositWithdrawFixture {
     val keyPair = SigningKeyPair(KeyPair.random())
     val jwt = authenticateWithoutMemo(keyPair)
@@ -100,9 +101,9 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
    * required field from schema assertions.
    */
   private fun getTransactionsRawArray(client: Sep6Client, query: Map<String, String>): JsonArray {
-    val baseUrl = "${toml.getString("TRANSFER_SERVER")}/transactions?"
-    val url = query.entries.fold(baseUrl) { acc, entry -> "$acc${entry.key}=${entry.value}&" }
-    val rawJson = client.httpGet(url, client.jwt)!!
+    val urlBuilder = "${toml.getString("TRANSFER_SERVER")}/transactions".toHttpUrl().newBuilder()
+    query.forEach { (key, value) -> urlBuilder.addQueryParameter(key, value) }
+    val rawJson = client.httpGet(urlBuilder.build().toString(), client.jwt)!!
     return JsonParser.parseString(rawJson).asJsonObject.getAsJsonArray("transactions")
   }
 
@@ -398,6 +399,14 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       }
     assert(ex.message!!.contains("asset code NOPE not supported")) {
       "Expected an unsupported-asset error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 GET transactions rejects request without asset_code`() {
+    val ex = assertThrows<SepException> { sep6Client.getTransactions(mapOf()) }
+    assert(ex.message!!.contains("asset_code")) {
+      "Expected a missing 'asset_code' parameter error but got: ${ex.message}"
     }
   }
 

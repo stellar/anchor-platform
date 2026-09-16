@@ -1740,18 +1740,6 @@ class Sep6ServiceTest {
   }
 
   @Test
-  fun `test find transactions with omitted account does not throw`() {
-    val depositTxn = createDepositTxn(TEST_ACCOUNT)
-    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any()) } returns listOf(depositTxn)
-    val request =
-      GetTransactionsRequest.builder().assetCode(TEST_ASSET).limit(10).lang("en-US").build()
-
-    assertDoesNotThrow {
-      sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
-    }
-  }
-
-  @Test
   fun `test find transactions with omitted account queries store with token account`() {
     val depositTxn = createDepositTxn(TEST_ACCOUNT)
     every { txnStore.findTransactions(TEST_ACCOUNT, any(), any()) } returns listOf(depositTxn)
