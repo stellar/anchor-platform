@@ -220,6 +220,27 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 withdrawal appears in transactions listing with valid schema`() {
+    val withdrawId =
+      sep6Client
+        .withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1"))
+        .id!!
+
+    val transactions =
+      getTransactionsRawArray(
+        sep6Client,
+        mapOf("asset_code" to "USDC", "account" to clientWalletAccount),
+      )
+    val withdrawTxn =
+      transactions.map { it.asJsonObject }.find { it.get("id").asString == withdrawId }
+
+    Assertions.assertNotNull(withdrawTxn) {
+      "expected withdrawal ($withdrawId) to be present in the transactions listing"
+    }
+    assertValidSep6TransactionSchema(withdrawTxn!!, "from")
+  }
+
+  @Test
   fun `test sep6 deposit-exchange without quote`() {
     val request =
       mapOf(
