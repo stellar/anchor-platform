@@ -102,6 +102,46 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 GET transactions rejects account param that does not match the JWT`() {
+    assertThrows<SepNotAuthorizedException> {
+      sep6Client.getTransactions(
+        mapOf("asset_code" to "USDC", "account" to KeyPair.random().accountId)
+      )
+    }
+  }
+
+  @Test
+  fun `test sep6 GET transactions with account omitted stays scoped to the JWT's own memo on a shared account`() {
+    val sharedKeyPair = SigningKeyPair(KeyPair.random())
+    val memoAJwt = authenticateWithMemo(sharedKeyPair, 111UL)
+    val memoBJwt = authenticateWithMemo(sharedKeyPair, 222UL)
+
+    val memoAClient = Sep6Client(toml.getString("TRANSFER_SERVER"), memoAJwt)
+    val memoBClient = Sep6Client(toml.getString("TRANSFER_SERVER"), memoBJwt)
+
+    fun depositRequest() =
+      mapOf(
+        "asset_code" to "USDC",
+        "account" to sharedKeyPair.address,
+        "amount" to "1",
+        "type" to "SWIFT",
+      )
+
+    val memoATxnId = memoAClient.deposit(depositRequest()).id!!
+    val memoBTxnId = memoBClient.deposit(depositRequest()).id!!
+
+    val listedIds =
+      memoAClient.getTransactions(mapOf("asset_code" to "USDC")).transactions.map { it.id }
+
+    Assertions.assertTrue(listedIds.contains(memoATxnId)) {
+      "expected memo A's own transaction to be visible when account is omitted"
+    }
+    Assertions.assertFalse(listedIds.contains(memoBTxnId)) {
+      "GET /transactions leaked memo B's transaction ($memoBTxnId) to memo A's JWT when account was omitted"
+    }
+  }
+
+  @Test
   fun `test sep6 deposit-exchange without quote`() {
     val request =
       mapOf(
