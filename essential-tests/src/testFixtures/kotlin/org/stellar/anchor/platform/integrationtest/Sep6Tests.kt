@@ -1,13 +1,19 @@
 package org.stellar.anchor.platform.integrationtest
 
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import java.time.Instant
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
@@ -31,6 +37,50 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
   private fun authenticateWithoutMemo(keyPair: SigningKeyPair): String {
     return runBlocking { anchor.auth().authenticate(keyPair) }.token
+  }
+
+  /**
+   * Fetches GET /transactions as a raw JSON array, bypassing [Sep6Client.getTransactions]'s parsed
+   * response -- Gson silently nulls absent fields on a parsed object, which would hide a missing
+   * required field from schema assertions.
+   */
+  private fun getTransactionsRawArray(client: Sep6Client, query: Map<String, String>): JsonArray {
+    val baseUrl = "${toml.getString("TRANSFER_SERVER")}/transactions?"
+    val url = query.entries.fold(baseUrl) { acc, entry -> "$acc${entry.key}=${entry.value}&" }
+    val rawJson = client.httpGet(url, client.jwt)!!
+    return JsonParser.parseString(rawJson).asJsonObject.getAsJsonArray("transactions")
+  }
+
+  /**
+   * Validates a single SEP-6 transaction object from raw JSON against the fields the spec requires
+   * on every transaction record, plus a caller-specified extra field (`to` for deposit, `from` for
+   * withdrawal).
+   */
+  private fun assertValidSep6TransactionSchema(txn: JsonObject, requiredField: String) {
+    listOf("id", "kind", "status", requiredField).forEach { field ->
+      val value = txn.get(field)
+      Assertions.assertTrue(
+        value != null &&
+          !value.isJsonNull &&
+          value.isJsonPrimitive &&
+          value.asJsonPrimitive.isString
+      ) {
+        "expected '$field' to be present, non-null, and a JSON string in $txn"
+      }
+    }
+
+    val status = txn.get("status").asString
+    Assertions.assertTrue(SepTransactionStatus.isValid(status)) {
+      "expected 'status' ($status) to be one of SEP-6's defined status values"
+    }
+
+    val startedAt = txn.get("started_at")
+    Assertions.assertTrue(startedAt != null && !startedAt.isJsonNull) {
+      "expected 'started_at' to be present and non-null in $txn"
+    }
+    assertDoesNotThrow({ "expected 'started_at' ($startedAt) to parse as an ISO-8601 instant" }) {
+      Instant.parse(startedAt.asString)
+    }
   }
 
   @Test
@@ -139,6 +189,34 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     Assertions.assertFalse(listedIds.contains(memoBTxnId)) {
       "GET /transactions leaked memo B's transaction ($memoBTxnId) to memo A's JWT when account was omitted"
     }
+  }
+
+  @Test
+  fun `test sep6 deposit appears in transactions listing with valid schema`() {
+    val depositId =
+      sep6Client
+        .deposit(
+          mapOf(
+            "asset_code" to "USDC",
+            "account" to clientWalletAccount,
+            "amount" to "1",
+            "type" to "SWIFT",
+          )
+        )
+        .id!!
+
+    val transactions =
+      getTransactionsRawArray(
+        sep6Client,
+        mapOf("asset_code" to "USDC", "account" to clientWalletAccount),
+      )
+    val depositTxn =
+      transactions.map { it.asJsonObject }.find { it.get("id").asString == depositId }
+
+    Assertions.assertNotNull(depositTxn) {
+      "expected deposit ($depositId) to be present in the transactions listing"
+    }
+    assertValidSep6TransactionSchema(depositTxn!!, "to")
   }
 
   @Test
