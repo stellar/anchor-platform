@@ -241,6 +241,18 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 GET transactions returns empty list for account with no history`() {
+    val freshKeyPair = SigningKeyPair(KeyPair.random())
+    val freshJwt = authenticateWithoutMemo(freshKeyPair)
+    val freshClient = Sep6Client(toml.getString("TRANSFER_SERVER"), freshJwt)
+
+    val response = freshClient.getTransactions(mapOf("asset_code" to "USDC"))
+
+    Assertions.assertNotNull(response.transactions)
+    Assertions.assertEquals(0, response.transactions.size)
+  }
+
+  @Test
   fun `test sep6 deposit-exchange without quote`() {
     val request =
       mapOf(
