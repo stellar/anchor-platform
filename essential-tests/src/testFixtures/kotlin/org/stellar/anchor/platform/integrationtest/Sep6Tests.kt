@@ -13,6 +13,7 @@ import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.client.Sep38Client
@@ -358,6 +359,17 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
     Assertions.assertFalse(ids.contains(depositId)) {
       "expected kind=withdrawal to exclude the deposit ($depositId)"
+    }
+  }
+
+  @Test
+  fun `test sep6 GET transactions rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.getTransactions(mapOf("asset_code" to "NOPE"))
+      }
+    assert(ex.message!!.contains("asset code NOPE not supported")) {
+      "Expected an unsupported-asset error but got: ${ex.message}"
     }
   }
 
