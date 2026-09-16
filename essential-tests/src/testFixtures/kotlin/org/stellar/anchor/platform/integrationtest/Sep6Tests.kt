@@ -278,6 +278,22 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 GET transactions are ordered by started_at descending`() {
+    val (client, _) = createAccountWithDeposits(3)
+
+    val startedAts =
+      client.getTransactions(mapOf("asset_code" to "USDC")).transactions.map {
+        Instant.parse(it.startedAt)
+      }
+
+    for (i in 0 until startedAts.size - 1) {
+      Assertions.assertTrue(startedAts[i] >= startedAts[i + 1]) {
+        "expected started_at[$i] (${startedAts[i]}) to be >= started_at[${i + 1}] (${startedAts[i + 1]})"
+      }
+    }
+  }
+
+  @Test
   fun `test sep6 deposit-exchange without quote`() {
     val request =
       mapOf(
