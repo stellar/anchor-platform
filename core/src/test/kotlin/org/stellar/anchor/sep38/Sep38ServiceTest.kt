@@ -1022,6 +1022,60 @@ class Sep38ServiceTest {
     JSONAssert.assertEquals(json(wantEvent), json(slotEvent.captured), STRICT)
   }
 
+  @Test
+  fun `test POST quote fails when the rate callback's expires_at exceeds the maximum quote expiration`() {
+    // The rate callback may round up or otherwise transform expire_after (see ANCHOR-1314): the
+    // client's request itself can be within bounds, or omit expire_after entirely, while the
+    // callback's own transformation still produces an expires_at beyond what the anchor is
+    // configured to honor. That must be rejected too, not just an out-of-bounds expire_after.
+    val account = ACCOUNT
+    val tooFarInTheFuture =
+      Instant.now().plusSeconds(sep38Config.maxQuoteExpirationSeconds.toLong() + 3600)
+    val rate =
+      GetRateResponse.Rate.builder()
+        .id("789")
+        .price("1.02")
+        .sellAmount("103")
+        .buyAmount("100")
+        .expiresAt(tooFarInTheFuture)
+        .fee(mockSellAssetFee(fiatUSD))
+        .build()
+    val getRateReq =
+      GetRateRequest.builder()
+        .type(FIRM)
+        .sellAsset(fiatUSD)
+        .sellAmount("103")
+        .buyAsset(stellarUSDC)
+        .clientId(account)
+        .build()
+    every { mockRateIntegration.getRate(getRateReq) } returns GetRateResponse(rate)
+
+    sep38Service =
+      Sep38Service(
+        sep38Config,
+        sep38Service.assetService,
+        mockRateIntegration,
+        mockQuoteStore,
+        eventService,
+      )
+
+    val token = createWebAuthJwt(account)
+    val ex =
+      assertThrows<ServerErrorException> {
+        sep38Service.postQuote(
+          token,
+          Sep38PostQuoteRequest.builder()
+            .context(SEP31)
+            .sellAssetName(fiatUSD)
+            .sellAmount("103")
+            .buyAssetName(stellarUSDC)
+            .build(),
+        )
+      }
+    assertTrue(ex.message!!.contains("exceeds the maximum quote expiration"))
+    verify(exactly = 0) { mockQuoteStore.save(any()) }
+  }
+
   @ValueSource(strings = [ACCOUNT, SMART_WALLET_ACCOUNT])
   @ParameterizedTest
   fun `test POST quote with minimum parameters and buy amount`(account: String) {

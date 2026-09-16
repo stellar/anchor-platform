@@ -365,6 +365,22 @@ public class Sep38Service {
               "Unable to calculate total_price with buy_amount: %s and sell_amount: %s",
               rate.getBuyAmount(), rate.getSellAmount()));
     }
+    // The rate callback computes the actual expires_at - it may round up or otherwise transform
+    // the requested expire_after (or apply its own default policy when none was given) - so the
+    // max-expiration ceiling must be enforced against what it actually returns, not only against
+    // the client's raw expire_after validated above. Without this, a callback that rounds up to
+    // e.g. the next day's noon can push expires_at past the configured maximum even when
+    // expire_after itself was in bounds, or exceed a small configured maximum by default.
+    int maxQuoteExpirationSeconds = sep38Config.getMaxQuoteExpirationSeconds();
+    if (rate.getExpiresAt() != null
+        && rate.getExpiresAt().isAfter(Instant.now().plusSeconds(maxQuoteExpirationSeconds))) {
+      throw new ServerErrorException(
+          "Rate callback returned expires_at="
+              + rate.getExpiresAt()
+              + ", which exceeds the maximum quote expiration of "
+              + maxQuoteExpirationSeconds
+              + " seconds");
+    }
     return rate;
   }
 
