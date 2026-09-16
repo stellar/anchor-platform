@@ -95,9 +95,12 @@ class Sep6TransactionUtilsTest {
               ]
           },
           "required_info_message": "need more info",
-          "required_info_updates": [
-              "some_field"
-          ],
+          "required_info_updates": {
+              "some_field": {
+                  "description": "Some field",
+                  "optional": false
+              }
+          },
           "instructions": {
               "key": {
                   "value": "1234",
