@@ -374,6 +374,14 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 GET transactions rejects request without JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.getTransactions(mapOf("asset_code" to "USDC"))
+    }
+  }
+
+  @Test
   fun `test sep6 deposit-exchange without quote`() {
     val request =
       mapOf(
