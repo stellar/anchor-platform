@@ -370,13 +370,15 @@ public class Sep38Service {
     // max-expiration ceiling must be enforced against what it actually returns, not only against
     // the client's raw expire_after validated above. Without this, a callback that rounds up to
     // e.g. the next day's noon can push expires_at past the configured maximum even when
-    // expire_after itself was in bounds, or exceed a small configured maximum by default. A null
-    // expires_at is rejected too: ExchangeAmountsCalculator/Sep31Service's own expiry checks
-    // treat a null expiresAt as never-expiring, so letting one through here would produce a quote
-    // valid forever - a stricter bypass of this ceiling than any finite value could be.
+    // expire_after itself was in bounds, or exceed a small configured maximum by default.
+    if (rate.getExpiresAt() == null) {
+      // ExchangeAmountsCalculator/Sep31Service's own expiry checks treat a null expiresAt as
+      // never-expiring, so letting one through here would produce a quote valid forever - a
+      // stricter bypass of this ceiling than any finite value could be.
+      throw new ServerErrorException("Rate callback returned a null expires_at");
+    }
     int maxQuoteExpirationSeconds = sep38Config.getMaxQuoteExpirationSeconds();
-    if (rate.getExpiresAt() == null
-        || rate.getExpiresAt().isAfter(Instant.now().plusSeconds(maxQuoteExpirationSeconds))) {
+    if (rate.getExpiresAt().isAfter(Instant.now().plusSeconds(maxQuoteExpirationSeconds))) {
       throw new ServerErrorException(
           "Rate callback returned expires_at="
               + rate.getExpiresAt()

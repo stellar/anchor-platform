@@ -1077,10 +1077,11 @@ class Sep38ServiceTest {
   }
 
   @Test
-  fun `test POST quote fails when the rate callback returns a null expires_at`() {
+  fun `test POST quote fails with a distinct message when the rate callback returns a null expires_at`() {
     // ExchangeAmountsCalculator and Sep31Service's own expiry checks (quote.getExpiresAt() !=
     // null && ...) treat a null expiresAt as never-expiring, so a callback that omits it must be
-    // rejected here rather than producing a quote valid forever.
+    // rejected here rather than producing a quote valid forever. Asserted with its own message,
+    // distinct from the "exceeds the maximum" case: null doesn't exceed anything, it's missing.
     val account = ACCOUNT
     val rate =
       GetRateResponse.Rate.builder()
@@ -1122,7 +1123,7 @@ class Sep38ServiceTest {
             .build(),
         )
       }
-    assertTrue(ex.message!!.contains("exceeds the maximum quote expiration"))
+    assertEquals("Rate callback returned a null expires_at", ex.message)
     verify(exactly = 0) { mockQuoteStore.save(any()) }
   }
 
