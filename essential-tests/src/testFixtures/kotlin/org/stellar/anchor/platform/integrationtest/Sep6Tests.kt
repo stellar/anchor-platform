@@ -15,7 +15,6 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepValidationException
-import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
@@ -108,34 +107,230 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   /**
-   * Validates a single SEP-6 transaction object from raw JSON against the fields the spec requires
-   * on every transaction record, plus a caller-specified extra field (`to` for deposit, `from` for
-   * withdrawal).
+   * SEP-6's own transaction status enum (sep-0006.md, "Transaction History" -> "`status` should be
+   * one of:"). Deliberately NOT `org.stellar.anchor.api.sep.SepTransactionStatus` -- that enum is
+   * shared across SEP-6/24/31, so it also accepts SEP-31-only values (`pending_sender`,
+   * `pending_receiver`) and matches case-insensitively; a SEP-6 response must use exactly one of
+   * these lowercase, snake_case strings.
    */
-  private fun assertValidSep6TransactionSchema(txn: JsonObject, requiredField: String) {
-    listOf("id", "kind", "status", requiredField).forEach { field ->
-      val value = txn.get(field)
-      Assertions.assertTrue(
-        value != null &&
-          !value.isJsonNull &&
-          value.isJsonPrimitive &&
-          value.asJsonPrimitive.isString
-      ) {
-        "expected '$field' to be present, non-null, and a JSON string in $txn"
+  private val sep6Statuses =
+    setOf(
+      "completed",
+      "pending_external",
+      "pending_anchor",
+      "on_hold",
+      "pending_stellar",
+      "pending_trust",
+      "pending_user",
+      "pending_user_transfer_start",
+      "pending_user_transfer_complete",
+      "pending_customer_info_update",
+      "pending_transaction_info_update",
+      "incomplete",
+      "expired",
+      "no_market",
+      "too_small",
+      "too_large",
+      "error",
+      "refunded",
+    )
+
+  // Every other field sep-0006.md's transaction object table defines, by JSON type -- present only
+  // to say "if this field is present, it must have this shape"; none of these are required.
+  private val sep6OptionalStringFields =
+    setOf(
+      "more_info_url",
+      "amount_in",
+      "amount_in_asset",
+      "amount_out",
+      "amount_out_asset",
+      "amount_fee",
+      "amount_fee_asset",
+      "quote_id",
+      "from",
+      "to",
+      "external_extra",
+      "external_extra_text",
+      "deposit_memo",
+      "deposit_memo_type",
+      "withdraw_anchor_account",
+      "withdraw_memo",
+      "withdraw_memo_type",
+      "stellar_transaction_id",
+      "external_transaction_id",
+      "message",
+      "required_info_message",
+      "claimable_balance_id",
+    )
+  private val sep6OptionalInstantFields =
+    setOf("updated_at", "completed_at", "user_action_required_by")
+  private val sep6OptionalNumberFields = setOf("status_eta")
+  private val sep6OptionalBooleanFields = setOf("refunded")
+  private val sep6OptionalObjectFields =
+    setOf("fee_details", "refunds", "required_info_updates", "instructions")
+
+  private fun assertJsonString(obj: JsonObject, field: String, required: Boolean) {
+    val value = obj.get(field)
+    if (value == null || value.isJsonNull) {
+      Assertions.assertFalse(required) { "expected '$field' to be present and non-null in $obj" }
+      return
+    }
+    Assertions.assertTrue(value.isJsonPrimitive && value.asJsonPrimitive.isString) {
+      "expected '$field' to be a JSON string in $obj, was $value"
+    }
+  }
+
+  private fun assertOptionalInstant(obj: JsonObject, field: String) {
+    val value = obj.get(field)
+    if (value == null || value.isJsonNull) return
+    assertJsonString(obj, field, required = true)
+    assertDoesNotThrow({ "expected '$field' ($value) to parse as an ISO-8601 instant" }) {
+      Instant.parse(value.asString)
+    }
+  }
+
+  private fun assertOptionalNumber(obj: JsonObject, field: String) {
+    val value = obj.get(field)
+    if (value == null || value.isJsonNull) return
+    Assertions.assertTrue(value.isJsonPrimitive && value.asJsonPrimitive.isNumber) {
+      "expected '$field' to be a JSON number in $obj, was $value"
+    }
+  }
+
+  private fun assertOptionalBoolean(obj: JsonObject, field: String) {
+    val value = obj.get(field)
+    if (value == null || value.isJsonNull) return
+    Assertions.assertTrue(value.isJsonPrimitive && value.asJsonPrimitive.isBoolean) {
+      "expected '$field' to be a JSON boolean in $obj, was $value"
+    }
+  }
+
+  /** Fee Details Object Schema (sep-0006.md). */
+  private fun assertValidFeeDetails(feeDetails: JsonObject) {
+    assertJsonString(feeDetails, "total", required = true)
+    assertJsonString(feeDetails, "asset", required = true)
+    feeDetails
+      .get("details")
+      ?.takeIf { !it.isJsonNull }
+      ?.let { details ->
+        Assertions.assertTrue(details.isJsonArray) {
+          "expected 'fee_details.details' to be a JSON array, was $details"
+        }
+        details.asJsonArray.forEach { entry ->
+          Assertions.assertTrue(entry.isJsonObject) {
+            "expected each 'fee_details.details' entry to be a JSON object, was $entry"
+          }
+          assertJsonString(entry.asJsonObject, "name", required = true)
+          assertJsonString(entry.asJsonObject, "amount", required = true)
+        }
+      }
+    val unknown = feeDetails.keySet() - setOf("total", "asset", "details")
+    Assertions.assertTrue(unknown.isEmpty()) {
+      "unexpected field(s) $unknown in 'fee_details': $feeDetails"
+    }
+  }
+
+  /** Refunds Object Schema + Refund Payment Object Schema (sep-0006.md). */
+  private fun assertValidRefunds(refunds: JsonObject) {
+    assertJsonString(refunds, "amount_refunded", required = true)
+    assertJsonString(refunds, "amount_fee", required = true)
+    val payments = refunds.get("payments")
+    Assertions.assertTrue(payments != null && !payments.isJsonNull && payments.isJsonArray) {
+      "expected 'refunds.payments' to be a JSON array in $refunds"
+    }
+    payments!!.asJsonArray.forEach { entry ->
+      Assertions.assertTrue(entry.isJsonObject) {
+        "expected each 'refunds.payments' entry to be a JSON object, was $entry"
+      }
+      val payment = entry.asJsonObject
+      listOf("id", "id_type", "amount", "fee").forEach { field ->
+        assertJsonString(payment, field, required = true)
+      }
+      Assertions.assertTrue(payment.get("id_type").asString in setOf("stellar", "external")) {
+        "expected 'refunds.payments[].id_type' to be 'stellar' or 'external', was ${payment.get("id_type")}"
       }
     }
+    val unknown = refunds.keySet() - setOf("amount_refunded", "amount_fee", "payments")
+    Assertions.assertTrue(unknown.isEmpty()) {
+      "unexpected field(s) $unknown in 'refunds': $refunds"
+    }
+  }
 
+  /**
+   * `instructions` is a map of SEP-9 financial-account-field name -> `{value, description}` (SEP-9
+   * financial account fields section). Field names are caller/anchor-defined, so only the shape of
+   * each entry is checked, not a fixed key set.
+   */
+  private fun assertValidInstructions(instructions: JsonObject) {
+    instructions.entrySet().forEach { (fieldName, value) ->
+      Assertions.assertTrue(value.isJsonObject) {
+        "expected instructions.'$fieldName' to be a JSON object, was $value"
+      }
+      assertJsonString(value.asJsonObject, "value", required = true)
+      assertJsonString(value.asJsonObject, "description", required = false)
+    }
+  }
+
+  /**
+   * Validates a single SEP-6 transaction object from raw JSON, exhaustively, against every field
+   * `sep-0006.md`'s "Transaction History" response schema defines: `id`/`kind`/`status` plus a
+   * caller-specified extra field (`to` for deposit, `from` for withdrawal) are required; every
+   * other documented field is checked for the correct JSON shape *if present*; and any field name
+   * not in the schema at all fails the assertion, so a stray SEP-24/31-only field can't slip
+   * through unnoticed.
+   */
+  private fun assertValidSep6TransactionSchema(txn: JsonObject, requiredField: String) {
+    listOf("id", "kind", requiredField).forEach { field -> assertJsonString(txn, field, true) }
+
+    assertJsonString(txn, "status", required = true)
     val status = txn.get("status").asString
-    Assertions.assertTrue(SepTransactionStatus.isValid(status)) {
-      "expected 'status' ($status) to be one of SEP-6's defined status values"
+    Assertions.assertTrue(sep6Statuses.contains(status)) {
+      "expected 'status' ($status) to be one of SEP-6's defined status values: $sep6Statuses"
     }
 
-    val startedAt = txn.get("started_at")
-    Assertions.assertTrue(startedAt != null && !startedAt.isJsonNull) {
-      "expected 'started_at' to be present and non-null in $txn"
+    // `started_at` is optional per the spec's general schema, but every code path exercised by this
+    // test suite always populates it -- so it's required here, as a stricter check on our own
+    // reference server's actual behavior, not a spec violation.
+    assertJsonString(txn, "started_at", required = true)
+    assertDoesNotThrow({
+      "expected 'started_at' (${txn.get("started_at")}) to parse as an ISO-8601 instant"
+    }) {
+      Instant.parse(txn.get("started_at").asString)
     }
-    assertDoesNotThrow({ "expected 'started_at' ($startedAt) to parse as an ISO-8601 instant" }) {
-      Instant.parse(startedAt.asString)
+
+    sep6OptionalStringFields.forEach { field -> assertJsonString(txn, field, required = false) }
+    sep6OptionalInstantFields.forEach { field -> assertOptionalInstant(txn, field) }
+    sep6OptionalNumberFields.forEach { field -> assertOptionalNumber(txn, field) }
+    sep6OptionalBooleanFields.forEach { field -> assertOptionalBoolean(txn, field) }
+
+    txn
+      .get("fee_details")
+      ?.takeIf { !it.isJsonNull }
+      ?.let { assertValidFeeDetails(it.asJsonObject) }
+    txn.get("refunds")?.takeIf { !it.isJsonNull }?.let { assertValidRefunds(it.asJsonObject) }
+    txn
+      .get("instructions")
+      ?.takeIf { !it.isJsonNull }
+      ?.let { assertValidInstructions(it.asJsonObject) }
+    txn
+      .get("required_info_updates")
+      ?.takeIf { !it.isJsonNull }
+      ?.let {
+        Assertions.assertTrue(it.isJsonObject) {
+          "expected 'required_info_updates' to be a JSON object in $txn"
+        }
+      }
+
+    val knownFields =
+      setOf("id", "kind", "status", "started_at", requiredField) +
+        sep6OptionalStringFields +
+        sep6OptionalInstantFields +
+        sep6OptionalNumberFields +
+        sep6OptionalBooleanFields +
+        sep6OptionalObjectFields
+    val unknownFields = txn.keySet() - knownFields
+    Assertions.assertTrue(unknownFields.isEmpty()) {
+      "unexpected field(s) $unknownFields not defined by the SEP-6 transaction schema in $txn"
     }
   }
 
@@ -319,12 +514,17 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
   @Test
   fun `test sep6 GET transactions are ordered by started_at descending`() {
-    val (client, _) = createAccountWithDeposits(3)
+    val (client, depositIds) = createAccountWithDeposits(3)
 
     val startedAts =
       client.getTransactions(mapOf("asset_code" to "USDC")).transactions.map {
         Instant.parse(it.startedAt)
       }
+
+    Assertions.assertEquals(depositIds.size, startedAts.size) {
+      "expected all ${depositIds.size} fixture deposits to be returned before checking their order" +
+        " -- got ${startedAts.size}, which would make the pairwise check below vacuous"
+    }
 
     for (i in 0 until startedAts.size - 1) {
       Assertions.assertTrue(startedAts[i] >= startedAts[i + 1]) {
