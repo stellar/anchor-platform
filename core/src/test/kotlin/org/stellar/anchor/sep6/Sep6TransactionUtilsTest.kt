@@ -6,8 +6,10 @@ import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import java.time.Instant
 import java.util.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.MoreInfoUrlConstructor
@@ -200,5 +202,23 @@ class Sep6TransactionUtilsTest {
       gson.toJson(Sep6TransactionUtils.fromTxn(databaseTxn, sep6MoreInfoUrlConstructor, null)),
       JSONCompareMode.STRICT,
     )
+  }
+
+  @Test
+  fun `test fromTxn skips null and blank required_info_updates entries`() {
+    val databaseTxn =
+      PojoSep6Transaction().apply {
+        id = "database-id"
+        status = "pending_transaction_info_update"
+        kind = "deposit"
+        startedAt = Instant.ofEpochMilli(1)
+        requiredInfoUpdates = listOf(null, "", "   ", "real_field")
+      }
+
+    val response = assertDoesNotThrow {
+      Sep6TransactionUtils.fromTxn(databaseTxn, sep6MoreInfoUrlConstructor, null)
+    }
+
+    assertEquals(setOf("real_field"), response.requiredInfoUpdates.keys)
   }
 }

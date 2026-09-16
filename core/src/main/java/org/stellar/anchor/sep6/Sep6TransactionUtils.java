@@ -19,6 +19,12 @@ public class Sep6TransactionUtils {
    * wire response in the same per-field object format as `/info` (name -> {description, choices,
    * optional}). Synthesize that shape here, at the response boundary only -- a humanized version of
    * the field name is the best available description, since no richer metadata exists upstream.
+   *
+   * <p>The list is copied verbatim from the business server's RPC payload with no element
+   * validation ({@code TransactionService}'s SEP-6 branch does not reject a null or blank entry the
+   * way SEP-31's does), so a null or blank name must be skipped here rather than passed to {@link
+   * StringHelper#humanizeSnakeCase}, which would NPE on null and produce an unusable empty JSON key
+   * for blank -- either would otherwise fail every future read of the transaction.
    */
   private static Map<String, AssetInfo.Field> toRequiredInfoUpdatesFields(
       List<String> requiredInfoUpdates) {
@@ -27,11 +33,14 @@ public class Sep6TransactionUtils {
     }
     Map<String, AssetInfo.Field> fields = new LinkedHashMap<>();
     for (String fieldName : requiredInfoUpdates) {
+      if (fieldName == null || fieldName.trim().isEmpty()) {
+        continue;
+      }
       fields.put(
           fieldName,
           AssetInfo.Field.builder().description(StringHelper.humanizeSnakeCase(fieldName)).build());
     }
-    return fields;
+    return fields.isEmpty() ? null : fields;
   }
 
   /**
