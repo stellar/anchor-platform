@@ -57,11 +57,20 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   /**
-   * Creates a fresh, isolated keypair, authenticates it, and issues exactly one deposit and one
-   * withdrawal for it -- so kind-filter assertions run against an account holding both kinds (and
-   * deliberately no exchange-kind transactions) with a deterministic id for each.
+   * Creates a fresh, isolated keypair, authenticates it, and issues one deposit, one withdrawal,
+   * and one deposit-exchange for it -- so kind-filter assertions run against an account holding
+   * `deposit`, `withdrawal`, and `deposit-exchange` with a deterministic id for each, proving the
+   * `kind` filter distinguishes `deposit` from the similarly-named `deposit-exchange` rather than
+   * matching it as a prefix.
    */
-  private fun createAccountWithDepositAndWithdrawal(): Triple<Sep6Client, String, String> {
+  private data class DepositWithdrawFixture(
+    val client: Sep6Client,
+    val depositId: String,
+    val withdrawId: String,
+    val depositExchangeId: String,
+  )
+
+  private fun createAccountWithDepositAndWithdrawal(): DepositWithdrawFixture {
     val keyPair = SigningKeyPair(KeyPair.random())
     val jwt = authenticateWithoutMemo(keyPair)
     val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
@@ -69,7 +78,20 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       client.deposit(mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")).id!!
     val withdrawId =
       client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
-    return Triple(client, depositId, withdrawId)
+    val depositExchangeId =
+      client
+        .deposit(
+          mapOf(
+            "destination_asset" to "USDC",
+            "source_asset" to "iso4217:USD",
+            "amount" to "1",
+            "account" to keyPair.address,
+            "type" to "SWIFT",
+          ),
+          exchange = true,
+        )
+        .id!!
+    return DepositWithdrawFixture(client, depositId, withdrawId, depositExchangeId)
   }
 
   /**
@@ -329,7 +351,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
   @Test
   fun `test sep6 GET transactions kind=deposit returns only the deposit`() {
-    val (client, depositId, withdrawId) = createAccountWithDepositAndWithdrawal()
+    val (client, depositId, withdrawId, depositExchangeId) = createAccountWithDepositAndWithdrawal()
 
     val ids =
       client.getTransactions(mapOf("asset_code" to "USDC", "kind" to "deposit")).transactions.map {
@@ -342,11 +364,14 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     Assertions.assertFalse(ids.contains(withdrawId)) {
       "expected kind=deposit to exclude the withdrawal ($withdrawId)"
     }
+    Assertions.assertFalse(ids.contains(depositExchangeId)) {
+      "expected kind=deposit to exclude the deposit-exchange ($depositExchangeId)"
+    }
   }
 
   @Test
   fun `test sep6 GET transactions kind=withdrawal returns only the withdrawal`() {
-    val (client, depositId, withdrawId) = createAccountWithDepositAndWithdrawal()
+    val (client, depositId, withdrawId, depositExchangeId) = createAccountWithDepositAndWithdrawal()
 
     val ids =
       client
@@ -359,6 +384,9 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
     Assertions.assertFalse(ids.contains(depositId)) {
       "expected kind=withdrawal to exclude the deposit ($depositId)"
+    }
+    Assertions.assertFalse(ids.contains(depositExchangeId)) {
+      "expected kind=withdrawal to exclude the deposit-exchange ($depositExchangeId)"
     }
   }
 
