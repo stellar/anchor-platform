@@ -18,6 +18,7 @@ import org.stellar.anchor.api.sep.SepExceptionResponse;
 import org.stellar.anchor.api.sep.sep24.*;
 import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
+import org.stellar.anchor.platform.utils.TransactionCreationRateLimiter;
 import org.stellar.anchor.sep24.Sep24Service;
 
 @RestController
@@ -26,9 +27,11 @@ import org.stellar.anchor.sep24.Sep24Service;
 @OnAllSepsEnabled(seps = {"sep24"})
 public class Sep24Controller {
   private final Sep24Service sep24Service;
+  private final TransactionCreationRateLimiter rateLimiter;
 
-  Sep24Controller(Sep24Service sep24Service) {
+  Sep24Controller(Sep24Service sep24Service, TransactionCreationRateLimiter rateLimiter) {
     this.sep24Service = sep24Service;
+    this.rateLimiter = rateLimiter;
   }
 
   @CrossOrigin(origins = "*")
@@ -51,6 +54,7 @@ public class Sep24Controller {
       throws AnchorException, MalformedURLException, URISyntaxException {
     debug("/deposit", requestData);
     WebAuthJwt token = SepRequestHelper.getToken(request);
+    rateLimiter.checkAndRecord(token);
     requestData.put(ATTRIBUTE_CLIENT_IP_ADDRESS, SepRequestHelper.getClientIpAddress(request));
     InteractiveTransactionResponse itr = sep24Service.deposit(token, requestData);
     info("interactive redirection:", itr);
@@ -84,6 +88,7 @@ public class Sep24Controller {
       throws AnchorException, MalformedURLException, URISyntaxException {
     debug("/withdraw", requestData);
     WebAuthJwt token = SepRequestHelper.getToken(request);
+    rateLimiter.checkAndRecord(token);
     requestData.put(ATTRIBUTE_CLIENT_IP_ADDRESS, SepRequestHelper.getClientIpAddress(request));
     InteractiveTransactionResponse itr = sep24Service.withdraw(token, requestData);
     info("interactive redirection:", itr);

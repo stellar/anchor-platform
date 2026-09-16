@@ -1,11 +1,13 @@
 package org.stellar.anchor.platform.integrationtest
 
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.exception.SepException
+import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
@@ -15,11 +17,21 @@ import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.gson
 import org.stellar.anchor.util.Log
 import org.stellar.sdk.KeyPair
+import org.stellar.walletsdk.anchor.auth
+import org.stellar.walletsdk.horizon.SigningKeyPair
 
 class Sep6Tests : IntegrationTestBase(TestConfig()) {
   private val sep6Client = Sep6Client(toml.getString("TRANSFER_SERVER"), token.token)
   private val sep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
+
+  private fun authenticateWithMemo(keyPair: SigningKeyPair, memoId: ULong): String {
+    return runBlocking { anchor.auth().authenticate(keyPair, memoId = memoId) }.token
+  }
+
+  private fun authenticateWithoutMemo(keyPair: SigningKeyPair): String {
+    return runBlocking { anchor.auth().authenticate(keyPair) }.token
+  }
 
   @Test
   fun `test Sep6 info endpoint`() {
@@ -47,6 +59,46 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       JSONCompareMode.LENIENT,
     )
     Assertions.assertNotNull(savedDepositTxn.transaction.moreInfoUrl)
+  }
+
+  @Test
+  fun `test sep6 GET transactions does not leak another memo's transactions on a shared account`() {
+    val sharedKeyPair = SigningKeyPair(KeyPair.random())
+    val noMemoJwt = authenticateWithoutMemo(sharedKeyPair)
+    val memoAJwt = authenticateWithMemo(sharedKeyPair, 111UL)
+    val memoBJwt = authenticateWithMemo(sharedKeyPair, 222UL)
+
+    val noMemoClient = Sep6Client(toml.getString("TRANSFER_SERVER"), noMemoJwt)
+    val memoAClient = Sep6Client(toml.getString("TRANSFER_SERVER"), memoAJwt)
+    val memoBClient = Sep6Client(toml.getString("TRANSFER_SERVER"), memoBJwt)
+
+    fun depositRequest() =
+      mapOf(
+        "asset_code" to "USDC",
+        "account" to sharedKeyPair.address,
+        "amount" to "1",
+        "type" to "SWIFT",
+      )
+
+    val noMemoTxnId = noMemoClient.deposit(depositRequest()).id!!
+    val memoATxnId = memoAClient.deposit(depositRequest()).id!!
+    val memoBTxnId = memoBClient.deposit(depositRequest()).id!!
+
+    val listedIds =
+      noMemoClient
+        .getTransactions(mapOf("asset_code" to "USDC", "account" to sharedKeyPair.address))
+        .transactions
+        .map { it.id }
+
+    Assertions.assertTrue(listedIds.contains(noMemoTxnId)) {
+      "caller's own no-memo transaction should be visible in its own list"
+    }
+    Assertions.assertFalse(listedIds.contains(memoATxnId)) {
+      "GET /transactions leaked another memo's transaction ($memoATxnId) to a bare-account caller sharing the same Stellar account"
+    }
+    Assertions.assertFalse(listedIds.contains(memoBTxnId)) {
+      "GET /transactions leaked another memo's transaction ($memoBTxnId) to a bare-account caller sharing the same Stellar account"
+    }
   }
 
   @Test
@@ -101,6 +153,34 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       JSONCompareMode.LENIENT,
     )
     Assertions.assertNotNull(savedDepositTxn.transaction.moreInfoUrl)
+  }
+
+  @Test
+  fun `test sep6 deposit falls back to the JWT's own account when account param is omitted`() {
+    val request = mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")
+    val response = sep6Client.deposit(request)
+    Log.info("GET /deposit response: $response")
+    assert(!response.id.isNullOrEmpty())
+
+    val savedDepositTxn = sep6Client.getTransaction(mapOf("id" to response.id!!))
+    Assertions.assertEquals(clientWalletAccount, savedDepositTxn.transaction.to)
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange falls back to the JWT's own account when account param is omitted`() {
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "1",
+        "type" to "SWIFT",
+      )
+    val response = sep6Client.deposit(request, exchange = true)
+    Log.info("GET /deposit-exchange response: $response")
+    assert(!response.id.isNullOrEmpty())
+
+    val savedDepositTxn = sep6Client.getTransaction(mapOf("id" to response.id!!))
+    Assertions.assertEquals(clientWalletAccount, savedDepositTxn.transaction.to)
   }
 
   @Test
@@ -248,6 +328,86 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       }
     assert(ex.message!!.contains("Provided 'account' is not allowed")) {
       "Expected destination policy error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit rejects request without JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.deposit(
+        mapOf(
+          "asset_code" to "USDC",
+          "account" to clientWalletAccount,
+          "amount" to "1",
+          "type" to "SWIFT",
+        )
+      )
+    }
+  }
+
+  @Test
+  fun `test sep6 withdraw rejects request without JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.withdraw(
+        mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")
+      )
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.deposit(
+          mapOf("account" to clientWalletAccount, "amount" to "1", "type" to "SWIFT")
+        )
+      }
+    assert(ex.message!!.contains("asset_code")) {
+      "Expected a missing 'asset_code' parameter error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 withdraw rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.withdraw(mapOf("type" to "bank_account", "amount" to "1"))
+      }
+    assert(ex.message!!.contains("asset_code")) {
+      "Expected a missing 'asset_code' parameter error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.deposit(
+          mapOf(
+            "asset_code" to "DOES_NOT_EXIST",
+            "account" to clientWalletAccount,
+            "amount" to "1",
+            "type" to "SWIFT",
+          )
+        )
+      }
+    assert(ex.message!!.contains("invalid operation for asset")) {
+      "Expected an unsupported-asset error but got: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `test sep6 withdraw rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep6Client.withdraw(
+          mapOf("asset_code" to "DOES_NOT_EXIST", "type" to "bank_account", "amount" to "1")
+        )
+      }
+    assert(ex.message!!.contains("invalid operation for asset")) {
+      "Expected an unsupported-asset error but got: ${ex.message}"
     }
   }
 
