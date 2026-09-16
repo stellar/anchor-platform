@@ -56,6 +56,22 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   /**
+   * Creates a fresh, isolated keypair, authenticates it, and issues exactly one deposit and one
+   * withdrawal for it -- so kind-filter assertions run against an account holding both kinds (and
+   * deliberately no exchange-kind transactions) with a deterministic id for each.
+   */
+  private fun createAccountWithDepositAndWithdrawal(): Triple<Sep6Client, String, String> {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val depositId =
+      client.deposit(mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")).id!!
+    val withdrawId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    return Triple(client, depositId, withdrawId)
+  }
+
+  /**
    * Fetches GET /transactions as a raw JSON array, bypassing [Sep6Client.getTransactions]'s parsed
    * response -- Gson silently nulls absent fields on a parsed object, which would hide a missing
    * required field from schema assertions.
@@ -307,6 +323,41 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     Assertions.assertEquals(2, ids.size)
     Assertions.assertFalse(ids.contains(oldest.id)) {
       "expected the boundary record (${oldest.id}) to be excluded by no_older_than"
+    }
+  }
+
+  @Test
+  fun `test sep6 GET transactions kind=deposit returns only the deposit`() {
+    val (client, depositId, withdrawId) = createAccountWithDepositAndWithdrawal()
+
+    val ids =
+      client.getTransactions(mapOf("asset_code" to "USDC", "kind" to "deposit")).transactions.map {
+        it.id
+      }
+
+    Assertions.assertTrue(ids.contains(depositId)) {
+      "expected kind=deposit to return the deposit ($depositId)"
+    }
+    Assertions.assertFalse(ids.contains(withdrawId)) {
+      "expected kind=deposit to exclude the withdrawal ($withdrawId)"
+    }
+  }
+
+  @Test
+  fun `test sep6 GET transactions kind=withdrawal returns only the withdrawal`() {
+    val (client, depositId, withdrawId) = createAccountWithDepositAndWithdrawal()
+
+    val ids =
+      client
+        .getTransactions(mapOf("asset_code" to "USDC", "kind" to "withdrawal"))
+        .transactions
+        .map { it.id }
+
+    Assertions.assertTrue(ids.contains(withdrawId)) {
+      "expected kind=withdrawal to return the withdrawal ($withdrawId)"
+    }
+    Assertions.assertFalse(ids.contains(depositId)) {
+      "expected kind=withdrawal to exclude the deposit ($depositId)"
     }
   }
 
