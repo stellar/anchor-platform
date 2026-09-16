@@ -149,7 +149,16 @@ class Sep6ServiceTestData {
                       ]
                   },
                   "required_info_message": "some info message",
-                  "required_info_updates": ["first_name", "last_name"]
+                  "required_info_updates": {
+                      "first_name": {
+                          "description": "Legal first name",
+                          "optional": false
+                      },
+                      "last_name": {
+                          "description": "Legal last name",
+                          "optional": false
+                      }
+                  }
               }
           ]
       }

@@ -1,8 +1,8 @@
 package org.stellar.anchor.sep6;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
+import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.InstructionField;
 import org.stellar.anchor.api.shared.Refunds;
@@ -184,7 +184,8 @@ public class Sep6TransactionBuilder {
     return this;
   }
 
-  public Sep6TransactionBuilder requiredInfoUpdates(List<String> requiredInfoUpdates) {
+  public Sep6TransactionBuilder requiredInfoUpdates(
+      Map<String, AssetInfo.Field> requiredInfoUpdates) {
     txn.setRequiredInfoUpdates(requiredInfoUpdates);
     return this;
   }

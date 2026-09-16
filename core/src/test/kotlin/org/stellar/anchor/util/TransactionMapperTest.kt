@@ -435,7 +435,7 @@ class TransactionMapperTest {
         statusEta = 10000
         type = "bank_account"
         requiredInfoMessage = "requiredInfoMessage"
-        requiredInfoUpdates = listOf("field")
+        requiredInfoUpdates = mapOf("field" to AssetInfo.Field("description", null, false))
         instructions =
           mapOf(
             "field" to InstructionField.builder().value("value").description("description").build()

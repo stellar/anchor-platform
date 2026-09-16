@@ -1,9 +1,9 @@
 package org.stellar.anchor.sep6;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import org.stellar.anchor.SepTransaction;
+import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.InstructionField;
 import org.stellar.anchor.api.shared.Refunds;
@@ -335,13 +335,14 @@ public interface Sep6Transaction extends SepTransaction {
   void setRequiredInfoMessage(String requiredInfoMessage);
 
   /**
-   * A set of fields that require updates from the user.
+   * The fields that require updates from the user, keyed by field name, in the same per-field
+   * metadata format as `/info`.
    *
    * @return the required info updates.
    */
-  List<String> getRequiredInfoUpdates();
+  Map<String, AssetInfo.Field> getRequiredInfoUpdates();
 
-  void setRequiredInfoUpdates(List<String> requiredInfoUpdates);
+  void setRequiredInfoUpdates(Map<String, AssetInfo.Field> requiredInfoUpdates);
 
   /**
    * Describes how to complete the off-chain deposit.

@@ -2,7 +2,6 @@ package org.stellar.anchor.platform.data;
 
 import com.google.gson.annotations.SerializedName;
 import jakarta.persistence.*;
-import java.util.List;
 import java.util.Map;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -10,6 +9,7 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import org.springframework.beans.BeanUtils;
+import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.shared.InstructionField;
 import org.stellar.anchor.api.shared.Refunds;
 import org.stellar.anchor.sep6.Sep6Transaction;
@@ -125,7 +125,7 @@ public class JdbcSep6Transaction extends JdbcSepTransaction implements Sep6Trans
   @SerializedName("required_info_updates")
   @Column(name = "required_info_updates")
   @JdbcTypeCode(SqlTypes.JSON)
-  List<String> requiredInfoUpdates;
+  Map<String, AssetInfo.Field> requiredInfoUpdates;
 
   @Column(name = "instructions")
   @JdbcTypeCode(SqlTypes.JSON)

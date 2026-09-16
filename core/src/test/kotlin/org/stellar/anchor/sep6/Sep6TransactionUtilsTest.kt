@@ -15,6 +15,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_ACCOUNT
 import org.stellar.anchor.TestConstants.Companion.TEST_ASSET
 import org.stellar.anchor.TestConstants.Companion.TEST_ASSET_ISSUER_ACCOUNT_ID
 import org.stellar.anchor.TestConstants.Companion.TEST_MEMO
+import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.shared.*
 import org.stellar.anchor.util.GsonUtils
 
@@ -95,9 +96,12 @@ class Sep6TransactionUtilsTest {
               ]
           },
           "required_info_message": "need more info",
-          "required_info_updates": [
-              "some_field"
-          ],
+          "required_info_updates": {
+              "some_field": {
+                  "description": "Some field",
+                  "optional": false
+              }
+          },
           "instructions": {
               "key": {
                   "value": "1234",
@@ -188,7 +192,7 @@ class Sep6TransactionUtilsTest {
         refundMemo = "some refund memo"
         refundMemoType = "text"
         requiredInfoMessage = "need more info"
-        requiredInfoUpdates = listOf("some_field")
+        requiredInfoUpdates = mapOf("some_field" to AssetInfo.Field("Some field", null, false))
         instructions = mapOf("key" to InstructionField("1234", "Bank account number"))
       }
 
