@@ -54,6 +54,10 @@ class Sep38ServiceTest {
     override fun isAuthEnforced(): Boolean {
       return false
     }
+
+    override fun getMaxQuoteExpirationSeconds(): Int {
+      return 604800 // 7 days
+    }
   }
 
   companion object {
@@ -802,7 +806,7 @@ class Sep38ServiceTest {
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("Unsupported country code", ex.message)
 
-    // unsupported expire_after
+    // valid expire_after falls through to the next validation (context)
     ex = assertThrows {
       sep38Service.postQuote(
         token,
@@ -812,12 +816,67 @@ class Sep38ServiceTest {
           .sellDeliveryMethod("WIRE")
           .buyAssetName(stellarUSDC)
           .countryCode("US")
-          .expireAfter("2022-04-18T23:33:24.629719Z")
+          .expireAfter(Instant.now().plus(1, ChronoUnit.DAYS).toString())
           .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("Unsupported context. Should be one of [sep6, sep24, sep31].", ex.message)
+
+    // malformed expire_after
+    ex = assertThrows {
+      sep38Service.postQuote(
+        token,
+        Sep38PostQuoteRequest.builder()
+          .sellAssetName(fiatUSD)
+          .sellAmount("1.23")
+          .sellDeliveryMethod("WIRE")
+          .buyAssetName(stellarUSDC)
+          .countryCode("US")
+          .expireAfter("not-an-instant")
+          .build(),
+      )
+    }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals("expire_after is invalid", ex.message)
+
+    // expire_after in the past
+    ex = assertThrows {
+      sep38Service.postQuote(
+        token,
+        Sep38PostQuoteRequest.builder()
+          .sellAssetName(fiatUSD)
+          .sellAmount("1.23")
+          .sellDeliveryMethod("WIRE")
+          .buyAssetName(stellarUSDC)
+          .countryCode("US")
+          .expireAfter(Instant.now().minus(1, ChronoUnit.DAYS).toString())
+          .build(),
+      )
+    }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals("expire_after cannot be in the past", ex.message)
+
+    // expire_after beyond the configured maximum
+    ex = assertThrows {
+      sep38Service.postQuote(
+        token,
+        Sep38PostQuoteRequest.builder()
+          .sellAssetName(fiatUSD)
+          .sellAmount("1.23")
+          .sellDeliveryMethod("WIRE")
+          .buyAssetName(stellarUSDC)
+          .countryCode("US")
+          .expireAfter("9999-12-31T23:59:59Z")
+          .build(),
+      )
+    }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals(
+      "expire_after exceeds the maximum quote expiration of " +
+        "${sep38Config.maxQuoteExpirationSeconds} seconds",
+      ex.message,
+    )
   }
 
   @ValueSource(strings = [ACCOUNT, SMART_WALLET_ACCOUNT])

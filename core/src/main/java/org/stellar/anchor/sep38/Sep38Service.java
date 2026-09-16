@@ -37,6 +37,7 @@ import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.Log;
 
 public class Sep38Service {
+  final Sep38Config sep38Config;
   final AssetService assetService;
   final RateIntegration rateIntegration;
   final Sep38QuoteStore sep38QuoteStore;
@@ -54,6 +55,7 @@ public class Sep38Service {
       Sep38QuoteStore sep38QuoteStore,
       EventService eventService) {
     debug("sep38Config:", sep38Config);
+    this.sep38Config = sep38Config;
     this.assetService = assetService;
     this.rateIntegration = rateIntegration;
     this.sep38QuoteStore = sep38QuoteStore;
@@ -471,10 +473,29 @@ public class Sep38Service {
 
     // validate expireAfter
     if (!Objects.toString(request.getExpireAfter(), "").isEmpty()) {
+      Instant expireAfter;
       try {
-        Instant.parse(request.getExpireAfter());
+        expireAfter = Instant.parse(request.getExpireAfter());
       } catch (Exception ex) {
         throw new BadRequestException("expire_after is invalid");
+      }
+      // A firm-price quote is a free option on the anchor's book: the client picks when to
+      // exercise it, and the anchor is bound either way. Without a ceiling here, the client's
+      // own expire_after becomes the anchor's entire expiry policy (see ANCHOR-1314) - reject
+      // both a request the anchor can never honor (already expired) and one that leaves the
+      // anchor exposed indefinitely, rather than silently complying with either.
+      Instant now = Instant.now();
+      // A small grace period absorbs request latency and clock skew, so a client asking to
+      // expire "now" isn't rejected just because a few seconds elapsed in transit.
+      if (expireAfter.isBefore(now.minusSeconds(60))) {
+        throw new BadRequestException("expire_after cannot be in the past");
+      }
+      Instant maxExpireAfter = now.plusSeconds(sep38Config.getMaxQuoteExpirationSeconds());
+      if (expireAfter.isAfter(maxExpireAfter)) {
+        throw new BadRequestException(
+            "expire_after exceeds the maximum quote expiration of "
+                + sep38Config.getMaxQuoteExpirationSeconds()
+                + " seconds");
       }
     }
 
