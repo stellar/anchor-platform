@@ -45,6 +45,9 @@ public class Sep38Service {
   final InfoResponse infoResponse;
   final Map<String, InfoResponse.Asset> assetMap;
   final int pricePrecision = 10;
+  // Absorbs request latency and clock skew, so a client asking to expire "now" isn't rejected
+  // just because a few seconds elapsed in transit.
+  static final long EXPIRE_AFTER_GRACE_PERIOD_SECONDS = 60;
   final Counter sep38PriceQueriedCounter = Metrics.counter(SEP38_PRICE_QUERIED);
   final Counter sep38QuoteCreatedCounter = Metrics.counter(SEP38_QUOTE_CREATED);
 
@@ -485,16 +488,14 @@ public class Sep38Service {
       // both a request the anchor can never honor (already expired) and one that leaves the
       // anchor exposed indefinitely, rather than silently complying with either.
       Instant now = Instant.now();
-      // A small grace period absorbs request latency and clock skew, so a client asking to
-      // expire "now" isn't rejected just because a few seconds elapsed in transit.
-      if (expireAfter.isBefore(now.minusSeconds(60))) {
+      if (expireAfter.isBefore(now.minusSeconds(EXPIRE_AFTER_GRACE_PERIOD_SECONDS))) {
         throw new BadRequestException("expire_after cannot be in the past");
       }
-      Instant maxExpireAfter = now.plusSeconds(sep38Config.getMaxQuoteExpirationSeconds());
-      if (expireAfter.isAfter(maxExpireAfter)) {
+      int maxQuoteExpirationSeconds = sep38Config.getMaxQuoteExpirationSeconds();
+      if (expireAfter.isAfter(now.plusSeconds(maxQuoteExpirationSeconds))) {
         throw new BadRequestException(
             "expire_after exceeds the maximum quote expiration of "
-                + sep38Config.getMaxQuoteExpirationSeconds()
+                + maxQuoteExpirationSeconds
                 + " seconds");
       }
     }

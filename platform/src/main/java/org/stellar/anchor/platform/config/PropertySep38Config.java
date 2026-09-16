@@ -34,7 +34,8 @@ public class PropertySep38Config implements Sep38Config, Validator {
 
     if (config.getMaxQuoteExpirationSeconds() == null
         || config.getMaxQuoteExpirationSeconds() <= 0) {
-      errors.reject(
+      errors.rejectValue(
+          "maxQuoteExpirationSeconds",
           "sep38-max-quote-expiration-seconds-invalid",
           "The sep38.max_quote_expiration_seconds must be greater than 0");
     }

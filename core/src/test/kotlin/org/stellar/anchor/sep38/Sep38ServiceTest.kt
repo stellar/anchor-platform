@@ -840,6 +840,40 @@ class Sep38ServiceTest {
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("expire_after is invalid", ex.message)
 
+    // expire_after just inside the grace period (30s in the past) falls through
+    ex = assertThrows {
+      sep38Service.postQuote(
+        token,
+        Sep38PostQuoteRequest.builder()
+          .sellAssetName(fiatUSD)
+          .sellAmount("1.23")
+          .sellDeliveryMethod("WIRE")
+          .buyAssetName(stellarUSDC)
+          .countryCode("US")
+          .expireAfter(Instant.now().minusSeconds(30).toString())
+          .build(),
+      )
+    }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals("Unsupported context. Should be one of [sep6, sep24, sep31].", ex.message)
+
+    // expire_after just outside the grace period (90s in the past) is rejected
+    ex = assertThrows {
+      sep38Service.postQuote(
+        token,
+        Sep38PostQuoteRequest.builder()
+          .sellAssetName(fiatUSD)
+          .sellAmount("1.23")
+          .sellDeliveryMethod("WIRE")
+          .buyAssetName(stellarUSDC)
+          .countryCode("US")
+          .expireAfter(Instant.now().minusSeconds(90).toString())
+          .build(),
+      )
+    }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals("expire_after cannot be in the past", ex.message)
+
     // expire_after in the past
     ex = assertThrows {
       sep38Service.postQuote(
