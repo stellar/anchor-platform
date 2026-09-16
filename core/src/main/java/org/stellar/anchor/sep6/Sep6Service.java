@@ -510,7 +510,7 @@ public class Sep6Service {
       throw new SepValidationException("missing request");
     }
     String tokenAccount = Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
-    if (!request.getAccount().equals(tokenAccount)) {
+    if (!StringHelper.isEmpty(request.getAccount()) && !request.getAccount().equals(tokenAccount)) {
       throw new SepNotAuthorizedException("account does not match token");
     }
     if (assetService.getAsset(request.getAssetCode()) == null) {

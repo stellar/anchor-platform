@@ -184,6 +184,27 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 GET transactions returns own transactions when account param is omitted`() {
+    val depositId =
+      sep6Client
+        .deposit(
+          mapOf(
+            "asset_code" to "USDC",
+            "account" to clientWalletAccount,
+            "amount" to "1",
+            "type" to "SWIFT",
+          )
+        )
+        .id!!
+
+    val response = sep6Client.getTransactions(mapOf("asset_code" to "USDC"))
+
+    Assertions.assertTrue(response.transactions.map { it.id }.contains(depositId)) {
+      "expected the JWT's own deposit ($depositId) to be present when account is omitted"
+    }
+  }
+
+  @Test
   fun `test sep6 withdraw`() {
     val request = mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")
     val response = sep6Client.withdraw(request)
