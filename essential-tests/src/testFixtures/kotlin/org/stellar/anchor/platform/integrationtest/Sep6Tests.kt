@@ -294,6 +294,23 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 GET transactions no_older_than filters strictly newer records`() {
+    val (client, _) = createAccountWithDeposits(3)
+
+    val transactions = client.getTransactions(mapOf("asset_code" to "USDC")).transactions
+    val oldest = transactions.minByOrNull { Instant.parse(it.startedAt) }!!
+
+    val response =
+      client.getTransactions(mapOf("asset_code" to "USDC", "no_older_than" to oldest.startedAt))
+    val ids = response.transactions.map { it.id }
+
+    Assertions.assertEquals(2, ids.size)
+    Assertions.assertFalse(ids.contains(oldest.id)) {
+      "expected the boundary record (${oldest.id}) to be excluded by no_older_than"
+    }
+  }
+
+  @Test
   fun `test sep6 deposit-exchange without quote`() {
     val request =
       mapOf(
