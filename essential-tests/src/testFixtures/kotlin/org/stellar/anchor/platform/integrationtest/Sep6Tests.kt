@@ -166,8 +166,12 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     setOf("updated_at", "completed_at", "user_action_required_by")
   private val sep6OptionalNumberFields = setOf("status_eta")
   private val sep6OptionalBooleanFields = setOf("refunded")
-  private val sep6OptionalObjectFields =
-    setOf("fee_details", "refunds", "required_info_updates", "instructions")
+  private val sep6OptionalObjectFields = setOf("fee_details", "refunds", "instructions")
+
+  // `required_info_updates` is documented in sep-0006.md as "described in the same format as
+  // /info", but this codebase's actual `Sep6TransactionResponse.requiredInfoUpdates` is a flat
+  // `List<String>` of field names, not a nested per-field object -- validate what's really sent.
+  private val sep6OptionalStringArrayFields = setOf("required_info_updates")
 
   private fun assertJsonString(obj: JsonObject, field: String, required: Boolean) {
     val value = obj.get(field)
@@ -205,7 +209,45 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
-  /** Fee Details Object Schema (sep-0006.md). */
+  private fun assertOptionalStringArray(obj: JsonObject, field: String) {
+    val value = obj.get(field)
+    if (value == null || value.isJsonNull) return
+    Assertions.assertTrue(value.isJsonArray) {
+      "expected '$field' to be a JSON array in $obj, was $value"
+    }
+    value.asJsonArray.forEach { entry ->
+      Assertions.assertTrue(entry.isJsonPrimitive && entry.asJsonPrimitive.isString) {
+        "expected each entry of '$field' to be a JSON string, was $entry"
+      }
+    }
+  }
+
+  /**
+   * `Amount` objects (`org.stellar.anchor.api.shared.Amount`) are `{amount, asset}` -- used
+   * wherever sep-0006.md's schema text describes a plain amount *string* for a refund-related field
+   * (`refunds.amount_refunded`/`amount_fee`, `refunds.payments[].amount`/`fee`). Confirmed against
+   * `Refunds`/`RefundPayment`/`Amount` (api-schema) and the real fixture in
+   * `Sep6TransactionUtilsTest.kt`, not assumed from the spec text alone.
+   */
+  private fun assertAmountObject(obj: JsonObject, field: String, required: Boolean) {
+    val value = obj.get(field)
+    if (value == null || value.isJsonNull) {
+      Assertions.assertFalse(required) { "expected '$field' to be present and non-null in $obj" }
+      return
+    }
+    Assertions.assertTrue(value.isJsonObject) {
+      "expected '$field' to be a JSON object ({amount, asset}) in $obj, was $value"
+    }
+    val amountObj = value.asJsonObject
+    assertJsonString(amountObj, "amount", required = true)
+    assertJsonString(amountObj, "asset", required = false)
+    val unknown = amountObj.keySet() - setOf("amount", "asset")
+    Assertions.assertTrue(unknown.isEmpty()) {
+      "unexpected field(s) $unknown in '$field': $amountObj"
+    }
+  }
+
+  /** Fee Details Object Schema (sep-0006.md), incl. Fee Details Details Object Schema. */
   private fun assertValidFeeDetails(feeDetails: JsonObject) {
     assertJsonString(feeDetails, "total", required = true)
     assertJsonString(feeDetails, "asset", required = true)
@@ -220,8 +262,17 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
           Assertions.assertTrue(entry.isJsonObject) {
             "expected each 'fee_details.details' entry to be a JSON object, was $entry"
           }
-          assertJsonString(entry.asJsonObject, "name", required = true)
-          assertJsonString(entry.asJsonObject, "amount", required = true)
+          val detail = entry.asJsonObject
+          assertJsonString(detail, "name", required = true)
+          assertJsonString(detail, "amount", required = true)
+          // `FeeDescription.description` (api-schema) is a real, optional field -- not in
+          // sep-0006.md's own "Fee Details Details Object Schema" table, but present in this
+          // codebase's actual response shape, so it must be accepted, not rejected as unknown.
+          assertJsonString(detail, "description", required = false)
+          val unknownDetailFields = detail.keySet() - setOf("name", "amount", "description")
+          Assertions.assertTrue(unknownDetailFields.isEmpty()) {
+            "unexpected field(s) $unknownDetailFields in a 'fee_details.details' entry: $detail"
+          }
         }
       }
     val unknown = feeDetails.keySet() - setOf("total", "asset", "details")
@@ -232,8 +283,8 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
   /** Refunds Object Schema + Refund Payment Object Schema (sep-0006.md). */
   private fun assertValidRefunds(refunds: JsonObject) {
-    assertJsonString(refunds, "amount_refunded", required = true)
-    assertJsonString(refunds, "amount_fee", required = true)
+    assertAmountObject(refunds, "amount_refunded", required = true)
+    assertAmountObject(refunds, "amount_fee", required = true)
     val payments = refunds.get("payments")
     Assertions.assertTrue(payments != null && !payments.isJsonNull && payments.isJsonArray) {
       "expected 'refunds.payments' to be a JSON array in $refunds"
@@ -243,11 +294,22 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
         "expected each 'refunds.payments' entry to be a JSON object, was $entry"
       }
       val payment = entry.asJsonObject
-      listOf("id", "id_type", "amount", "fee").forEach { field ->
-        assertJsonString(payment, field, required = true)
-      }
+      assertJsonString(payment, "id", required = true)
+      assertJsonString(payment, "id_type", required = true)
+      assertAmountObject(payment, "amount", required = true)
+      assertAmountObject(payment, "fee", required = true)
       Assertions.assertTrue(payment.get("id_type").asString in setOf("stellar", "external")) {
         "expected 'refunds.payments[].id_type' to be 'stellar' or 'external', was ${payment.get("id_type")}"
+      }
+      // `RefundPayment` (api-schema) also carries `requested_at`/`refunded_at` -- not in
+      // sep-0006.md's own Refund Payment Object Schema table, but a real, optional part of this
+      // codebase's actual response shape, so they must be accepted, not rejected as unknown.
+      assertOptionalInstant(payment, "requested_at")
+      assertOptionalInstant(payment, "refunded_at")
+      val unknownPaymentFields =
+        payment.keySet() - setOf("id", "id_type", "amount", "fee", "requested_at", "refunded_at")
+      Assertions.assertTrue(unknownPaymentFields.isEmpty()) {
+        "unexpected field(s) $unknownPaymentFields in a 'refunds.payments' entry: $payment"
       }
     }
     val unknown = refunds.keySet() - setOf("amount_refunded", "amount_fee", "payments")
@@ -266,8 +328,13 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       Assertions.assertTrue(value.isJsonObject) {
         "expected instructions.'$fieldName' to be a JSON object, was $value"
       }
-      assertJsonString(value.asJsonObject, "value", required = true)
-      assertJsonString(value.asJsonObject, "description", required = false)
+      val field = value.asJsonObject
+      assertJsonString(field, "value", required = true)
+      assertJsonString(field, "description", required = false)
+      val unknown = field.keySet() - setOf("value", "description")
+      Assertions.assertTrue(unknown.isEmpty()) {
+        "unexpected field(s) $unknown in instructions.'$fieldName': $field"
+      }
     }
   }
 
@@ -302,6 +369,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     sep6OptionalInstantFields.forEach { field -> assertOptionalInstant(txn, field) }
     sep6OptionalNumberFields.forEach { field -> assertOptionalNumber(txn, field) }
     sep6OptionalBooleanFields.forEach { field -> assertOptionalBoolean(txn, field) }
+    sep6OptionalStringArrayFields.forEach { field -> assertOptionalStringArray(txn, field) }
 
     txn
       .get("fee_details")
@@ -312,14 +380,6 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       .get("instructions")
       ?.takeIf { !it.isJsonNull }
       ?.let { assertValidInstructions(it.asJsonObject) }
-    txn
-      .get("required_info_updates")
-      ?.takeIf { !it.isJsonNull }
-      ?.let {
-        Assertions.assertTrue(it.isJsonObject) {
-          "expected 'required_info_updates' to be a JSON object in $txn"
-        }
-      }
 
     val knownFields =
       setOf("id", "kind", "status", "started_at", requiredField) +
@@ -327,6 +387,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
         sep6OptionalInstantFields +
         sep6OptionalNumberFields +
         sep6OptionalBooleanFields +
+        sep6OptionalStringArrayFields +
         sep6OptionalObjectFields
     val unknownFields = txn.keySet() - knownFields
     Assertions.assertTrue(unknownFields.isEmpty()) {
