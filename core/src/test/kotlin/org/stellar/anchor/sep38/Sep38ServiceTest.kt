@@ -1076,6 +1076,56 @@ class Sep38ServiceTest {
     verify(exactly = 0) { mockQuoteStore.save(any()) }
   }
 
+  @Test
+  fun `test POST quote fails when the rate callback returns a null expires_at`() {
+    // ExchangeAmountsCalculator and Sep31Service's own expiry checks (quote.getExpiresAt() !=
+    // null && ...) treat a null expiresAt as never-expiring, so a callback that omits it must be
+    // rejected here rather than producing a quote valid forever.
+    val account = ACCOUNT
+    val rate =
+      GetRateResponse.Rate.builder()
+        .id("790")
+        .price("1.02")
+        .sellAmount("103")
+        .buyAmount("100")
+        .fee(mockSellAssetFee(fiatUSD))
+        .build()
+    val getRateReq =
+      GetRateRequest.builder()
+        .type(FIRM)
+        .sellAsset(fiatUSD)
+        .sellAmount("103")
+        .buyAsset(stellarUSDC)
+        .clientId(account)
+        .build()
+    every { mockRateIntegration.getRate(getRateReq) } returns GetRateResponse(rate)
+
+    sep38Service =
+      Sep38Service(
+        sep38Config,
+        sep38Service.assetService,
+        mockRateIntegration,
+        mockQuoteStore,
+        eventService,
+      )
+
+    val token = createWebAuthJwt(account)
+    val ex =
+      assertThrows<ServerErrorException> {
+        sep38Service.postQuote(
+          token,
+          Sep38PostQuoteRequest.builder()
+            .context(SEP31)
+            .sellAssetName(fiatUSD)
+            .sellAmount("103")
+            .buyAssetName(stellarUSDC)
+            .build(),
+        )
+      }
+    assertTrue(ex.message!!.contains("exceeds the maximum quote expiration"))
+    verify(exactly = 0) { mockQuoteStore.save(any()) }
+  }
+
   @ValueSource(strings = [ACCOUNT, SMART_WALLET_ACCOUNT])
   @ParameterizedTest
   fun `test POST quote with minimum parameters and buy amount`(account: String) {
