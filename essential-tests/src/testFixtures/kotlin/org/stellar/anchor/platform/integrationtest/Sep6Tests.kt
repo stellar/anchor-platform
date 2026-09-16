@@ -166,8 +166,12 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     setOf("updated_at", "completed_at", "user_action_required_by")
   private val sep6OptionalNumberFields = setOf("status_eta")
   private val sep6OptionalBooleanFields = setOf("refunded")
-  private val sep6OptionalObjectFields =
-    setOf("fee_details", "refunds", "instructions", "required_info_updates")
+  private val sep6OptionalObjectFields = setOf("fee_details", "refunds", "instructions")
+
+  // `required_info_updates` is documented in sep-0006.md as "described in the same format as
+  // /info", but this codebase's actual `Sep6TransactionResponse.requiredInfoUpdates` is a flat
+  // `List<String>` of field names, not a nested per-field object -- validate what's really sent.
+  private val sep6OptionalStringArrayFields = setOf("required_info_updates")
 
   private fun assertJsonString(obj: JsonObject, field: String, required: Boolean) {
     val value = obj.get(field)
@@ -202,6 +206,19 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     if (value == null || value.isJsonNull) return
     Assertions.assertTrue(value.isJsonPrimitive && value.asJsonPrimitive.isBoolean) {
       "expected '$field' to be a JSON boolean in $obj, was $value"
+    }
+  }
+
+  private fun assertOptionalStringArray(obj: JsonObject, field: String) {
+    val value = obj.get(field)
+    if (value == null || value.isJsonNull) return
+    Assertions.assertTrue(value.isJsonArray) {
+      "expected '$field' to be a JSON array in $obj, was $value"
+    }
+    value.asJsonArray.forEach { entry ->
+      Assertions.assertTrue(entry.isJsonPrimitive && entry.asJsonPrimitive.isString) {
+        "expected each entry of '$field' to be a JSON string, was $entry"
+      }
     }
   }
 
@@ -322,42 +339,6 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   /**
-   * `required_info_updates` is documented in sep-0006.md as "described in the same format as /info"
-   * -- a map of field name -> `{description, choices, optional}`, the same `AssetInfo.Field` shape
-   * `/info`'s own fields use. Field names are caller/anchor-defined, so only the shape of each
-   * entry is checked, not a fixed key set. `description` is treated as required, matching every
-   * real per-field entry `/info` itself returns; `choices` and `optional` are optional/defaultable
-   * per `AssetInfo.Field`.
-   */
-  private fun assertValidRequiredInfoUpdates(requiredInfoUpdates: JsonObject) {
-    requiredInfoUpdates.entrySet().forEach { (fieldName, value) ->
-      Assertions.assertTrue(value.isJsonObject) {
-        "expected required_info_updates.'$fieldName' to be a JSON object, was $value"
-      }
-      val field = value.asJsonObject
-      assertJsonString(field, "description", required = true)
-      field
-        .get("choices")
-        ?.takeIf { !it.isJsonNull }
-        ?.let { choices ->
-          Assertions.assertTrue(choices.isJsonArray) {
-            "expected required_info_updates.'$fieldName'.choices to be a JSON array, was $choices"
-          }
-          choices.asJsonArray.forEach { entry ->
-            Assertions.assertTrue(entry.isJsonPrimitive && entry.asJsonPrimitive.isString) {
-              "expected each entry of required_info_updates.'$fieldName'.choices to be a JSON string, was $entry"
-            }
-          }
-        }
-      assertOptionalBoolean(field, "optional")
-      val unknown = field.keySet() - setOf("description", "choices", "optional")
-      Assertions.assertTrue(unknown.isEmpty()) {
-        "unexpected field(s) $unknown in required_info_updates.'$fieldName': $field"
-      }
-    }
-  }
-
-  /**
    * Validates a single SEP-6 transaction object from raw JSON, exhaustively, against every field
    * `sep-0006.md`'s "Transaction History" response schema defines: `id`/`kind`/`status` plus a
    * caller-specified extra field (`to` for deposit, `from` for withdrawal) are required; every
@@ -388,6 +369,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     sep6OptionalInstantFields.forEach { field -> assertOptionalInstant(txn, field) }
     sep6OptionalNumberFields.forEach { field -> assertOptionalNumber(txn, field) }
     sep6OptionalBooleanFields.forEach { field -> assertOptionalBoolean(txn, field) }
+    sep6OptionalStringArrayFields.forEach { field -> assertOptionalStringArray(txn, field) }
 
     txn
       .get("fee_details")
@@ -398,10 +380,6 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       .get("instructions")
       ?.takeIf { !it.isJsonNull }
       ?.let { assertValidInstructions(it.asJsonObject) }
-    txn
-      .get("required_info_updates")
-      ?.takeIf { !it.isJsonNull }
-      ?.let { assertValidRequiredInfoUpdates(it.asJsonObject) }
 
     val knownFields =
       setOf("id", "kind", "status", "started_at", requiredField) +
@@ -409,6 +387,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
         sep6OptionalInstantFields +
         sep6OptionalNumberFields +
         sep6OptionalBooleanFields +
+        sep6OptionalStringArrayFields +
         sep6OptionalObjectFields
     val unknownFields = txn.keySet() - knownFields
     Assertions.assertTrue(unknownFields.isEmpty()) {

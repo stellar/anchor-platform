@@ -1,10 +1,10 @@
 package org.stellar.anchor.api.sep.sep6;
 
 import com.google.gson.annotations.SerializedName;
+import java.util.List;
 import java.util.Map;
 import lombok.Builder;
 import lombok.Data;
-import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.InstructionField;
 import org.stellar.anchor.api.shared.Refunds;
@@ -87,7 +87,7 @@ public class Sep6TransactionResponse {
   String requiredInfoMessage;
 
   @SerializedName("required_info_updates")
-  Map<String, AssetInfo.Field> requiredInfoUpdates;
+  List<String> requiredInfoUpdates;
 
   Map<String, InstructionField> instructions;
 }

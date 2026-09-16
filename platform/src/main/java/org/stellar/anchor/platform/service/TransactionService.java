@@ -387,53 +387,7 @@ public class TransactionService {
       case "6":
         JdbcSep6Transaction sep6Txn = (JdbcSep6Transaction) txn;
         txnUpdated = updateField(patch, sep6Txn, "requiredInfoMessage", txnUpdated);
-
-        // update required_info_updates: PlatformTransactionData only carries a flat list of field
-        // names (shared with SEP-31), so it's expanded into the Map<String, AssetInfo.Field> shape
-        // SEP-6's own required_info_updates wire format expects. Prefer the real metadata the
-        // business server supplies via requiredInfoUpdatesFields, falling back to a humanized
-        // version of the field name only when it didn't supply one for that field.
-        if (patch.getRequiredInfoUpdates() != null) {
-          Map<String, AssetInfo.Field> suppliedFieldMetadata = patch.getRequiredInfoUpdatesFields();
-          Map<String, AssetInfo.Field> requiredFields = new HashMap<>();
-          for (String fieldName : patch.getRequiredInfoUpdates()) {
-            // A null entry would NPE inside humanizeSnakeCase; a blank one would produce a
-            // required field with no usable name. Reject both outright instead of persisting an
-            // unusable entry.
-            if (fieldName == null || fieldName.trim().isEmpty()) {
-              throw new BadRequestException(
-                  "required_info_updates must not contain null or blank field names");
-            }
-            AssetInfo.Field suppliedField =
-                suppliedFieldMetadata == null ? null : suppliedFieldMetadata.get(fieldName);
-            AssetInfo.Field resolvedField;
-            if (suppliedField != null) {
-              // Only the description is synthesized when missing -- a blank description must not
-              // discard choices/optional the business server did supply alongside it.
-              String description =
-                  StringHelper.isNotEmpty(suppliedField.getDescription())
-                      ? suppliedField.getDescription()
-                      : StringHelper.humanizeSnakeCase(fieldName);
-              resolvedField =
-                  AssetInfo.Field.builder()
-                      .description(description)
-                      .choices(suppliedField.getChoices())
-                      .optional(suppliedField.isOptional())
-                      .build();
-            } else {
-              resolvedField =
-                  AssetInfo.Field.builder()
-                      .description(StringHelper.humanizeSnakeCase(fieldName))
-                      .build();
-            }
-            requiredFields.put(fieldName, resolvedField);
-          }
-          if (!Objects.equals(sep6Txn.getRequiredInfoUpdates(), requiredFields)) {
-            sep6Txn.setRequiredInfoUpdates(requiredFields);
-            txnUpdated = true;
-          }
-        }
-
+        txnUpdated = updateField(patch, sep6Txn, "requiredInfoUpdates", txnUpdated);
         txnUpdated = updateField(patch, sep6Txn, "instructions", txnUpdated);
         if (feeDetails != null) {
           sep6Txn.setFeeDetails(feeDetails);

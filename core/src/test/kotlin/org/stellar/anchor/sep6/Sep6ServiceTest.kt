@@ -2045,11 +2045,7 @@ class Sep6ServiceTest {
     txn.message = "some message"
     txn.refunds = refunds
     txn.requiredInfoMessage = "some info message"
-    txn.requiredInfoUpdates =
-      mapOf(
-        "first_name" to AssetInfo.Field.builder().description("Legal first name").build(),
-        "last_name" to AssetInfo.Field.builder().description("Legal last name").build(),
-      )
+    txn.requiredInfoUpdates = listOf("first_name", "last_name")
 
     return txn
   }

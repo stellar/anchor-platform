@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import lombok.Data;
-import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.shared.*;
 
 @Data
@@ -48,7 +47,7 @@ public class PojoSep6Transaction implements Sep6Transaction {
   String refundMemoType;
   String requiredInfoMessage;
   String requestClientIpAddress;
-  Map<String, AssetInfo.Field> requiredInfoUpdates;
+  List<String> requiredInfoUpdates;
   Map<String, InstructionField> instructions;
   List<FeeDescription> feeDetailsList;
 

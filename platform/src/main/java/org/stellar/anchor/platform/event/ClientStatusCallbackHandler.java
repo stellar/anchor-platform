@@ -301,31 +301,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
     sep6Txn.setRefundMemo(txn.getRefundMemo());
     sep6Txn.setRefundMemoType(txn.getRefundMemoType());
     sep6Txn.setRequiredInfoMessage(txn.getRequiredInfoMessage());
-
-    // GetTransactionResponse.requiredInfoUpdates is a flat field-name list (shared with SEP-31),
-    // so it's expanded back into the Map<String, AssetInfo.Field> shape SEP-6's own
-    // required_info_updates wire format expects -- see
-    // TransactionMapper.toGetTransactionResponse(Sep6Transaction, AssetService) for the other
-    // direction. requiredInfoUpdatesFields carries that same map's real per-field metadata
-    // alongside the flat list; prefer it over a humanized placeholder whenever it has an entry for
-    // the field.
-    if (txn.getRequiredInfoUpdates() != null && !txn.getRequiredInfoUpdates().isEmpty()) {
-      Map<String, AssetInfo.Field> realFieldMetadata = txn.getRequiredInfoUpdatesFields();
-      Map<String, AssetInfo.Field> requiredFields = new HashMap<>();
-      for (String fieldName : txn.getRequiredInfoUpdates()) {
-        AssetInfo.Field realField =
-            realFieldMetadata == null ? null : realFieldMetadata.get(fieldName);
-        requiredFields.put(
-            fieldName,
-            realField != null
-                ? realField
-                : AssetInfo.Field.builder()
-                    .description(StringHelper.humanizeSnakeCase(fieldName))
-                    .build());
-      }
-      sep6Txn.setRequiredInfoUpdates(requiredFields);
-    }
-
+    sep6Txn.setRequiredInfoUpdates(txn.getRequiredInfoUpdates());
     sep6Txn.setInstructions(txn.getInstructions());
 
     return sep6Txn;
