@@ -235,6 +235,7 @@ class Sep6EventProcessor(
   }
 
   override suspend fun onCustomerUpdated(event: SendEventRequest) {
+    val updatedCustomerId = event.payload.customer?.id ?: return
     platformClient
       .getTransactions(
         GetTransactionsRequest.builder()
@@ -245,6 +246,7 @@ class Sep6EventProcessor(
           .build()
       )
       .records
+      .filter { it.customers?.sender?.id == updatedCustomerId }
       .forEach { requestCustomerFunds(it) }
   }
 
