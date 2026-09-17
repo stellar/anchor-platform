@@ -13,6 +13,8 @@ internal class Sep31PostTransactionRequestTest {
     "asset_code": "USDC",
     "asset_issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
     "receiver_id": "RECEIVER_1234",
+    "refund_memo": "my-refund-memo",
+    "refund_memo_type": "text",
     "fields": {
         "transaction": {
             "receiver_routing_number": "r0123",

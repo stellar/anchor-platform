@@ -13,8 +13,11 @@ import org.junit.jupiter.params.provider.MethodSource
 import org.springframework.web.util.UriComponentsBuilder
 import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.callback.CustomerIntegration
+import org.stellar.anchor.api.callback.GetCustomerResponse
 import org.stellar.anchor.api.callback.PutCustomerRequest
 import org.stellar.anchor.api.callback.PutCustomerResponse
+import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.ServerErrorException
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.JwtService.*
@@ -28,6 +31,7 @@ import org.stellar.anchor.platform.config.PropertySep24Config
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.service.SimpleInteractiveUrlConstructor.FORWARD_KYC_CUSTOMER_TYPE
 import org.stellar.anchor.platform.utils.setupMock
+import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
 import org.stellar.anchor.util.GsonUtils
 
 @Suppress("UNCHECKED_CAST")
@@ -45,6 +49,7 @@ class SimpleInteractiveUrlConstructorTest {
   @MockK(relaxed = true) private lateinit var customerIntegration: CustomerIntegration
   @MockK(relaxed = true) private lateinit var testAsset: AssetInfo
   @MockK(relaxed = true) private lateinit var webAuthJwt: WebAuthJwt
+  @MockK(relaxed = true) private lateinit var customerIdOwnerStore: Sep31CustomerIdOwnerStore
 
   private lateinit var jwtService: JwtService
   private lateinit var sep24Config: PropertySep24Config
@@ -81,6 +86,7 @@ class SimpleInteractiveUrlConstructorTest {
         testConfig,
         customerIntegration,
         jwtService,
+        customerIdOwnerStore,
       )
 
     var jwt =
@@ -126,9 +132,13 @@ class SimpleInteractiveUrlConstructorTest {
   @Test
   fun `when kycFieldsForwarding is enabled, the customerIntegration should receive the kyc fields`() {
     val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     val capturedPutCustomerRequest = slot<PutCustomerRequest>()
     every { customerIntegration.putCustomer(capture(capturedPutCustomerRequest)) } returns
-      PutCustomerResponse()
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
     val constructor =
       SimpleInteractiveUrlConstructor(
         assetService,
@@ -136,10 +146,15 @@ class SimpleInteractiveUrlConstructorTest {
         sep24Config,
         customerIntegration,
         jwtService,
+        customerIdOwnerStore,
       )
     sep24Config.kycFieldsForwarding.isEnabled = true
     every { webAuthJwt.account }.returns("test_account")
     every { webAuthJwt.accountMemo }.returns("123")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns("123")
+    every { webAuthJwt.clientName }.returns(null)
+    every { webAuthJwt.ownerKey }.returns("test_account")
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
     assertEquals(capturedPutCustomerRequest.captured.type, FORWARD_KYC_CUSTOMER_TYPE)
     assertEquals(capturedPutCustomerRequest.captured.firstName, request.get("first_name"))
@@ -160,10 +175,334 @@ class SimpleInteractiveUrlConstructorTest {
         sep24Config,
         customerIntegration,
         jwtService,
+        customerIdOwnerStore,
       )
     sep24Config.kycFieldsForwarding.isEnabled = false
     constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
     verify(exactly = 0) { customerIntegration.putCustomer(any()) }
+  }
+
+  @Test
+  fun `when kycFieldsForwarding is enabled, the forwarded customer id is claimed for the caller`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns("123")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns("123")
+    every { webAuthJwt.clientName }.returns(null)
+    every { webAuthJwt.ownerKey }.returns("test_account")
+
+    constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("forwarded-customer-id", "test_account", "123")
+    }
+  }
+
+  @Test
+  fun `when the forwarded id is genuinely new, the callback confirms it before claiming it`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("new-customer-id").build()
+    every { customerIdOwnerStore.isClaimed("new-customer-id") } returns false
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("new-customer-id").build()
+    every { customerIdOwnerStore.verifyOrClaim("new-customer-id", "test_account", "123") } returns
+      true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns("123")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns("123")
+    every { webAuthJwt.clientName }.returns(null)
+    every { webAuthJwt.ownerKey }.returns("test_account")
+
+    assertDoesNotThrow {
+      constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+    }
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-customer-id", "test_account", "123")
+    }
+  }
+
+  @Test
+  fun `when the forwarded customer id is already claimed by another client, construct throws`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns false
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns("123")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns("123")
+    every { webAuthJwt.clientName }.returns(null)
+
+    assertThrows(SepNotAuthorizedException::class.java) {
+      constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+    }
+  }
+
+  @Test
+  fun `when the pre-check callback lookup fails with a server error, construct aborts without writing`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.getCustomer(any()) } throws RuntimeException("callback unavailable")
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns("123")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns("123")
+    every { webAuthJwt.clientName }.returns(null)
+
+    assertThrows(ServerErrorException::class.java) {
+      constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+    }
+    verify(exactly = 0) { customerIntegration.putCustomer(any()) }
+  }
+
+  @Test
+  fun `when the business server resolves the KYC fields to a different unclaimed customer, construct throws instead of claiming it`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("deduped-existing-customer-id").build()
+    every { customerIdOwnerStore.isClaimed("deduped-existing-customer-id") } returns false
+    every { customerIdOwnerStore.isClaimed("some-other-customer-id") } returns false
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("some-other-customer-id").build()
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns("123")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns("123")
+    every { webAuthJwt.clientName }.returns(null)
+
+    assertThrows(SepNotAuthorizedException::class.java) {
+      constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+    }
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+  }
+
+  @Test
+  fun `when the jwt carries a client_name claim, the forwarded id is claimed under that client name`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns(null)
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns(null)
+    every { webAuthJwt.clientName }.returns("vibrant")
+    every { webAuthJwt.ownerKey }.returns("vibrant:test_account")
+
+    constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("forwarded-customer-id", "vibrant:test_account", null)
+    }
+  }
+
+  @Test
+  fun `when the forwarded id is a legacy wallet-only key, the callback confirms it and it is reconciled`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("legacy-customer-id").build()
+    every { customerIdOwnerStore.isClaimed("legacy-customer-id") } returns true
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("legacy-customer-id").build()
+    every {
+      customerIdOwnerStore.verify("legacy-customer-id", "vibrant:test_account", null)
+    } returns false
+    every {
+      customerIdOwnerStore.verifyOrClaim("legacy-customer-id", "vibrant:test_account", null)
+    } returns false
+    every { customerIdOwnerStore.getCreatorMemo("legacy-customer-id") } returns null
+    every {
+      customerIdOwnerStore.reconcileLegacyKey(
+        "legacy-customer-id",
+        "vibrant",
+        null,
+        "vibrant:test_account",
+        null,
+      )
+    } returns true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.accountMemo }.returns(null)
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns(null)
+    every { webAuthJwt.clientName }.returns("vibrant")
+    every { webAuthJwt.ownerKey }.returns("vibrant:test_account")
+
+    assertDoesNotThrow {
+      constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+    }
+  }
+
+  @Test
+  fun `when a custodial client authenticates with a muxed account and the jwt carries no client_name, ownership uses the muxed owner account rather than a re-resolved client name`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    val baseAccountRegisteredAsSomeWallet =
+      "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    every { webAuthJwt.account }.returns(baseAccountRegisteredAsSomeWallet)
+    every { webAuthJwt.accountMemo }.returns(null)
+    every { webAuthJwt.ownerAccount }
+      .returns("MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC")
+    every { webAuthJwt.ownerMemo }.returns(null)
+    every { webAuthJwt.clientName }.returns(null)
+    every { webAuthJwt.ownerKey }
+      .returns("MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC")
+
+    constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "forwarded-customer-id",
+        "MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC",
+        null,
+      )
+    }
+  }
+
+  @Test
+  fun `when a custodial client authenticates with a muxed account, the forwarded customer callback receives the muxed owner memo, not the account memo`() {
+    val customerIntegration: CustomerIntegration = mockk()
+    val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
+    val putRequestSlot = slot<PutCustomerRequest>()
+    every { customerIntegration.putCustomer(capture(putRequestSlot)) } returns
+      PutCustomerResponse.builder().id("forwarded-customer-id").build()
+    every { customerIntegration.getCustomer(any()) } returns null
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    val constructor =
+      SimpleInteractiveUrlConstructor(
+        assetService,
+        clientService,
+        sep24Config,
+        customerIntegration,
+        jwtService,
+        customerIdOwnerStore,
+      )
+    sep24Config.kycFieldsForwarding.isEnabled = true
+    val baseAccountRegisteredAsSomeWallet =
+      "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+    every { webAuthJwt.account }.returns(baseAccountRegisteredAsSomeWallet)
+    every { webAuthJwt.accountMemo }.returns(null)
+    every { webAuthJwt.ownerAccount }
+      .returns("MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC")
+    every { webAuthJwt.ownerMemo }.returns("42")
+    every { webAuthJwt.clientName }.returns(null)
+    every { webAuthJwt.ownerKey }
+      .returns("MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC")
+
+    constructor.construct(txn, request as HashMap<String, String>?, testAsset, webAuthJwt)
+
+    assertEquals(baseAccountRegisteredAsSomeWallet, putRequestSlot.captured.account)
+    assertEquals("42", putRequestSlot.captured.memo)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "forwarded-customer-id",
+        "MDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPPAAAAAAAAAAAAJEUC",
+        "42",
+      )
+    }
   }
 
   private fun parseJwtFromUrl(url: String?): Sep24InteractiveUrlJwt {

@@ -21,6 +21,7 @@ import org.stellar.anchor.api.asset.AssetInfo.Field
 import org.stellar.anchor.api.asset.Sep31Info
 import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.callback.CustomerIntegration
+import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.callback.GetCustomerResponse
 import org.stellar.anchor.api.callback.GetRateResponse
 import org.stellar.anchor.api.callback.RateIntegration
@@ -120,7 +121,7 @@ class Sep31ServiceTest {
       "status": "pending_sender",
       "statusEta": "100",
       "amountIn": "100",
-      "amountInAsset": "USDC",
+      "amountInAsset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
       "amountOut": "98",
       "amountOutAsset": "USD",
       "amountFee": "2",
@@ -245,7 +246,8 @@ class Sep31ServiceTest {
     every { sep31Config.paymentType } returns STRICT_SEND
     every { txnStore.newTransaction() } returns PojoSep31Transaction()
     every { eventService.createSession(any(), TRANSACTION) } returns eventSession
-    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    every { customerIdOwnerStore.verifyOrClaim(any(), any(), any(), any()) } returns true
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIntegration.getCustomer(any()) } returns
       GetCustomerResponse.builder().status(Sep12Status.ACCEPTED.getName()).build()
 
@@ -407,7 +409,7 @@ class Sep31ServiceTest {
           .status("pending_sender")
           .statusEta(100)
           .amountIn("100")
-          .amountInAsset("USDC")
+          .amountInAsset("stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP")
           .amountOut("98")
           .amountOutAsset("USD")
           .feeDetails(FeeDetails("2", "USDC"))
@@ -433,9 +435,103 @@ class Sep31ServiceTest {
   fun `test PATCH transaction ok`() {
     val token = TestHelper.createWebAuthJwt()
     txn.status = "pending_transaction_info_update"
+    val originalUpdatedAt = txn.updatedAt
     every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
     sep31Service.patchTransaction(token, patchRequest)
-    // TODO: Add more saved transaction field validation
+
+    assertEquals("SEPA", txn.fields["type"])
+    // Per SEP-31, patching every field named in required_info_updates returns the transaction to
+    // pending_receiver, clears required_info_updates, and bumps updated_at (SEP-31 defines it as
+    // when the transaction reached its current status).
+    assertEquals("pending_receiver", txn.status)
+    assertEquals(null, txn.requiredInfoUpdates)
+    assertTrue(txn.updatedAt.isAfter(originalUpdatedAt))
+    // The receiving anchor's business server learns processing can resume via this event.
+    verify(exactly = 1) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test PATCH transaction rejects a partial patch missing a required field as a 400`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates.transaction =
+      mapOf(
+        "type" to Field("type of deposit to make", listOf("SEPA", "SWIFT"), false),
+        "receiver_bank_account" to Field("bank account", null, false),
+      )
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    // Per SEP-31, a 200 is only defined when every required field is patched in one request --
+    // this request only supplies "type", leaving "receiver_bank_account" unaddressed.
+    val ex =
+      assertThrows<BadRequestException> { sep31Service.patchTransaction(token, patchRequest) }
+    assertEquals("[receiver_bank_account] is required", ex.message)
+    assertEquals("pending_transaction_info_update", txn.status)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test PATCH transaction completes regardless of an unpatched field's stale prior value`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
+
+    // patchRequest already supplies every field named in txn's fixture required_info_updates
+    // ("type"); completion must be judged by presence of the field as a request key, not by
+    // whether txn.fields already happens to hold some other (possibly stale) value for it.
+    txn.fields["type"] = "stale-invalid-value"
+
+    sep31Service.patchTransaction(token, patchRequest)
+
+    assertEquals("SEPA", txn.fields["type"])
+    assertEquals("pending_receiver", txn.status)
+  }
+
+  @Test
+  fun `test PATCH transaction rejects malformed data missing fields as a 400`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    val request = Sep31PatchTransactionRequest.builder().id(patchRequest.id).build()
+    val ex = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, request) }
+    assertEquals("fields.transaction must be specified", ex.message)
+  }
+
+  @Test
+  fun `test PATCH transaction rejects an empty fields map as a 400`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    val request =
+      Sep31PatchTransactionRequest.builder()
+        .id(patchRequest.id)
+        .fields(Sep31TxnFields(hashMapOf()))
+        .build()
+    val ex = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, request) }
+    assertEquals("fields.transaction must be specified", ex.message)
+  }
+
+  @Test
+  fun `test PATCH transaction rejects a null field value as a 400`() {
+    val token = TestHelper.createWebAuthJwt()
+    txn.status = "pending_transaction_info_update"
+    every { txnStore.findByTransactionId("a2392add-87c9-42f0-a5c1-5f1728030b68") } returns txn
+
+    // A JSON `"type": null` in the request body deserializes to a null map entry -- this must not
+    // silently count as the field having been supplied.
+    val request =
+      gson.fromJson(
+        """{"id": "${patchRequest.id}", "fields": {"transaction": {"type": null}}}""",
+        Sep31PatchTransactionRequest::class.java,
+      )
+    val ex = assertThrows<BadRequestException> { sep31Service.patchTransaction(token, request) }
+    assertEquals("[type] must not be null", ex.message)
+    verify(exactly = 0) { eventSession.publish(any()) }
   }
 
   @Test
@@ -804,7 +900,8 @@ class Sep31ServiceTest {
   @Test
   fun `test postTransaction rejects receiver_id not owned by caller`() {
     useQuotesNotSupportedAssetService()
-    every { customerIdOwnerStore.verifyOrClaim("victim-customer-id", any(), any()) } returns false
+    every { customerIdOwnerStore.verifyOrClaim("victim-customer-id", any(), any(), any()) } returns
+      false
 
     val postTxRequest =
       ownershipTestRequest(senderId = "generic-sender", receiverId = "victim-customer-id")
@@ -834,6 +931,7 @@ class Sep31ServiceTest {
         "sender-customer-id",
         TestHelper.TEST_ACCOUNT,
         TestHelper.TEST_MEMO,
+        true,
       )
     }
     verify(exactly = 1) {
@@ -841,6 +939,7 @@ class Sep31ServiceTest {
         "receiver-customer-id",
         TestHelper.TEST_ACCOUNT,
         TestHelper.TEST_MEMO,
+        true,
       )
     }
   }
@@ -860,12 +959,12 @@ class Sep31ServiceTest {
     assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
     verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("muxed-receiver-id", jwtToken.muxedAccount, "42")
+      customerIdOwnerStore.verifyOrClaim("muxed-receiver-id", jwtToken.muxedAccount, "42", true)
     }
   }
 
   @Test
-  fun `test postTransaction binds ownership to client name so key rotation does not lock out the owner`() {
+  fun `test postTransaction rejects a different account under the same client name from claiming another user's receiver_id`() {
     useQuotesNotSupportedAssetService()
 
     every { txnStore.save(any()) } answers
@@ -883,15 +982,78 @@ class Sep31ServiceTest {
     val secondSigningKey = "GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"
     val jwtToken2 = TestHelper.createWebAuthJwt(account = secondSigningKey)
     jwtToken2.clientName = "vibrant"
-    assertDoesNotThrow {
+    every {
+      customerIdOwnerStore.verifyOrClaim(
+        "shared-receiver-id",
+        "vibrant:$secondSigningKey",
+        null,
+        true,
+      )
+    } returns false
+
+    val ex: AnchorException = assertThrows {
       sep31Service.postTransaction(
         jwtToken2,
         ownershipTestRequest(senderId = "generic-sender", receiverId = "shared-receiver-id"),
       )
     }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
 
-    verify(exactly = 2) {
-      customerIdOwnerStore.verifyOrClaim("shared-receiver-id", "vibrant", null)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "shared-receiver-id",
+        "vibrant:${TestHelper.TEST_ACCOUNT}",
+        null,
+        true,
+      )
+    }
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "shared-receiver-id",
+        "vibrant:$secondSigningKey",
+        null,
+        true,
+      )
+    }
+  }
+
+  @Test
+  fun `test postTransaction reconciles a legacy wallet-only key for the true owner via the callback`() {
+    useNoSep12AssetService()
+    every {
+      customerIdOwnerStore.verifyOrClaim(
+        "legacy-receiver-id",
+        "vibrant:${TestHelper.TEST_ACCOUNT}",
+        null,
+        true,
+      )
+    } returns false
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse().apply { id = "legacy-receiver-id" }
+    every { customerIdOwnerStore.getCreatorMemo("legacy-receiver-id") } returns null
+    every {
+      customerIdOwnerStore.reconcileLegacyKey(
+        "legacy-receiver-id",
+        "vibrant",
+        null,
+        "vibrant:${TestHelper.TEST_ACCOUNT}",
+        null,
+      )
+    } returns true
+
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(account = TestHelper.TEST_ACCOUNT)
+    jwtToken.clientName = "vibrant"
+
+    assertDoesNotThrow {
+      sep31Service.postTransaction(
+        jwtToken,
+        ownershipTestRequest(receiverId = "legacy-receiver-id")
+      )
     }
   }
 
@@ -916,7 +1078,12 @@ class Sep31ServiceTest {
     )
 
     verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("sub-user-a-id", "vibrant", TestHelper.TEST_MEMO)
+      customerIdOwnerStore.verifyOrClaim(
+        "sub-user-a-id",
+        subUserA.ownerKey,
+        TestHelper.TEST_MEMO,
+        true,
+      )
     }
 
     val subUserB = TestHelper.createMuxedWebAuthJwt(muxedId = 99L)
@@ -926,7 +1093,10 @@ class Sep31ServiceTest {
       ownershipTestRequest(senderId = "generic-sender", receiverId = "sub-user-b-id")
     )
 
-    verify(exactly = 1) { customerIdOwnerStore.verifyOrClaim("sub-user-b-id", "vibrant", "99") }
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("sub-user-b-id", subUserB.ownerKey, "99", true)
+    }
+    assertNotEquals(subUserA.ownerKey, subUserB.ownerKey)
   }
 
   @Test
@@ -942,8 +1112,138 @@ class Sep31ServiceTest {
     val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
     assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
-    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) }
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any(), any()) }
     verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test postTransaction verifies a legacy customer id against the callback before claiming it`() {
+    useNoSep12AssetService()
+    every { customerIdOwnerStore.isClaimed("legacy-receiver-id") } returns false
+    val legacyCustomer = GetCustomerResponse()
+    legacyCustomer.id = "legacy-receiver-id"
+    every { customerIntegration.getCustomer(any()) } returns legacyCustomer
+
+    val postTxRequest = ownershipTestRequest(receiverId = "legacy-receiver-id")
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "legacy-receiver-id",
+        TestHelper.TEST_ACCOUNT,
+        TestHelper.TEST_MEMO,
+        true,
+      )
+    }
+  }
+
+  @Test
+  fun `test postTransaction fails closed for an unclaimed customer id the caller cannot verify via the callback`() {
+    useNoSep12AssetService()
+    every { customerIdOwnerStore.isClaimed("victim-legacy-id") } returns false
+    every { customerIntegration.getCustomer(any()) } returns null
+
+    val postTxRequest = ownershipTestRequest(receiverId = "victim-legacy-id")
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any(), any()) }
+  }
+
+  @Test
+  fun `test postTransaction stores the sending anchor's requested refund memo`() {
+    useNoSep12AssetService()
+    val postTxRequest =
+      ownershipTestRequest().apply {
+        refundMemo = "my-refund-memo"
+        refundMemoType = "text"
+      }
+
+    val txnSlot = slot<Sep31Transaction>()
+    every { txnStore.save(capture(txnSlot)) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertEquals("my-refund-memo", txnSlot.captured.refundMemo)
+    assertEquals("text", txnSlot.captured.refundMemoType)
+  }
+
+  @Test
+  fun `test postTransaction rejects a refund memo without a refund memo type`() {
+    useNoSep12AssetService()
+    val postTxRequest = ownershipTestRequest().apply { refundMemo = "my-refund-memo" }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex =
+      assertThrows<SepValidationException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertEquals(
+      "refund_memo and refund_memo_type must both be specified or both be omitted",
+      ex.message
+    )
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction rejects an unsupported refund memo type as a 400`() {
+    useNoSep12AssetService()
+    val postTxRequest =
+      ownershipTestRequest().apply {
+        refundMemo = "my-refund-memo"
+        refundMemoType = "return"
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex =
+      assertThrows<SepValidationException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertTrue(ex.message!!.contains("Invalid refund_memo/refund_memo_type"))
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction rejects a malformed hash refund memo as a 400`() {
+    useNoSep12AssetService()
+    val postTxRequest =
+      ownershipTestRequest().apply {
+        refundMemo = "not-valid-base64!!"
+        refundMemoType = "hash"
+      }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex =
+      assertThrows<SepValidationException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertTrue(ex.message!!.contains("Invalid refund_memo/refund_memo_type"))
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction rejects a refund memo type without a refund memo`() {
+    useNoSep12AssetService()
+    val postTxRequest = ownershipTestRequest().apply { refundMemoType = "text" }
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex =
+      assertThrows<SepValidationException> { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertEquals(
+      "refund_memo and refund_memo_type must both be specified or both be omitted",
+      ex.message
+    )
+    verify(exactly = 0) { txnStore.save(any()) }
   }
 
   @Test
@@ -957,6 +1257,37 @@ class Sep31ServiceTest {
     assertInstanceOf(Sep31CustomerInfoNeededException::class.java, ex)
     assertEquals("sep31-sender", (ex as Sep31CustomerInfoNeededException).type)
     verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction verifies a legacy customer id against the callback using the base account for a muxed caller`() {
+    useNoSep12AssetService()
+    every { customerIdOwnerStore.isClaimed("legacy-receiver-id") } returns false
+    val legacyCustomer = GetCustomerResponse()
+    legacyCustomer.id = "legacy-receiver-id"
+    val getCustomerRequestSlot = slot<GetCustomerRequest>()
+    every { customerIntegration.getCustomer(capture(getCustomerRequestSlot)) } returns
+      legacyCustomer
+
+    val postTxRequest = ownershipTestRequest(receiverId = "legacy-receiver-id")
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    val jwtToken = TestHelper.createMuxedWebAuthJwt(muxedId = 42L)
+    assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
+
+    assertEquals(TestHelper.TEST_ACCOUNT, getCustomerRequestSlot.captured.account)
+    assertEquals("42", getCustomerRequestSlot.captured.memo)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim(
+        "legacy-receiver-id",
+        jwtToken.ownerAccount,
+        "42",
+        true,
+      )
+    }
   }
 
   @Test
@@ -1062,9 +1393,26 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test postTransaction fails closed when the callback returns a different customer id`() {
+    useNoSep12AssetService()
+    every { customerIdOwnerStore.isClaimed("victim-legacy-id") } returns false
+    val someoneElsesCustomer = GetCustomerResponse()
+    someoneElsesCustomer.id = "unrelated-customer-id"
+    every { customerIntegration.getCustomer(any()) } returns someoneElsesCustomer
+
+    val postTxRequest = ownershipTestRequest(receiverId = "victim-legacy-id")
+
+    val jwtToken = TestHelper.createWebAuthJwt(accountMemo = TestHelper.TEST_MEMO)
+    val ex: AnchorException = assertThrows { sep31Service.postTransaction(jwtToken, postTxRequest) }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    verify(exactly = 0) { customerIdOwnerStore.verifyOrClaim(any(), any(), any(), any()) }
+  }
+
+  @Test
   fun `test postTransaction does not query SEP-12 for a customer_id it doesn't own`() {
     useQuotesNotSupportedAssetService()
-    every { customerIdOwnerStore.verifyOrClaim("victim-customer-id", any(), any()) } returns false
+    every { customerIdOwnerStore.verifyOrClaim("victim-customer-id", any(), any(), any()) } returns
+      false
     val postTxRequest =
       ownershipTestRequest(senderId = "generic-sender", receiverId = "victim-customer-id")
 
@@ -1095,11 +1443,13 @@ class Sep31ServiceTest {
   fun `test postTransaction claims a customer_id registered under a different identity than the caller`() {
     // Mirrors stellar-anchor-tests' "differentMemosSameAccount" pattern: a sending anchor
     // registers a sender and a receiver customer via SEP-12 under the same Stellar account but
-    // different memos (and no `type`, so neither is claimed at PUT time), then calls
-    // POST /transactions authenticated as just one of those memos. There's no way to verify the
-    // receiver_id against SEP-12 independently of the caller's own identity, so the first
-    // reference claims it -- same as it always has -- and KYC is still checked by id.
+    // different memos, then calls POST /transactions authenticated as just one of those memos.
+    // The receiver is already claimed under its own memo by then (Sep12Service claims any new
+    // customer, not just sep31-typed ones), so this exercises the ignoreMemo=true ownership
+    // check rather than a fresh claim -- same account, different memo, still allowed for
+    // Sep31Service specifically. KYC is still checked by id regardless.
     useQuotesNotSupportedAssetService()
+    every { customerIdOwnerStore.isClaimed("receiver-under-other-memo") } returns true
     val postTxRequest =
       ownershipTestRequest(senderId = "generic-sender", receiverId = "receiver-under-other-memo")
 
@@ -1116,6 +1466,7 @@ class Sep31ServiceTest {
         "receiver-under-other-memo",
         TestHelper.TEST_ACCOUNT,
         TestHelper.TEST_MEMO,
+        true,
       )
     }
     verify(exactly = 1) {
@@ -1141,7 +1492,7 @@ class Sep31ServiceTest {
     assertDoesNotThrow { sep31Service.postTransaction(jwtToken, postTxRequest) }
 
     verify(exactly = 1) {
-      customerIdOwnerStore.verifyOrClaim("needs-info-but-not-required", any(), any())
+      customerIdOwnerStore.verifyOrClaim("needs-info-but-not-required", any(), any(), any())
     }
   }
 

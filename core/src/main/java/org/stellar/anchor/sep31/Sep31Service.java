@@ -2,6 +2,7 @@ package org.stellar.anchor.sep31;
 
 import static io.micrometer.core.instrument.Metrics.counter;
 import static org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_CREATED;
+import static org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED;
 import static org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse;
 import static org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_SEND;
 import static org.stellar.anchor.event.EventService.EventQueue.TRANSACTION;
@@ -11,10 +12,12 @@ import static org.stellar.anchor.util.Log.info;
 import static org.stellar.anchor.util.Log.infoF;
 import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MathHelper.formatAmount;
+import static org.stellar.anchor.util.MemoHelper.makeMemo;
 import static org.stellar.anchor.util.MetricConstants.SEP31_TRANSACTION_CREATED;
 import static org.stellar.anchor.util.MetricConstants.SEP31_TRANSACTION_PATCHED;
 import static org.stellar.anchor.util.SepHelper.*;
 import static org.stellar.anchor.util.SepLanguageHelper.validateLanguage;
+import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import io.micrometer.core.instrument.Counter;
 import jakarta.transaction.Transactional;
@@ -34,6 +37,7 @@ import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.NotFoundException;
 import org.stellar.anchor.api.exception.Sep31CustomerInfoNeededException;
 import org.stellar.anchor.api.exception.Sep31MissingFieldException;
+import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepNotAuthorizedException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.exception.ServerErrorException;
@@ -52,7 +56,6 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.event.EventService;
-import org.stellar.anchor.sep12.Sep12Service;
 import org.stellar.anchor.sep38.Sep38Quote;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.util.ExchangeAmountsCalculator;
@@ -138,6 +141,27 @@ public class Sep31Service {
         request.getFundingMethod(),
         assetInfo.getSep31().getReceive().getMethods());
     validateLanguage(languageConfig, request.getLang());
+    // Validates the refund_memo/refund_memo_type pair: both must be specified together, or both
+    // omitted. The presence check is done explicitly (with the correct field names) rather than
+    // relying on makeMemo's own message, which assumes a "memo_type" field that doesn't exist on
+    // this endpoint. makeMemo is still used to validate the type/value combination once both are
+    // known to be present.
+    if (isEmpty(request.getRefundMemo()) != isEmpty(request.getRefundMemoType())) {
+      throw new SepValidationException(
+          "refund_memo and refund_memo_type must both be specified or both be omitted");
+    }
+    // makeMemo doesn't consistently report malformed values as SepValidationException (some
+    // failures surface as a plain SepException or IllegalArgumentException, both of which the
+    // global exception handler maps to 500 instead of the 400 required for bad request input) —
+    // preserve an existing validation exception as-is, and wrap anything else as one.
+    try {
+      makeMemo(request.getRefundMemo(), request.getRefundMemoType());
+    } catch (SepValidationException e) {
+      throw e;
+    } catch (SepException | IllegalArgumentException e) {
+      throw new SepValidationException(
+          String.format("Invalid refund_memo/refund_memo_type: %s", e.getMessage()), e);
+    }
 
     /*
      * TODO:
@@ -170,22 +194,23 @@ public class Sep31Service {
             .memo(webAuthJwt.getAccountMemo())
             .build();
 
-    String ownerClientName = webAuthJwt.getClientName();
-    String ownerAccount = ownerClientName != null ? ownerClientName : webAuthJwt.getOwnerAccount();
+    String ownerAccount = webAuthJwt.getOwnerKey();
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
     Sep31Info.Sep12Info sep12Config = assetInfo.getSep31().getSep12();
     verifyCustomerOwnershipAndKyc(
         request.getSenderId(),
-        Sep12Service.TYPE_SEP31_SENDER,
+        "sep31-sender",
         ownerAccount,
         ownerMemo,
+        webAuthJwt,
         sep12Config != null && sep12Config.getSender() != null);
     verifyCustomerOwnershipAndKyc(
         request.getReceiverId(),
-        Sep12Service.TYPE_SEP31_RECEIVER,
+        "sep31-receiver",
         ownerAccount,
         ownerMemo,
+        webAuthJwt,
         sep12Config != null && sep12Config.getReceiver() != null);
 
     Sep38Quote quote = Context.get().getQuote();
@@ -230,6 +255,8 @@ public class Sep31Service {
             .amountOut(null)
             .amountOutAsset(null)
             .requestClientIpAddress(request.getRequestClientIpAddress())
+            .refundMemo(request.getRefundMemo())
+            .refundMemoType(request.getRefundMemoType())
             .build();
 
     Context.get().setTransaction(txn);
@@ -294,16 +321,16 @@ public class Sep31Service {
    * `receiver_id` are never validated against real SEP-12 customer records" finding).
    *
    * @param customerId the `sender_id` or `receiver_id` from the request, or null if not provided
-   * @param customerType the SEP-12 `type` to request -- {@link Sep12Service#TYPE_SEP31_SENDER} or
-   *     {@link Sep12Service#TYPE_SEP31_RECEIVER}, also advertised in `GET /info`'s
-   *     `sep12.sender`/`sep12.receiver` (see {@link
-   *     org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse#getSep12()}), and echoed
-   *     back in {@link Sep31CustomerInfoNeededException#getType()} so the sending anchor knows
-   *     which SEP-12 `type` to use when it re-fetches the customer
-   * @param ownerAccount the authenticated caller's ownership-store identity (may be a resolved
-   *     client name instead of a raw Stellar account -- see the {@code ownerAccount} computed in
-   *     {@link #postTransaction})
+   * @param customerType the SEP-12 `type` to request -- {@code sep31-sender} or {@code
+   *     sep31-receiver}, also advertised in `GET /info`'s `sep12.sender`/`sep12.receiver` (see
+   *     {@link org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse#getSep12()}), and
+   *     echoed back in {@link Sep31CustomerInfoNeededException#getType()} so the sending anchor
+   *     knows which SEP-12 `type` to use when it re-fetches the customer
+   * @param ownerAccount the authenticated caller's per-user ownership-store identity (see the
+   *     {@code ownerAccount} computed in {@link #postTransaction})
    * @param ownerMemo the authenticated caller's ownership-store memo
+   * @param webAuthJwt the authenticated caller's token, used both for the unclaimed-id reverse
+   *     lookup and for legacy-key reconciliation
    * @param kycRequired whether this asset's config actually advertises a SEP-12 type for this role
    *     (`assetInfo.getSep31().getSep12()`'s `sender`/`receiver` is non-null) -- per SEP-31, an
    *     absent `sep12.sender`/`sep12.receiver` in `GET /info` means KYC isn't required for that
@@ -318,6 +345,7 @@ public class Sep31Service {
       String customerType,
       String ownerAccount,
       String ownerMemo,
+      WebAuthJwt webAuthJwt,
       boolean kycRequired)
       throws AnchorException {
     if (customerId == null) {
@@ -327,7 +355,30 @@ public class Sep31Service {
       return;
     }
 
-    if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo)) {
+    if (!customerIdOwnerStore.isClaimed(customerId)) {
+      GetCustomerResponse owned;
+      try {
+        owned =
+            customerIntegration.getCustomer(
+                GetCustomerRequest.builder()
+                    .account(webAuthJwt.getAccount())
+                    .memo(webAuthJwt.getOwnerMemo())
+                    .memoType(webAuthJwt.getOwnerMemo() != null ? "id" : null)
+                    .type(customerType)
+                    .build());
+      } catch (Exception e) {
+        Log.warnEx(e);
+        owned = null;
+      }
+      if (owned == null || !customerId.equals(owned.getId())) {
+        throw new SepNotAuthorizedException(
+            "sender_id/receiver_id does not belong to the authenticated client");
+      }
+    }
+
+    if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo, true)
+        && !CustomerOwnershipReconciliation.tryReconcile(
+            customerIdOwnerStore, customerIntegration, customerId, webAuthJwt, customerType)) {
       throw new SepNotAuthorizedException(
           "sender_id/receiver_id does not belong to the authenticated client");
     }
@@ -498,13 +549,33 @@ public class Sep31Service {
         .getTransaction()
         .forEach((fieldName, fieldValue) -> txn.getFields().put(fieldName, fieldValue));
 
-    AssetInfo assetInfo = assetService.getAsset(txn.getAmountInAsset());
+    // txn.getAmountInAsset() stores the full asset id (e.g. "stellar:USDC:G...", as set by
+    // postTransaction), not a bare code, so it must be looked up via getAssetById.
+    AssetInfo assetInfo = assetService.getAssetById(txn.getAmountInAsset());
     Context.get().setAsset(assetInfo);
     Context.get().setTransactionFields(txn.getFields());
     validateRequiredFields();
 
-    Sep31GetTransactionResponse response =
-        sep31TransactionStore.save(txn).toSep31GetTransactionResponse();
+    // Per SEP-31 "PATCH Transaction": a 200 response is only defined for the case where "the
+    // information was successfully updated AND all fields required for the transaction are
+    // patched" -- validatePatchTransactionFields already rejects a request missing any expected
+    // field (400), so reaching this point means every required field was just supplied. The
+    // transaction returns to pending_receiver.
+    txn.setStatus(SepTransactionStatus.PENDING_RECEIVER.toString());
+    txn.setRequiredInfoUpdates(null);
+    txn.setUpdatedAt(clock.instant());
+
+    Sep31Transaction savedTxn = sep31TransactionStore.save(txn);
+    // Without this, the corrected data is only stored locally -- the receiving anchor's business
+    // server (the callback/event consumer) is never told processing can resume.
+    eventSession.publish(
+        AnchorEvent.builder()
+            .id(UUID.randomUUID().toString())
+            .sep("31")
+            .type(TRANSACTION_STATUS_CHANGED)
+            .transaction(TransactionMapper.toGetTransactionResponse(savedTxn))
+            .build());
+    Sep31GetTransactionResponse response = savedTxn.toSep31GetTransactionResponse();
     // increment counter
     sep31TransactionPatchedCounter.increment();
     return response;
@@ -559,14 +630,39 @@ public class Sep31Service {
           String.format("Transaction (%s) is not expecting any updates", txn.getId()));
     }
 
+    if (request.getFields() == null
+        || request.getFields().getTransaction() == null
+        || request.getFields().getTransaction().isEmpty()) {
+      infoF("Transaction ({}) patch request is missing fields", txn.getId());
+      throw new BadRequestException("fields.transaction must be specified");
+    }
+
     Map<String, AssetInfo.Field> expectedFields = txn.getRequiredInfoUpdates().getTransaction();
     Map<String, String> requestFields = request.getFields().getTransaction();
 
-    // validate if any of the fields from the request is not expected in the transaction.
-    for (String fieldName : requestFields.keySet()) {
+    for (Map.Entry<String, String> entry : requestFields.entrySet()) {
+      String fieldName = entry.getKey();
+      // validate if the field from the request is not expected in the transaction.
       if (!expectedFields.containsKey(fieldName)) {
         infoF("{} is not a expected field", fieldName);
         throw new BadRequestException(String.format("[%s] is not a expected field", fieldName));
+      }
+      // A JSON null value deserializes to a null map entry -- without this check it would still
+      // count as "supplied" below and could move the transaction to pending_receiver despite no
+      // corrected value actually being given.
+      if (entry.getValue() == null) {
+        infoF("{} was patched with a null value", fieldName);
+        throw new BadRequestException(String.format("[%s] must not be null", fieldName));
+      }
+    }
+
+    // SEP-31 only defines a 200 response for "all fields required for the transaction are
+    // patched" -- a request missing any currently-required field is rejected outright rather than
+    // accepted as a partial update, since the spec describes no such cumulative-PATCH behavior.
+    for (String fieldName : expectedFields.keySet()) {
+      if (!requestFields.containsKey(fieldName)) {
+        infoF("{} is required but was not provided", fieldName);
+        throw new BadRequestException(String.format("[%s] is required", fieldName));
       }
     }
   }
@@ -782,13 +878,11 @@ public class Sep31Service {
     sep12Response.setSender(
         sep12Config.getSender() == null
             ? new Sep31InfoResponse.Sep12TypesResponse()
-            : sep12TypesResponse(
-                Sep12Service.TYPE_SEP31_SENDER, sep12Config.getSender().getDescription()));
+            : sep12TypesResponse("sep31-sender", sep12Config.getSender().getDescription()));
     sep12Response.setReceiver(
         sep12Config.getReceiver() == null
             ? new Sep31InfoResponse.Sep12TypesResponse()
-            : sep12TypesResponse(
-                Sep12Service.TYPE_SEP31_RECEIVER, sep12Config.getReceiver().getDescription()));
+            : sep12TypesResponse("sep31-receiver", sep12Config.getReceiver().getDescription()));
     return sep12Response;
   }
 

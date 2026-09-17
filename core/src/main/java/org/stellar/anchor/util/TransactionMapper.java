@@ -1,8 +1,12 @@
 package org.stellar.anchor.util;
 
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*;
+import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import jakarta.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.platform.GetTransactionResponse;
 import org.stellar.anchor.api.platform.PlatformTransactionData;
@@ -23,6 +27,26 @@ public class TransactionMapper {
     if (txn.getRefunds() != null) {
       refunds = toRefunds(txn.getRefunds(), txn.getAmountInAsset());
     }
+    // Per SEP-31: refund_memo/refund_memo_type are a pair — if specified, both must be specified
+    // together. Only honor the sending anchor's override when both fields are non-empty
+    // (mirroring MemoHelper.makeMemo's own empty-is-absent semantics); otherwise (including an
+    // incomplete pair, which this endpoint doesn't reject) fall back to the same memo the sending
+    // anchor used for the original payment, so refund_memo and refund_memo_type always come from
+    // the same source and are never mismatched.
+    boolean hasRefundMemoOverride =
+        !isEmpty(txn.getRefundMemo()) && !isEmpty(txn.getRefundMemoType());
+
+    // GetTransactionResponse.requiredInfoUpdates is a flat field-name list (shared with SEP-6), so
+    // it carries the outstanding field names on its own; requiredInfoUpdatesFields carries the
+    // same map's real per-field metadata (description/choices/optional) alongside it, so a client
+    // status callback or status-changed event consumer isn't limited to the names alone.
+    List<String> requiredInfoUpdates = null;
+    Map<String, AssetInfo.Field> requiredInfoUpdatesFields = null;
+    if (txn.getRequiredInfoUpdates() != null
+        && txn.getRequiredInfoUpdates().getTransaction() != null) {
+      requiredInfoUpdates = new ArrayList<>(txn.getRequiredInfoUpdates().getTransaction().keySet());
+      requiredInfoUpdatesFields = txn.getRequiredInfoUpdates().getTransaction();
+    }
 
     return GetTransactionResponse.builder()
         .id(txn.getId())
@@ -41,6 +65,9 @@ public class TransactionMapper {
         .userActionRequiredBy(txn.getUserActionRequiredBy())
         .transferReceivedAt(txn.getTransferReceivedAt())
         .message(txn.getRequiredInfoMessage()) // Assuming these are meant to be the same.
+        .requiredInfoUpdates(requiredInfoUpdates)
+        .requiredInfoUpdatesFields(requiredInfoUpdatesFields)
+        .fields(txn.getFields())
         .refunds(refunds)
         .stellarTransactions(txn.getStellarTransactions())
         .sourceAccount(txn.getFromAccount())
@@ -51,9 +78,8 @@ public class TransactionMapper {
         .clientDomain(txn.getClientDomain())
         .clientName(txn.getClientName())
         .requestClientIpAddress(txn.getRequestClientIpAddress())
-        // TODO: SEP-31 supports refund memo but we don't use it
-        .refundMemo(txn.getStellarMemo())
-        .refundMemoType(txn.getStellarMemoType())
+        .refundMemo(hasRefundMemoOverride ? txn.getRefundMemo() : txn.getStellarMemo())
+        .refundMemoType(hasRefundMemoOverride ? txn.getRefundMemoType() : txn.getStellarMemoType())
         .customers(txn.getCustomers())
         .creator(txn.getCreator())
         .build();

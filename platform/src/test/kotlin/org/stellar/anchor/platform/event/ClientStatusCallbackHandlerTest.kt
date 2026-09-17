@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.event
 
+import com.google.gson.JsonParser
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
@@ -11,16 +12,19 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.stellar.anchor.LockAndMockStatic
 import org.stellar.anchor.LockAndMockTest
+import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.platform.GetTransactionResponse
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep.*
 import org.stellar.anchor.api.sep.SepTransactionStatus.COMPLETED
+import org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_RECEIVER
 import org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_USR_TRANSFER_START
 import org.stellar.anchor.api.sep.sep12.Sep12GetCustomerResponse
 import org.stellar.anchor.api.sep.sep24.TransactionResponse
@@ -541,6 +545,122 @@ class ClientStatusCallbackHandlerTest {
   }
 
   @Test
+  fun `handleEvent should carry patched field values in the actual SEP-31 callback JSON`() {
+    // fromSep31Txn's own unit test only asserts on the intermediate Sep31Transaction object,
+    // which doesn't prove the field values survive into the JSON actually POSTed to the client --
+    // this test drives handleEvent end-to-end and inspects the real request body instead.
+    val server = MockWebServer()
+    server.start()
+    try {
+      server.enqueue(MockResponse().setResponseCode(200))
+
+      val circleClient =
+        CustodialClient.builder()
+          .name("circle")
+          .signingKeys(setOf("GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"))
+          .callbackUrls(
+            CallbackUrls.builder().sep31(server.url("/callback/sep31").toString()).build()
+          )
+          .allowAnyDestination(false)
+          .destinationAccounts(emptySet())
+          .build()
+
+      val sep31Handler =
+        ClientStatusCallbackHandler(
+          secretConfig,
+          circleClient,
+          assetService,
+          sep6MoreInfoUrlConstructor,
+          sep24MoreInfoUrlConstructor
+        )
+
+      val sep31Event =
+        AnchorEvent().apply {
+          transaction =
+            GetTransactionResponse.builder()
+              .id("sep31-id")
+              .sep(SEP_31)
+              .kind(Kind.RECEIVE)
+              .status(PENDING_RECEIVER)
+              .clientName("circle")
+              .requiredInfoUpdates(listOf("receiver_bank_account"))
+              .requiredInfoUpdatesFields(
+                mapOf(
+                  "receiver_bank_account" to
+                    AssetInfo.Field.builder()
+                      .description("The receiver's bank account number")
+                      .build()
+                )
+              )
+              .fields(mapOf("receiver_bank_account" to "12345"))
+              .build()
+        }
+
+      sep31Handler.handleEvent(sep31Event)
+
+      val request = server.takeRequest(5, TimeUnit.SECONDS)
+      assertNotNull(request, "circle's callback receiver should have gotten a POST")
+      val body = JsonParser.parseString(request!!.body.readUtf8()).asJsonObject
+      val transaction = body.getAsJsonObject("transaction")
+      assertEquals(
+        "12345",
+        transaction.getAsJsonObject("fields").get("receiver_bank_account").asString,
+        "the callback payload must carry the patched field values, not just the intermediate mapping",
+      )
+      assertEquals(
+        "The receiver's bank account number",
+        transaction
+          .getAsJsonObject("required_info_updates")
+          .getAsJsonObject("transaction")
+          .getAsJsonObject("receiver_bank_account")
+          .get("description")
+          .asString,
+        "the callback payload must carry the real field metadata, not a humanized placeholder",
+      )
+    } finally {
+      server.shutdown()
+    }
+  }
+
+  @Test
+  fun `redactedJson should strip SEP-31 field values before they reach the logs`() {
+    val event =
+      AnchorEvent().apply {
+        transaction =
+          GetTransactionResponse.builder()
+            .id("sep31-id")
+            .sep(SEP_31)
+            .kind(Kind.RECEIVE)
+            .status(PENDING_RECEIVER)
+            .clientName("circle")
+            .requiredInfoUpdates(listOf("receiver_bank_account"))
+            .fields(mapOf("receiver_bank_account" to "12345"))
+            .build()
+      }
+
+    val redacted =
+      JsonParser.parseString(ClientStatusCallbackHandler.redactedJson(event)).asJsonObject
+    val transaction = redacted.getAsJsonObject("transaction")
+
+    assertEquals("sep31-id", transaction.get("id").asString)
+    Assertions.assertFalse(
+      transaction.has("fields"),
+      "raw field values (e.g. bank account/routing numbers) must not reach the logs",
+    )
+  }
+
+  @Test
+  fun `redactedJson should handle an event with no transaction at all`() {
+    val event = AnchorEvent().apply { transaction = null }
+
+    // Must not throw when there's no `transaction` object to redact from (e.g. a SEP-12 customer
+    // event).
+    val redacted = ClientStatusCallbackHandler.redactedJson(event)
+
+    Assertions.assertFalse(JsonParser.parseString(redacted).asJsonObject.has("transaction"))
+  }
+
+  @Test
   fun `fromSep31Txn should map GetTransactionResponse to Sep31Transaction correctly`() {
     // Arrange
     val amountIn = Amount("300.0", "USD")
@@ -567,6 +687,8 @@ class ClientStatusCallbackHandlerTest {
         .clientDomain("client.com")
         .quoteId("quote-id")
         .message("message")
+        .requiredInfoUpdates(listOf("receiver_bank_account"))
+        .fields(mapOf("receiver_bank_account" to "12345"))
         .build()
 
     // Act
@@ -587,5 +709,50 @@ class ClientStatusCallbackHandlerTest {
     assertEquals("client.com", sep31Txn.clientDomain)
     assertEquals("quote-id", sep31Txn.quoteId)
     assertEquals("message", sep31Txn.requiredInfoMessage)
+    // The flat field-name list from GetTransactionResponse is expanded back into the
+    // Sep31Info.Fields shape a SEP-31 client callback body expects. No requiredInfoUpdatesFields
+    // was supplied here, so it falls back to a humanized description -- see the sibling test below
+    // for the case where the real metadata is supplied and must be preferred instead.
+    assertEquals(setOf("receiver_bank_account"), sep31Txn.requiredInfoUpdates.transaction.keys)
+    assertEquals(
+      "Receiver bank account",
+      sep31Txn.requiredInfoUpdates.transaction["receiver_bank_account"]!!.description,
+    )
+    assertEquals(mapOf("receiver_bank_account" to "12345"), sep31Txn.fields)
+  }
+
+  @Test
+  fun `fromSep31Txn should prefer supplied requiredInfoUpdatesFields metadata over a humanized placeholder`() {
+    val txnResponse =
+      GetTransactionResponse.builder()
+        .id("sep31-id")
+        .sep(SEP_31)
+        .kind(Kind.RECEIVE)
+        .status(PENDING_USR_TRANSFER_START)
+        .requiredInfoUpdates(listOf("receiver_bank_account", "receiver_routing_number"))
+        .requiredInfoUpdatesFields(
+          mapOf(
+            "receiver_bank_account" to
+              AssetInfo.Field.builder()
+                .description("The receiver's bank account number")
+                .choices(listOf("SEPA", "SWIFT"))
+                .optional(false)
+                .build()
+            // receiver_routing_number is intentionally left unsupplied to verify it still falls
+            // back to the humanized default on its own, independent of the other field.
+          )
+        )
+        .build()
+
+    val sep31Txn = ClientStatusCallbackHandler.fromSep31Txn(txnResponse)
+
+    val bankAccountField = sep31Txn.requiredInfoUpdates.transaction["receiver_bank_account"]!!
+    assertEquals("The receiver's bank account number", bankAccountField.description)
+    assertEquals(listOf("SEPA", "SWIFT"), bankAccountField.choices)
+
+    assertEquals(
+      "Receiver routing number",
+      sep31Txn.requiredInfoUpdates.transaction["receiver_routing_number"]!!.description,
+    )
   }
 }

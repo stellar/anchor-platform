@@ -34,7 +34,9 @@ class ClientConfigServiceTest {
     service = ClientConfigService(repoProvider)
   }
 
-  private fun custodialRequest(signingKeys: Set<String> = setOf("GALICE")) =
+  private fun custodialRequest(
+    signingKeys: Set<String> = setOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
+  ) =
     ClientConfigRequest().apply {
       type = ClientType.CUSTODIAL
       this.signingKeys = signingKeys
@@ -58,7 +60,10 @@ class ClientConfigServiceTest {
 
     assertEquals("MGI", response.name)
     assertEquals(ClientType.CUSTODIAL, response.type)
-    assertEquals(setOf("GALICE"), response.signingKeys)
+    assertEquals(
+      setOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL"),
+      response.signingKeys
+    )
   }
 
   @Test
@@ -72,10 +77,16 @@ class ClientConfigServiceTest {
     val saved = slot<JdbcClientConfig>()
     every { repo.save(capture(saved)) } answers { saved.captured }
 
-    service.upsert("MGI", custodialRequest(setOf("GNEWKEY")))
+    service.upsert(
+      "MGI",
+      custodialRequest(setOf("GD3TURJDV37E7S7XTI63CJJXEWEVNB3MBSCSGM5LQAWKQ7O5SPAW7ZXM"))
+    )
 
     assertSame(existing, saved.captured)
-    assertEquals(setOf("GNEWKEY"), saved.captured.signingKeys)
+    assertEquals(
+      setOf("GD3TURJDV37E7S7XTI63CJJXEWEVNB3MBSCSGM5LQAWKQ7O5SPAW7ZXM"),
+      saved.captured.signingKeys
+    )
   }
 
   @Test
@@ -110,7 +121,10 @@ class ClientConfigServiceTest {
   @Test
   fun `upsert rejects a missing type`() {
     every { repo.findById("MGI") } returns Optional.empty()
-    val request = ClientConfigRequest().apply { signingKeys = setOf("GALICE") }
+    val request =
+      ClientConfigRequest().apply {
+        signingKeys = setOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
+      }
 
     assertThrows(BadRequestException::class.java) { service.upsert("MGI", request) }
   }
@@ -191,14 +205,17 @@ class ClientConfigServiceTest {
       JdbcClientConfig().apply {
         name = "MGI"
         type = ClientType.CUSTODIAL
-        signingKeys = mutableSetOf("GALICE")
+        signingKeys = mutableSetOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
       }
     every { repo.findById("MGI") } returns Optional.of(entity)
 
     val response = service.get("MGI")
 
     assertEquals("MGI", response.name)
-    assertEquals(setOf("GALICE"), response.signingKeys)
+    assertEquals(
+      setOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL"),
+      response.signingKeys
+    )
   }
 
   @Test
@@ -275,23 +292,67 @@ class ClientConfigServiceTest {
       JdbcClientConfig().apply {
         name = "DING"
         type = ClientType.CUSTODIAL
-        signingKeys = mutableSetOf("GALICE", "GBOB")
+        signingKeys =
+          mutableSetOf(
+            "GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL",
+            "GBJFPH252QQPPK3VSDLTPITYQG2I66CT7BCE3U7VUWXZQJNQZZ74G5K2"
+          )
       }
     every { repo.findById("DING") } returns Optional.of(existing)
     val saved = slot<JdbcClientConfig>()
     every { repo.save(capture(saved)) } answers { saved.captured }
 
-    val response = service.addSigningKey("DING", "GCAROL")
+    val response =
+      service.addSigningKey("DING", "GDF4WLQVPVTMLZOG7T677ULCBFUY3HY723IBBUVPO6RPQRKHJC6ATGA7")
 
-    assertEquals(setOf("GALICE", "GBOB", "GCAROL"), saved.captured.signingKeys)
-    assertEquals(setOf("GALICE", "GBOB", "GCAROL"), response.signingKeys)
+    assertEquals(
+      setOf(
+        "GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL",
+        "GBJFPH252QQPPK3VSDLTPITYQG2I66CT7BCE3U7VUWXZQJNQZZ74G5K2",
+        "GDF4WLQVPVTMLZOG7T677ULCBFUY3HY723IBBUVPO6RPQRKHJC6ATGA7"
+      ),
+      saved.captured.signingKeys
+    )
+    assertEquals(
+      setOf(
+        "GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL",
+        "GBJFPH252QQPPK3VSDLTPITYQG2I66CT7BCE3U7VUWXZQJNQZZ74G5K2",
+        "GDF4WLQVPVTMLZOG7T677ULCBFUY3HY723IBBUVPO6RPQRKHJC6ATGA7"
+      ),
+      response.signingKeys
+    )
   }
 
   @Test
   fun `addSigningKey throws NotFoundException when the client does not exist`() {
     every { repo.findById("UNKNOWN") } returns Optional.empty()
 
-    assertThrows(NotFoundException::class.java) { service.addSigningKey("UNKNOWN", "GALICE") }
+    assertThrows(NotFoundException::class.java) {
+      service.addSigningKey("UNKNOWN", "GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
+    }
+  }
+
+  @Test
+  fun `addSigningKey rejects a malformed signing key before touching the repo`() {
+    val ex =
+      assertThrows(BadRequestException::class.java) {
+        service.addSigningKey("DING", "not-a-valid-signing-key")
+      }
+    assertEquals("Invalid signing key: not-a-valid-signing-key", ex.message)
+    verify(exactly = 0) { repo.findById(any()) }
+    verify(exactly = 0) { repo.save(any()) }
+  }
+
+  @Test
+  fun `upsert rejects a custodial client whose signing key is not a valid strkey`() {
+    every { repo.findById("MGI") } returns Optional.empty()
+
+    val ex =
+      assertThrows(BadRequestException::class.java) {
+        service.upsert("MGI", custodialRequest(setOf("not-a-valid-signing-key")))
+      }
+    assertEquals("Invalid signing key: not-a-valid-signing-key", ex.message)
+    verify(exactly = 0) { repo.save(any()) }
   }
 
   @Test
@@ -300,7 +361,7 @@ class ClientConfigServiceTest {
       JdbcClientConfig().apply {
         name = "DING"
         type = ClientType.CUSTODIAL
-        signingKeys = mutableSetOf("GALICE")
+        signingKeys = mutableSetOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
       }
     every { repo.findById("DING") } returns Optional.of(existing)
     every { repo.save(any()) } throws
@@ -313,7 +374,7 @@ class ClientConfigServiceTest {
 
     val ex =
       assertThrows(BadRequestException::class.java) {
-        service.addSigningKey("DING", "GALREADYUSEDBYSOMEONEELSE")
+        service.addSigningKey("DING", "GCH7Q6BPM6AABOL7B3X3VRYG26NDZEOHTH4YZJV5JMS2TO2I6EF5G63Y")
       }
     assertEquals("domain or signing key is already in use by another client", ex.message)
   }
@@ -324,22 +385,34 @@ class ClientConfigServiceTest {
       JdbcClientConfig().apply {
         name = "DING"
         type = ClientType.CUSTODIAL
-        signingKeys = mutableSetOf("GALICE", "GBOB")
+        signingKeys =
+          mutableSetOf(
+            "GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL",
+            "GBJFPH252QQPPK3VSDLTPITYQG2I66CT7BCE3U7VUWXZQJNQZZ74G5K2"
+          )
       }
     every { repo.findById("DING") } returns Optional.of(existing)
     val saved = slot<JdbcClientConfig>()
     every { repo.save(capture(saved)) } answers { saved.captured }
 
-    service.removeSigningKey("DING", "GALICE")
+    service.removeSigningKey("DING", "GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
 
-    assertEquals(setOf("GBOB"), saved.captured.signingKeys)
+    assertEquals(
+      setOf("GBJFPH252QQPPK3VSDLTPITYQG2I66CT7BCE3U7VUWXZQJNQZZ74G5K2"),
+      saved.captured.signingKeys
+    )
   }
 
   @Test
   fun `removeSigningKey throws NotFoundException when the client does not exist`() {
     every { repo.findById("UNKNOWN") } returns Optional.empty()
 
-    assertThrows(NotFoundException::class.java) { service.removeSigningKey("UNKNOWN", "GALICE") }
+    assertThrows(NotFoundException::class.java) {
+      service.removeSigningKey(
+        "UNKNOWN",
+        "GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL"
+      )
+    }
   }
 
   @Test
@@ -348,11 +421,13 @@ class ClientConfigServiceTest {
       JdbcClientConfig().apply {
         name = "DING"
         type = ClientType.CUSTODIAL
-        signingKeys = mutableSetOf("GALICE")
+        signingKeys = mutableSetOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
       }
     every { repo.findById("DING") } returns Optional.of(existing)
 
-    assertThrows(NotFoundException::class.java) { service.removeSigningKey("DING", "GNEVERADDED") }
+    assertThrows(NotFoundException::class.java) {
+      service.removeSigningKey("DING", "GC7RK5Y7YB3COC2ONJSDLOMCPVNOFTVIHRVCJ4EMGTIVXRPGFRXCEP4Y")
+    }
   }
 
   @Test
@@ -361,11 +436,13 @@ class ClientConfigServiceTest {
       JdbcClientConfig().apply {
         name = "DING"
         type = ClientType.CUSTODIAL
-        signingKeys = mutableSetOf("GALICE")
+        signingKeys = mutableSetOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
       }
     every { repo.findById("DING") } returns Optional.of(existing)
 
-    assertThrows(BadRequestException::class.java) { service.removeSigningKey("DING", "GALICE") }
+    assertThrows(BadRequestException::class.java) {
+      service.removeSigningKey("DING", "GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
+    }
     verify(exactly = 0) { repo.save(any()) }
   }
 
@@ -375,17 +452,34 @@ class ClientConfigServiceTest {
       JdbcClientConfig().apply {
         name = "DING"
         type = ClientType.CUSTODIAL
-        signingKeys = mutableSetOf("GALICE")
-        destinationAccounts = mutableSetOf("GWALLET1")
+        signingKeys = mutableSetOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
+        destinationAccounts =
+          mutableSetOf("GBWO3GPFE2QAQS45RB3M4ARB73DHWGPHTCKQPMJOTWWEBPWZTGQ4OM4C")
       }
     every { repo.findById("DING") } returns Optional.of(existing)
     val saved = slot<JdbcClientConfig>()
     every { repo.save(capture(saved)) } answers { saved.captured }
 
-    val response = service.addDestinationAccount("DING", "GWALLET2")
+    val response =
+      service.addDestinationAccount(
+        "DING",
+        "GBEZ7LGFD5VJKWA4ZEO7CJF7LGP6RZCPU266SMKDSNHYGZGW3TLNERVE"
+      )
 
-    assertEquals(setOf("GWALLET1", "GWALLET2"), saved.captured.destinationAccounts)
-    assertEquals(setOf("GWALLET1", "GWALLET2"), response.destinationAccounts)
+    assertEquals(
+      setOf(
+        "GBWO3GPFE2QAQS45RB3M4ARB73DHWGPHTCKQPMJOTWWEBPWZTGQ4OM4C",
+        "GBEZ7LGFD5VJKWA4ZEO7CJF7LGP6RZCPU266SMKDSNHYGZGW3TLNERVE"
+      ),
+      saved.captured.destinationAccounts
+    )
+    assertEquals(
+      setOf(
+        "GBWO3GPFE2QAQS45RB3M4ARB73DHWGPHTCKQPMJOTWWEBPWZTGQ4OM4C",
+        "GBEZ7LGFD5VJKWA4ZEO7CJF7LGP6RZCPU266SMKDSNHYGZGW3TLNERVE"
+      ),
+      response.destinationAccounts
+    )
   }
 
   @Test
@@ -393,8 +487,32 @@ class ClientConfigServiceTest {
     every { repo.findById("UNKNOWN") } returns Optional.empty()
 
     assertThrows(NotFoundException::class.java) {
-      service.addDestinationAccount("UNKNOWN", "GWALLET1")
+      service.addDestinationAccount(
+        "UNKNOWN",
+        "GBWO3GPFE2QAQS45RB3M4ARB73DHWGPHTCKQPMJOTWWEBPWZTGQ4OM4C"
+      )
     }
+  }
+
+  @Test
+  fun `addDestinationAccount rejects a malformed account before touching the repo`() {
+    val ex =
+      assertThrows(BadRequestException::class.java) {
+        service.addDestinationAccount("DING", "not-a-valid-account")
+      }
+    assertEquals("Invalid destination account: not-a-valid-account", ex.message)
+    verify(exactly = 0) { repo.findById(any()) }
+    verify(exactly = 0) { repo.save(any()) }
+  }
+
+  @Test
+  fun `upsert rejects a custodial client whose destination account is not a valid strkey`() {
+    every { repo.findById("MGI") } returns Optional.empty()
+    val request = custodialRequest().apply { destinationAccounts = setOf("not-a-valid-account") }
+
+    val ex = assertThrows(BadRequestException::class.java) { service.upsert("MGI", request) }
+    assertEquals("Invalid destination account: not-a-valid-account", ex.message)
+    verify(exactly = 0) { repo.save(any()) }
   }
 
   @Test
@@ -403,16 +521,26 @@ class ClientConfigServiceTest {
       JdbcClientConfig().apply {
         name = "DING"
         type = ClientType.CUSTODIAL
-        signingKeys = mutableSetOf("GALICE")
-        destinationAccounts = mutableSetOf("GWALLET1", "GWALLET2")
+        signingKeys = mutableSetOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
+        destinationAccounts =
+          mutableSetOf(
+            "GBWO3GPFE2QAQS45RB3M4ARB73DHWGPHTCKQPMJOTWWEBPWZTGQ4OM4C",
+            "GBEZ7LGFD5VJKWA4ZEO7CJF7LGP6RZCPU266SMKDSNHYGZGW3TLNERVE"
+          )
       }
     every { repo.findById("DING") } returns Optional.of(existing)
     val saved = slot<JdbcClientConfig>()
     every { repo.save(capture(saved)) } answers { saved.captured }
 
-    service.removeDestinationAccount("DING", "GWALLET1")
+    service.removeDestinationAccount(
+      "DING",
+      "GBWO3GPFE2QAQS45RB3M4ARB73DHWGPHTCKQPMJOTWWEBPWZTGQ4OM4C"
+    )
 
-    assertEquals(setOf("GWALLET2"), saved.captured.destinationAccounts)
+    assertEquals(
+      setOf("GBEZ7LGFD5VJKWA4ZEO7CJF7LGP6RZCPU266SMKDSNHYGZGW3TLNERVE"),
+      saved.captured.destinationAccounts
+    )
   }
 
   @Test
@@ -421,13 +549,17 @@ class ClientConfigServiceTest {
       JdbcClientConfig().apply {
         name = "DING"
         type = ClientType.CUSTODIAL
-        signingKeys = mutableSetOf("GALICE")
-        destinationAccounts = mutableSetOf("GWALLET1")
+        signingKeys = mutableSetOf("GDT5Z3R4YY6ROC5AJHNCY5KKMPVFLXG5RU3PDHCVFS2Z4DKAMO3GBSIL")
+        destinationAccounts =
+          mutableSetOf("GBWO3GPFE2QAQS45RB3M4ARB73DHWGPHTCKQPMJOTWWEBPWZTGQ4OM4C")
       }
     every { repo.findById("DING") } returns Optional.of(existing)
 
     assertThrows(NotFoundException::class.java) {
-      service.removeDestinationAccount("DING", "GNEVERADDED")
+      service.removeDestinationAccount(
+        "DING",
+        "GC7RK5Y7YB3COC2ONJSDLOMCPVNOFTVIHRVCJ4EMGTIVXRPGFRXCEP4Y"
+      )
     }
   }
 }

@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import java.time.Instant
 import java.util.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.skyscreamer.jsonassert.JSONAssert
@@ -112,58 +113,157 @@ class TransactionMapperTest {
       }
 
     val actual = GsonUtils.getInstance().toJson(TransactionMapper.toGetTransactionResponse(sepTxn))
-    val expected =
-      GsonUtils.getInstance()
-        .toJson(
-          PlatformTransactionData.builder()
-            .id(sepTxn.id)
-            .sep(PlatformTransactionData.Sep.SEP_31)
-            .status(SepTransactionStatus.COMPLETED)
-            .kind(PlatformTransactionData.Kind.RECEIVE)
-            .amountExpected(Amount("100.0", "USDC"))
-            .amountIn(Amount("100.0", "USDC"))
-            .amountOut(Amount("100.0", "USD"))
-            .feeDetails(FeeDetails("10.0", "USD"))
-            .quoteId(sepTxn.quoteId)
-            .startedAt(sepTxn.startedAt)
-            .updatedAt(sepTxn.updatedAt)
-            .completedAt(sepTxn.completedAt)
-            .userActionRequiredBy(sepTxn.userActionRequiredBy)
-            .transferReceivedAt(sepTxn.transferReceivedAt)
-            .message(sepTxn.requiredInfoMessage)
-            .refunds(
-              Refunds.builder()
-                .amountRefunded(Amount("90.0", "USDC"))
-                .amountFee(Amount("10.0", "USDC"))
-                .payments(
-                  arrayOf(
-                    RefundPayment.builder()
-                      .id("id")
-                      .idType(RefundPayment.IdType.STELLAR)
-                      .amount(Amount("90.0", "USDC"))
-                      .fee(Amount("10.0", "USDC"))
-                      .build()
-                  )
-                )
-                .build()
+    val expectedPlatformTxn =
+      PlatformTransactionData.builder()
+        .id(sepTxn.id)
+        .sep(PlatformTransactionData.Sep.SEP_31)
+        .status(SepTransactionStatus.COMPLETED)
+        .kind(PlatformTransactionData.Kind.RECEIVE)
+        .amountExpected(Amount("100.0", "USDC"))
+        .amountIn(Amount("100.0", "USDC"))
+        .amountOut(Amount("100.0", "USD"))
+        .feeDetails(FeeDetails("10.0", "USD"))
+        .quoteId(sepTxn.quoteId)
+        .startedAt(sepTxn.startedAt)
+        .updatedAt(sepTxn.updatedAt)
+        .completedAt(sepTxn.completedAt)
+        .userActionRequiredBy(sepTxn.userActionRequiredBy)
+        .transferReceivedAt(sepTxn.transferReceivedAt)
+        .message(sepTxn.requiredInfoMessage)
+        .requiredInfoUpdates(listOf("field"))
+        .refunds(
+          Refunds.builder()
+            .amountRefunded(Amount("90.0", "USDC"))
+            .amountFee(Amount("10.0", "USDC"))
+            .payments(
+              arrayOf(
+                RefundPayment.builder()
+                  .id("id")
+                  .idType(RefundPayment.IdType.STELLAR)
+                  .amount(Amount("90.0", "USDC"))
+                  .fee(Amount("10.0", "USDC"))
+                  .build()
+              )
             )
-            .stellarTransactions(listOf(stellarTransaction))
-            .sourceAccount(sepTxn.fromAccount)
-            .destinationAccount(sepTxn.toAccount)
-            .externalTransactionId(sepTxn.externalTransactionId)
-            .memo(sepTxn.stellarMemo)
-            .memoType(sepTxn.stellarMemoType)
-            .refundMemo(sepTxn.stellarMemo)
-            .refundMemoType(sepTxn.stellarMemoType)
-            .clientDomain(sepTxn.clientDomain)
-            .clientName(sepTxn.clientName)
-            .customers(sepTxn.customers)
-            .creator(sepTxn.creator)
-            .instructions(null)
             .build()
         )
+        .stellarTransactions(listOf(stellarTransaction))
+        .sourceAccount(sepTxn.fromAccount)
+        .destinationAccount(sepTxn.toAccount)
+        .externalTransactionId(sepTxn.externalTransactionId)
+        .memo(sepTxn.stellarMemo)
+        .memoType(sepTxn.stellarMemoType)
+        .refundMemo(sepTxn.stellarMemo)
+        .refundMemoType(sepTxn.stellarMemoType)
+        .clientDomain(sepTxn.clientDomain)
+        .clientName(sepTxn.clientName)
+        .customers(sepTxn.customers)
+        .creator(sepTxn.creator)
+        .instructions(null)
+        .build()
+
+    val expectedJsonObject = gson.fromJson(gson.toJson(expectedPlatformTxn), JsonObject::class.java)
+    // PlatformTransactionData's builder has no slot for the SEP-31-only `fields` and
+    // `requiredInfoUpdatesFields` properties (both live on GetTransactionResponse instead), so add
+    // them directly rather than switching this whole builder chain to GetTransactionResponse.
+    expectedJsonObject.add("fields", gson.toJsonTree(sepTxn.fields))
+    expectedJsonObject.add(
+      "requiredInfoUpdatesFields",
+      gson.toJsonTree(sepTxn.requiredInfoUpdates.transaction),
+    )
+    val expected = gson.toJson(expectedJsonObject)
 
     JSONAssert.assertEquals(expected, actual, true)
+  }
+
+  @Test
+  fun `test SEP-31 transaction mapping uses refund memo override when specified`() {
+    val sepTxn =
+      PojoSep31Transaction().apply {
+        id = UUID.randomUUID().toString()
+        status = "completed"
+        amountIn = "100.0"
+        amountInAsset = "USDC"
+        amountOut = "100.0"
+        amountOutAsset = "USD"
+        feeDetails = FeeDetails("10.0", "USD")
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        stellarMemo = "originalMemo"
+        stellarMemoType = "text"
+        refundMemo = "overrideMemo"
+        refundMemoType = "id"
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        amountExpected = "100.0"
+        receiverId = "receiverId"
+        senderId = "senderId"
+      }
+
+    val actual = TransactionMapper.toGetTransactionResponse(sepTxn)
+
+    assertEquals("overrideMemo", actual.refundMemo)
+    assertEquals("id", actual.refundMemoType)
+  }
+
+  @Test
+  fun `test SEP-31 transaction mapping falls back to the original memo when the refund memo override is incomplete`() {
+    val sepTxn =
+      PojoSep31Transaction().apply {
+        id = UUID.randomUUID().toString()
+        status = "completed"
+        amountIn = "100.0"
+        amountInAsset = "USDC"
+        amountOut = "100.0"
+        amountOutAsset = "USD"
+        feeDetails = FeeDetails("10.0", "USD")
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        stellarMemo = "originalMemo"
+        stellarMemoType = "text"
+        refundMemo = "overrideMemo"
+        refundMemoType = null
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        amountExpected = "100.0"
+        receiverId = "receiverId"
+        senderId = "senderId"
+      }
+
+    val actual = TransactionMapper.toGetTransactionResponse(sepTxn)
+
+    assertEquals("originalMemo", actual.refundMemo)
+    assertEquals("text", actual.refundMemoType)
+  }
+
+  @Test
+  fun `test SEP-31 transaction mapping treats an empty refund memo as absent`() {
+    val sepTxn =
+      PojoSep31Transaction().apply {
+        id = UUID.randomUUID().toString()
+        status = "completed"
+        amountIn = "100.0"
+        amountInAsset = "USDC"
+        amountOut = "100.0"
+        amountOutAsset = "USD"
+        feeDetails = FeeDetails("10.0", "USD")
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        stellarMemo = "originalMemo"
+        stellarMemoType = "text"
+        refundMemo = ""
+        refundMemoType = ""
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        amountExpected = "100.0"
+        receiverId = "receiverId"
+        senderId = "senderId"
+      }
+
+    val actual = TransactionMapper.toGetTransactionResponse(sepTxn)
+
+    assertEquals("originalMemo", actual.refundMemo)
+    assertEquals("text", actual.refundMemoType)
   }
 
   @Test

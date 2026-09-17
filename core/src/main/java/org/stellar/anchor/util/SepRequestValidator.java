@@ -235,8 +235,9 @@ public class SepRequestValidator {
    * Validates that the resolved destination account is permitted by the operator-configured
    * destination policy (CustodialClient.destinationAccounts / allowAnyDestination), then verifies
    * the address is syntactically valid. The caller is responsible for resolving the account to the
-   * SEP-10 subject when the request omits it (i.e. pass token.getAccount() when the request field
-   * is empty).
+   * SEP-10 subject when the request omits it -- pass token.getOwnerAccount() (not
+   * token.getAccount(), which always demuxes) when the request field is empty, so a muxed subject's
+   * own sub-account isn't silently lost.
    *
    * @param token the SEP-10 JWT of the authenticated client
    * @param destinationAccount the already-resolved destination account
