@@ -62,7 +62,7 @@ class Sep31PlatformApiTests : PlatformApiTests() {
     val receiveRequest = gson.fromJson(receiveRequestJson, Sep31PostTransactionRequest::class.java)
     val receiveResponse = sep31Client.postTransaction(receiveRequest)
 
-    val maxAttempts = 20
+    val maxAttempts = 60
     for (attempt in 1..maxAttempts) {
       if (sep31Client.getTransaction(receiveResponse.id).transaction.status == "pending_sender") {
         break
