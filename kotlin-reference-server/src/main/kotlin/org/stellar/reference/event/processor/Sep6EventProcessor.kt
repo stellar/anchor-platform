@@ -236,18 +236,37 @@ class Sep6EventProcessor(
 
   override suspend fun onCustomerUpdated(event: SendEventRequest) {
     val updatedCustomerId = event.payload.customer?.id ?: return
-    platformClient
-      .getTransactions(
-        GetTransactionsRequest.builder()
-          .sep(TransactionsSeps.SEP_6)
-          .orderBy(TransactionsOrderBy.CREATED_AT)
-          .order(TransactionsOrder.ASC)
-          .statuses(listOf(PENDING_CUSTOMER_INFO_UPDATE))
-          .build()
-      )
-      .records
+    fetchAllPendingCustomerInfoUpdateTransactions()
       .filter { isCustomerForTransaction(it.id, updatedCustomerId) }
       .forEach { requestCustomerFunds(it) }
+  }
+
+  // The Platform API paginates /transactions (20 records per page by default), so a single
+  // unpaginated call can silently miss pending transactions past the first page.
+  private suspend fun fetchAllPendingCustomerInfoUpdateTransactions():
+    List<GetTransactionResponse> {
+    val pageSize = 20
+    val allRecords = mutableListOf<GetTransactionResponse>()
+    var pageNumber = 0
+    while (true) {
+      val page =
+        platformClient
+          .getTransactions(
+            GetTransactionsRequest.builder()
+              .sep(TransactionsSeps.SEP_6)
+              .orderBy(TransactionsOrderBy.CREATED_AT)
+              .order(TransactionsOrder.ASC)
+              .statuses(listOf(PENDING_CUSTOMER_INFO_UPDATE))
+              .pageSize(pageSize)
+              .pageNumber(pageNumber)
+              .build()
+          )
+          .records
+      allRecords.addAll(page)
+      if (page.size < pageSize) break
+      pageNumber++
+    }
+    return allRecords
   }
 
   // SEP-6 transactions carry the customer's account/memo, not its id, so the id has to be
