@@ -246,8 +246,17 @@ class Sep6EventProcessor(
           .build()
       )
       .records
-      .filter { it.customers?.sender?.id == updatedCustomerId }
+      .filter { isCustomerForTransaction(it.id, updatedCustomerId) }
       .forEach { requestCustomerFunds(it) }
+  }
+
+  // SEP-6 transactions carry the customer's account/memo, not its id, so the id has to be
+  // resolved through CustomerService before it can be compared to the event's customer id.
+  private fun isCustomerForTransaction(transactionId: String, customerId: String): Boolean {
+    val customer = runBlocking {
+      customerService.getCustomer(GetCustomerRequest.builder().transactionId(transactionId).build())
+    }
+    return customer.id == customerId
   }
 
   private fun requestCustomerFunds(transaction: GetTransactionResponse) {
