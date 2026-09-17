@@ -15,11 +15,11 @@ class EventConsumer(
 
   suspend fun start(): EventConsumer {
     while (!stopped) {
-      while (!channel.isEmpty) {
-        val event = channel.receive()
-        log.info { "Processing event ${event.id} of type ${event.type}" }
-        processor.handleEvent(event)
-      }
+      // channel.receive() suspends until an event is available, instead of busy-polling
+      // channel.isEmpty in a tight loop and pinning a whole CPU core.
+      val event = channel.receive()
+      log.info { "Processing event ${event.id} of type ${event.type}" }
+      processor.handleEvent(event)
     }
     return this
   }
