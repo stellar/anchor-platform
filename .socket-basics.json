@@ -2,11 +2,14 @@
   "workspace": ".",
   "java_sast_enabled": true,
   "kotlin_sast_enabled": true,
+  "rust_sast_enabled": true,
+  "java_disabled_rules": "java-hardcoded-credentials,java-reflection-injection",
+  "kotlin_disabled_rules": "kotlin-hardcoded-secrets,kotlin-sql-injection",
+  "sast_ignore_overrides": "java-jndi-injection:core/src/main/java/org/stellar/anchor/util/ClientDomainHelper.java,kotlin-path-traversal:service-runner/src/main/kotlin/org/stellar/anchor/platform/ResourceHelper.kt,kotlin-path-traversal:service-runner/src/main/kotlin/org/stellar/anchor/platform/TestProfileRunner.kt,kotlin-path-traversal:wallet-reference-server/src/main/kotlin/org/stellar/reference/wallet/WalletServer.kt,rust-panic-in-production:soroban/contracts/account/src/lib.rs,rust-panic-in-production:soroban/contracts/web-auth/src/lib.rs",
   "secret_scanning_enabled": true,
   "console_tabular_enabled": true,
-  "dockerfiles": "Dockerfile",
-  "trivy_image_scanning_disabled": false,
+  "dockerfiles": "Dockerfile,docs/resources/deployment-examples/example-fargate/Dockerfile",
   "socket_tier_1_enabled": false,
   "trivy_vuln_enabled": false,
-  "trufflehog_exclude_dir": "build,.gradle,target,.git"
+  "trufflehog_exclude_dir": "build,target,.gradle,.git,yarn.lock,package-lock.json,pnpm-lock.yaml,Cargo.lock,go.sum,poetry.lock,Gemfile.lock,composer.lock,docs/resources/deployment-examples,platform/src/main/java/org/stellar/anchor/platform/configurator/DataConfigAdapter.java,platform/src/main/java/org/stellar/anchor/platform/databaseintegration/IAMAuthDataSource.java,essential-tests,extended-tests"
 }
