@@ -1,39 +1,18 @@
 # Socket Basics security scan for anchor-platform.
 # Upstream: https://github.com/SocketDev/socket-basics
-# Scanner settings live in .socket-basics.json at the repo root.
+# Scanner settings live in .socket-basics.json; SAST path exclusions live in
+# .semgrepignore.
 #
-# This is SEPARATE from socket-scan.yml. The two do different jobs:
-#   socket-scan.yml   application dependency CVEs + Tier 1 reachability
-#   socket-basics.yml SAST, leaked secrets, and Trivy container scanning
-#
-# WHY THIS RUNS THE CONTAINER DIRECTLY INSTEAD OF `uses: SocketDev/socket-basics`
-# ------------------------------------------------------------------------------
-# The published action's action.yml declares only `using`, `image` and `env` --
-# no `args` and no `entrypoint` -- so a workflow cannot pass CLI flags or a
-# config file through it. Everything given via `with:` arrives as an INPUT_*
-# environment variable, and socket-basics ranks its config sources:
-#
-#   1. CLI options                      (highest)
-#   2. JSON config OR dashboard config
-#   3. environment variables            (lowest)  <- where `with:` inputs land
-#
-# So with an API key present, the Socket dashboard config outranked every input
-# we set. Observed 2026-09-09 on another repo: the dashboard's
-# all_languages_enabled=True overrode our single-language setting and OpenGrep
-# ran all 13 rule files, and the dashboard's jira_url auto-enabled the Jira
-# notifier, which filed a ticket.
-#
-# Passing --config avoids both. socket-basics loads the dashboard config only
-# when no JSON config is supplied, so .socket-basics.json is authoritative and
-# no Jira notifier gets configured. The API key is still passed, so results are
-# still submitted to the Socket dashboard.
-#
-# Trigger: manual only while we evaluate the tool.
+# This workflow does SAST through OpenGrep, secret scanning through TruffleHog,
+# Dockerfile misconfiguration scanning through Trivy, and submits results to
+# Socket.dev
 
 name: Socket Basics security scan
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "3 13 * * 6"
 
 permissions:
   contents: read
@@ -49,14 +28,29 @@ jobs:
           SOCKET_SECURITY_API_TOKEN: ${{ secrets.SOCKET_SECURITY_API_TOKEN }}
           SOCKET_ORG: stellar
         run: |
+          set +e
           docker run --rm \
             -v "$PWD:/github/workspace" \
             -w /github/workspace \
-            -v /var/run/docker.sock:/var/run/docker.sock \
             -e SOCKET_SECURITY_API_TOKEN \
             -e SOCKET_ORG \
             -e GITHUB_REPOSITORY \
             -e GITHUB_REF_NAME \
             -e GITHUB_SHA \
-            ghcr.io/socketdev/socket-basics:3.1.0 \
-            --config .socket-basics.json
+            ghcr.io/socketdev/socket-basics@sha256:d463bae84f21d0240d5e197acb81e95144a966a20ab7cd05cca3a70e1796a4bb \
+            --config .socket-basics.json 2>&1 | tee /tmp/socket-basics.log
+          rc=${PIPESTATUS[0]}
+
+          # socket-basics exits non-zero merely BECAUSE high/critical findings
+          # exist, so the exit code is not a health signal. "Scan completed!" is.
+          # Findings raise a warning annotation; only a broken scan fails the job.
+          if grep -q "Scan completed!" /tmp/socket-basics.log; then
+            hc=$(grep -oE "Found [0-9]+ high/critical" /tmp/socket-basics.log \
+                 | grep -oE "[0-9]+" | head -1)
+            if [ -n "$hc" ] && [ "$hc" -gt 0 ]; then
+              echo "::warning::Socket Basics found $hc high/critical finding(s)"
+            fi
+            exit 0
+          fi
+          echo "::error::Socket Basics did not complete (docker exit $rc)"
+          exit "${rc:-1}"
