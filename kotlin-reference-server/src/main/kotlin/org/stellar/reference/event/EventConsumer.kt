@@ -11,20 +11,20 @@ class EventConsumer(
   private val channel: Channel<SendEventRequest>,
   private val processor: AnchorEventProcessor,
 ) {
-  private var stopped = false
-
   suspend fun start(): EventConsumer {
-    while (!stopped) {
-      // channel.receive() suspends until an event is available, instead of busy-polling
-      // channel.isEmpty in a tight loop and pinning a whole CPU core.
-      val event = channel.receive()
+    while (true) {
+      // receiveCatching() suspends until an event is available or the channel is closed,
+      // instead of busy-polling channel.isEmpty in a tight loop and pinning a whole CPU core.
+      val event = channel.receiveCatching().getOrNull() ?: break
       log.info { "Processing event ${event.id} of type ${event.type}" }
       processor.handleEvent(event)
     }
     return this
   }
 
+  // Closing the channel (rather than flipping a flag) wakes up a coroutine suspended in
+  // receiveCatching() immediately, so shutdown doesn't wait for the next event to arrive.
   fun stop() {
-    stopped = true
+    channel.close()
   }
 }
