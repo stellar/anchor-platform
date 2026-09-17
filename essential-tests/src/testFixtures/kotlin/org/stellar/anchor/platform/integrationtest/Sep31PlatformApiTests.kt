@@ -69,7 +69,7 @@ class Sep31PlatformApiTests : PlatformApiTests() {
       }
       if (attempt == maxAttempts) {
         throw IllegalStateException(
-          "Transaction not in pending_sender status after $maxAttempts seconds"
+          "Transaction not in pending_sender status after $maxAttempts attempts"
         )
       }
       Thread.sleep(1000L)
