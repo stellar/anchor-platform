@@ -4,6 +4,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.time.Instant
+import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.jupiter.api.Assertions
@@ -14,6 +15,7 @@ import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.SepNotFoundException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.client.Sep38Client
@@ -717,6 +719,35 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     ) {
       "Expected a missing-identifier error but got: ${ex.message}"
     }
+  }
+
+  @Test
+  fun `test sep6 GET transaction returns 404 for an unknown id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep6Client.getTransaction(mapOf("id" to UUID.randomUUID().toString()))
+      }
+    Assertions.assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep6 GET transaction returns 404 for an unknown external_transaction_id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep6Client.getTransaction(
+          mapOf("external_transaction_id" to "unknown-${UUID.randomUUID()}")
+        )
+      }
+    Assertions.assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep6 GET transaction returns 404 for an unknown stellar_transaction_id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep6Client.getTransaction(mapOf("stellar_transaction_id" to "unknown-${UUID.randomUUID()}"))
+      }
+    Assertions.assertEquals("transaction not found", ex.message)
   }
 
   @Test
