@@ -248,6 +248,7 @@ class Sep6EventProcessor(
     val pageSize = 20
     val allRecords = mutableListOf<GetTransactionResponse>()
     var pageNumber = 0
+    var previousPageIds: List<String>? = null
     while (true) {
       val page =
         platformClient
@@ -262,8 +263,13 @@ class Sep6EventProcessor(
               .build()
           )
           .records
+      // The Platform API caps its internal offset, so past that cap every "next" page repeats
+      // the same records instead of advancing. Stop instead of looping forever.
+      val pageIds = page.map { it.id }
+      if (pageIds.isNotEmpty() && pageIds == previousPageIds) break
       allRecords.addAll(page)
       if (page.size < pageSize) break
+      previousPageIds = pageIds
       pageNumber++
     }
     return allRecords
