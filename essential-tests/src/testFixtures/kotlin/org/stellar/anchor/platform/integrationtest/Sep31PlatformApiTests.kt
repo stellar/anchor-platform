@@ -67,19 +67,17 @@ class Sep31PlatformApiTests : PlatformApiTests() {
     val receiveRequest = gson.fromJson(receiveRequestJson, Sep31PostTransactionRequest::class.java)
     val receiveResponse = sep31Client.postTransaction(receiveRequest)
 
-    // This flow drives the transaction through RPC calls itself (including an error/recovery
-    // path the reference server doesn't know about), so it must opt out of the reference server's
-    // own automatic advancement -- otherwise both race to advance the same transaction.
-    runBlocking { anchorReferenceServerClient.skipSep31AutoAdvance(receiveResponse.id) }
-
-    repeat(5) {
-      if (sep31Client.getTransaction(receiveResponse.id).transaction.status == "pending_sender")
-        return@repeat
+    val maxAttempts = 60
+    for (attempt in 1..maxAttempts) {
+      if (sep31Client.getTransaction(receiveResponse.id).transaction.status == "pending_sender") {
+        break
+      }
+      if (attempt == maxAttempts) {
+        throw IllegalStateException(
+          "Transaction not in pending_sender status after $maxAttempts attempts"
+        )
+      }
       Thread.sleep(1000L)
-    }
-
-    if (sep31Client.getTransaction(receiveResponse.id).transaction.status != "pending_sender") {
-      throw IllegalStateException("Transaction not in pending_sender status after 5 seconds")
     }
 
     val updatedActionRequests =

@@ -104,17 +104,45 @@ class Sep31EventProcessor(
   }
 
   override suspend fun onCustomerUpdated(event: SendEventRequest) {
-    platformClient
-      .getTransactions(
-        GetTransactionsRequest.builder()
-          .sep(TransactionsSeps.SEP_31)
-          .orderBy(TransactionsOrderBy.CREATED_AT)
-          .order(TransactionsOrder.ASC)
-          .statuses(listOf(PENDING_CUSTOMER_INFO_UPDATE))
-          .build()
-      )
-      .records
+    val updatedCustomerId = event.payload.customer?.id ?: return
+    fetchAllPendingCustomerInfoUpdateTransactions(TransactionsSeps.SEP_31)
+      .filter { it.customers?.receiver?.id == updatedCustomerId }
       .forEach { notifyCustomerUpdated(it) }
+  }
+
+  // The Platform API paginates /transactions (20 records per page by default), so a single
+  // unpaginated call can silently miss pending transactions past the first page.
+  private suspend fun fetchAllPendingCustomerInfoUpdateTransactions(
+    sep: TransactionsSeps
+  ): List<GetTransactionResponse> {
+    val pageSize = 20
+    val allRecords = mutableListOf<GetTransactionResponse>()
+    var pageNumber = 0
+    var previousPageIds: List<String>? = null
+    while (true) {
+      val page =
+        platformClient
+          .getTransactions(
+            GetTransactionsRequest.builder()
+              .sep(sep)
+              .orderBy(TransactionsOrderBy.CREATED_AT)
+              .order(TransactionsOrder.ASC)
+              .statuses(listOf(PENDING_CUSTOMER_INFO_UPDATE))
+              .pageSize(pageSize)
+              .pageNumber(pageNumber)
+              .build()
+          )
+          .records
+      // The Platform API caps its internal offset, so past that cap every "next" page repeats
+      // the same records instead of advancing. Stop instead of looping forever.
+      val pageIds = page.map { it.id }
+      if (pageIds.isNotEmpty() && pageIds == previousPageIds) break
+      allRecords.addAll(page)
+      if (page.size < pageSize) break
+      previousPageIds = pageIds
+      pageNumber++
+    }
+    return allRecords
   }
 
   private fun notifyCustomerUpdated(transaction: GetTransactionResponse) {
