@@ -708,6 +708,18 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 GET transaction rejects request naming no transaction`() {
+    val ex = assertThrows<SepValidationException> { sep6Client.getTransaction(mapOf()) }
+    assert(
+      ex.message!!.contains(
+        "One of id, stellar_transaction_id, or external_transaction_id is required"
+      )
+    ) {
+      "Expected a missing-identifier error but got: ${ex.message}"
+    }
+  }
+
+  @Test
   fun `test sep6 deposit-exchange without quote`() {
     val request =
       mapOf(
