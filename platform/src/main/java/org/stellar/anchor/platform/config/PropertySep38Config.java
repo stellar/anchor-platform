@@ -16,6 +16,9 @@ public class PropertySep38Config implements Sep38Config, Validator {
   @SerializedName("auth_enforced")
   boolean authEnforced;
 
+  @SerializedName("max_quote_expiration_seconds")
+  Integer maxQuoteExpirationSeconds = 604800; // 7 days
+
   @Override
   public boolean supports(Class<?> clazz) {
     return Sep38Config.class.isAssignableFrom(clazz);
@@ -27,6 +30,14 @@ public class PropertySep38Config implements Sep38Config, Validator {
 
     if (config.isEnabled() && config.isAuthEnforced() != config.isSep10Enforced()) {
       errors.reject("sep38-auth-enforced-mismatch", "Mismatched auth_enforced and sep10_enforced");
+    }
+
+    if (config.getMaxQuoteExpirationSeconds() == null
+        || config.getMaxQuoteExpirationSeconds() <= 0) {
+      errors.rejectValue(
+          "maxQuoteExpirationSeconds",
+          "sep38-max-quote-expiration-seconds-invalid",
+          "The sep38.max_quote_expiration_seconds must be greater than 0");
     }
   }
 }
