@@ -1740,6 +1740,39 @@ class Sep6ServiceTest {
   }
 
   @Test
+  fun `test find transactions with omitted account queries store with token account`() {
+    val depositTxn = createDepositTxn(TEST_ACCOUNT)
+    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any()) } returns listOf(depositTxn)
+    val request =
+      GetTransactionsRequest.builder().assetCode(TEST_ASSET).limit(10).lang("en-US").build()
+
+    val response = sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+
+    verify(exactly = 1) { txnStore.findTransactions(TEST_ACCOUNT, null, request) }
+    assertEquals(1, response.transactions.size)
+  }
+
+  @Test
+  fun `test find transactions with blank account behaves like omitted account`() {
+    val depositTxn = createDepositTxn(TEST_ACCOUNT)
+    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any()) } returns listOf(depositTxn)
+    val request =
+      GetTransactionsRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account("")
+        .limit(10)
+        .lang("en-US")
+        .build()
+
+    val response = assertDoesNotThrow {
+      sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+    }
+
+    verify(exactly = 1) { txnStore.findTransactions(TEST_ACCOUNT, null, request) }
+    assertEquals(1, response.transactions.size)
+  }
+
+  @Test
   fun `test find transactions with unsupported asset`() {
     val request =
       GetTransactionsRequest.builder()
