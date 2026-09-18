@@ -37,6 +37,8 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   private val sep6Client = Sep6Client(toml.getString("TRANSFER_SERVER"), token.token)
   private val sep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
+  private val platformApiClient =
+    PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
 
   private fun authenticateWithMemo(keyPair: SigningKeyPair, memoId: ULong): String {
     return runBlocking { anchor.auth().authenticate(keyPair, memoId = memoId) }.token
@@ -774,12 +776,12 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep6 GET transaction hides a transaction belonging to a different memo on the same account`() {
     val sharedKeyPair = SigningKeyPair(KeyPair.random())
-    val memoAJwt = authenticateWithMemo(sharedKeyPair, 111uL)
+    val memoAJwt = authenticateWithMemo(sharedKeyPair, 111UL)
     val memoAClient = Sep6Client(toml.getString("TRANSFER_SERVER"), memoAJwt)
     val depositId =
       memoAClient.deposit(mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")).id!!
 
-    val memoBJwt = authenticateWithMemo(sharedKeyPair, 222uL)
+    val memoBJwt = authenticateWithMemo(sharedKeyPair, 222UL)
     val memoBClient = Sep6Client(toml.getString("TRANSFER_SERVER"), memoBJwt)
 
     val ex =
@@ -795,8 +797,6 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     val depositId =
       client.deposit(mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")).id!!
 
-    val platformApiClient =
-      PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
     val externalTransactionId = "sep6-404s-external-${UUID.randomUUID()}"
     val rpcActionRequestsJson =
       SEP6_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS.replace("%TX_ID%", depositId)
