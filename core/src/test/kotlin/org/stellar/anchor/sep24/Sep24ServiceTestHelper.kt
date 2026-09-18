@@ -9,13 +9,16 @@ import org.stellar.anchor.TestConstants.Companion.TEST_OFFCHAIN_ASSET
 import org.stellar.anchor.TestConstants.Companion.TEST_QUOTE_ID
 import org.stellar.anchor.api.shared.FeeDescription
 
-fun createTestTransactionRequest(quoteID: String? = null): MutableMap<String, String> {
+fun createTestTransactionRequest(
+  quoteID: String? = null,
+  account: String = TEST_ACCOUNT,
+): MutableMap<String, String> {
   val request =
     mutableMapOf(
       "lang" to "en",
       "asset_code" to TEST_ASSET,
       "asset_issuer" to TEST_ASSET_ISSUER_ACCOUNT_ID,
-      "account" to TEST_ACCOUNT,
+      "account" to account,
       "amount" to TEST_AMOUNT,
       "source_asset" to TEST_OFFCHAIN_ASSET,
       "destination_asset" to TEST_OFFCHAIN_ASSET,

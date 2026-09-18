@@ -10,10 +10,56 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.TestHelper
+import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.InvalidConfigException
 import org.stellar.sdk.xdr.MemoType
 
 internal class SepHelperTest {
+  @Test
+  fun `test webAuthTokenIdentity for a plain account with no memo`() {
+    val token = TestHelper.createWebAuthJwt(TestHelper.TEST_ACCOUNT)
+    val identity = SepHelper.webAuthTokenIdentity(token)
+    assertEquals(TestHelper.TEST_ACCOUNT, identity.account())
+    assertEquals(null, identity.memo())
+    assertEquals(null, identity.memoType())
+  }
+
+  @Test
+  fun `test webAuthTokenIdentity for an account with a memo`() {
+    val token = TestHelper.createWebAuthJwt(TestHelper.TEST_ACCOUNT, TestHelper.TEST_MEMO)
+    val identity = SepHelper.webAuthTokenIdentity(token)
+    assertEquals(TestHelper.TEST_ACCOUNT, identity.account())
+    assertEquals(TestHelper.TEST_MEMO, identity.memo())
+    assertEquals("id", identity.memoType())
+  }
+
+  @Test
+  fun `test webAuthTokenIdentity for a muxed account is the muxed address alone, with no separate memo`() {
+    val token = TestHelper.createMuxedWebAuthJwt(TestHelper.TEST_ACCOUNT, muxedId = 42L)
+    val identity = SepHelper.webAuthTokenIdentity(token)
+    assertEquals(token.muxedAccount, identity.account())
+    assert(identity.account().startsWith("M"))
+    assertEquals(null, identity.memo())
+    assertEquals(null, identity.memoType())
+  }
+
+  @Test
+  fun `test webAuthTokenIdentity distinguishes two different accounts`() {
+    val victim =
+      SepHelper.webAuthTokenIdentity(TestHelper.createWebAuthJwt(TestHelper.TEST_ACCOUNT))
+    val attacker =
+      SepHelper.webAuthTokenIdentity(
+        TestHelper.createWebAuthJwt("GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO")
+      )
+    assert(victim != attacker)
+  }
+
+  @Test
+  fun `test webAuthTokenIdentity rejects a null token`() {
+    assertThrows<BadRequestException> { SepHelper.webAuthTokenIdentity(null) }
+  }
+
   @Test
   fun `test memoType conversion`() {
     assert(SepHelper.memoTypeString(MemoType.MEMO_ID).equals("id"))
