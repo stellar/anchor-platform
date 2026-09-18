@@ -3,6 +3,7 @@ package org.stellar.anchor.platform.integrationtest
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
@@ -17,7 +18,10 @@ import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepNotFoundException
 import org.stellar.anchor.api.exception.SepValidationException
+import org.stellar.anchor.api.rpc.RpcRequest
 import org.stellar.anchor.api.sep.sep38.Sep38Context
+import org.stellar.anchor.apiclient.PlatformApiClient
+import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
 import org.stellar.anchor.platform.IntegrationTestBase
@@ -784,6 +788,29 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 GET transaction resolves a transaction by external_transaction_id`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val depositId =
+      client.deposit(mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")).id!!
+
+    val platformApiClient =
+      PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
+    val externalTransactionId = "sep6-404s-external-${UUID.randomUUID()}"
+    val rpcActionRequestsJson =
+      SEP6_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS.replace("%TX_ID%", depositId)
+        .replace("%EXTERNAL_TRANSACTION_ID%", externalTransactionId)
+    val rpcActionRequestsType = object : TypeToken<List<RpcRequest>>() {}.type
+    val rpcActionRequests: List<RpcRequest> =
+      gson.fromJson(rpcActionRequestsJson, rpcActionRequestsType)
+    platformApiClient.sendRpcRequest(rpcActionRequests)
+
+    val found = client.getTransaction(mapOf("external_transaction_id" to externalTransactionId))
+    Assertions.assertEquals(depositId, found.transaction.id)
+  }
+
+  @Test
   fun `test sep6 deposit-exchange without quote`() {
     val request =
       mapOf(
@@ -1119,6 +1146,40 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   companion object {
+
+    private val SEP6_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS =
+      """
+      [
+        {
+          "id": "1",
+          "method": "request_offchain_funds",
+          "jsonrpc": "2.0",
+          "params": {
+            "transaction_id": "%TX_ID%",
+            "message": "test message 1",
+            "amount_in": { "amount": "1", "asset": "iso4217:USD" },
+            "amount_out": {
+              "amount": "1",
+              "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+            },
+            "fee_details": { "total": "0", "asset": "iso4217:USD" },
+            "amount_expected": { "amount": "1" }
+          }
+        },
+        {
+          "id": "2",
+          "method": "notify_offchain_funds_received",
+          "jsonrpc": "2.0",
+          "params": {
+            "transaction_id": "%TX_ID%",
+            "message": "test message 2",
+            "external_transaction_id": "%EXTERNAL_TRANSACTION_ID%",
+            "amount_in": { "amount": "1" }
+          }
+        }
+      ]
+      """
+        .trimIndent()
 
     private val expectedSep6Info =
       """
