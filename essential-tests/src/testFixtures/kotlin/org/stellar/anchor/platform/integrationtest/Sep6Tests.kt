@@ -751,6 +751,39 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 GET transaction hides a transaction belonging to a different account`() {
+    val ownerKeyPair = SigningKeyPair(KeyPair.random())
+    val ownerJwt = authenticateWithoutMemo(ownerKeyPair)
+    val ownerClient = Sep6Client(toml.getString("TRANSFER_SERVER"), ownerJwt)
+    val depositId =
+      ownerClient.deposit(mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")).id!!
+
+    val strangerKeyPair = SigningKeyPair(KeyPair.random())
+    val strangerJwt = authenticateWithoutMemo(strangerKeyPair)
+    val strangerClient = Sep6Client(toml.getString("TRANSFER_SERVER"), strangerJwt)
+
+    val ex =
+      assertThrows<SepNotFoundException> { strangerClient.getTransaction(mapOf("id" to depositId)) }
+    Assertions.assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep6 GET transaction hides a transaction belonging to a different memo on the same account`() {
+    val sharedKeyPair = SigningKeyPair(KeyPair.random())
+    val memoAJwt = authenticateWithMemo(sharedKeyPair, 111uL)
+    val memoAClient = Sep6Client(toml.getString("TRANSFER_SERVER"), memoAJwt)
+    val depositId =
+      memoAClient.deposit(mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")).id!!
+
+    val memoBJwt = authenticateWithMemo(sharedKeyPair, 222uL)
+    val memoBClient = Sep6Client(toml.getString("TRANSFER_SERVER"), memoBJwt)
+
+    val ex =
+      assertThrows<SepNotFoundException> { memoBClient.getTransaction(mapOf("id" to depositId)) }
+    Assertions.assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
   fun `test sep6 deposit-exchange without quote`() {
     val request =
       mapOf(
