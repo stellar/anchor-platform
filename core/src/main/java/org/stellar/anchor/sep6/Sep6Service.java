@@ -94,6 +94,25 @@ public class Sep6Service {
     return infoResponse;
   }
 
+  /**
+   * Builds the transaction memo for a deposit/deposit-exchange request. When the caller omits both
+   * `account` and `memo` -- falling back entirely to the JWT's own identity -- and the JWT carries
+   * a legacy `G...:memo` subject (accountMemo is only ever set for that form, never for a muxed
+   * subject, since a muxed M-address already carries its own sub-account identifier), default the
+   * memo to that accountMemo (type "id"). Otherwise the created deposit would be addressed to the
+   * shared base account with no memo distinguishing this JWT's specific sub-account.
+   */
+  private Memo resolveDepositMemo(
+      WebAuthJwt token, String requestAccount, String requestMemo, String requestMemoType)
+      throws AnchorException {
+    if (StringHelper.isEmpty(requestAccount)
+        && StringHelper.isEmpty(requestMemo)
+        && token.getAccountMemo() != null) {
+      return makeMemo(token.getAccountMemo(), "id");
+    }
+    return makeMemo(requestMemo, requestMemoType);
+  }
+
   public StartDepositResponse deposit(WebAuthJwt token, StartDepositRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
@@ -120,8 +139,11 @@ public class Sep6Service {
           asset.getSep6().getDeposit().getMinAmount(),
           asset.getSep6().getDeposit().getMaxAmount());
     }
+    // When omitted, the account established by the JWT is used -- getOwnerAccount() prefers the
+    // muxed (M...) address over the demuxed base account, matching webAuthAccount below, so a
+    // muxed JWT's sub-account destination isn't silently lost when the caller omits `account`.
     String destinationAccount =
-        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, destinationAccount);
 
     String id = generateSepTransactionId();
@@ -157,7 +179,8 @@ public class Sep6Service {
       }
     }
 
-    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
+    Memo memo =
+        resolveDepositMemo(token, request.getAccount(), request.getMemo(), request.getMemoType());
 
     if (memo != null) {
       debug("Set the transaction memo.", memo);
@@ -208,8 +231,9 @@ public class Sep6Service {
         fundingMethod, buyAsset.getCode(), buyAsset.getSep6().getDeposit().getMethods());
     requestValidator.validateAmount(
         request.getAmount(), sellAsset.getCode(), sellAsset.getSignificantDecimals(), null, null);
+    // See deposit() above for why getOwnerAccount() (not getAccount()) is the correct fallback.
     String destinationAccount =
-        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, destinationAccount);
 
     Amounts amounts;
@@ -241,7 +265,8 @@ public class Sep6Service {
               .build();
     }
 
-    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
+    Memo memo =
+        resolveDepositMemo(token, request.getAccount(), request.getMemo(), request.getMemoType());
     String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
@@ -326,8 +351,9 @@ public class Sep6Service {
           asset.getSep6().getWithdraw().getMinAmount(),
           asset.getSep6().getWithdraw().getMaxAmount());
     }
+    // See deposit() above for why getOwnerAccount() (not getAccount()) is the correct fallback.
     String sourceAccount =
-        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, sourceAccount);
 
     String id = generateSepTransactionId();
@@ -403,8 +429,9 @@ public class Sep6Service {
         sellAsset.getSignificantDecimals(),
         sellAsset.getSep6().getWithdraw().getMinAmount(),
         sellAsset.getSep6().getWithdraw().getMaxAmount());
+    // See deposit() above for why getOwnerAccount() (not getAccount()) is the correct fallback.
     String sourceAccount =
-        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, sourceAccount);
 
     String id = generateSepTransactionId();
@@ -491,7 +518,7 @@ public class Sep6Service {
       throw new SepValidationException("missing request");
     }
     String tokenAccount = Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
-    if (!request.getAccount().equals(tokenAccount)) {
+    if (!StringHelper.isEmpty(request.getAccount()) && !request.getAccount().equals(tokenAccount)) {
       throw new SepNotAuthorizedException("account does not match token");
     }
     if (assetService.getAsset(request.getAssetCode()) == null) {

@@ -47,7 +47,7 @@ public class Sep6Controller {
   public StartDepositResponse deposit(
       HttpServletRequest request,
       @RequestParam(value = "asset_code") String assetCode,
-      @RequestParam(value = "account") String account,
+      @RequestParam(value = "account", required = false) String account,
       @RequestParam(value = "memo_type", required = false) String memoType,
       @RequestParam(value = "memo", required = false) String memo,
       @RequestParam(value = "email_address", required = false) String emailAddress,
@@ -95,7 +95,7 @@ public class Sep6Controller {
       @RequestParam(value = "source_asset") String sourceAsset,
       @RequestParam(value = "quote_id", required = false) String quoteId,
       @RequestParam(value = "amount") String amount,
-      @RequestParam(value = "account") String account,
+      @RequestParam(value = "account", required = false) String account,
       @RequestParam(value = "memo_type", required = false) String memoType,
       @RequestParam(value = "memo", required = false) String memo,
       @RequestParam(value = "funding_method", required = false) String fundingMethod,
@@ -207,7 +207,7 @@ public class Sep6Controller {
   public GetTransactionsResponse getTransactions(
       HttpServletRequest request,
       @RequestParam(value = "asset_code") String assetCode,
-      @RequestParam(value = "account") String account,
+      @RequestParam(value = "account", required = false) String account,
       @RequestParam(required = false, value = "kind") String kind,
       @RequestParam(required = false, value = "limit") Integer limit,
       @RequestParam(required = false, value = "paging_id") String pagingId,

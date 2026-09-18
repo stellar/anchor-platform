@@ -40,7 +40,7 @@ public class StartDepositExchangeRequest {
   @NonNull String amount;
 
   /** The Stellar account ID of the user to deposit to */
-  @NonNull String account;
+  String account;
 
   /** The memo type to use for the deposit. */
   @SerializedName("memo_type")
