@@ -9,6 +9,7 @@ import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -47,6 +48,7 @@ import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse.EventInfo;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.scval.Scv;
+import org.stellar.sdk.xdr.Asset;
 import org.stellar.sdk.xdr.SCVal;
 import org.stellar.sdk.xdr.SCValType;
 
@@ -202,7 +204,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             result.event.getOperationIndex());
         return;
       }
-      processOperation(txn, op);
+      processOperation(txn, op, result.event.getContractId(), result.amount);
     } catch (Exception ex) {
       warnF(
           "Error processing transfer event: {}. ex={}",
@@ -228,7 +230,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     String toAddr;
     String eventMemo;
     String sep11Asset;
-    Long amount;
+    BigInteger amount;
   }
 
   private ShouldProcessResult shouldProcess(EventInfo event) {
@@ -256,13 +258,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
       String fromAddr = Scv.fromAddress(from).toString();
       String toAddr = Scv.fromAddress(to).toString();
-      long amount = 0L;
+      BigInteger amount = BigInteger.ZERO;
       String eventMemo = null;
       SCVal scValue = SCVal.fromXdrBase64(event.getValue());
       // Reference:
       // https://github.com/stellar/stellar-protocol/blob/master/core/cap-0067.md#emit-a-map-as-the-data-field-in-the-transfer-and-mint-event-if-muxed-information-is-being-emitted-for-the-destination
       if (scValue.getDiscriminant() == SCValType.SCV_I128) {
-        amount = Scv.fromInt128(scValue).longValue();
+        amount = Scv.fromInt128(scValue);
       } else if (scValue.getDiscriminant() == SCValType.SCV_MAP) {
         var entries = scValue.getMap() == null ? null : scValue.getMap().getSCMap();
         if (entries == null || entries.length < 2) {
@@ -273,7 +275,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
         if (amountVal.getDiscriminant() != SCValType.SCV_I128) {
           return builder.build();
         }
-        amount = Scv.fromInt128(amountVal).longValue();
+        amount = Scv.fromInt128(amountVal);
         eventMemo =
             switch (memoVal.getDiscriminant()) {
               case SCV_STRING -> memoVal.getStr().getSCString().toString();
@@ -374,7 +376,11 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  void processOperation(LedgerTransaction ledgerTxn, LedgerOperation op)
+  void processOperation(
+      LedgerTransaction ledgerTxn,
+      LedgerOperation op,
+      String emittingContractId,
+      BigInteger emittingAmount)
       throws IOException, AnchorException {
     PaymentTransferEvent event =
         switch (op.getType()) {
@@ -405,12 +411,20 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           case INVOKE_HOST_FUNCTION -> {
             LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
                 op.getInvokeHostFunctionOperation();
-            invokeOp.setAsset(sacToAssetMapper.getAssetFromSac(invokeOp.getContractId()));
+            Asset asset = sacToAssetMapper.getAssetFromSac(emittingContractId);
+            if (asset == null) {
+              warnF(
+                  "Event-emitting contract {} is not a Stellar Asset Contract. Skipping operation {}.",
+                  emittingContractId,
+                  invokeOp.getId());
+              yield null;
+            }
+            invokeOp.setAsset(asset);
             yield PaymentTransferEvent.builder()
                 .from(invokeOp.getFrom())
                 .to(invokeOp.getTo())
                 .sep11Asset(AssetHelper.getSep11AssetName(invokeOp.getAsset()))
-                .amount(invokeOp.getAmount())
+                .amount(emittingAmount)
                 .txHash(ledgerTxn.getHash())
                 .operationId(invokeOp.getId())
                 .ledgerTransaction(ledgerTxn)

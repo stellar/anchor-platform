@@ -37,7 +37,6 @@ class DefaultPaymentListenerTest {
   @MockK(relaxed = true) private lateinit var sep6TransactionStore: JdbcSep6TransactionStore
   @MockK(relaxed = true) private lateinit var platformApiClient: PlatformApiClient
   @MockK(relaxed = true) private lateinit var rpcConfig: RpcConfig
-  @MockK(relaxed = true) private lateinit var sacToAssetMapper: SacToAssetMapper
 
   private lateinit var paymentListener: DefaultPaymentListener
 
@@ -62,38 +61,106 @@ class DefaultPaymentListenerTest {
           sep6TransactionStore,
           platformApiClient,
           rpcConfig,
-          sacToAssetMapper
         )
       )
   }
 
   @Test
   fun `test validate()`() {
-    var ledgerTransaction = createTestTransferEvent().ledgerTransaction
+    var event = createTestTransferEvent()
+    var ledgerTransaction = event.ledgerTransaction
     // empty hash
     ledgerTransaction.hash = null
     var testPayment = ledgerTransaction.operations[0].paymentOperation
 
-    assertFalse(paymentListener.validate(ledgerTransaction, testPayment))
+    assertFalse(paymentListener.validate(ledgerTransaction, testPayment, event))
 
     // null memo
-    ledgerTransaction = createTestTransferEvent().ledgerTransaction
+    event = createTestTransferEvent()
+    ledgerTransaction = event.ledgerTransaction
     ledgerTransaction.memo = null
-    assertFalse(paymentListener.validate(ledgerTransaction, testPayment))
+    assertFalse(paymentListener.validate(ledgerTransaction, testPayment, event))
 
     // empty memo
-    ledgerTransaction = createTestTransferEvent().ledgerTransaction
+    event = createTestTransferEvent()
+    ledgerTransaction = event.ledgerTransaction
     ledgerTransaction.memo = Memo()
     ledgerTransaction.memo.discriminant = MEMO_TEXT
     ledgerTransaction.memo.text = XdrString("")
-    assertFalse(paymentListener.validate(ledgerTransaction, testPayment))
+    assertFalse(paymentListener.validate(ledgerTransaction, testPayment, event))
 
     // unsupported asset type
-    ledgerTransaction = createTestTransferEvent().ledgerTransaction
+    event = createTestTransferEvent()
+    ledgerTransaction = event.ledgerTransaction
     testPayment = ledgerTransaction.operations[0].paymentOperation
     testPayment.asset = Asset()
     testPayment.asset.discriminant = ASSET_TYPE_POOL_SHARE
-    assertFalse(paymentListener.validate(ledgerTransaction, testPayment))
+    assertFalse(paymentListener.validate(ledgerTransaction, testPayment, event))
+  }
+
+  @Test
+  fun `test validate() rejects an invoke-host-function operation with no observed SAC balance change`() {
+    val event = createTestInvokeHostFunctionTransferEvent(eventAsset = null)
+    val ledgerTransaction = event.ledgerTransaction
+    val invokeOp = ledgerTransaction.operations[0].invokeHostFunctionOperation
+
+    assertFalse(paymentListener.validate(ledgerTransaction, invokeOp, event))
+  }
+
+  @Test
+  fun `test validate() takes the asset and amount from the event for an invoke-host-function operation`() {
+    val event =
+      createTestInvokeHostFunctionTransferEvent(
+        eventAsset = "native",
+        ledgerAmount = BigInteger.valueOf(999_999_999_999L),
+        eventAmount = BigInteger.valueOf(1),
+      )
+    val ledgerTransaction = event.ledgerTransaction
+    val invokeOp = ledgerTransaction.operations[0].invokeHostFunctionOperation
+
+    assertTrue(paymentListener.validate(ledgerTransaction, invokeOp, event))
+    assertEquals("native", getSep11AssetName(invokeOp.getAsset(false)))
+    assertEquals(BigInteger.valueOf(1), invokeOp.amount)
+  }
+
+  @Test
+  fun `test onReceived() credits an invoke-host-function payment using the verified event amount, not the top-level declared amount`() {
+    // Regression test for a router-style contract declaring a large top-level amount while only
+    // actually forwarding a small verified amount to the real Stellar Asset Contract: the payment
+    // must be credited from the verified amount, not rejected or credited from the forged one.
+    val event =
+      createTestInvokeHostFunctionTransferEvent(
+        eventAsset = "native",
+        ledgerAmount = BigInteger.valueOf(999_999_999_999L),
+        eventAmount = BigInteger.valueOf(1),
+      )
+    val ledgerTransaction = event.ledgerTransaction
+    xdrMemoText.text = XdrString("my_memo_1")
+    ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      listOf(JdbcSep31Transaction())
+    every { paymentListener.handleSep31Transaction(any(), any(), any()) } answers {}
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      assertEquals(
+        0.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH.toString()).count(),
+      )
+      verify(exactly = 1) {
+        paymentListener.handleSep31Transaction(
+          ledgerTransaction,
+          match { it.amount == BigInteger.valueOf(1) },
+          any(),
+        )
+      }
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
   }
 
   @Test
@@ -319,6 +386,47 @@ class DefaultPaymentListenerTest {
       .amount(eventAmount)
       .sep11Asset(eventAsset)
       .txHash("2bd62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af31")
+      .operationId(testTOID.toInt64().toString())
+      .ledgerTransaction(ledgerTransaction)
+      .build()
+  }
+
+  private fun createTestInvokeHostFunctionTransferEvent(
+    eventAsset: String?,
+    ledgerAmount: BigInteger = BigInteger.valueOf(1),
+    eventAmount: BigInteger = BigInteger.valueOf(1),
+  ): PaymentTransferEvent {
+    val ledgerTransaction =
+      LedgerTransaction.builder()
+        .hash("3cd62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af32")
+        .memo(xdrMemoText)
+        .ledger(ledgerSequence.toLong())
+        .operations(
+          listOf(
+            LedgerOperation.builder()
+              .type(OperationType.INVOKE_HOST_FUNCTION)
+              .invokeHostFunctionOperation(
+                LedgerTransaction.LedgerInvokeHostFunctionOperation.builder()
+                  .contractId("CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA")
+                  .hostFunction("transfer")
+                  .id(testTOID.toInt64().toString())
+                  .amount(ledgerAmount)
+                  .sourceAccount("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
+                  .from("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
+                  .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
+                  .build()
+              )
+              .build()
+          )
+        )
+        .build()
+
+    return PaymentTransferEvent.builder()
+      .from("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5")
+      .to("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364")
+      .amount(eventAmount)
+      .sep11Asset(eventAsset)
+      .txHash("3cd62e48724426be96cf2cdb65d5dacb8fac2e403e50bedb717bfc8eaf05af32")
       .operationId(testTOID.toInt64().toString())
       .ledgerTransaction(ledgerTransaction)
       .build()

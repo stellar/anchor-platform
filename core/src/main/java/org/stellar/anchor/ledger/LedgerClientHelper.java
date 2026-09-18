@@ -161,16 +161,17 @@ public class LedgerClientHelper {
       case INVOKE_HOST_FUNCTION -> {
         HostFunction hostFunction = op.getBody().getInvokeHostFunctionOp().getHostFunction();
         if (hostFunction.getDiscriminant() != HOST_FUNCTION_TYPE_INVOKE_CONTRACT) yield null;
-        if (!hostFunction
-            .getInvokeContract()
-            .getFunctionName()
-            .getSCSymbol()
-            .toString()
-            .equals("transfer")) yield null;
+        SCVal[] args = hostFunction.getInvokeContract().getArgs();
+        if (args.length != 3
+            || args[0].getDiscriminant() != SCValType.SCV_ADDRESS
+            || args[1].getDiscriminant() != SCValType.SCV_ADDRESS
+            || args[2].getDiscriminant() != SCValType.SCV_I128) {
+          yield null;
+        }
         SCAddress contractAddress = hostFunction.getInvokeContract().getContractAddress();
-        SCVal from = hostFunction.getInvokeContract().getArgs()[0];
-        SCVal to = hostFunction.getInvokeContract().getArgs()[1];
-        SCVal amount = hostFunction.getInvokeContract().getArgs()[2];
+        SCVal from = args[0];
+        SCVal to = args[1];
+        SCVal amount = args[2];
 
         String contractId;
         String fromAddr;
@@ -189,7 +190,8 @@ public class LedgerClientHelper {
             .invokeHostFunctionOperation(
                 LedgerInvokeHostFunctionOperation.builder()
                     .contractId(contractId)
-                    .hostFunction("transfer")
+                    .hostFunction(
+                        hostFunction.getInvokeContract().getFunctionName().getSCSymbol().toString())
                     .id(operationId)
                     .amount(Scv.fromInt128(amount))
                     .from(fromAddr)

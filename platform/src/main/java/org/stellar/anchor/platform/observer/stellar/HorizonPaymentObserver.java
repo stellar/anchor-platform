@@ -11,7 +11,6 @@ import static org.stellar.anchor.util.ReflectionUtil.getField;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse.*;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -40,7 +39,6 @@ import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse;
 import org.stellar.sdk.responses.operations.OperationResponse;
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse;
 import org.stellar.sdk.responses.operations.PaymentOperationResponse;
-import org.stellar.sdk.xdr.SCVal;
 
 public class HorizonPaymentObserver extends AbstractPaymentObserver {
 
@@ -155,18 +153,16 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
     if (isEmpty(strLastStored)) {
       info("No last stored cursor, so use the latest cursor");
       return strLatestFromNetwork;
-    } else {
-      long lastStored = Long.parseLong(strLastStored);
-      long latest = Long.parseLong(strLatestFromNetwork);
-      if (lastStored >= latest) {
-        infoF(
-            "The last stored cursor is stale. This is probably because of a test network reset. Use the latest cursor: {}",
-            strLatestFromNetwork);
-        return String.valueOf(latest);
-      } else {
-        return String.valueOf(Math.max(lastStored, latest - MAX_RESULTS));
-      }
     }
+    long lastStored = Long.parseLong(strLastStored);
+    long latest = Long.parseLong(strLatestFromNetwork);
+    if (lastStored >= latest) {
+      infoF(
+          "The last stored cursor is stale. This is probably because of a test network reset. Use the latest cursor: {}",
+          strLatestFromNetwork);
+      return String.valueOf(latest);
+    }
+    return strLastStored;
   }
 
   String fetchLatestCursorFromHorizon() {
@@ -204,6 +200,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
         infoF("Processing payment transfer event: {}", transferEvent);
         handleEvent(transferEvent);
       }
+      saveHorizonCursor(operationResponse.getPagingToken());
     } catch (EventPublishException ex) {
       // restart the observer from where it stopped, in case the queue fails to
       // publish the message.
@@ -215,8 +212,6 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
     } catch (Throwable t) {
       errorEx("Something went wrong in the observer while sending the event", t);
       setStatus(PUBLISHER_ERROR);
-    } finally {
-      saveHorizonCursor(operationResponse.getPagingToken());
     }
   }
 
@@ -259,39 +254,29 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
         return null;
       }
     } else if (operation instanceof InvokeHostFunctionOperationResponse invokeOp) {
-      if (invokeOp.getParameters() != null
-          && invokeOp.getParameters().size() == 5
-          && "HostFunctionTypeHostFunctionTypeInvokeContract".equals(invokeOp.getFunction())) {
-        try {
-          SCVal scVal = SCVal.fromXdrBase64(invokeOp.getParameters().get(1).getValue());
-          if ("transfer".equals(scVal.getSym().getSCSymbol().toString())) {
-            AssetContractBalanceChange assetBalanceChange =
-                invokeOp.getAssetBalanceChanges().get(0);
-            if (assetBalanceChange == null) return null;
-            String lookupToAccount = assetBalanceChange.getTo();
-            if (assetBalanceChange.getTo().startsWith("M")) {
-              lookupToAccount = new MuxedAccount(lookupToAccount).getAccountId();
-            }
-            if (!paymentObservingAccountsManager.lookupAndUpdate(assetBalanceChange.getFrom())
-                && !paymentObservingAccountsManager.lookupAndUpdate(lookupToAccount)) {
-              return null;
-            }
-            return PaymentTransferEvent.builder()
-                .from(assetBalanceChange.getFrom())
-                .to(assetBalanceChange.getTo())
-                .sep11Asset(AssetHelper.getSep11AssetName(assetBalanceChange.getAsset().toXdr()))
-                .amount(AssetHelper.toXdrAmount(assetBalanceChange.getAmount()).toBigInteger())
-                .txHash(invokeOp.getTransactionHash())
-                .operationId(String.valueOf(invokeOp.getId()))
-                .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
-                .build();
-          }
-        } catch (IOException ioex) {
-          return null;
-        }
-      } else {
+      List<AssetContractBalanceChange> balanceChanges = invokeOp.getAssetBalanceChanges();
+      if (balanceChanges == null) {
         return null;
       }
+      for (AssetContractBalanceChange assetBalanceChange : balanceChanges) {
+        String lookupToAccount = assetBalanceChange.getTo();
+        if (lookupToAccount != null && lookupToAccount.startsWith("M")) {
+          lookupToAccount = new MuxedAccount(lookupToAccount).getAccountId();
+        }
+        if (paymentObservingAccountsManager.lookupAndUpdate(assetBalanceChange.getFrom())
+            || paymentObservingAccountsManager.lookupAndUpdate(lookupToAccount)) {
+          return PaymentTransferEvent.builder()
+              .from(assetBalanceChange.getFrom())
+              .to(assetBalanceChange.getTo())
+              .sep11Asset(AssetHelper.getSep11AssetName(assetBalanceChange.getAsset().toXdr()))
+              .amount(AssetHelper.toXdrAmount(assetBalanceChange.getAmount()).toBigInteger())
+              .txHash(invokeOp.getTransactionHash())
+              .operationId(String.valueOf(invokeOp.getId()))
+              .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
+              .build();
+        }
+      }
+      return null;
     }
     return null;
   }
@@ -312,8 +297,8 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
 
     HealthCheckStatus status =
         switch (this.status) {
-          case STREAM_ERROR, SILENCE_ERROR, PUBLISHER_ERROR, DATABASE_ERROR -> YELLOW;
-          case NEEDS_SHUTDOWN, SHUTDOWN -> RED;
+          case STREAM_ERROR, SILENCE_ERROR, DATABASE_ERROR -> YELLOW;
+          case PUBLISHER_ERROR, NEEDS_SHUTDOWN, SHUTDOWN -> RED;
           default -> GREEN;
         };
     StreamHealth.StreamHealthBuilder healthBuilder = StreamHealth.builder();

@@ -6,7 +6,10 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.sdk.Address
+import org.stellar.sdk.KeyPair
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus.*
+import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.*
 import org.stellar.sdk.xdr.CryptoKeyType.KEY_TYPE_ED25519
 import org.stellar.sdk.xdr.EnvelopeType.*
@@ -317,6 +320,108 @@ internal class LedgerClientHelperTest {
   }
 
   @Test
+  fun `test convert() with invoke host function transfer call`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val contractId = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
+    val operation =
+      buildInvokeHostFunctionOperation(contractId, "transfer", fromAccount, toAccount, 500L)
+
+    val ledgerOperation =
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        null,
+      )
+
+    assertEquals(OperationType.INVOKE_HOST_FUNCTION, ledgerOperation.type)
+    assertEquals(contractId, ledgerOperation.invokeHostFunctionOperation.contractId)
+    assertEquals("transfer", ledgerOperation.invokeHostFunctionOperation.hostFunction)
+    assertEquals(fromAccount, ledgerOperation.invokeHostFunctionOperation.from)
+    assertEquals(toAccount, ledgerOperation.invokeHostFunctionOperation.to)
+    assertEquals(BigInteger.valueOf(500L), ledgerOperation.invokeHostFunctionOperation.amount)
+  }
+
+  @Test
+  fun `test convert() with invoke host function call under a non-transfer entrypoint`() {
+    val fromAccount = KeyPair.random().accountId
+    val toAccount = KeyPair.random().accountId
+    val contractId = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
+    val operation =
+      buildInvokeHostFunctionOperation(contractId, "pay", fromAccount, toAccount, 500L)
+
+    val ledgerOperation =
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        null,
+      )
+
+    assertNotNull(ledgerOperation)
+    assertEquals(OperationType.INVOKE_HOST_FUNCTION, ledgerOperation.type)
+    assertEquals("pay", ledgerOperation.invokeHostFunctionOperation.hostFunction)
+    assertEquals(fromAccount, ledgerOperation.invokeHostFunctionOperation.from)
+    assertEquals(toAccount, ledgerOperation.invokeHostFunctionOperation.to)
+    assertEquals(BigInteger.valueOf(500L), ledgerOperation.invokeHostFunctionOperation.amount)
+  }
+
+  @Test
+  fun `test convert() with invoke host function call carrying too few arguments returns null`() {
+    val contractId = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
+    val operation =
+      buildInvokeHostFunctionOperationWithArgs(
+        contractId,
+        "swap",
+        arrayOf(Scv.toAddress(KeyPair.random().accountId)),
+      )
+
+    val ledgerOperation =
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        null,
+      )
+
+    assertNull(ledgerOperation)
+  }
+
+  @Test
+  fun `test convert() with invoke host function call carrying wrong argument types returns null`() {
+    val contractId = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
+    val operation =
+      buildInvokeHostFunctionOperationWithArgs(
+        contractId,
+        "execute",
+        arrayOf(
+          Scv.toAddress(KeyPair.random().accountId),
+          Scv.toAddress(KeyPair.random().accountId),
+          Scv.toString("not-an-amount"),
+        ),
+      )
+
+    val ledgerOperation =
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        null,
+      )
+
+    assertNull(ledgerOperation)
+  }
+
+  @Test
   fun `test parseOperationResults returns results for txSUCCESS`() {
     val opResults =
       arrayOf(OperationResult.builder().discriminant(OperationResultCode.opINNER).build())
@@ -518,6 +623,49 @@ internal class LedgerClientHelperTest {
     assertEquals(memo, result.memo())
     assertEquals(operations, result.operations())
   }
+}
+
+private fun buildInvokeHostFunctionOperation(
+  contractId: String,
+  functionName: String,
+  fromAccount: String,
+  toAccount: String,
+  amount: Long,
+): Operation {
+  return buildInvokeHostFunctionOperationWithArgs(
+    contractId,
+    functionName,
+    arrayOf(
+      Scv.toAddress(fromAccount),
+      Scv.toAddress(toAccount),
+      Scv.toInt128(BigInteger.valueOf(amount))
+    ),
+  )
+}
+
+private fun buildInvokeHostFunctionOperationWithArgs(
+  contractId: String,
+  functionName: String,
+  args: Array<SCVal>,
+): Operation {
+  val invokeContractArgs =
+    InvokeContractArgs.builder()
+      .contractAddress(Address(contractId).toSCAddress())
+      .functionName(SCSymbol(XdrString(functionName)))
+      .args(args)
+      .build()
+  val hostFunction =
+    HostFunction.builder()
+      .discriminant(HostFunctionType.HOST_FUNCTION_TYPE_INVOKE_CONTRACT)
+      .invokeContract(invokeContractArgs)
+      .build()
+  val invokeHostFunctionOp = InvokeHostFunctionOp.builder().hostFunction(hostFunction).build()
+  val body =
+    Operation.OperationBody.builder()
+      .discriminant(OperationType.INVOKE_HOST_FUNCTION)
+      .invokeHostFunctionOp(invokeHostFunctionOp)
+      .build()
+  return Operation.builder().body(body).build()
 }
 
 private fun buildStrictSendSuccessResult(receivedAmount: Long): OperationResult {
