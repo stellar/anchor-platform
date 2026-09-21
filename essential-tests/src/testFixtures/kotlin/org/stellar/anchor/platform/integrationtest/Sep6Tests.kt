@@ -805,9 +805,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     val rpcActionRequests: List<RpcRequest> =
       gson.fromJson(rpcActionRequestsJson, rpcActionRequestsType)
     platformApiClient.sendRpcRequest(rpcActionRequests).use { response ->
-      Assertions.assertTrue(response.isSuccessful) {
-        "RPC setup failed with HTTP ${response.code}"
-      }
+      Assertions.assertTrue(response.isSuccessful) { "RPC setup failed with HTTP ${response.code}" }
     }
 
     val found = client.getTransaction(mapOf("external_transaction_id" to externalTransactionId))
