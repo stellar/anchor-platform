@@ -1278,6 +1278,42 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  /**
+   * Asserts a `SepValidationException`'s raw body's `error` field equals exactly `The "<paramName>"
+   * parameter is missing.` -- parsed from the JSON body, not a `contains` match.
+   */
+  private fun assertMissingParameterError(ex: SepValidationException, paramName: String) {
+    val body = JsonParser.parseString(ex.message).asJsonObject
+    Assertions.assertEquals("The \"$paramName\" parameter is missing.", body.get("error").asString)
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects request without destination_asset`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.deposit(depositExchangeRequest() - "destination_asset", exchange = true)
+      }
+    assertMissingParameterError(ex, "destination_asset")
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects request without source_asset`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.deposit(depositExchangeRequest() - "source_asset", exchange = true)
+      }
+    assertMissingParameterError(ex, "source_asset")
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects request without amount`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.deposit(depositExchangeRequest() - "amount", exchange = true)
+      }
+    assertMissingParameterError(ex, "amount")
+  }
+
   companion object {
 
     private val expectedSep6Info =
