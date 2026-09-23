@@ -18,8 +18,12 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepValidationException
+import org.stellar.anchor.api.platform.PatchTransactionRequest
+import org.stellar.anchor.api.platform.PatchTransactionsRequest
+import org.stellar.anchor.api.platform.PlatformTransactionData
 import org.stellar.anchor.api.rpc.RpcRequest
 import org.stellar.anchor.api.rpc.RpcResponse
+import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.api.sep.sep38.Sep38QuoteResponse
@@ -1557,6 +1561,77 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
     val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
     Assertions.assertEquals("pending_customer_info_update", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  /**
+   * Sets a SEP-6 transaction directly to [status] via the deprecated Platform API PATCH
+   * (`@Deprecated // ANCHOR-641`) -- the only writer of `required_info_message` /
+   * `required_info_updates` for SEP-6 (`TransactionService.java:386-394`), and the only way to
+   * reach `pending_transaction_info_update`, `too_small`, `too_large`, and `no_market`: no RPC or
+   * business flow ever sets any of the four for SEP-6.
+   */
+  @Suppress("DEPRECATION")
+  private fun patchStatus(
+    txId: String,
+    status: SepTransactionStatus,
+    requiredInfoMessage: String? = null,
+    requiredInfoUpdates: List<String>? = null,
+  ) {
+    val request =
+      PatchTransactionsRequest.builder()
+        .records(
+          listOf(
+            PatchTransactionRequest(
+              PlatformTransactionData.builder()
+                .id(txId)
+                .status(status)
+                .requiredInfoMessage(requiredInfoMessage)
+                .requiredInfoUpdates(requiredInfoUpdates)
+                .build()
+            )
+          )
+        )
+        .build()
+
+    // The transaction may still be concurrently touched by an async event/observer, racing this
+    // PATCH into the same OptimisticLockingFailureException Sep31Tests.kt's `requestInfoUpdate`
+    // retries on -- same defensive pattern, applied here for the same deprecated PATCH API.
+    var attempt = 0
+    while (true) {
+      try {
+        platformApiClient.patchTransaction(request)
+        return
+      } catch (ex: SepException) {
+        attempt++
+        if (attempt >= 5 || ex.message?.contains("modified by another request") != true) {
+          throw ex
+        }
+        Thread.sleep(500)
+      }
+    }
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports pending_transaction_info_update with its required info`() {
+    val (client, ids) = createAccountWithDeposits(1)
+    val depositId = ids[0]
+    val requiredInfoMessage = "Please provide additional destination details"
+
+    patchStatus(
+      depositId,
+      SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE,
+      requiredInfoMessage,
+      listOf("dest", "dest_extra"),
+    )
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("pending_transaction_info_update", txn.get("status").asString)
+    Assertions.assertEquals(requiredInfoMessage, txn.get("required_info_message").asString)
+    Assertions.assertEquals(
+      setOf("dest", "dest_extra"),
+      txn.getAsJsonObject("required_info_updates").keySet(),
+    )
     assertValidSep6TransactionSchema(txn, "to")
   }
 
