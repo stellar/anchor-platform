@@ -1635,6 +1635,42 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     assertValidSep6TransactionSchema(txn, "to")
   }
 
+  @Test
+  fun `test sep6 GET transaction reports too_small`() {
+    val (client, ids) = createAccountWithDeposits(1)
+    val depositId = ids[0]
+
+    patchStatus(depositId, SepTransactionStatus.TOO_SMALL)
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("too_small", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports too_large`() {
+    val (client, ids) = createAccountWithDeposits(1)
+    val depositId = ids[0]
+
+    patchStatus(depositId, SepTransactionStatus.TOO_LARGE)
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("too_large", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports no_market`() {
+    val (client, ids) = createAccountWithDeposits(1)
+    val depositId = ids[0]
+
+    patchStatus(depositId, SepTransactionStatus.NO_MARKET)
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("no_market", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
   companion object {
 
     /**
