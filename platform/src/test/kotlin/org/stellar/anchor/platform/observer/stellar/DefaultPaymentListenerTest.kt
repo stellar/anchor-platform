@@ -4,9 +4,12 @@ import io.micrometer.core.instrument.Metrics
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.*
 import io.mockk.impl.annotations.MockK
+import java.io.IOException
 import java.math.BigInteger
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -161,6 +164,65 @@ class DefaultPaymentListenerTest {
     } finally {
       Metrics.removeRegistry(registry)
     }
+  }
+
+  @Test
+  fun `test validate() takes from and to from the event for an invoke-host-function operation`() {
+    val event = createTestInvokeHostFunctionTransferEvent(eventAsset = "native")
+    val verifiedFrom = "GCKFBEIYTKP5RDBKIXFJMA4GOUBBZ6EE7F6KF4LWE6BJN7KGRCTN6IZH"
+    val verifiedTo = "GDRVLGOSWUD3IUZVZKK4QRDT6ZSZAHULP5Y32TDSI2FIRVHZC7QIHVKP"
+    event.from = verifiedFrom
+    event.to = verifiedTo
+    val ledgerTransaction = event.ledgerTransaction
+    val invokeOp = ledgerTransaction.operations[0].invokeHostFunctionOperation
+
+    assertTrue(paymentListener.validate(ledgerTransaction, invokeOp, event))
+    assertEquals(verifiedFrom, invokeOp.from)
+    assertEquals(verifiedTo, invokeOp.to)
+  }
+
+  @Test
+  fun `test onReceived() propagates a failed platform notification so the payment is retried`() {
+    val event = createTestTransferEvent()
+    xdrMemoText.text = XdrString("unique_memo")
+    event.ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(JdbcSep24Transaction().apply { id = "sep24-id" })
+    every { paymentListener.handleSep24Transaction(any(), any(), any()) } throws
+      IOException("platform unavailable")
+
+    assertThrows(IOException::class.java) { paymentListener.onReceived(event) }
+  }
+
+  @Test
+  fun `test onReceived() skips an event that fails with an unexpected error instead of throwing`() {
+    val event = createTestTransferEvent()
+    every { paymentListener.validate(any(), any(), any()) } throws IllegalStateException("bad data")
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      assertDoesNotThrow { paymentListener.onReceived(event) }
+      assertEquals(
+        1.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test onReceived() skips an event without a ledger transaction`() {
+    val event = createTestTransferEvent()
+    event.ledgerTransaction = null
+
+    assertDoesNotThrow { paymentListener.onReceived(event) }
+    verify { sep31TransactionStore wasNot Called }
   }
 
   @Test

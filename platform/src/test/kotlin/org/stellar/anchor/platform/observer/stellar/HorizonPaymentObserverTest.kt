@@ -2,20 +2,25 @@ package org.stellar.anchor.platform.observer.stellar
 
 import io.mockk.every
 import io.mockk.mockk
+import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.ledger.Horizon
+import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
 import org.stellar.anchor.platform.observer.PaymentListener
 import org.stellar.anchor.util.AssetHelper
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.MuxedAccount
 import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse
 import org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse.HostFunctionParameter
 import org.stellar.sdk.responses.operations.OperationResponse
 import org.stellar.sdk.responses.operations.PathPaymentBaseOperationResponse
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
+import org.stellar.sdk.xdr.OperationType
 import org.stellar.sdk.xdr.SCSymbol
 import org.stellar.sdk.xdr.SCVal
 import org.stellar.sdk.xdr.SCValType
@@ -106,6 +111,8 @@ class HorizonPaymentObserverTest {
   @Test
   fun `toPaymentTransferEvent returns event for InvokeHostFunctionOperationResponse with transfer function`() {
     val assetBalanceChange = mockk<InvokeHostFunctionOperationResponse.AssetContractBalanceChange>()
+    every { assetBalanceChange.type } returns "transfer"
+    every { assetBalanceChange.destinationMuxedId } returns null
     val fromAccount = KeyPair.random().accountId
     val toAccount = KeyPair.random().accountId
 
@@ -128,7 +135,8 @@ class HorizonPaymentObserverTest {
         .toXdrBase64()
     every { invokeOp.parameters } returns
       List(5) { HostFunctionParameter("mock type", transferXdr) }
-    every { horizon.getTransaction(any()) } returns mockk()
+    every { horizon.getTransaction(any()) } returns
+      LedgerTransaction.builder().hash("txHash").operations(listOf()).build()
 
     val event = observer.toPaymentTransferEvent(invokeOp)
 
@@ -173,10 +181,14 @@ class HorizonPaymentObserverTest {
     val fromAccount = KeyPair.random().accountId
     val toAccount = KeyPair.random().accountId
     val unrelatedChange = mockk<InvokeHostFunctionOperationResponse.AssetContractBalanceChange>()
+    every { unrelatedChange.type } returns "transfer"
+    every { unrelatedChange.destinationMuxedId } returns null
     every { unrelatedChange.from } returns KeyPair.random().accountId
     every { unrelatedChange.to } returns KeyPair.random().accountId
 
     val observedChange = mockk<InvokeHostFunctionOperationResponse.AssetContractBalanceChange>()
+    every { observedChange.type } returns "transfer"
+    every { observedChange.destinationMuxedId } returns null
     every { observedChange.from } returns fromAccount
     every { observedChange.to } returns toAccount
     every { observedChange.asset } returns Asset.createNativeAsset()
@@ -191,7 +203,8 @@ class HorizonPaymentObserverTest {
     every { invokeOp.assetBalanceChanges } returns listOf(unrelatedChange, observedChange)
     every { invokeOp.transactionHash } returns "txHash4"
     every { invokeOp.id } returns 321L
-    every { horizon.getTransaction(any()) } returns mockk()
+    every { horizon.getTransaction(any()) } returns
+      LedgerTransaction.builder().hash("txHash").operations(listOf()).build()
 
     val event = observer.toPaymentTransferEvent(invokeOp)
 
@@ -206,6 +219,8 @@ class HorizonPaymentObserverTest {
     val fromAccount = KeyPair.random().accountId
     val toAccount = KeyPair.random().accountId
     val assetBalanceChange = mockk<InvokeHostFunctionOperationResponse.AssetContractBalanceChange>()
+    every { assetBalanceChange.type } returns "transfer"
+    every { assetBalanceChange.destinationMuxedId } returns null
     every { assetBalanceChange.from } returns fromAccount
     every { assetBalanceChange.to } returns toAccount
     every { assetBalanceChange.asset } returns Asset.createNativeAsset()
@@ -218,12 +233,79 @@ class HorizonPaymentObserverTest {
     every { invokeOp.transactionHash } returns "txHash5"
     every { invokeOp.id } returns 654L
     every { invokeOp.parameters } returns null
-    every { horizon.getTransaction(any()) } returns mockk()
+    every { horizon.getTransaction(any()) } returns
+      LedgerTransaction.builder().hash("txHash").operations(listOf()).build()
 
     val event = observer.toPaymentTransferEvent(invokeOp)
 
     assertNotNull(event)
     assertEquals(fromAccount, event?.from)
     assertEquals(toAccount, event?.to)
+  }
+
+  private fun contractTransfer(
+    type: String = "transfer",
+    from: String = KeyPair.random().accountId,
+    to: String = KeyPair.random().accountId,
+    muxedId: BigInteger? = null,
+  ): InvokeHostFunctionOperationResponse {
+    val change = mockk<InvokeHostFunctionOperationResponse.AssetContractBalanceChange>()
+    every { change.type } returns type
+    every { change.destinationMuxedId } returns muxedId
+    every { change.from } returns from
+    every { change.to } returns to
+    every { change.asset } returns Asset.createNativeAsset()
+    every { change.amount } returns "10.0"
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns true
+
+    val invokeOp = mockk<InvokeHostFunctionOperationResponse>()
+    every { invokeOp.assetBalanceChanges } returns listOf(change)
+    every { invokeOp.transactionHash } returns "txHash6"
+    every { invokeOp.id } returns 777L
+    return invokeOp
+  }
+
+  @Test
+  fun `toPaymentTransferEvent ignores balance changes that are not transfers`() {
+    every { horizon.getTransaction(any()) } returns
+      LedgerTransaction.builder().hash("txHash").operations(listOf()).build()
+
+    assertNull(observer.toPaymentTransferEvent(contractTransfer(type = "mint")))
+  }
+
+  @Test
+  fun `toPaymentTransferEvent carries the destination muxed id into the recipient address`() {
+    val toAccount = KeyPair.random().accountId
+    every { horizon.getTransaction(any()) } returns
+      LedgerTransaction.builder().hash("txHash").operations(listOf()).build()
+
+    val event =
+      observer.toPaymentTransferEvent(
+        contractTransfer(to = toAccount, muxedId = BigInteger.valueOf(42))
+      )
+
+    assertEquals(MuxedAccount(toAccount, BigInteger.valueOf(42)).address, event?.to)
+  }
+
+  @Test
+  fun `toPaymentTransferEvent adds the contract call to the transaction when the parser did not model it`() {
+    every { horizon.getTransaction(any()) } returns
+      LedgerTransaction.builder().hash("txHash").operations(listOf()).build()
+
+    val event = observer.toPaymentTransferEvent(contractTransfer())
+
+    val ops = event!!.ledgerTransaction.operations
+    assertEquals(1, ops.size)
+    assertEquals(OperationType.INVOKE_HOST_FUNCTION, ops[0].type)
+    assertEquals("777", ops[0].invokeHostFunctionOperation.id)
+  }
+
+  @Test
+  fun `toPaymentTransferEvent throws so the operation is retried when the transaction is not yet available`() {
+    every { horizon.getTransaction(any()) } returns null
+
+    assertThrows(LedgerException::class.java) {
+      observer.toPaymentTransferEvent(contractTransfer())
+    }
   }
 }

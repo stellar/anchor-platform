@@ -60,11 +60,31 @@ public class DefaultPaymentListener implements PaymentListener {
   }
 
   @Override
-  public void onReceived(PaymentTransferEvent paymentTransferEvent) {
+  public void onReceived(PaymentTransferEvent paymentTransferEvent) throws IOException {
     debugF(
         "Received payment transfer event: {}",
         GsonUtils.getInstance().toJson(paymentTransferEvent));
+    try {
+      receive(paymentTransferEvent);
+    } catch (RuntimeException rex) {
+      errorF(
+          "Skipping payment transfer event that cannot be processed: txHash={}, opId={}, ex={}",
+          paymentTransferEvent.getTxHash(),
+          paymentTransferEvent.getOperationId(),
+          rex.toString());
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+    }
+  }
+
+  void receive(PaymentTransferEvent paymentTransferEvent) throws IOException {
     LedgerTransaction ledgerTransaction = paymentTransferEvent.getLedgerTransaction();
+    if (ledgerTransaction == null || ledgerTransaction.getOperations() == null) {
+      warnF(
+          "Payment transfer event has no ledger transaction: txHash={}, opId={}",
+          paymentTransferEvent.getTxHash(),
+          paymentTransferEvent.getOperationId());
+      return;
+    }
     LedgerPayment ledgerPayment = null;
     for (LedgerTransaction.LedgerOperation operation : ledgerTransaction.getOperations()) {
       switch (operation.getType()) {
@@ -105,7 +125,8 @@ public class DefaultPaymentListener implements PaymentListener {
   void processAndDispatchLedgerPayment(
       LedgerTransaction ledgerTransaction,
       LedgerPayment ledgerPayment,
-      PaymentTransferEvent paymentTransferEvent) {
+      PaymentTransferEvent paymentTransferEvent)
+      throws IOException {
     if (!validate(ledgerTransaction, ledgerPayment, paymentTransferEvent)) {
       return;
     }
@@ -173,6 +194,8 @@ public class DefaultPaymentListener implements PaymentListener {
           return;
         }
       }
+    } catch (IOException ioex) {
+      throw ioex;
     } catch (Exception ex) {
       errorEx(ex);
     }
@@ -230,6 +253,8 @@ public class DefaultPaymentListener implements PaymentListener {
           errorEx(aex);
         }
       }
+    } catch (IOException ioex) {
+      throw ioex;
     } catch (Exception ex) {
       errorEx(ex);
     }
@@ -271,6 +296,8 @@ public class DefaultPaymentListener implements PaymentListener {
           errorEx(aex);
         }
       }
+    } catch (IOException ioex) {
+      throw ioex;
     } catch (Exception ex) {
       errorEx(ex);
     }
@@ -421,17 +448,25 @@ public class DefaultPaymentListener implements PaymentListener {
     if (ledgerPayment.getType() == OperationType.INVOKE_HOST_FUNCTION) {
       LedgerInvokeHostFunctionOperation invokeOp =
           (LedgerInvokeHostFunctionOperation) ledgerPayment;
-      if (invokeOp.getAsset(false) == null) {
-        String eventAsset = paymentTransferEvent.getSep11Asset();
-        if (isEmpty(eventAsset)) {
-          debugF(
-              "Operation {} moved no SAC balance to/from an observed account.",
-              ledgerPayment.getId());
-          return false;
-        }
-        invokeOp.setAsset(org.stellar.sdk.Asset.create(eventAsset).toXdr());
-        invokeOp.setAmount(paymentTransferEvent.getAmount());
+      String eventAsset = paymentTransferEvent.getSep11Asset();
+      if (isEmpty(eventAsset)
+          || paymentTransferEvent.getAmount() == null
+          || isEmpty(paymentTransferEvent.getFrom())
+          || isEmpty(paymentTransferEvent.getTo())) {
+        debugF(
+            "Operation {} moved no SAC balance to/from an observed account.",
+            ledgerPayment.getId());
+        return false;
       }
+      invokeOp.setAsset(org.stellar.sdk.Asset.create(eventAsset).toXdr());
+      invokeOp.setAmount(paymentTransferEvent.getAmount());
+      invokeOp.setFrom(paymentTransferEvent.getFrom());
+      invokeOp.setTo(paymentTransferEvent.getTo());
+    }
+
+    if (isEmpty(ledgerPayment.getFrom()) || isEmpty(ledgerPayment.getTo())) {
+      debugF("Operation {} has no source or destination account.", ledgerPayment.getId());
+      return false;
     }
 
     if (!List.of(

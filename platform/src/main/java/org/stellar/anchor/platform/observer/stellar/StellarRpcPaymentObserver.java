@@ -22,6 +22,7 @@ import lombok.Getter;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.asset.AssetService;
@@ -131,15 +132,14 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       lastActivityTime = Instant.now();
       silenceTimeoutCount = 0;
       metricLatestBlockRead.set(response.getLatestLedger());
-      try {
-        if (response.getEvents() != null && !response.getEvents().isEmpty()) {
-          processEvents(response.getEvents());
-        }
-      } finally {
+      String nextCursor = processEvents(response.getEvents(), response.getCursor());
+      if (nextCursor != null) {
         try {
-          saveCursor(response.getCursor());
-          streamBackoffTimer.reset();
-          metricLatestBlockProcessed.set(response.getLatestLedger());
+          saveCursor(nextCursor);
+          if (nextCursor.equals(response.getCursor())) {
+            streamBackoffTimer.reset();
+            metricLatestBlockProcessed.set(response.getLatestLedger());
+          }
         } catch (Exception tex) {
           warnF("Failed to persist RPC cursor. Will retry next tick. ex={}", tex.getMessage());
           setStatus(ObserverStatus.DATABASE_ERROR);
@@ -158,59 +158,72 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  private void processEvents(List<EventInfo> events) {
-    if (events == null || events.isEmpty()) return;
+  String processEvents(List<EventInfo> events, String responseCursor) {
+    if (events == null || events.isEmpty()) return responseCursor;
     debugF("Processing {} 'transfer' events", events.size());
 
-    for (EventInfo event : events) {
+    for (int i = 0; i < events.size(); i++) {
+      EventInfo event = events.get(i);
+      ShouldProcessResult result = shouldProcess(event);
+      if (!result.shouldProcess) {
+        continue;
+      }
       try {
-        ShouldProcessResult result = shouldProcess(event);
-        if (result.shouldProcess) {
-          processTransferEvent(result);
-        }
+        processTransferEvent(result);
+      } catch (IOException | NetworkException ex) {
+        errorF(
+            "Failed to process transfer event of transaction {}. It will be retried. ex={}",
+            event.getTransactionHash(),
+            ex.toString());
+        return i == 0 ? null : events.get(i - 1).getId();
       } catch (Exception ex) {
-        warnF(
-            "Skip event due to unexpected error: {}. ex={}",
-            GsonUtils.getInstance().toJson(event),
+        errorF(
+            "Skipping transfer event of transaction {} that cannot be processed. ex={}",
+            event.getTransactionHash(),
             ex.toString());
       }
     }
+    return responseCursor;
   }
 
-  private void processTransferEvent(ShouldProcessResult result) {
+  void processTransferEvent(ShouldProcessResult result) throws IOException, AnchorException {
     debug("Processing transfer event: {}", GsonUtils.getInstance().toJson(result.event));
+    LedgerTransaction txn;
     try {
-      LedgerTransaction txn =
+      txn =
           LedgerClientHelper.waitForTransactionAvailable(
               stellarRpc, result.event.getTransactionHash());
-      String wantedOpId =
-          String.valueOf(
-              new TOID(
-                      txn.getSequenceNumber().intValue(),
-                      txn.getApplicationOrder(),
-                      result.event.getOperationIndex().intValue() + 1)
-                  .toInt64());
-      LedgerOperation op =
+    } catch (LedgerException lex) {
+      throw new IOException(
+          "Transaction is not available: " + result.event.getTransactionHash(), lex);
+    }
+    int opIndex = result.event.getOperationIndex().intValue();
+    String wantedOpId =
+        String.valueOf(
+            new TOID(txn.getSequenceNumber().intValue(), txn.getApplicationOrder(), opIndex + 1)
+                .toInt64());
+    LedgerOperation op =
+        txn.getOperations().stream()
+            .filter(o -> wantedOpId.equals(getOperationId(o)))
+            .findFirst()
+            .orElse(null);
+    if (op == null && LedgerClientHelper.isInvokeHostFunctionOperation(txn, opIndex)) {
+      txn = withInvokeHostFunctionOperation(txn, wantedOpId);
+      op =
           txn.getOperations().stream()
               .filter(o -> wantedOpId.equals(getOperationId(o)))
               .findFirst()
               .orElse(null);
-      if (op == null) {
-        errorF(
-            "No creditable operation found for transfer event: txHash={}, operationIndex={}."
-                + " The operation may be a contract sub-invocation with no direct representation"
-                + " in the filtered operation list. Skipping.",
-            result.event.getTransactionHash(),
-            result.event.getOperationIndex());
-        return;
-      }
-      processOperation(txn, op, result.event.getContractId(), result.amount);
-    } catch (Exception ex) {
-      warnF(
-          "Error processing transfer event: {}. ex={}",
-          GsonUtils.getInstance().toJson(result.event),
-          ex.getMessage());
     }
+    if (op == null) {
+      errorF(
+          "No creditable operation found for transfer event: txHash={}, operationIndex={}."
+              + " Skipping.",
+          result.event.getTransactionHash(),
+          result.event.getOperationIndex());
+      return;
+    }
+    processOperation(txn, op, result);
   }
 
   private String getOperationId(LedgerOperation op) {
@@ -377,10 +390,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   void processOperation(
-      LedgerTransaction ledgerTxn,
-      LedgerOperation op,
-      String emittingContractId,
-      BigInteger emittingAmount)
+      LedgerTransaction ledgerTxn, LedgerOperation op, ShouldProcessResult verified)
       throws IOException, AnchorException {
     PaymentTransferEvent event =
         switch (op.getType()) {
@@ -411,6 +421,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           case INVOKE_HOST_FUNCTION -> {
             LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
                 op.getInvokeHostFunctionOperation();
+            String emittingContractId = verified.event.getContractId();
             Asset asset = sacToAssetMapper.getAssetFromSac(emittingContractId);
             if (asset == null) {
               warnF(
@@ -421,10 +432,10 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             }
             invokeOp.setAsset(asset);
             yield PaymentTransferEvent.builder()
-                .from(invokeOp.getFrom())
-                .to(invokeOp.getTo())
+                .from(verified.fromAddr)
+                .to(verified.toAddr)
                 .sep11Asset(AssetHelper.getSep11AssetName(invokeOp.getAsset()))
-                .amount(emittingAmount)
+                .amount(verified.amount)
                 .txHash(ledgerTxn.getHash())
                 .operationId(invokeOp.getId())
                 .ledgerTransaction(ledgerTxn)

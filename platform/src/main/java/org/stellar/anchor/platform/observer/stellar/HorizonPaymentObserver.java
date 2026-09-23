@@ -23,6 +23,7 @@ import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.ledger.Horizon;
+import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.PaymentTransferEvent;
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig;
 import org.stellar.anchor.platform.observer.PaymentListener;
@@ -259,26 +260,46 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
         return null;
       }
       for (AssetContractBalanceChange assetBalanceChange : balanceChanges) {
+        if (!"transfer".equals(assetBalanceChange.getType())
+            || isEmpty(assetBalanceChange.getFrom())
+            || isEmpty(assetBalanceChange.getTo())) {
+          continue;
+        }
         String lookupToAccount = assetBalanceChange.getTo();
-        if (lookupToAccount != null && lookupToAccount.startsWith("M")) {
+        if (lookupToAccount.startsWith("M")) {
           lookupToAccount = new MuxedAccount(lookupToAccount).getAccountId();
         }
         if (paymentObservingAccountsManager.lookupAndUpdate(assetBalanceChange.getFrom())
             || paymentObservingAccountsManager.lookupAndUpdate(lookupToAccount)) {
+          String operationId = String.valueOf(invokeOp.getId());
+          LedgerTransaction ledgerTransaction =
+              horizon.getTransaction(operation.getTransactionHash());
+          if (ledgerTransaction == null) {
+            throw new LedgerException(
+                "Transaction is not yet available: " + operation.getTransactionHash());
+          }
           return PaymentTransferEvent.builder()
               .from(assetBalanceChange.getFrom())
-              .to(assetBalanceChange.getTo())
+              .to(toMuxedAddress(assetBalanceChange))
               .sep11Asset(AssetHelper.getSep11AssetName(assetBalanceChange.getAsset().toXdr()))
               .amount(AssetHelper.toXdrAmount(assetBalanceChange.getAmount()).toBigInteger())
               .txHash(invokeOp.getTransactionHash())
-              .operationId(String.valueOf(invokeOp.getId()))
-              .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
+              .operationId(operationId)
+              .ledgerTransaction(withInvokeHostFunctionOperation(ledgerTransaction, operationId))
               .build();
         }
       }
       return null;
     }
     return null;
+  }
+
+  static String toMuxedAddress(AssetContractBalanceChange assetBalanceChange) {
+    String to = assetBalanceChange.getTo();
+    if (assetBalanceChange.getDestinationMuxedId() == null || !to.startsWith("G")) {
+      return to;
+    }
+    return new MuxedAccount(to, assetBalanceChange.getDestinationMuxedId()).getAddress();
   }
 
   @Override

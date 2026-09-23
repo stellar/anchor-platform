@@ -3,8 +3,10 @@ package org.stellar.anchor.platform.observer.stellar
 import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.slot
 import io.mockk.spyk
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import java.io.IOException
 import java.math.BigInteger
@@ -13,11 +15,13 @@ import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.asset.AssetService
+import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation
@@ -92,6 +96,148 @@ class StellarRpcPaymentObserverTest {
     observer.setStatus(ObserverStatus.RUNNING)
   }
 
+  private fun verified(
+    contractId: String,
+    amount: BigInteger,
+    from: String = KeyPair.random().accountId,
+    to: String = KeyPair.random().accountId,
+  ): StellarRpcPaymentObserver.ShouldProcessResult {
+    val event = mockk<GetEventsResponse.EventInfo>()
+    every { event.contractId } returns contractId
+    return StellarRpcPaymentObserver.ShouldProcessResult.builder()
+      .event(event)
+      .shouldProcess(true)
+      .fromAddr(from)
+      .toAddr(to)
+      .amount(amount)
+      .build()
+  }
+
+  private fun eventWithId(id: String): GetEventsResponse.EventInfo {
+    val event = mockk<GetEventsResponse.EventInfo>(relaxed = true)
+    every { event.id } returns id
+    return event
+  }
+
+  private fun processAll() {
+    every { observer["shouldProcess"](any<GetEventsResponse.EventInfo>()) } answers
+      {
+        StellarRpcPaymentObserver.ShouldProcessResult.builder()
+          .event(firstArg())
+          .shouldProcess(true)
+          .build()
+      }
+  }
+
+  @Test
+  fun `processEvents stops at a transient failure and resumes after the last processed event`() {
+    val e1 = eventWithId("e1")
+    val e2 = eventWithId("e2")
+    val e3 = eventWithId("e3")
+    processAll()
+    every { observer.processTransferEvent(any()) } answers
+      {
+        if (firstArg<StellarRpcPaymentObserver.ShouldProcessResult>().event === e2)
+          throw IOException("platform unavailable")
+      }
+
+    assertEquals("e1", observer.processEvents(listOf(e1, e2, e3), "END"))
+    verify(exactly = 0) { observer.processTransferEvent(match { it.event === e3 }) }
+  }
+
+  @Test
+  fun `processEvents keeps the current cursor when the first event fails transiently`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws NetworkException(503, "unavailable")
+
+    assertNull(observer.processEvents(listOf(e1), "END"))
+  }
+
+  @Test
+  fun `processEvents skips an event that fails with a non-transient error and moves on`() {
+    val e1 = eventWithId("e1")
+    val e2 = eventWithId("e2")
+    processAll()
+    every { observer.processTransferEvent(any()) } answers
+      {
+        if (firstArg<StellarRpcPaymentObserver.ShouldProcessResult>().event === e1)
+          throw IllegalStateException("bad data")
+      }
+
+    assertEquals("END", observer.processEvents(listOf(e1, e2), "END"))
+    verify(exactly = 1) { observer.processTransferEvent(match { it.event === e2 }) }
+  }
+
+  @Test
+  fun `processTransferEvent credits a contract call the ledger parser did not model`() {
+    val event = eventWithId("e1")
+    every { event.transactionHash } returns "txHashRouter"
+    every { event.operationIndex } returns 0L
+    val txn =
+      LedgerTransaction.builder()
+        .hash("txHashRouter")
+        .sequenceNumber(100L)
+        .applicationOrder(1)
+        .operations(listOf())
+        .build()
+    every { stellarRpc.getTransaction("txHashRouter") } returns txn
+    mockkStatic(LedgerClientHelper::class)
+    try {
+      every { LedgerClientHelper.isInvokeHostFunctionOperation(any(), 0) } returns true
+      val opSlot = slot<LedgerOperation>()
+      every { observer.processOperation(any(), capture(opSlot), any()) } answers {}
+
+      observer.processTransferEvent(
+        StellarRpcPaymentObserver.ShouldProcessResult.builder()
+          .event(event)
+          .shouldProcess(true)
+          .build()
+      )
+
+      assertEquals(OperationType.INVOKE_HOST_FUNCTION, opSlot.captured.type)
+      assertEquals(
+        TOID(100, 1, 1).toInt64().toString(),
+        opSlot.captured.invokeHostFunctionOperation.id,
+      )
+    } finally {
+      unmockkStatic(LedgerClientHelper::class)
+    }
+  }
+
+  @Test
+  fun `processOperation takes from and to from the verified event, not the top-level declared arguments`() {
+    val ledgerTxn = mockk<LedgerTransaction>()
+    val cId = "verifiedSacContractId"
+    sacToAssetMapper.resolvableContracts = setOf(cId)
+    val verifiedFrom = KeyPair.random().accountId
+    val verifiedTo = KeyPair.random().accountId
+    val invokeOp =
+      LedgerTransaction.LedgerInvokeHostFunctionOperation().apply {
+        from = KeyPair.random().accountId
+        to = KeyPair.random().accountId
+        id = "opIdDeclared"
+        contractId = "routerContractId"
+      }
+    val op =
+      LedgerOperation().apply {
+        type = OperationType.INVOKE_HOST_FUNCTION
+        invokeHostFunctionOperation = invokeOp
+      }
+    every { ledgerTxn.hash } returns "txHashDeclared"
+    val eventSlot = slot<PaymentTransferEvent>()
+    every { observer["handleEvent"](capture(eventSlot)) } answers {}
+
+    observer.processOperation(
+      ledgerTxn,
+      op,
+      verified(cId, BigInteger.TEN, verifiedFrom, verifiedTo),
+    )
+
+    assertEquals(verifiedFrom, eventSlot.captured.from)
+    assertEquals(verifiedTo, eventSlot.captured.to)
+  }
+
   @Test
   fun `processOperation creates PaymentTransferEvent for PAYMENT operation`() {
     // Arrange
@@ -118,7 +264,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op, "ignoredContractId", BigInteger.ZERO)
+    observer.processOperation(ledgerTxn, op, verified("ignoredContractId", BigInteger.ZERO))
 
     // Assert
     val event = eventSlot.captured
@@ -158,7 +304,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op, "ignoredContractId", BigInteger.ZERO)
+    observer.processOperation(ledgerTxn, op, verified("ignoredContractId", BigInteger.ZERO))
 
     // Assert
     val event = eventSlot.captured
@@ -198,7 +344,7 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op, "ignoredContractId", BigInteger.ZERO)
+    observer.processOperation(ledgerTxn, op, verified("ignoredContractId", BigInteger.ZERO))
 
     // Assert
     val event = eventSlot.captured
@@ -241,7 +387,11 @@ class StellarRpcPaymentObserverTest {
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
     // Act
-    observer.processOperation(ledgerTxn, op, cId, BigInteger.valueOf(400L))
+    observer.processOperation(
+      ledgerTxn,
+      op,
+      verified(cId, BigInteger.valueOf(400L), fromAccount, toAccount),
+    )
 
     // Assert
     val event = eventSlot.captured
@@ -283,7 +433,11 @@ class StellarRpcPaymentObserverTest {
     val eventSlot = slot<PaymentTransferEvent>()
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
-    observer.processOperation(ledgerTxn, op, sacContractId, BigInteger.valueOf(500L))
+    observer.processOperation(
+      ledgerTxn,
+      op,
+      verified(sacContractId, BigInteger.valueOf(500L), fromAccount, toAccount),
+    )
 
     val event = eventSlot.captured
     assertEquals(fromAccount, event.from)
@@ -316,7 +470,7 @@ class StellarRpcPaymentObserverTest {
     val eventSlot = slot<PaymentTransferEvent>()
     every { observer["handleEvent"](capture(eventSlot)) } answers {}
 
-    observer.processOperation(ledgerTxn, op, cId, BigInteger.ONE)
+    observer.processOperation(ledgerTxn, op, verified(cId, BigInteger.ONE))
 
     val event = eventSlot.captured
     assertEquals(BigInteger.ONE, event.amount)
@@ -347,7 +501,11 @@ class StellarRpcPaymentObserverTest {
     every { ledgerTxn.hash } returns "txHashForwarder"
 
     assertDoesNotThrow {
-      observer.processOperation(ledgerTxn, op, forwarderContractId, BigInteger.valueOf(999L))
+      observer.processOperation(
+        ledgerTxn,
+        op,
+        verified(forwarderContractId, BigInteger.valueOf(999L)),
+      )
     }
 
     verify(exactly = 0) { observer["handleEvent"](any<PaymentTransferEvent>()) }
