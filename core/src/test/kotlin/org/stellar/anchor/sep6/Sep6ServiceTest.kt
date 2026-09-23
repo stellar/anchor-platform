@@ -1713,9 +1713,11 @@ class Sep6ServiceTest {
     val request = GetTransactionRequest.builder().id(depositTxn.id).lang("en-US").build()
     every { txnStore.findByTransactionId(depositTxn.id) } returns depositTxn
 
-    assertThrows<NotFoundException> {
-      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
-    }
+    val ex =
+      assertThrows<NotFoundException> {
+        sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction not found", ex.message)
 
     verify { txnStore.findByTransactionId(depositTxn.id) }
   }
@@ -1737,6 +1739,39 @@ class Sep6ServiceTest {
       sep6Service.findTransactions(TestHelper.createWebAuthJwt("other-account"), request)
     }
     verify { txnStore wasNot Called }
+  }
+
+  @Test
+  fun `test find transactions with omitted account queries store with token account`() {
+    val depositTxn = createDepositTxn(TEST_ACCOUNT)
+    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any()) } returns listOf(depositTxn)
+    val request =
+      GetTransactionsRequest.builder().assetCode(TEST_ASSET).limit(10).lang("en-US").build()
+
+    val response = sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+
+    verify(exactly = 1) { txnStore.findTransactions(TEST_ACCOUNT, null, request) }
+    assertEquals(1, response.transactions.size)
+  }
+
+  @Test
+  fun `test find transactions with blank account behaves like omitted account`() {
+    val depositTxn = createDepositTxn(TEST_ACCOUNT)
+    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any()) } returns listOf(depositTxn)
+    val request =
+      GetTransactionsRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account("")
+        .limit(10)
+        .lang("en-US")
+        .build()
+
+    val response = assertDoesNotThrow {
+      sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+    }
+
+    verify(exactly = 1) { txnStore.findTransactions(TEST_ACCOUNT, null, request) }
+    assertEquals(1, response.transactions.size)
   }
 
   @Test
