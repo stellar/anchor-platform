@@ -1314,6 +1314,33 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     assertMissingParameterError(ex, "amount")
   }
 
+  @Test
+  fun `test sep6 withdraw-exchange rejects request without source_asset`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(withdrawExchangeRequest() - "source_asset", exchange = true)
+      }
+    assertMissingParameterError(ex, "source_asset")
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects request without destination_asset`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(withdrawExchangeRequest() - "destination_asset", exchange = true)
+      }
+    assertMissingParameterError(ex, "destination_asset")
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects request without amount`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(withdrawExchangeRequest() - "amount", exchange = true)
+      }
+    assertMissingParameterError(ex, "amount")
+  }
+
   companion object {
 
     private val expectedSep6Info =
