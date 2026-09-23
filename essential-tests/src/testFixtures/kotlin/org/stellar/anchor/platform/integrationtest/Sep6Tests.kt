@@ -3,6 +3,8 @@ package org.stellar.anchor.platform.integrationtest
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Instant
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -16,6 +18,7 @@ import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.sep.sep38.Sep38Context
+import org.stellar.anchor.api.sep.sep38.Sep38QuoteResponse
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
 import org.stellar.anchor.platform.IntegrationTestBase
@@ -1339,6 +1342,96 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
         sep6Client.withdraw(withdrawExchangeRequest() - "amount", exchange = true)
       }
     assertMissingParameterError(ex, "amount")
+  }
+
+  /**
+   * Asserts a quote-backed SEP-6 exchange's raw transaction record agrees with the SEP-38 quote and
+   * satisfies the SEP-6 Amount Formula -- computed here from the quote's own fields, never read
+   * back from [txn]'s stored copy (audit Step 4's exact complaint: today's tests only compare
+   * against a hardcoded/stored value). Every comparison is numeric ([BigDecimal.compareTo]/
+   * subtraction), never string equality, since the transaction's amount strings and the quote's
+   * amount strings are independently formatted and can differ in scale/trailing zeros.
+   */
+  private fun assertAmountsAgreeWithQuote(txn: JsonObject, quote: Sep38QuoteResponse) {
+    val amountInAsset = txn.get("amount_in_asset").asString
+    val amountOutAsset = txn.get("amount_out_asset").asString
+    val feeDetails = txn.getAsJsonObject("fee_details")
+    val feeAsset = feeDetails.get("asset").asString
+    val amountOutString = txn.get("amount_out").asString
+    val amountIn = BigDecimal(txn.get("amount_in").asString)
+    val amountOut = BigDecimal(amountOutString)
+    val feeTotal = BigDecimal(feeDetails.get("total").asString)
+
+    Assertions.assertEquals(0, amountIn.compareTo(BigDecimal(quote.sellAmount))) {
+      "expected amount_in ($amountIn) to equal the quote's sell_amount (${quote.sellAmount}) numerically"
+    }
+    Assertions.assertEquals(quote.sellAsset, amountInAsset) {
+      "expected amount_in_asset ($amountInAsset) to equal the quote's sell_asset (${quote.sellAsset})"
+    }
+    Assertions.assertEquals(0, amountOut.compareTo(BigDecimal(quote.buyAmount))) {
+      "expected amount_out ($amountOut) to equal the quote's buy_amount (${quote.buyAmount}) numerically"
+    }
+    Assertions.assertEquals(quote.buyAsset, amountOutAsset) {
+      "expected amount_out_asset ($amountOutAsset) to equal the quote's buy_asset (${quote.buyAsset})"
+    }
+    Assertions.assertEquals(0, feeTotal.compareTo(BigDecimal(quote.fee.total))) {
+      "expected fee_details.total ($feeTotal) to equal the quote's fee.total (${quote.fee.total}) numerically"
+    }
+    Assertions.assertEquals(quote.fee.asset, feeAsset) {
+      "expected fee_details.asset ($feeAsset) to equal the quote's fee.asset (${quote.fee.asset})"
+    }
+
+    // Precondition (spec.md edge case): the formula below is only valid in sell-asset units. If
+    // the reference server ever quotes the fee in the buy asset, fail loudly here instead of
+    // computing the formula in mixed units.
+    Assertions.assertEquals(amountInAsset, feeAsset) {
+      "Amount Formula precondition failed: fee_details.asset ($feeAsset) must equal" +
+        " amount_in_asset ($amountInAsset) to compute the formula in sell-asset units"
+    }
+
+    val price = BigDecimal(quote.price)
+    val computedAmountOut = amountIn.subtract(feeTotal).divide(price, 10, RoundingMode.HALF_UP)
+    val scale = amountOutString.substringAfter('.', "").length
+    val tolerance = BigDecimal.ONE.movePointLeft(scale)
+    val diff = computedAmountOut.subtract(amountOut).abs()
+    Assertions.assertTrue(diff < tolerance) {
+      "expected abs((amount_in - fee_details.total) / price - amount_out) ($diff) to be less" +
+        " than one unit in amount_out's last decimal place ($tolerance); amount_in=$amountIn," +
+        " fee_details.total=$feeTotal, price=$price, amount_out=$amountOut"
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange with quote satisfies the amount formula`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val quoteClient = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), jwt)
+
+    val quoteId =
+      quoteClient
+        .postQuote(
+          "iso4217:USD",
+          "10",
+          "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+          Sep38Context.SEP6,
+        )
+        .id
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "10",
+        "account" to keyPair.address,
+        "type" to "SWIFT",
+        "quote_id" to quoteId,
+      )
+
+    val response = client.deposit(request, exchange = true)
+    val txn = getTransactionRaw(client, response.id!!).getAsJsonObject("transaction")
+    val quote = quoteClient.getQuote(quoteId)
+
+    assertAmountsAgreeWithQuote(txn, quote)
   }
 
   companion object {
