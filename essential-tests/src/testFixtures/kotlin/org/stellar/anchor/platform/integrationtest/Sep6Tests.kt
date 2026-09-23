@@ -3,6 +3,7 @@ package org.stellar.anchor.platform.integrationtest
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
@@ -17,8 +18,12 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepValidationException
+import org.stellar.anchor.api.rpc.RpcRequest
+import org.stellar.anchor.api.rpc.RpcResponse
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.api.sep.sep38.Sep38QuoteResponse
+import org.stellar.anchor.apiclient.PlatformApiClient
+import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
 import org.stellar.anchor.platform.IntegrationTestBase
@@ -34,6 +39,8 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   private val sep6Client = Sep6Client(toml.getString("TRANSFER_SERVER"), token.token)
   private val sep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
+  private val platformApiClient =
+    PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
 
   private fun authenticateWithMemo(keyPair: SigningKeyPair, memoId: ULong): String {
     return runBlocking { anchor.auth().authenticate(keyPair, memoId = memoId) }.token
@@ -1466,7 +1473,148 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     assertAmountsAgreeWithQuote(txn, quote)
   }
 
+  /**
+   * Sends a JSON-RPC batch to the Platform API and asserts it succeeded -- HTTP success AND no
+   * individual batch item carrying an `error` (a failed item still returns HTTP 200, so both must
+   * be checked to catch a silently-failed step; the resource-handling gap Copilot flagged on
+   *
+   * #2025). [json] is a JSON array of RPC request objects with `%TX_ID%` standing in for [txId].
+   */
+  private fun sendRpcBatch(json: String, txId: String) {
+    val rpcRequestListType = object : TypeToken<List<RpcRequest>>() {}.type
+    val rpcRequests: List<RpcRequest> =
+      gson.fromJson(json.replace("%TX_ID%", txId), rpcRequestListType)
+
+    platformApiClient.sendRpcRequest(rpcRequests).use { response ->
+      Assertions.assertTrue(response.isSuccessful) {
+        "expected the RPC batch call to succeed, got HTTP ${response.code}"
+      }
+      val body = response.body!!.string()
+      val rpcResponseListType = object : TypeToken<List<RpcResponse>>() {}.type
+      val rpcResponses: List<RpcResponse> = gson.fromJson(body, rpcResponseListType)
+      rpcResponses.forEachIndexed { index, rpcResponse ->
+        Assertions.assertNull(rpcResponse.error) {
+          "expected no error in RPC batch response item $index, got ${rpcResponse.error}: $body"
+        }
+      }
+    }
+  }
+
+  /**
+   * Creates a fresh-keypair deposit and drives it to `on_hold` via RPC: `request_offchain_funds`
+   * (incomplete -> pending_user_transfer_start), then `notify_transaction_on_hold`
+   * (pending_user_transfer_start -> on_hold) -- the #2025 CI-proven fixture with
+   * `notify_transaction_on_hold` inserted between its two steps.
+   */
+  private fun createOnHoldDeposit(): Pair<Sep6Client, String> {
+    val (client, ids) = createAccountWithDeposits(1)
+    val depositId = ids[0]
+    sendRpcBatch(onHoldRpcBatchRequests, depositId)
+    return client to depositId
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports on_hold`() {
+    val (client, depositId) = createOnHoldDeposit()
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("on_hold", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  @Test
+  fun `test sep6 on_hold deposit resumes to pending_anchor when funds are received`() {
+    val (client, depositId) = createOnHoldDeposit()
+    sendRpcBatch(offchainFundsReceivedRpcRequest, depositId)
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("pending_anchor", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
   companion object {
+
+    /**
+     * Reaches `on_hold` from a fresh `incomplete` deposit: `request_offchain_funds` moves it to
+     * `pending_user_transfer_start`, then `notify_transaction_on_hold` moves it to `on_hold` --
+     * the #2025 CI-proven `request_offchain_funds` -> `notify_offchain_funds_received` fixture with
+     * `notify_transaction_on_hold` inserted between the two steps.
+     */
+    private val onHoldRpcBatchRequests =
+      """
+      [
+        {
+          "id": "1",
+          "method": "request_offchain_funds",
+          "jsonrpc": "2.0",
+          "params": {
+            "transaction_id": "%TX_ID%",
+            "message": "on_hold fixture: requesting offchain funds",
+            "amount_in": { "amount": "1", "asset": "iso4217:USD" },
+            "amount_out": {
+              "amount": "1",
+              "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+            },
+            "fee_details": { "total": "0", "asset": "iso4217:USD" },
+            "amount_expected": { "amount": "1" }
+          }
+        },
+        {
+          "id": "2",
+          "method": "notify_transaction_on_hold",
+          "jsonrpc": "2.0",
+          "params": {
+            "transaction_id": "%TX_ID%",
+            "message": "on_hold fixture: placing on hold for additional checks"
+          }
+        }
+      ]
+      """
+        .trimIndent()
+
+    /** Resumes an `on_hold` deposit to `pending_anchor`. */
+    private val offchainFundsReceivedRpcRequest =
+      """
+      [
+        {
+          "id": "3",
+          "method": "notify_offchain_funds_received",
+          "jsonrpc": "2.0",
+          "params": {
+            "transaction_id": "%TX_ID%",
+            "message": "on_hold fixture: offchain funds received",
+            "funds_received_at": "2023-07-04T12:34:56Z",
+            "external_transaction_id": "ext-on-hold-1",
+            "amount_in": { "amount": "1" },
+            "amount_out": { "amount": "1" },
+            "fee_details": { "total": "0", "asset": "iso4217:USD" }
+          }
+        }
+      ]
+      """
+        .trimIndent()
+
+    /**
+     * Moves an `incomplete` deposit to `pending_customer_info_update`. `%CUSTOMER_ID%` is filled in
+     * by the caller with a customer id the reference server reports as `NEEDS_INFO`.
+     */
+    private val notifyCustomerInfoUpdatedRpcRequest =
+      """
+      [
+        {
+          "id": "1",
+          "method": "notify_customer_info_updated",
+          "jsonrpc": "2.0",
+          "params": {
+            "transaction_id": "%TX_ID%",
+            "message": "NEEDS_INFO fixture: customer info updated",
+            "customer_id": "%CUSTOMER_ID%",
+            "customer_type": "sep6"
+          }
+        }
+      ]
+      """
+        .trimIndent()
 
     private val expectedSep6Info =
       """
