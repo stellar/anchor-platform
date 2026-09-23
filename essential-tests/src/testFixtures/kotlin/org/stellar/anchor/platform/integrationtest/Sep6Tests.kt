@@ -107,6 +107,25 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   /**
+   * Fetches GET /transaction as a raw JSON object, bypassing [Sep6Client.getTransaction]'s parsed
+   * response -- Gson silently nulls absent fields on a parsed object, which would hide a missing
+   * required field from schema assertions. Returns the whole response body, including its top-level
+   * wrapper, so callers can assert the wrapper's key set as well as the nested `transaction`
+   * object.
+   */
+  private fun getTransactionRaw(client: Sep6Client, id: String): JsonObject {
+    val url =
+      "${toml.getString("TRANSFER_SERVER")}/transaction"
+        .toHttpUrl()
+        .newBuilder()
+        .addQueryParameter("id", id)
+        .build()
+        .toString()
+    val rawJson = client.httpGet(url, client.jwt)!!
+    return JsonParser.parseString(rawJson).asJsonObject
+  }
+
+  /**
    * SEP-6's own transaction status enum (sep-0006.md, "Transaction History" -> "`status` should be
    * one of:"). Deliberately NOT `org.stellar.anchor.api.sep.SepTransactionStatus` -- that enum is
    * shared across SEP-6/24/31, so it also accepts SEP-31-only values (`pending_sender`,
@@ -1034,6 +1053,40 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
   private fun postQuote(sellAsset: String, sellAmount: String, buyAsset: String): String {
     return sep38Client.postQuote(sellAsset, sellAmount, buyAsset, Sep38Context.SEP6).id
+  }
+
+  // --- SEP-6 coverage audit (ANCHOR-1296): closes audit assertions #10, #11, #12, #16, #17 plus
+  // the exchange-endpoint entry-condition gap PR #2017 deferred. See
+  // .specs/features/sep6-coverage/spec.md.
+
+  @Test
+  fun `test sep6 GET transaction returns a schema-complete deposit record`() {
+    val fixture = createAccountWithDepositAndWithdrawal()
+
+    val raw = getTransactionRaw(fixture.client, fixture.depositId)
+    Assertions.assertEquals(setOf("transaction"), raw.keySet()) {
+      "expected the /transaction response's only top-level key to be 'transaction', got ${raw.keySet()}"
+    }
+
+    val txn = raw.getAsJsonObject("transaction")
+    assertValidSep6TransactionSchema(txn, "to")
+    Assertions.assertEquals("deposit", txn.get("kind").asString)
+    Assertions.assertEquals(fixture.depositId, txn.get("id").asString)
+  }
+
+  @Test
+  fun `test sep6 GET transaction returns a schema-complete withdrawal record`() {
+    val fixture = createAccountWithDepositAndWithdrawal()
+
+    val raw = getTransactionRaw(fixture.client, fixture.withdrawId)
+    Assertions.assertEquals(setOf("transaction"), raw.keySet()) {
+      "expected the /transaction response's only top-level key to be 'transaction', got ${raw.keySet()}"
+    }
+
+    val txn = raw.getAsJsonObject("transaction")
+    assertValidSep6TransactionSchema(txn, "from")
+    Assertions.assertEquals("withdrawal", txn.get("kind").asString)
+    Assertions.assertEquals(fixture.withdrawId, txn.get("id").asString)
   }
 
   companion object {
