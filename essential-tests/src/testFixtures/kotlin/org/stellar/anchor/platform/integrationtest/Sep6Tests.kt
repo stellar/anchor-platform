@@ -1434,6 +1434,38 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     assertAmountsAgreeWithQuote(txn, quote)
   }
 
+  @Test
+  fun `test sep6 withdraw-exchange with quote satisfies the amount formula`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val quoteClient = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), jwt)
+
+    val quoteId =
+      quoteClient
+        .postQuote(
+          "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+          "10",
+          "iso4217:USD",
+          Sep38Context.SEP6,
+        )
+        .id
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "10",
+        "type" to "bank_account",
+        "quote_id" to quoteId,
+      )
+
+    val response = client.withdraw(request, exchange = true)
+    val txn = getTransactionRaw(client, response.id!!).getAsJsonObject("transaction")
+    val quote = quoteClient.getQuote(quoteId)
+
+    assertAmountsAgreeWithQuote(txn, quote)
+  }
+
   companion object {
 
     private val expectedSep6Info =
