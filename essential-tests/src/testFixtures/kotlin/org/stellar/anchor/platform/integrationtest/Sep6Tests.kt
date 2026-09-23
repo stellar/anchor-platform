@@ -1241,6 +1241,43 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  /** Known-good `/deposit-exchange` request, reused by the JWT test and the per-parameter tests. */
+  private fun depositExchangeRequest(): Map<String, String> =
+    mapOf(
+      "destination_asset" to "USDC",
+      "source_asset" to "iso4217:USD",
+      "amount" to "1",
+      "account" to clientWalletAccount,
+      "type" to "SWIFT",
+    )
+
+  /**
+   * Known-good `/withdraw-exchange` request, reused by the JWT test and the per-parameter tests.
+   */
+  private fun withdrawExchangeRequest(): Map<String, String> =
+    mapOf(
+      "destination_asset" to "iso4217:USD",
+      "source_asset" to "USDC",
+      "amount" to "1",
+      "type" to "bank_account",
+    )
+
+  @Test
+  fun `test sep6 deposit-exchange rejects request without JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.deposit(depositExchangeRequest(), exchange = true)
+    }
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects request without JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.withdraw(withdrawExchangeRequest(), exchange = true)
+    }
+  }
+
   companion object {
 
     private val expectedSep6Info =
