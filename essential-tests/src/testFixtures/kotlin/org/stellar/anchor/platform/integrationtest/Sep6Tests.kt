@@ -20,10 +20,12 @@ import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.rpc.RpcRequest
 import org.stellar.anchor.api.rpc.RpcResponse
+import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.api.sep.sep38.Sep38QuoteResponse
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
+import org.stellar.anchor.client.Sep12Client
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
 import org.stellar.anchor.platform.IntegrationTestBase
@@ -1529,6 +1531,32 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
     val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
     Assertions.assertEquals("pending_anchor", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports pending_customer_info_update for a NEEDS_INFO customer`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    // Its own Sep12Client/customer -- never the shared sep6Client's wallet customer. Cross-test
+    // customer updates caused real optimistic-locking flakiness in this codebase before (#2022).
+    val freshSep12Client = Sep12Client(toml.getString("KYC_SERVER"), jwt)
+
+    val customer =
+      freshSep12Client.putCustomer(
+        Sep12PutCustomerRequest.builder().account(keyPair.address).build()
+      )!!
+    val depositId =
+      client.deposit(mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")).id!!
+
+    sendRpcBatch(
+      notifyCustomerInfoUpdatedRpcRequest.replace("%CUSTOMER_ID%", customer.id),
+      depositId
+    )
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("pending_customer_info_update", txn.get("status").asString)
     assertValidSep6TransactionSchema(txn, "to")
   }
 
