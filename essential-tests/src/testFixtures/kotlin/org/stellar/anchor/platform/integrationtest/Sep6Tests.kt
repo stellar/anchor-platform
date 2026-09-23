@@ -126,6 +126,16 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   /**
+   * Fetches GET /info as a raw JSON object, bypassing [Sep6Client.getInfo]'s parsed response --
+   * Gson silently re-serializes the DTO, which would hide a malformed or extra raw field from the
+   * per-asset field-metadata assertions.
+   */
+  private fun getInfoRaw(): JsonObject {
+    val rawJson = sep6Client.httpGet("${toml.getString("TRANSFER_SERVER")}/info")!!
+    return JsonParser.parseString(rawJson).asJsonObject
+  }
+
+  /**
    * SEP-6's own transaction status enum (sep-0006.md, "Transaction History" -> "`status` should be
    * one of:"). Deliberately NOT `org.stellar.anchor.api.sep.SepTransactionStatus` -- that enum is
    * shared across SEP-6/24/31, so it also accepts SEP-31-only values (`pending_sender`,
@@ -1128,6 +1138,106 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
     Assertions.assertTrue(info.has("withdraw")) {
       "expected TRANSFER_SERVER's /info response to contain a 'withdraw' key, got $info"
+    }
+  }
+
+  @Test
+  fun `test sep6 info deposit fields are exactly the type field listing the funding methods`() {
+    val info = getInfoRaw()
+
+    for (operation in listOf("deposit", "deposit-exchange")) {
+      val assets = info.getAsJsonObject(operation)
+      Assertions.assertTrue(assets.size() > 0) {
+        "expected '$operation' to list at least one asset in /info"
+      }
+      assets.entrySet().forEach { (assetCode, assetJson) ->
+        val asset = assetJson.asJsonObject
+        val fields = asset.getAsJsonObject("fields")
+        Assertions.assertEquals(setOf("type"), fields.keySet()) {
+          "expected '$operation.$assetCode.fields' to have exactly the key 'type', got ${fields.keySet()}"
+        }
+
+        val fundingMethods = asset.getAsJsonArray("funding_methods").map { it.asString }
+        val choices = fields.getAsJsonObject("type").getAsJsonArray("choices").map { it.asString }
+        Assertions.assertEquals(fundingMethods, choices) {
+          "expected '$operation.$assetCode.fields.type.choices' ($choices) to equal" +
+            " 'funding_methods' ($fundingMethods), element-for-element, in order"
+        }
+      }
+    }
+  }
+
+  @Test
+  fun `test sep6 info fields entries carry only description, optional and choices`() {
+    val info = getInfoRaw()
+
+    for (operation in listOf("deposit", "deposit-exchange")) {
+      val assets = info.getAsJsonObject(operation)
+      Assertions.assertTrue(assets.size() > 0) {
+        "expected '$operation' to list at least one asset in /info"
+      }
+      assets.entrySet().forEach { (assetCode, assetJson) ->
+        val fields = assetJson.asJsonObject.getAsJsonObject("fields")
+        fields.entrySet().forEach { (fieldName, fieldJson) ->
+          val field = fieldJson.asJsonObject
+          val description = field.get("description")
+          Assertions.assertTrue(
+            description != null &&
+              description.isJsonPrimitive &&
+              description.asJsonPrimitive.isString &&
+              description.asString.isNotEmpty()
+          ) {
+            "expected '$operation.$assetCode.fields.$fieldName.description' to be a non-empty" +
+              " string, got $description"
+          }
+          val unknown = field.keySet() - setOf("description", "optional", "choices")
+          Assertions.assertTrue(unknown.isEmpty()) {
+            "unexpected key(s) $unknown in '$operation.$assetCode.fields.$fieldName': $field"
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun `test sep6 info withdraw types are exactly the funding methods with empty fields`() {
+    val info = getInfoRaw()
+
+    for (operation in listOf("withdraw", "withdraw-exchange")) {
+      val assets = info.getAsJsonObject(operation)
+      Assertions.assertTrue(assets.size() > 0) {
+        "expected '$operation' to list at least one asset in /info"
+      }
+      assets.entrySet().forEach { (assetCode, assetJson) ->
+        val asset = assetJson.asJsonObject
+        val fundingMethods = asset.getAsJsonArray("funding_methods").map { it.asString }.toSet()
+        val types = asset.getAsJsonObject("types")
+        Assertions.assertEquals(fundingMethods, types.keySet()) {
+          "expected '$operation.$assetCode.types' key set (${types.keySet()}) to equal" +
+            " 'funding_methods' ($fundingMethods)"
+        }
+        types.entrySet().forEach { (method, typeJson) ->
+          val fields = typeJson.asJsonObject.getAsJsonObject("fields")
+          Assertions.assertEquals(0, fields.size()) {
+            "expected '$operation.$assetCode.types.$method.fields' to be empty, got $fields"
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun `test sep6 info omits assets with SEP-6 disabled`() {
+    val info = getInfoRaw()
+
+    for (operation in listOf("deposit", "deposit-exchange", "withdraw", "withdraw-exchange")) {
+      val assets = info.getAsJsonObject(operation)
+      Assertions.assertTrue(assets.size() > 0) {
+        "expected '$operation' to list at least one asset in /info"
+      }
+      Assertions.assertFalse(assets.has("JPYC")) {
+        "expected 'JPYC' (sep6.enabled: false) to be absent from '$operation', got ${assets.keySet()}"
+      }
     }
   }
 
