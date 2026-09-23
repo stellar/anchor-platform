@@ -342,6 +342,22 @@ public class LedgerClientHelper {
 
   public record ParseResult(Operation[] operations, String sourceAccount, Memo memo) {}
 
+  public static boolean isInvokeHostFunctionOperation(LedgerTransaction txn, int opIndex) {
+    if (txn == null || txn.getEnvelopeXdr() == null) {
+      return false;
+    }
+    try {
+      TransactionEnvelope txnEnv = TransactionEnvelope.fromXdrBase64(txn.getEnvelopeXdr());
+      ParseResult parsed = parseOperationAndSourceAccountAndMemo(txnEnv, txn.getHash());
+      if (parsed == null || opIndex < 0 || opIndex >= parsed.operations().length) {
+        return false;
+      }
+      return parsed.operations()[opIndex].getBody().getDiscriminant() == INVOKE_HOST_FUNCTION;
+    } catch (IOException ioex) {
+      return false;
+    }
+  }
+
   public static List<LedgerOperation> getLedgerOperations(
       Integer applicationOrder,
       Long sequenceNumber,

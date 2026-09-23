@@ -421,6 +421,51 @@ internal class LedgerClientHelperTest {
     assertNull(ledgerOperation)
   }
 
+  private fun envelopeXdrOf(operation: org.stellar.sdk.operations.Operation): String {
+    val source = KeyPair.random()
+    return org.stellar.sdk
+      .TransactionBuilder(
+        org.stellar.sdk.Account(source.accountId, 1L),
+        org.stellar.sdk.Network.TESTNET
+      )
+      .addOperation(operation)
+      .setBaseFee(100)
+      .setTimeout(0L)
+      .build()
+      .toEnvelopeXdrBase64()
+  }
+
+  @Test
+  fun `test isInvokeHostFunctionOperation detects a contract call of any argument shape`() {
+    val operation =
+      org.stellar.sdk.operations.InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
+          "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+          "pay",
+          listOf(Scv.toSymbol("memo")),
+        )
+        .build()
+    val txn = LedgerTransaction.builder().hash("hash").envelopeXdr(envelopeXdrOf(operation)).build()
+
+    assertTrue(LedgerClientHelper.isInvokeHostFunctionOperation(txn, 0))
+    assertFalse(LedgerClientHelper.isInvokeHostFunctionOperation(txn, 1))
+  }
+
+  @Test
+  fun `test isInvokeHostFunctionOperation returns false for a classic operation`() {
+    val operation =
+      org.stellar.sdk.operations.PaymentOperation.builder()
+        .destination(KeyPair.random().accountId)
+        .asset(org.stellar.sdk.Asset.createNativeAsset())
+        .amount(java.math.BigDecimal.ONE)
+        .build()
+    val txn = LedgerTransaction.builder().hash("hash").envelopeXdr(envelopeXdrOf(operation)).build()
+
+    assertFalse(LedgerClientHelper.isInvokeHostFunctionOperation(txn, 0))
+    assertFalse(
+      LedgerClientHelper.isInvokeHostFunctionOperation(LedgerTransaction.builder().build(), 0)
+    )
+  }
+
   @Test
   fun `test parseOperationResults returns results for txSUCCESS`() {
     val opResults =
