@@ -1089,6 +1089,48 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     Assertions.assertEquals(fixture.withdrawId, txn.get("id").asString)
   }
 
+  @Test
+  fun `test sep6 TOML TRANSFER_SERVER is a well-formed URL`() {
+    val transferServer: String? = toml.getString("TRANSFER_SERVER")
+    Assertions.assertNotNull(transferServer) {
+      "expected the TOML to contain a TRANSFER_SERVER value"
+    }
+
+    val url =
+      assertDoesNotThrow({
+        "expected TRANSFER_SERVER ($transferServer) to parse as an absolute URL"
+      }) {
+        transferServer!!.toHttpUrl()
+      }
+
+    val isLocalHttp = url.scheme == "http" && url.host in setOf("localhost", "host.docker.internal")
+    Assertions.assertTrue(url.scheme == "https" || isLocalHttp) {
+      "expected TRANSFER_SERVER's scheme to be https, or http only when the host is localhost or" +
+        " host.docker.internal, got ${url.scheme}://${url.host}"
+    }
+
+    Assertions.assertFalse(transferServer!!.endsWith("/")) {
+      "expected TRANSFER_SERVER ($transferServer) to not end with '/'"
+    }
+  }
+
+  @Test
+  fun `test sep6 TOML TRANSFER_SERVER serves the SEP-6 info endpoint`() {
+    val transferServer: String = toml.getString("TRANSFER_SERVER")
+
+    // Any non-200 response already throws inside SepClient.handleResponse, so successfully
+    // reaching and parsing the body below is itself the assertion that GET /info responded 200.
+    val rawJson = sep6Client.httpGet("$transferServer/info")!!
+    val info = JsonParser.parseString(rawJson).asJsonObject
+
+    Assertions.assertTrue(info.has("deposit")) {
+      "expected TRANSFER_SERVER's /info response to contain a 'deposit' key, got $info"
+    }
+    Assertions.assertTrue(info.has("withdraw")) {
+      "expected TRANSFER_SERVER's /info response to contain a 'withdraw' key, got $info"
+    }
+  }
+
   companion object {
 
     private val expectedSep6Info =
