@@ -353,7 +353,7 @@ public class LedgerClientHelper {
         return false;
       }
       return parsed.operations()[opIndex].getBody().getDiscriminant() == INVOKE_HOST_FUNCTION;
-    } catch (IOException ioex) {
+    } catch (IOException | RuntimeException ex) {
       return false;
     }
   }

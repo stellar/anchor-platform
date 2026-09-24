@@ -85,7 +85,8 @@ class Sep45ServiceTest {
     every { nonceManager.verifyAndUse(any()) } returns true
     every { nonce.id } returns "nonce-id"
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns passphrase
-    every { stellarRpc.latestLedger } returns GetLatestLedgerResponse("id", 23, 123455)
+    every { stellarRpc.latestLedger } returns
+      GetLatestLedgerResponse("id", 23, 123455, null, null, null)
     every { stellarRpc.simulateTransaction(any()) } returns
       GsonUtils.getInstance()
         .fromJson(jsonSimulateTransactionResponse, SimulateTransactionResponse::class.java)

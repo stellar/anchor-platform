@@ -14,6 +14,7 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import okhttp3.OkHttpClient;
 import org.stellar.anchor.api.exception.AccountNotFoundException;
+import org.stellar.anchor.api.exception.LedgerDecodeException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.RpcAuthConfig;
 import org.stellar.anchor.config.SecretConfig;
@@ -122,7 +123,9 @@ public class StellarRpc implements LedgerClient {
               .build());
 
       return Account.builder()
-          .accountId(StrKey.encodeEd25519PublicKey(ae.getAccountID()))
+          .accountId(
+              StrKey.encodeEd25519PublicKey(
+                  ae.getAccountID().getAccountID().getEd25519().getUint256()))
           .sequenceNumber(ae.getSeqNum().getSequenceNumber().getInt64())
           .thresholds(
               new Thresholds(
@@ -248,8 +251,9 @@ public class StellarRpc implements LedgerClient {
     TransactionEnvelope txnEnv;
     try {
       txnEnv = TransactionEnvelope.fromXdrBase64(txnResponse.getEnvelopeXdr());
-    } catch (IOException ioex) {
-      throw new LedgerException("Unable to parse transaction envelope", ioex);
+    } catch (IOException | RuntimeException ex) {
+      throw new LedgerDecodeException(
+          "Unable to parse transaction envelope for hash=" + txnResponse.getTxHash(), ex);
     }
     Integer applicationOrder = txnResponse.getApplicationOrder();
     Long sequenceNumber = txnResponse.getLedger();
@@ -261,7 +265,7 @@ public class StellarRpc implements LedgerClient {
     try {
       txResult = txnResponse.parseResultXdr();
     } catch (RuntimeException rex) {
-      throw new LedgerException(
+      throw new LedgerDecodeException(
           "Unable to parse transaction result for hash=" + txnResponse.getTxHash(), rex);
     }
     OperationResult[] opResults =
