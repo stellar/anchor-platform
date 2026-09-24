@@ -1,6 +1,7 @@
 package org.stellar.reference.sep24
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -10,50 +11,89 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.stellar.reference.ClientException
+import org.stellar.reference.UnauthorizedException
 import org.stellar.reference.data.DepositRequest
 import org.stellar.reference.data.ErrorResponse
 import org.stellar.reference.data.Success
 import org.stellar.reference.data.WithdrawalRequest
 import org.stellar.reference.jwt.JwtDecoder
+import org.stellar.reference.jwt.Sep24SessionToken
 import org.stellar.reference.service.SepHelper
 
 private val log = KotlinLogging.logger {}
+
+private const val INTERACTIVE_AUDIENCE = "sep24_interactive"
+private const val MORE_INFO_AUDIENCE = "sep24_more_info"
+private const val INTERNAL_ERROR_MESSAGE = "An internal error occurred"
+
+private fun ApplicationCall.bearerToken(): String {
+  val header =
+    request.headers["Authorization"] ?: throw ClientException("Missing Authorization header")
+  if (!header.startsWith("Bearer")) {
+    throw ClientException("Invalid Authorization header")
+  }
+  return header.replace(Regex("Bearer\\s+"), "")
+}
+
+private fun sessionTransactionId(sessionToken: String, jwtKey: String): String =
+  try {
+    Sep24SessionToken.verify(sessionToken, jwtKey)
+  } catch (e: Exception) {
+    throw UnauthorizedException("Invalid or expired session")
+  }
+
+private fun readableTransactionId(token: String, jwtKey: String, moreInfoJwtKey: String?): String {
+  runCatching { Sep24SessionToken.verify(token, jwtKey) }
+    .onSuccess {
+      return it
+    }
+  if (moreInfoJwtKey != null) {
+    runCatching { JwtDecoder.decode(token, moreInfoJwtKey, MORE_INFO_AUDIENCE).transactionId }
+      .onSuccess {
+        return it
+      }
+  }
+  throw UnauthorizedException("Invalid or expired session")
+}
+
+private suspend fun ApplicationCall.respondUnauthorized(e: UnauthorizedException) {
+  respond(HttpStatusCode.Unauthorized, ErrorResponse(e.message!!))
+}
 
 fun Route.sep24(
   sep24: SepHelper,
   depositService: DepositService,
   withdrawalService: WithdrawalService,
   jwtKey: String,
+  moreInfoJwtKey: String? = null,
+  sessionTtlSeconds: Long = Sep24SessionToken.DEFAULT_TTL_SECONDS,
 ) {
   route("/start") {
     post {
       try {
-        val header =
-          call.request.headers["Authorization"]
-            ?: throw ClientException("Missing Authorization header")
+        val interactiveToken = call.bearerToken()
 
-        if (!header.startsWith("Bearer")) {
-          throw ClientException("Invalid Authorization header")
-        }
+        val token =
+          try {
+            JwtDecoder.decode(interactiveToken, jwtKey, INTERACTIVE_AUDIENCE)
+          } catch (e: Exception) {
+            throw UnauthorizedException("Invalid or expired interactive token")
+          }
 
-        val token = JwtDecoder.decode(header.replace(Regex("Bearer\\s+"), ""), jwtKey)
+        log.info { "Starting /sep24/interactive for transaction ${token.transactionId}" }
 
-        val transactionId = token.transactionId
-
-        log.info { "Starting /sep24/interactive with token $token" }
-
-        if (token.expiration > System.currentTimeMillis()) {
-          throw ClientException("Token expired")
-        }
-
-        // TODO: return new JWT here
-        call.respond(Success(transactionId))
+        call.respond(
+          Success(Sep24SessionToken.issue(token.transactionId, jwtKey, sessionTtlSeconds))
+        )
+      } catch (e: UnauthorizedException) {
+        log.error { e }
+        call.respondUnauthorized(e)
       } catch (e: ClientException) {
         log.error { e }
         call.respond(ErrorResponse(e.message!!))
       } catch (e: Exception) {
         log.error { e }
-        call.respond(ErrorResponse("Error occurred: ${e.message}"))
+        call.respond(ErrorResponse(INTERNAL_ERROR_MESSAGE))
       }
     }
   }
@@ -62,18 +102,10 @@ fun Route.sep24(
   route("/submit") {
     post {
       try {
-        val header =
-          call.request.headers["Authorization"]
-            ?: throw ClientException("Missing Authorization header")
+        val sessionToken = call.bearerToken()
+        val transactionId = sessionTransactionId(sessionToken, jwtKey)
 
-        if (!header.startsWith("Bearer")) {
-          throw ClientException("Invalid Authorization header")
-        }
-
-        val sessionId = header.replace(Regex("Bearer\\s+"), "")
-
-        // TODO: decode sessionID
-        val transaction = sep24.getTransaction(sessionId)
+        val transaction = sep24.getTransaction(transactionId)
 
         if (transaction.status != "incomplete") {
           throw ClientException("Transaction has already been started.")
@@ -93,7 +125,7 @@ fun Route.sep24(
                 ?: throw ClientException("Missing amountExpected.asset field")
             val memo = transaction.memo
 
-            call.respond(Success(sessionId))
+            call.respond(Success(sessionToken))
 
             val stellarAsset = asset.replace("stellar:", "")
 
@@ -111,7 +143,7 @@ fun Route.sep24(
           "withdrawal" -> {
             val withdrawal = call.receive<WithdrawalRequest>()
 
-            call.respond(Success(sessionId))
+            call.respond(Success(sessionToken))
 
             val asset =
               transaction.amountExpected?.asset
@@ -133,12 +165,15 @@ fun Route.sep24(
               ErrorResponse("The only supported operations are \"deposit\" or \"withdrawal\"")
             )
         }
+      } catch (e: UnauthorizedException) {
+        log.error { e }
+        call.respondUnauthorized(e)
       } catch (e: ClientException) {
         log.error { e }
         call.respond(ErrorResponse(e.message!!))
       } catch (e: Exception) {
         log.error { e }
-        call.respond(ErrorResponse("Error occurred: ${e.message}"))
+        call.respond(ErrorResponse(INTERNAL_ERROR_MESSAGE))
       }
     }
   }
@@ -146,26 +181,20 @@ fun Route.sep24(
   route("transaction") {
     get {
       try {
-        val header =
-          call.request.headers["Authorization"]
-            ?: throw ClientException("Missing Authorization header")
+        val transactionId = readableTransactionId(call.bearerToken(), jwtKey, moreInfoJwtKey)
 
-        if (!header.startsWith("Bearer")) {
-          throw ClientException("Invalid Authorization header")
-        }
-
-        val sessionId = header.replace(Regex("Bearer\\s+"), "")
-
-        // TODO: decode sessionID
-        val transaction = sep24.getTransaction(sessionId)
+        val transaction = sep24.getTransaction(transactionId)
 
         call.respond(transaction)
+      } catch (e: UnauthorizedException) {
+        log.error { e }
+        call.respondUnauthorized(e)
       } catch (e: ClientException) {
         log.error { e }
         call.respond(ErrorResponse(e.message!!))
       } catch (e: Exception) {
         log.error { e }
-        call.respond(ErrorResponse("Error occurred: ${e.message}"))
+        call.respond(ErrorResponse(INTERNAL_ERROR_MESSAGE))
       }
     }
   }
