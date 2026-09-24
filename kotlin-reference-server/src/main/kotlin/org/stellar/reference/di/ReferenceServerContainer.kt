@@ -55,7 +55,9 @@ object ReferenceServerContainer {
       ServiceContainer.sepHelper,
       ServiceContainer.depositService,
       ServiceContainer.withdrawalService,
-      config.sep24.interactiveJwtKey
+      config.sep24.interactiveJwtKey,
+      config.sep24.moreInfoJwtKey,
+      config.sep24.sessionTtlSeconds,
     )
     event(ServiceContainer.eventService, config.appSettings.isTest)
     customer(ServiceContainer.customerService)

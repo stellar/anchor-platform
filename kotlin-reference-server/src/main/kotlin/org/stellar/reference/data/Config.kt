@@ -11,7 +11,11 @@ data class Config(
   val sep24: Sep24,
 )
 
-data class Sep24(val interactiveJwtKey: String)
+data class Sep24(
+  val interactiveJwtKey: String,
+  val moreInfoJwtKey: String? = null,
+  val sessionTtlSeconds: Long = 1800,
+)
 
 data class AppSettings(
   val version: String,
