@@ -15,6 +15,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.springframework.data.domain.Sort;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.platform.*;
 import org.stellar.anchor.api.rpc.RpcRequest;
@@ -43,7 +44,16 @@ public class PlatformApiClient extends BaseApiClient {
    */
   @Deprecated // ANCHOR-641 Use getTransactionByRpc instead
   public GetTransactionResponse getTransaction(String id) throws IOException, AnchorException {
-    Request request = getRequestBuilder().url(endpoint + "/transactions/" + id).get().build();
+    if (id == null || id.isEmpty() || ".".equals(id) || "..".equals(id)) {
+      throw new BadRequestException("Invalid transaction id");
+    }
+    HttpUrl baseUrl = HttpUrl.parse(endpoint);
+    if (baseUrl == null) {
+      throw new InvalidConfigException(
+          String.format("Invalid endpoint: %s of the client.", endpoint));
+    }
+    HttpUrl url = baseUrl.newBuilder().addPathSegment("transactions").addPathSegment(id).build();
+    Request request = getRequestBuilder().url(url).get().build();
     String responseBody = handleResponse(client.newCall(request).execute());
     return gson.fromJson(responseBody, GetTransactionResponse.class);
   }
