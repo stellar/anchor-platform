@@ -377,7 +377,7 @@ public class Sep38Service {
       // stricter bypass of this ceiling than any finite value could be.
       throw new ServerErrorException("Rate callback returned a null expires_at");
     }
-    int maxQuoteExpirationSeconds = sep38Config.getMaxQuoteExpirationSeconds();
+    int maxQuoteExpirationSeconds = getValidatedMaxQuoteExpirationSeconds();
     if (rate.getExpiresAt().isAfter(Instant.now().plusSeconds(maxQuoteExpirationSeconds))) {
       throw new ServerErrorException(
           "Rate callback returned expires_at="
@@ -387,6 +387,17 @@ public class Sep38Service {
               + " seconds");
     }
     return rate;
+  }
+
+  private int getValidatedMaxQuoteExpirationSeconds() throws ServerErrorException {
+    Integer maxQuoteExpirationSeconds = sep38Config.getMaxQuoteExpirationSeconds();
+    if (maxQuoteExpirationSeconds == null || maxQuoteExpirationSeconds <= 0) {
+      // PropertySep38Config.validate() rejects this at startup, but sep38Config is an interface -
+      // guard against a misconfigured or non-validated implementation instead of unboxing a null
+      // Integer, which would surface as a raw NullPointerException.
+      throw new ServerErrorException("sep38.max_quote_expiration_seconds is not configured");
+    }
+    return maxQuoteExpirationSeconds;
   }
 
   private Pair<String, Pair<String, String>> validateToken(WebAuthJwt token)
@@ -512,7 +523,7 @@ public class Sep38Service {
       if (expireAfter.isBefore(now.minusSeconds(EXPIRE_AFTER_GRACE_PERIOD_SECONDS))) {
         throw new BadRequestException("expire_after cannot be in the past");
       }
-      int maxQuoteExpirationSeconds = sep38Config.getMaxQuoteExpirationSeconds();
+      int maxQuoteExpirationSeconds = getValidatedMaxQuoteExpirationSeconds();
       if (expireAfter.isAfter(now.plusSeconds(maxQuoteExpirationSeconds))) {
         throw new BadRequestException(
             "expire_after exceeds the maximum quote expiration of "
