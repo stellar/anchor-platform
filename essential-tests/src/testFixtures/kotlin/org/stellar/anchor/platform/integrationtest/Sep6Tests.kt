@@ -1628,10 +1628,19 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
     Assertions.assertEquals("pending_transaction_info_update", txn.get("status").asString)
     Assertions.assertEquals(requiredInfoMessage, txn.get("required_info_message").asString)
-    Assertions.assertEquals(
-      setOf("dest", "dest_extra"),
-      txn.getAsJsonObject("required_info_updates").keySet(),
-    )
+    val requiredInfoUpdates = txn.getAsJsonObject("required_info_updates")
+    Assertions.assertEquals(setOf("dest", "dest_extra"), requiredInfoUpdates.keySet())
+    requiredInfoUpdates.entrySet().forEach { (fieldName, fieldJson) ->
+      val description = fieldJson.asJsonObject.get("description")
+      Assertions.assertTrue(
+        description != null &&
+          description.isJsonPrimitive &&
+          description.asJsonPrimitive.isString &&
+          description.asString.isNotEmpty()
+      ) {
+        "expected 'required_info_updates.$fieldName.description' to be a non-empty string, got $description"
+      }
+    }
     assertValidSep6TransactionSchema(txn, "to")
   }
 
