@@ -1,6 +1,7 @@
 package org.stellar.anchor.apiclient;
 
 import static org.stellar.anchor.api.rpc.method.RpcMethod.*;
+import static org.stellar.anchor.util.SepHelper.isValidSepTransactionId;
 
 import jakarta.annotation.Nullable;
 import java.io.IOException;
@@ -44,7 +45,7 @@ public class PlatformApiClient extends BaseApiClient {
    */
   @Deprecated // ANCHOR-641 Use getTransactionByRpc instead
   public GetTransactionResponse getTransaction(String id) throws IOException, AnchorException {
-    if (id == null || id.isEmpty() || ".".equals(id) || "..".equals(id)) {
+    if (!isValidSepTransactionId(id)) {
       throw new BadRequestException("Invalid transaction id");
     }
     HttpUrl baseUrl = HttpUrl.parse(endpoint);

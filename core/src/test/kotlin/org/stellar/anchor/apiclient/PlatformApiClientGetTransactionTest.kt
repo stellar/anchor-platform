@@ -53,28 +53,32 @@ class PlatformApiClientGetTransactionTest {
     assertEquals("/platform/transactions/9a0a0f9c-3b1c-4f1e-8d3a-2b6f4f0e7c11", path)
   }
 
-  @Test
-  fun `getTransaction keeps a path traversal id inside the transaction path`() {
-    val (path, query) = requestedPathFor("../clients")
-
-    assertEquals("/transactions/..%2Fclients", path)
-    assertNull(query)
-  }
-
-  @Test
-  fun `getTransaction keeps an injected query inside the transaction path`() {
-    val (path, query) = requestedPathFor("../transactions?sep=24&page_size=2000000000")
-
-    assertEquals("/transactions/..%2Ftransactions%3Fsep=24&page_size=2000000000", path)
-    assertNull(query)
-  }
-
   @ParameterizedTest
-  @ValueSource(strings = ["", ".", ".."])
-  fun `getTransaction rejects ids that would resolve to another path without sending a request`(
+  @ValueSource(
+    strings =
+      [
+        "",
+        ".",
+        "..",
+        "../clients",
+        "../../clients/some-wallet",
+        "../transactions?sep=24&page_size=2000000000",
+        "../health",
+        "not-a-uuid",
+        "9a0a0f9c-3b1c-4f1e-8d3a-2b6f4f0e7c11/../../clients",
+        "9a0a0f9c-3b1c-4f1e-8d3a-2b6f4f0e7c11?x=1",
+      ]
+  )
+  fun `getTransaction rejects anything that is not a transaction id without sending a request`(
     id: String
   ) {
     assertThrows(BadRequestException::class.java) { client().getTransaction(id) }
+    assertEquals(0, server.requestCount)
+  }
+
+  @Test
+  fun `getTransaction rejects a null id without sending a request`() {
+    assertThrows(BadRequestException::class.java) { client().getTransaction(null) }
     assertEquals(0, server.requestCount)
   }
 }
