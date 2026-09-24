@@ -1713,9 +1713,11 @@ class Sep6ServiceTest {
     val request = GetTransactionRequest.builder().id(depositTxn.id).lang("en-US").build()
     every { txnStore.findByTransactionId(depositTxn.id) } returns depositTxn
 
-    assertThrows<NotFoundException> {
-      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
-    }
+    val ex =
+      assertThrows<NotFoundException> {
+        sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction not found", ex.message)
 
     verify { txnStore.findByTransactionId(depositTxn.id) }
   }

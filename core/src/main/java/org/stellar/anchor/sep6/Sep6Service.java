@@ -564,7 +564,7 @@ public class Sep6Service {
       throw new NotFoundException("transaction not found");
     }
     if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
-      throw new NotFoundException("account memo does not match token");
+      throw new NotFoundException("transaction not found");
     }
 
     sep6TransactionQueriedCounter.increment();
