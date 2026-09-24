@@ -35,6 +35,7 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.config.Sep38Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.Log;
+import org.stellar.anchor.util.SepHelper;
 
 public class Sep38Service {
   final AssetService assetService;
@@ -365,22 +366,8 @@ public class Sep38Service {
 
   private Pair<String, Pair<String, String>> validateToken(WebAuthJwt token)
       throws BadRequestException {
-    if (token == null) {
-      throw new BadRequestException("missing web auth token");
-    }
-    String account, memo = null, memoType = null;
-    if (!Objects.toString(token.getMuxedAccount(), "").isEmpty()) {
-      account = token.getMuxedAccount();
-    } else if (!Objects.toString(token.getAccount(), "").isEmpty()) {
-      account = token.getAccount();
-      if (token.getAccountMemo() != null) {
-        memo = token.getAccountMemo();
-        memoType = "id";
-      }
-    } else {
-      throw new BadRequestException("web auth token is malformed");
-    }
-    return Pair.of(account, Pair.of(memo, memoType));
+    SepHelper.TokenIdentity identity = SepHelper.webAuthTokenIdentity(token);
+    return Pair.of(identity.account(), Pair.of(identity.memo(), identity.memoType()));
   }
 
   public Sep38QuoteResponse getQuote(WebAuthJwt token, String quoteId) throws AnchorException {

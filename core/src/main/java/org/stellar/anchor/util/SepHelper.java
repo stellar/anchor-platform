@@ -5,13 +5,40 @@ import static org.stellar.anchor.util.MathHelper.decimal;
 
 import java.util.Set;
 import java.util.UUID;
+import org.apache.commons.lang3.StringUtils;
+import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.InvalidStellarAccountException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
+import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.xdr.MemoType;
 
 public class SepHelper {
+
+  public static TokenIdentity webAuthTokenIdentity(WebAuthJwt token) throws BadRequestException {
+    if (token == null) {
+      throw new BadRequestException("missing web auth token");
+    }
+    String account;
+    String memo = null;
+    String memoType = null;
+    if (StringUtils.isNotEmpty(token.getMuxedAccount())) {
+      account = token.getMuxedAccount();
+    } else if (StringUtils.isNotEmpty(token.getAccount())) {
+      account = token.getAccount();
+      if (token.getAccountMemo() != null) {
+        memo = token.getAccountMemo();
+        memoType = "id";
+      }
+    } else {
+      throw new BadRequestException("web auth token is malformed");
+    }
+    return new TokenIdentity(account, memo, memoType);
+  }
+
+  public record TokenIdentity(String account, String memo, String memoType) {}
+
   public enum AccountType {
     Classic,
     Muxed,

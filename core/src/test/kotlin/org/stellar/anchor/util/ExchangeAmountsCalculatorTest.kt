@@ -25,6 +25,17 @@ import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts
 class ExchangeAmountsCalculatorTest {
   companion object {
     val token = TestHelper.createWebAuthJwt(TEST_ACCOUNT, TestConstants.TEST_MEMO)
+    val callerIdentity = SepHelper.webAuthTokenIdentity(token)
+
+    val differentAccountIdentity =
+      SepHelper.TokenIdentity(
+        TestHelper.TEST_ACCOUNT,
+        callerIdentity.memo(),
+        callerIdentity.memoType(),
+      )
+
+    val differentMemoIdentity =
+      SepHelper.TokenIdentity(callerIdentity.account(), "456", callerIdentity.memoType())
   }
 
   private val assetService: AssetService = DefaultAssetService.fromJsonResource("test_assets.json")
@@ -50,6 +61,9 @@ class ExchangeAmountsCalculatorTest {
           total = "2"
           asset = "iso4217:USD"
         }
+      creatorAccountId = callerIdentity.account()
+      creatorMemo = callerIdentity.memo()
+      creatorMemoType = callerIdentity.memoType()
     }
 
   @Test
@@ -57,7 +71,14 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
 
-    val result = calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
+    val result =
+      calculator.calculateFromQuote(
+        quoteId,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        callerIdentity,
+      )
     assertEquals(
       Amounts.builder()
         .amountIn("100")
@@ -74,7 +95,13 @@ class ExchangeAmountsCalculatorTest {
   fun `test calculateFromQuote with invalid quote id`() {
     every { sep38QuoteStore.findByQuoteId(any()) } returns null
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote("id", assetService.getAsset("USDC"), null, "100")
+      calculator.calculateFromQuote(
+        "id",
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        callerIdentity
+      )
     }
   }
 
@@ -88,7 +115,13 @@ class ExchangeAmountsCalculatorTest {
       }
 
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
+      calculator.calculateFromQuote(
+        quoteId,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        callerIdentity
+      )
     }
   }
 
@@ -97,7 +130,13 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "99")
+      calculator.calculateFromQuote(
+        quoteId,
+        assetService.getAsset("USDC"),
+        null,
+        "99",
+        callerIdentity
+      )
     }
   }
 
@@ -106,7 +145,13 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("JPYC"), null, "100")
+      calculator.calculateFromQuote(
+        quoteId,
+        assetService.getAsset("JPYC"),
+        null,
+        "100",
+        callerIdentity
+      )
     }
   }
 
@@ -115,7 +160,13 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote().apply { fee = null }
     assertThrows<SepValidationException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
+      calculator.calculateFromQuote(
+        quoteId,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        callerIdentity
+      )
     }
   }
 
@@ -129,6 +180,7 @@ class ExchangeAmountsCalculatorTest {
         assetService.getAsset("USDC"),
         assetService.getAsset("JPYC"),
         "100",
+        callerIdentity,
       )
     }
   }
@@ -143,6 +195,7 @@ class ExchangeAmountsCalculatorTest {
         assetService.getAsset("USDC"),
         assetService.getAsset("JPYC"),
         "100",
+        callerIdentity,
       )
     }
   }
@@ -158,6 +211,7 @@ class ExchangeAmountsCalculatorTest {
         assetService.getAsset("USDC"),
         assetService.getAsset("USD"),
         "100",
+        callerIdentity,
       )
     assertEquals(
       Amounts.builder()
@@ -178,7 +232,13 @@ class ExchangeAmountsCalculatorTest {
       usdcQuote().apply { transactionId = "existing-txn-id" }
     val ex =
       assertThrows<BadRequestException> {
-        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
+        calculator.calculateFromQuote(
+          quoteId,
+          assetService.getAsset("USDC"),
+          null,
+          "100",
+          callerIdentity
+        )
       }
     assert(ex.message!!.contains("has already been used"))
   }
@@ -193,8 +253,76 @@ class ExchangeAmountsCalculatorTest {
         assetService.getAsset("USDC"),
         null,
         "100",
+        callerIdentity,
       )
     assertEquals(TEST_ASSET_SEP38_FORMAT, result.sellAsset)
+  }
+
+  @Test
+  fun `test calculateFromQuote rejects a quote owned by a caller with a different account`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
+    val ex =
+      assertThrows<BadRequestException> {
+        calculator.calculateFromQuote(
+          quoteId,
+          assetService.getAsset("USDC"),
+          null,
+          "100",
+          differentAccountIdentity,
+        )
+      }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test calculateFromQuote rejects a quote owned by a caller with a different memo`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
+    val ex =
+      assertThrows<BadRequestException> {
+        calculator.calculateFromQuote(
+          quoteId,
+          assetService.getAsset("USDC"),
+          null,
+          "100",
+          differentMemoIdentity,
+        )
+      }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test validateQuoteAgainstRequestInfo rejects a quote owned by a different caller with the same message as a missing quote`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
+    every { sep38QuoteStore.findByQuoteId("missing") } returns null
+
+    val notFoundMessage =
+      assertThrows<BadRequestException> {
+          calculator.validateQuoteAgainstRequestInfo(
+            "missing",
+            assetService.getAsset("USDC"),
+            null,
+            "100",
+            callerIdentity,
+          )
+        }
+        .message
+
+    val wrongOwnerMessage =
+      assertThrows<BadRequestException> {
+          calculator.validateQuoteAgainstRequestInfo(
+            quoteId,
+            assetService.getAsset("USDC"),
+            null,
+            "100",
+            differentAccountIdentity,
+          )
+        }
+        .message
+
+    assertEquals(notFoundMessage, wrongOwnerMessage)
   }
 
   @Test
@@ -217,7 +345,13 @@ class ExchangeAmountsCalculatorTest {
       usdcQuote().apply { transactionId = "T1-cancelled" }
     val ex =
       assertThrows<BadRequestException> {
-        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
+        calculator.calculateFromQuote(
+          quoteId,
+          assetService.getAsset("USDC"),
+          null,
+          "100",
+          callerIdentity
+        )
       }
     assert(ex.message!!.contains("has already been used"))
   }
