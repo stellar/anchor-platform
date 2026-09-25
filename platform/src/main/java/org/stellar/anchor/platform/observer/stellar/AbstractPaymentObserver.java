@@ -23,11 +23,15 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.healthcheck.HealthCheckable;
+import org.stellar.anchor.ledger.LedgerTransaction;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerInvokeHostFunctionOperation;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.PaymentTransferEvent;
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig;
 import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.utils.DaemonExecutors;
 import org.stellar.anchor.util.ExponentialBackoffTimer;
+import org.stellar.sdk.xdr.OperationType;
 
 /**
  * Abstract class for payment observers (HorizonPaymentObserver and SorobanPaymentObserver).
@@ -144,10 +148,51 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
    * @throws AnchorException if the event cannot be handled
    * @throws IOException if there is an error processing the event
    */
+  static LedgerTransaction withInvokeHostFunctionOperation(
+      LedgerTransaction ledgerTransaction, String operationId) {
+    if (ledgerTransaction == null) {
+      return null;
+    }
+    List<LedgerOperation> operations =
+        ledgerTransaction.getOperations() == null
+            ? new ArrayList<>()
+            : new ArrayList<>(ledgerTransaction.getOperations());
+    boolean present =
+        operations.stream()
+            .anyMatch(
+                op ->
+                    op.getInvokeHostFunctionOperation() != null
+                        && operationId.equals(op.getInvokeHostFunctionOperation().getId()));
+    if (!present) {
+      operations.add(
+          LedgerOperation.builder()
+              .type(OperationType.INVOKE_HOST_FUNCTION)
+              .invokeHostFunctionOperation(
+                  LedgerInvokeHostFunctionOperation.builder()
+                      .id(operationId)
+                      .sourceAccount(ledgerTransaction.getSourceAccount())
+                      .build())
+              .build());
+      ledgerTransaction.setOperations(operations);
+    }
+    return ledgerTransaction;
+  }
+
   void handleEvent(PaymentTransferEvent transferEvent) throws AnchorException, IOException {
     // process the payment
+    RuntimeException firstFailure = null;
     for (PaymentListener listener : paymentListeners) {
-      listener.onReceived(transferEvent);
+      try {
+        listener.onReceived(transferEvent);
+      } catch (RuntimeException rex) {
+        errorEx("Listener failed to process payment transfer event.", rex);
+        if (firstFailure == null) {
+          firstFailure = rex;
+        }
+      }
+    }
+    if (firstFailure != null) {
+      throw firstFailure;
     }
     publishingBackoffTimer.reset();
   }
