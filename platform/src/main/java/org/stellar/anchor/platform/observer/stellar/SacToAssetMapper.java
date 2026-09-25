@@ -72,6 +72,9 @@ public class SacToAssetMapper {
                 .build());
 
     GetLedgerEntriesResponse response = sorobanServer.getLedgerEntries(ledgerKeys);
+    if (response == null || response.getEntries() == null || response.getEntries().isEmpty()) {
+      return null;
+    }
     SCContractInstance contractInstance =
         LedgerEntry.LedgerEntryData.fromXdrBase64(response.getEntries().get(0).getXdr())
             .getContractData()

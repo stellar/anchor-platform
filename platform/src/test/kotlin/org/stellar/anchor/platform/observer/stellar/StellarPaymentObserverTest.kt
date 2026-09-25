@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.platform.HealthCheckStatus.RED
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
@@ -56,7 +57,7 @@ class StellarPaymentObserverTest {
 
     every { stellarObserver.fetchLatestCursorFromHorizon() } returns "1000"
     var gotCursor = stellarObserver.fetchStreamingCursor()
-    assertEquals("800", gotCursor)
+    assertEquals("123", gotCursor)
     verify(exactly = 1) { paymentStreamerCursorStore.loadHorizonCursor() }
 
     // 2 - If there is no stored constructor, we will fall back to fetching a result from the
@@ -168,5 +169,111 @@ class StellarPaymentObserverTest {
 
     val checkResult = observer.check()
     assertEquals(RED, checkResult.status)
+  }
+
+  @Test
+  fun `check() maps PUBLISHER_ERROR to RED`() {
+    val observer =
+      HorizonPaymentObserver(
+        Horizon(TEST_HORIZON_URI),
+        stellarPaymentObserverConfig,
+        null,
+        paymentObservingAccountsManager,
+        paymentStreamerCursorStore,
+      )
+    observer.setStatus(ObserverStatus.PUBLISHER_ERROR)
+
+    assertEquals(RED, observer.check().status)
+  }
+
+  @Test
+  fun `processOperation does not advance the cursor when the operation cannot be converted`() {
+    val observer =
+      spyk(
+        HorizonPaymentObserver(
+          Horizon(TEST_HORIZON_URI),
+          stellarPaymentObserverConfig,
+          null,
+          paymentObservingAccountsManager,
+          paymentStreamerCursorStore,
+        )
+      )
+    val operationResponse = mockk<OperationResponse>(relaxed = true)
+    every { operationResponse.pagingToken } returns "999"
+    every { observer.toPaymentTransferEvent(operationResponse) } throws
+      org.stellar.anchor.api.exception.LedgerException("boom")
+
+    observer.processOperation(operationResponse)
+
+    verify(exactly = 0) { paymentStreamerCursorStore.saveHorizonCursor(any()) }
+    assertEquals(ObserverStatus.PUBLISHER_ERROR, observer.status)
+  }
+
+  @Test
+  fun `processOperation advances the cursor once the operation is successfully processed`() {
+    val observer =
+      spyk(
+        HorizonPaymentObserver(
+          Horizon(TEST_HORIZON_URI),
+          stellarPaymentObserverConfig,
+          null,
+          paymentObservingAccountsManager,
+          paymentStreamerCursorStore,
+        )
+      )
+    val operationResponse = mockk<OperationResponse>(relaxed = true)
+    every { operationResponse.pagingToken } returns "1000"
+    every { observer.toPaymentTransferEvent(operationResponse) } returns null
+
+    observer.processOperation(operationResponse)
+
+    verify(exactly = 1) { paymentStreamerCursorStore.saveHorizonCursor("1000") }
+  }
+
+  @Test
+  fun `handleEvent still delivers to every listener but propagates a failing listener's exception`() {
+    val brokenListener: PaymentListener = mockk()
+    val healthyListener: PaymentListener = mockk(relaxed = true)
+    every { brokenListener.onReceived(any()) } throws IllegalStateException("decode bug")
+
+    val observer =
+      HorizonPaymentObserver(
+        Horizon(TEST_HORIZON_URI),
+        stellarPaymentObserverConfig,
+        listOf(brokenListener, healthyListener),
+        paymentObservingAccountsManager,
+        paymentStreamerCursorStore,
+      )
+    val transferEvent = mockk<org.stellar.anchor.ledger.PaymentTransferEvent>()
+
+    assertThrows<IllegalStateException> { observer.handleEvent(transferEvent) }
+
+    verify(exactly = 1) { healthyListener.onReceived(transferEvent) }
+  }
+
+  @Test
+  fun `processOperation sets PUBLISHER_ERROR and does not advance the cursor when a listener fails`() {
+    val brokenListener: PaymentListener = mockk()
+    every { brokenListener.onReceived(any()) } throws IllegalStateException("decode bug")
+
+    val observer =
+      spyk(
+        HorizonPaymentObserver(
+          Horizon(TEST_HORIZON_URI),
+          stellarPaymentObserverConfig,
+          listOf(brokenListener),
+          paymentObservingAccountsManager,
+          paymentStreamerCursorStore,
+        )
+      )
+    val operationResponse = mockk<OperationResponse>(relaxed = true)
+    every { operationResponse.pagingToken } returns "PUBLISHER_ERROR_CUR"
+    every { observer.toPaymentTransferEvent(operationResponse) } returns
+      mockk<org.stellar.anchor.ledger.PaymentTransferEvent>()
+
+    observer.processOperation(operationResponse)
+
+    verify(exactly = 0) { paymentStreamerCursorStore.saveHorizonCursor(any()) }
+    assertEquals(ObserverStatus.PUBLISHER_ERROR, observer.status)
   }
 }
