@@ -1264,6 +1264,168 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     Assertions.assertEquals(mapOf("dest" to "222", "dest_extra" to "021000021"), platformTxn.fields)
   }
 
+  /**
+   * A 400 body carries `{"error": "..."}`; [SepClient.handleResponse] preserves it raw rather than
+   * parsing it (see its comment), so tests that need the exact message extract it themselves.
+   */
+  private fun errorMessage(ex: SepException): String =
+    JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+
+  @Test
+  fun `test sep6 PATCH transaction rejects an unknown id`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+
+    val ex =
+      assertThrows<SepNotFoundException> {
+        client.patchTransaction(UUID.randomUUID().toString(), """{"transaction": {"dest": "1"}}""")
+      }
+    Assertions.assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects another account's transaction`() {
+    val ownerKeyPair = SigningKeyPair(KeyPair.random())
+    val ownerClient =
+      Sep6Client(toml.getString("TRANSFER_SERVER"), authenticateWithoutMemo(ownerKeyPair))
+    val txId =
+      ownerClient
+        .withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1"))
+        .id!!
+    requestSep6InfoUpdate(txId, listOf("dest"))
+
+    val otherKeyPair = SigningKeyPair(KeyPair.random())
+    val otherClient =
+      Sep6Client(toml.getString("TRANSFER_SERVER"), authenticateWithoutMemo(otherKeyPair))
+
+    val ex =
+      assertThrows<SepNotFoundException> {
+        otherClient.patchTransaction(txId, """{"transaction": {"dest": "1"}}""")
+      }
+    Assertions.assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects the same account under another memo`() {
+    val sharedKeyPair = SigningKeyPair(KeyPair.random())
+    val memoAClient =
+      Sep6Client(toml.getString("TRANSFER_SERVER"), authenticateWithMemo(sharedKeyPair, 111UL))
+    val memoBClient =
+      Sep6Client(toml.getString("TRANSFER_SERVER"), authenticateWithMemo(sharedKeyPair, 222UL))
+
+    val txId =
+      memoAClient
+        .withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1"))
+        .id!!
+    requestSep6InfoUpdate(txId, listOf("dest"))
+
+    val ex =
+      assertThrows<SepNotFoundException> {
+        memoBClient.patchTransaction(txId, """{"transaction": {"dest": "1"}}""")
+      }
+    Assertions.assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects a transaction not awaiting an update`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    // Never moved into pending_transaction_info_update.
+
+    val ex =
+      assertThrows<SepValidationException> {
+        client.patchTransaction(txId, """{"transaction": {"dest": "1"}}""")
+      }
+    Assertions.assertEquals("transaction (id=$txId) does not need update", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects an empty transaction object`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    requestSep6InfoUpdate(txId, listOf("dest"))
+
+    val ex =
+      assertThrows<SepValidationException> {
+        client.patchTransaction(txId, """{"transaction": {}}""")
+      }
+    Assertions.assertEquals("transaction must be specified", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects an unexpected field and changes nothing`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    requestSep6InfoUpdate(txId, listOf("dest"))
+
+    val before = platformApiClient.getTransactionByRpc(txId)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        client.patchTransaction(txId, """{"transaction": {"unexpected": "value"}}""")
+      }
+    Assertions.assertEquals("[unexpected] is not a expected field", errorMessage(ex))
+
+    val after = platformApiClient.getTransactionByRpc(txId)
+    Assertions.assertEquals(before.status, after.status)
+    Assertions.assertEquals(before.requiredInfoUpdates, after.requiredInfoUpdates)
+    Assertions.assertEquals(before.requiredInfoMessage, after.requiredInfoMessage)
+    Assertions.assertNull(after.fields)
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects a null field value`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    requestSep6InfoUpdate(txId, listOf("dest"))
+
+    val ex =
+      assertThrows<SepValidationException> {
+        client.patchTransaction(txId, """{"transaction": {"dest": null}}""")
+      }
+    Assertions.assertEquals("[dest] must not be null", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects a missing requested field`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    requestSep6InfoUpdate(txId, listOf("dest", "dest_extra"))
+
+    val ex =
+      assertThrows<SepValidationException> {
+        client.patchTransaction(txId, """{"transaction": {"dest": "1"}}""")
+      }
+    Assertions.assertEquals("[dest_extra] is required", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects a request without a JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.patchTransaction(
+        UUID.randomUUID().toString(),
+        """{"transaction": {"dest": "1"}}"""
+      )
+    }
+  }
+
   companion object {
 
     private val SEP6_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS =
