@@ -1,7 +1,7 @@
 package org.stellar.anchor.platform.integrationtest
 
 import java.time.Instant
-import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.Executors
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
@@ -86,7 +86,7 @@ class Sep38Tests : IntegrationTestBase(TestConfig()) {
 
     // POST {SEP38}/quote with `expires_after`
     printRequest("Calling POST /quote")
-    val expireAfter = DateTimeFormatter.ISO_INSTANT.parse("2022-04-30T02:15:44.000Z", Instant::from)
+    val expireAfter = Instant.now().plus(1, ChronoUnit.HOURS)
     postQuote =
       sep38Client.postQuote(
         "iso4217:USD",

@@ -110,6 +110,7 @@ sep31.enabled:
 sep31.payment_type:
 sep38.auth_enforced:
 sep38.enabled:
+sep38.max_quote_expiration_seconds:
 sep38.sep10_enforced:
 sep45.auth_timeout:
 sep45.client_allow_list:

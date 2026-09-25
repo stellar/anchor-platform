@@ -450,6 +450,10 @@ sep38:
   sep10_enforced: false
   # Whether to enforce SEP-10/SEP-45 authentication for SEP-38 /info, /price, /prices endpoints.
   auth_enforced: false
+  # The maximum number of seconds into the future a client's requested `expire_after` may push a
+  # quote's `expires_at`. Requests beyond this window are rejected with a 400 rather than being
+  # silently honored. Defaults to 7 days.
+  max_quote_expiration_seconds: 604800
 
 ######################
 # SEP-45 Configuration
