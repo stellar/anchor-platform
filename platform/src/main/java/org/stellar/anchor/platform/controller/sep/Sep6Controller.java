@@ -264,4 +264,23 @@ public class Sep6Controller {
             .build();
     return sep6Service.findTransaction(token, getTransactionRequest);
   }
+
+  @CrossOrigin(origins = "*")
+  @RequestMapping(
+      value = "/transactions/{id}",
+      consumes = {MediaType.APPLICATION_JSON_VALUE},
+      produces = {MediaType.APPLICATION_JSON_VALUE},
+      method = {RequestMethod.PATCH})
+  public Sep6GetTransactionResponse patchTransaction(
+      HttpServletRequest servletRequest,
+      @PathVariable(name = "id") String id,
+      @RequestBody Sep6PatchTransactionRequest request)
+      throws AnchorException {
+    WebAuthJwt token = SepRequestHelper.getToken(servletRequest);
+    if (request != null) {
+      request.setId(id);
+    }
+    debugF("PATCH /transactions id={}", id);
+    return sep6Service.patchTransaction(token, request);
+  }
 }

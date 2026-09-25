@@ -44,4 +44,18 @@ class Sep6Client(private val endpoint: String, var jwt: String?) : SepClient() {
     val responseBody = httpGet(urlBuilder.build().toString(), jwt)
     return gson.fromJson(responseBody, GetTransactionsResponse::class.java)
   }
+
+  /**
+   * Sends `PATCH /transactions/:id`. `body` is the raw JSON request body -- a raw string, rather
+   * than a typed request, so tests can send malformed shapes (`{}`, a null field value) without a
+   * typed builder getting in the way. Errors surface through [SepClient]'s status -> exception
+   * mapping (400 -> [org.stellar.anchor.api.exception.SepValidationException], 404 ->
+   * [org.stellar.anchor.api.exception.SepNotFoundException], 403 ->
+   * [org.stellar.anchor.api.exception.SepNotAuthorizedException]).
+   */
+  fun patchTransaction(id: String, body: String): Sep6GetTransactionResponse {
+    val headers = mapOf("Authorization" to "Bearer $jwt", "Content-Type" to "application/json")
+    val responseBody = httpPatch("$endpoint/transactions/$id", body, headers)
+    return gson.fromJson(responseBody, Sep6GetTransactionResponse::class.java)
+  }
 }

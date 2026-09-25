@@ -18,7 +18,11 @@ import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepNotFoundException
 import org.stellar.anchor.api.exception.SepValidationException
+import org.stellar.anchor.api.platform.PatchTransactionRequest
+import org.stellar.anchor.api.platform.PatchTransactionsRequest
+import org.stellar.anchor.api.platform.PlatformTransactionData.builder
 import org.stellar.anchor.api.rpc.RpcRequest
+import org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
@@ -1145,6 +1149,119 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
   private fun postQuote(sellAsset: String, sellAmount: String, buyAsset: String): String {
     return sep38Client.postQuote(sellAsset, sellAmount, buyAsset, Sep38Context.SEP6).id
+  }
+
+  /**
+   * Moves a SEP-6 transaction into `pending_transaction_info_update` through the deprecated
+   * Platform API `PATCH /transactions` -- the only entry path into that status for SEP-6. The
+   * transaction just created by [Sep6Client.withdraw]/[Sep6Client.deposit] may still be
+   * concurrently touched by an async event/observer, racing this PATCH into the same
+   * OptimisticLockingFailureException `TransactionService` throws as "Transaction was modified by
+   * another request. Please re-read the transaction state and retry if appropriate." -- so retry on
+   * that exact message, as `Sep31Tests.kt`'s `requestInfoUpdate` does.
+   */
+  private fun requestSep6InfoUpdate(
+    txId: String,
+    fieldNames: List<String>,
+    message: String? = null,
+  ) {
+    val request =
+      PatchTransactionsRequest.builder()
+        .records(
+          listOf(
+            PatchTransactionRequest(
+              builder()
+                .id(txId)
+                .status(PENDING_TRANSACTION_INFO_UPDATE)
+                .requiredInfoUpdates(fieldNames)
+                .requiredInfoMessage(message)
+                .build()
+            )
+          )
+        )
+        .build()
+
+    var attempt = 0
+    while (true) {
+      try {
+        platformApiClient.patchTransaction(request)
+        return
+      } catch (ex: SepException) {
+        attempt++
+        if (attempt >= 5 || ex.message?.contains("modified by another request") != true) {
+          throw ex
+        }
+        Thread.sleep(500)
+      }
+    }
+  }
+
+  /**
+   * Fetches GET /transaction as a raw JSON object, bypassing [Sep6Client.getTransaction]'s parsed
+   * response -- Gson silently nulls absent fields on a parsed object, which would hide an absent
+   * `required_info_updates`/`required_info_message` key from a strict "field is gone" assertion.
+   */
+  private fun getTransactionRaw(client: Sep6Client, id: String): JsonObject {
+    val rawJson =
+      client.httpGet("${toml.getString("TRANSFER_SERVER")}/transaction?id=$id", client.jwt)!!
+    return JsonParser.parseString(rawJson).asJsonObject.getAsJsonObject("transaction")
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction supplies the requested fields`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+
+    requestSep6InfoUpdate(txId, listOf("dest", "dest_extra"))
+
+    val patchResponse =
+      client.patchTransaction(
+        txId,
+        """{"transaction": {"dest": "12345678901234", "dest_extra": "021000021"}}""",
+      )
+    Assertions.assertEquals(txId, patchResponse.transaction.id)
+    Assertions.assertEquals("pending_anchor", patchResponse.transaction.status)
+
+    // The reference server asynchronously moves a pending_anchor transaction with no KYC on to
+    // another status right after this PATCH (Sep6EventProcessor.kt), so the exact post-PATCH
+    // status can't be pinned here -- only that the required-info fields are gone and the
+    // transaction has left pending_transaction_info_update.
+    val rawTxn = getTransactionRaw(client, txId)
+    Assertions.assertFalse(rawTxn.has("required_info_updates"))
+    Assertions.assertFalse(rawTxn.has("required_info_message"))
+    Assertions.assertNotEquals("pending_transaction_info_update", rawTxn.get("status").asString)
+
+    val platformTxn = platformApiClient.getTransactionByRpc(txId)
+    Assertions.assertEquals(
+      mapOf("dest" to "12345678901234", "dest_extra" to "021000021"),
+      platformTxn.fields,
+    )
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction keeps earlier fields across rounds`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+
+    // Round 1: only "dest" is requested and supplied.
+    requestSep6InfoUpdate(txId, listOf("dest"))
+    client.patchTransaction(txId, """{"transaction": {"dest": "111"}}""")
+
+    // Round 2: the anchor asks again, this time for "dest" (a new value) and "dest_extra".
+    requestSep6InfoUpdate(txId, listOf("dest", "dest_extra"))
+    client.patchTransaction(
+      txId,
+      """{"transaction": {"dest": "222", "dest_extra": "021000021"}}""",
+    )
+
+    val platformTxn = platformApiClient.getTransactionByRpc(txId)
+    Assertions.assertEquals(mapOf("dest" to "222", "dest_extra" to "021000021"), platformTxn.fields)
   }
 
   companion object {
