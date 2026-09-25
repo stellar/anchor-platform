@@ -430,6 +430,7 @@ public class Sep6Service {
     String sourceAccount =
         StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, sourceAccount);
+    validateRefundMemo(request.getRefundMemo(), request.getRefundMemoType());
 
     String id = generateSepTransactionId();
 
