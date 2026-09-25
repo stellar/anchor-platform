@@ -1143,6 +1143,187 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  @Test
+  fun `test sep6 withdraw stores the refund memo sent under the spec names`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+
+    val response =
+      client.withdraw(
+        mapOf(
+          "asset_code" to "USDC",
+          "type" to "bank_account",
+          "amount" to "1",
+          "refund_memo" to "spec-name-memo",
+          "refund_memo_type" to "text",
+        )
+      )
+
+    val txn = platformApiClient.getTransactionByRpc(response.id!!)
+    Assertions.assertEquals("spec-name-memo", txn.refundMemo)
+    Assertions.assertEquals("text", txn.refundMemoType)
+  }
+
+  @Test
+  fun `test sep6 withdraw without a refund memo stores none`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+
+    val response =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1"))
+
+    val txn = platformApiClient.getTransactionByRpc(response.id!!)
+    Assertions.assertNull(txn.refundMemo)
+    Assertions.assertNull(txn.refundMemoType)
+  }
+
+  @Test
+  fun `test sep6 withdraw stores the refund memo sent under the deprecated camelCase alias`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+
+    val response =
+      client.withdraw(
+        mapOf(
+          "asset_code" to "USDC",
+          "type" to "bank_account",
+          "amount" to "1",
+          "refundMemo" to "alias-memo",
+          "refundMemoType" to "text",
+        )
+      )
+
+    val txn = platformApiClient.getTransactionByRpc(response.id!!)
+    Assertions.assertEquals("alias-memo", txn.refundMemo)
+    Assertions.assertEquals("text", txn.refundMemoType)
+  }
+
+  @Test
+  fun `test sep6 withdraw prefers the spec names over the alias when both are sent`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+
+    val response =
+      client.withdraw(
+        mapOf(
+          "asset_code" to "USDC",
+          "type" to "bank_account",
+          "amount" to "1",
+          "refund_memo" to "canonical-memo",
+          "refund_memo_type" to "text",
+          "refundMemo" to "alias-memo",
+          "refundMemoType" to "id",
+        )
+      )
+
+    val txn = platformApiClient.getTransactionByRpc(response.id!!)
+    Assertions.assertEquals("canonical-memo", txn.refundMemo)
+    Assertions.assertEquals("text", txn.refundMemoType)
+  }
+
+  @Test
+  fun `test sep6 withdraw resolves a mixed spec-name and alias refund memo pair`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+
+    val response =
+      client.withdraw(
+        mapOf(
+          "asset_code" to "USDC",
+          "type" to "bank_account",
+          "amount" to "1",
+          "refund_memo" to "mixed-memo",
+          "refundMemoType" to "text",
+        )
+      )
+
+    val txn = platformApiClient.getTransactionByRpc(response.id!!)
+    Assertions.assertEquals("mixed-memo", txn.refundMemo)
+    Assertions.assertEquals("text", txn.refundMemoType)
+  }
+
+  @Test
+  fun `test sep6 withdraw rejects a malformed refund memo`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(
+          mapOf(
+            "asset_code" to "USDC",
+            "type" to "bank_account",
+            "amount" to "1",
+            "refund_memo" to "abc",
+            "refund_memo_type" to "id",
+          )
+        )
+      }
+    val error = JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+    Assertions.assertEquals("Invalid memo abc of type: MEMO_ID", error)
+  }
+
+  @Test
+  fun `test sep6 withdraw rejects a malformed refund memo sent under the alias`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(
+          mapOf(
+            "asset_code" to "USDC",
+            "type" to "bank_account",
+            "amount" to "1",
+            "refundMemo" to "some text",
+          )
+        )
+      }
+    val error = JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+    Assertions.assertEquals(
+      "refund_memo and refund_memo_type must both be specified or both be omitted",
+      error,
+    )
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange stores the refund memo it is sent`() {
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "1",
+        "type" to "bank_account",
+        "refund_memo" to "exchange-memo",
+        "refund_memo_type" to "text",
+      )
+
+    val response = sep6Client.withdraw(request, exchange = true)
+
+    val txn = platformApiClient.getTransactionByRpc(response.id!!)
+    Assertions.assertEquals("exchange-memo", txn.refundMemo)
+    Assertions.assertEquals("text", txn.refundMemoType)
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects a malformed refund memo`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(
+          mapOf(
+            "destination_asset" to "iso4217:USD",
+            "source_asset" to "USDC",
+            "amount" to "1",
+            "type" to "bank_account",
+            "refund_memo" to "abc",
+            "refund_memo_type" to "foo",
+          ),
+          exchange = true,
+        )
+      }
+    val error = JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+    Assertions.assertEquals("Invalid memo type: foo", error)
+  }
+
   private fun postQuote(sellAsset: String, sellAmount: String, buyAsset: String): String {
     return sep38Client.postQuote(sellAsset, sellAmount, buyAsset, Sep38Context.SEP6).id
   }

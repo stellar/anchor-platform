@@ -351,6 +351,7 @@ public class Sep6Service {
     String sourceAccount =
         StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, sourceAccount);
+    validateRefundMemo(request.getRefundMemo(), request.getRefundMemoType());
 
     String id = generateSepTransactionId();
 
@@ -429,6 +430,7 @@ public class Sep6Service {
     String sourceAccount =
         StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, sourceAccount);
+    validateRefundMemo(request.getRefundMemo(), request.getRefundMemoType());
 
     String id = generateSepTransactionId();
 
@@ -498,6 +500,31 @@ public class Sep6Service {
 
     sep6WithdrawalExchangeCounter.increment();
     return StartWithdrawResponse.builder().id(txn.getId()).build();
+  }
+
+  // Validates the refund_memo/refund_memo_type pair the same way Sep31Service does: both must be
+  // specified together, or both omitted. The presence check is done explicitly (with the correct
+  // field names) rather than relying on makeMemo's own message, which assumes a "memo_type" field
+  // that doesn't exist on this endpoint. makeMemo is still used to validate the type/value
+  // combination once both are known to be present.
+  private void validateRefundMemo(String refundMemo, String refundMemoType)
+      throws SepValidationException {
+    if (StringHelper.isEmpty(refundMemo) != StringHelper.isEmpty(refundMemoType)) {
+      throw new SepValidationException(
+          "refund_memo and refund_memo_type must both be specified or both be omitted");
+    }
+    // makeMemo doesn't consistently report malformed values as SepValidationException (some
+    // failures surface as a plain SepException or IllegalArgumentException, both of which the
+    // global exception handler maps to 500 instead of the 400 required for bad request input) —
+    // preserve an existing validation exception as-is, and wrap anything else as one.
+    try {
+      makeMemo(refundMemo, refundMemoType);
+    } catch (SepValidationException e) {
+      throw e;
+    } catch (SepException | IllegalArgumentException e) {
+      throw new SepValidationException(
+          String.format("Invalid refund_memo/refund_memo_type: %s", e.getMessage()), e);
+    }
   }
 
   public GetTransactionsResponse findTransactions(WebAuthJwt token, GetTransactionsRequest request)

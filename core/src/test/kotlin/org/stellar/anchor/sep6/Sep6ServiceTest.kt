@@ -12,6 +12,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.MoreInfoUrlConstructor
@@ -1050,6 +1052,46 @@ class Sep6ServiceTest {
     )
   }
 
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "some text|''|refund_memo and refund_memo_type must both be specified or both be omitted|true",
+        "''|text|refund_memo and refund_memo_type must both be specified or both be omitted|true",
+        "abc|foo|Invalid memo type: foo|true",
+        "abc|id|Invalid memo abc of type: MEMO_ID|true",
+        "abc|return|Invalid refund_memo/refund_memo_type: |false",
+        "not-valid-base64!!|hash|Invalid refund_memo/refund_memo_type: |false",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|text|Invalid refund_memo/refund_memo_type: |false",
+      ],
+    delimiter = '|',
+  )
+  fun `test withdraw rejects a malformed refund memo`(
+    refundMemo: String,
+    refundMemoType: String,
+    expectedMessage: String,
+    exact: Boolean,
+  ) {
+    val request =
+      StartWithdrawRequest.builder()
+        .assetCode(TEST_ASSET)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .refundMemo(refundMemo)
+        .refundMemoType(refundMemoType)
+        .build()
+
+    val ex = assertThrows<SepValidationException> { sep6Service.withdraw(token, request) }
+    if (exact) {
+      assertEquals(expectedMessage, ex.message)
+    } else {
+      Assertions.assertTrue(ex.message!!.startsWith(expectedMessage)) {
+        "Expected message to start with '$expectedMessage' but was '${ex.message}'"
+      }
+    }
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
   @Test
   fun `test withdraw from requested account`() {
     val slotTxn = slot<Sep6Transaction>()
@@ -1448,6 +1490,47 @@ class Sep6ServiceTest {
       gson.toJson(response),
       JSONCompareMode.LENIENT,
     )
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "some text|''|refund_memo and refund_memo_type must both be specified or both be omitted|true",
+        "''|text|refund_memo and refund_memo_type must both be specified or both be omitted|true",
+        "abc|foo|Invalid memo type: foo|true",
+        "abc|id|Invalid memo abc of type: MEMO_ID|true",
+        "abc|return|Invalid refund_memo/refund_memo_type: |false",
+        "not-valid-base64!!|hash|Invalid refund_memo/refund_memo_type: |false",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|text|Invalid refund_memo/refund_memo_type: |false",
+      ],
+    delimiter = '|',
+  )
+  fun `test withdraw-exchange rejects a malformed refund memo`(
+    refundMemo: String,
+    refundMemoType: String,
+    expectedMessage: String,
+    exact: Boolean,
+  ) {
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .fundingMethod("bank_account")
+        .amount("100")
+        .refundMemo(refundMemo)
+        .refundMemoType(refundMemoType)
+        .build()
+
+    val ex = assertThrows<SepValidationException> { sep6Service.withdrawExchange(token, request) }
+    if (exact) {
+      assertEquals(expectedMessage, ex.message)
+    } else {
+      Assertions.assertTrue(ex.message!!.startsWith(expectedMessage)) {
+        "Expected message to start with '$expectedMessage' but was '${ex.message}'"
+      }
+    }
+    verify(exactly = 0) { txnStore.save(any()) }
   }
 
   @Test
