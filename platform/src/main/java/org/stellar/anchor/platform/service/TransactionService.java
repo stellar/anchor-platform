@@ -388,6 +388,19 @@ public class TransactionService {
         JdbcSep6Transaction sep6Txn = (JdbcSep6Transaction) txn;
         txnUpdated = updateField(patch, sep6Txn, "requiredInfoMessage", txnUpdated);
         txnUpdated = updateField(patch, sep6Txn, "requiredInfoUpdates", txnUpdated);
+        // A transition into pending_transaction_info_update with nothing to correct would leave
+        // the transaction unrecoverable through the SEP-6 wallet PATCH: an absent or empty
+        // required_info_updates rejects the PATCH as "not expecting any updates". Require a
+        // non-empty effective list -- from this patch, or already stored -- whenever this status
+        // is applied. Mirrors SEP-31's guard above.
+        if (PENDING_TRANSACTION_INFO_UPDATE.getStatus().equals(sep6Txn.getStatus())) {
+          List<String> effectiveRequiredInfoUpdates = sep6Txn.getRequiredInfoUpdates();
+          if (effectiveRequiredInfoUpdates == null || effectiveRequiredInfoUpdates.isEmpty()) {
+            throw new BadRequestException(
+                "required_info_updates must not be empty when status is "
+                    + "pending_transaction_info_update");
+          }
+        }
         txnUpdated = updateField(patch, sep6Txn, "instructions", txnUpdated);
         if (feeDetails != null) {
           sep6Txn.setFeeDetails(feeDetails);
