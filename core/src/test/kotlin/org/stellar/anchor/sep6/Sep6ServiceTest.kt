@@ -2335,4 +2335,107 @@ class Sep6ServiceTest {
     assertNotNull(response.id)
     verify(exactly = 1) { txnStore.save(any()) }
   }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects null requested list`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = null
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "12345")).build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("Transaction (${txn.id}) is not expecting any updates", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects empty requested list`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = emptyList()
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "12345")).build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("Transaction (${txn.id}) is not expecting any updates", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects null transaction`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest")
+    val request = Sep6PatchTransactionRequest.builder().id(txn.id).transaction(null).build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("transaction must be specified", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects empty transaction`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest")
+    val request = Sep6PatchTransactionRequest.builder().id(txn.id).transaction(emptyMap()).build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("transaction must be specified", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects unexpected field`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest")
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(txn.id)
+        .transaction(mapOf("dest" to "12345", "unexpected" to "value"))
+        .build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("[unexpected] is not a expected field", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects null value`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest")
+    // A JSON `"dest": null` deserializes to a null map entry -- this must not silently count as
+    // the field having been supplied.
+    val request =
+      gson.fromJson(
+        """{"id": "${txn.id}", "transaction": {"dest": null}}""",
+        Sep6PatchTransactionRequest::class.java,
+      )
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("[dest] must not be null", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects missing requested field`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest", "dest_extra")
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "12345")).build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("[dest_extra] is required", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields accepts all requested fields supplied`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest", "dest_extra")
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(txn.id)
+        .transaction(mapOf("dest" to "12345", "dest_extra" to "021000021"))
+        .build()
+
+    assertDoesNotThrow { sep6Service.validatePatchTransactionFields(txn, request) }
+  }
 }

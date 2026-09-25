@@ -661,6 +661,54 @@ public class Sep6Service {
   }
 
   /**
+   * Validates a SEP-6 PATCH request's supplied fields against the transaction's {@code
+   * required_info_updates}.
+   *
+   * @param txn is the Sep6Transaction already stored in the database.
+   * @param request is the Sep6PatchTransactionRequest request.
+   * @throws BadRequestException if the stored transaction is not expecting any info update.
+   * @throws BadRequestException if the request carries no fields.
+   * @throws BadRequestException if a supplied field is not expected, has a null value, or a
+   *     requested field is missing.
+   */
+  void validatePatchTransactionFields(Sep6Transaction txn, Sep6PatchTransactionRequest request)
+      throws BadRequestException {
+    List<String> expectedFields = txn.getRequiredInfoUpdates();
+    if (expectedFields == null || expectedFields.isEmpty()) {
+      infoF("Transaction ({}) is not expecting any updates", txn.getId());
+      throw new BadRequestException(
+          String.format("Transaction (%s) is not expecting any updates", txn.getId()));
+    }
+
+    Map<String, String> requestFields = request.getTransaction();
+    if (requestFields == null || requestFields.isEmpty()) {
+      infoF("Transaction ({}) patch request is missing fields", txn.getId());
+      throw new BadRequestException("transaction must be specified");
+    }
+
+    for (Map.Entry<String, String> entry : requestFields.entrySet()) {
+      String fieldName = entry.getKey();
+      if (!expectedFields.contains(fieldName)) {
+        infoF("{} is not a expected field", fieldName);
+        throw new BadRequestException(String.format("[%s] is not a expected field", fieldName));
+      }
+      // A JSON null value deserializes to a null map entry -- without this check it would still
+      // count as "supplied" below.
+      if (entry.getValue() == null) {
+        infoF("{} was patched with a null value", fieldName);
+        throw new BadRequestException(String.format("[%s] must not be null", fieldName));
+      }
+    }
+
+    for (String fieldName : expectedFields) {
+      if (!requestFields.containsKey(fieldName)) {
+        infoF("{} is required but was not provided", fieldName);
+        throw new BadRequestException(String.format("[%s] is required", fieldName));
+      }
+    }
+  }
+
+  /**
    * Whether the stored web_auth_account belongs to the requesting token. M-prefixed stored values
    * (post-fix muxed-aware storage) require an exact muxed match; non-muxed stored values fall back
    * to the underlying G so that legacy rows predating muxed-aware storage remain reachable by their
