@@ -1247,6 +1247,44 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     Assertions.assertEquals("text", txn.refundMemoType)
   }
 
+  @Test
+  fun `test sep6 withdraw rejects a malformed refund memo`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(
+          mapOf(
+            "asset_code" to "USDC",
+            "type" to "bank_account",
+            "amount" to "1",
+            "refund_memo" to "abc",
+            "refund_memo_type" to "id",
+          )
+        )
+      }
+    val error = JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+    Assertions.assertEquals("Invalid memo abc of type: MEMO_ID", error)
+  }
+
+  @Test
+  fun `test sep6 withdraw rejects a malformed refund memo sent under the alias`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(
+          mapOf(
+            "asset_code" to "USDC",
+            "type" to "bank_account",
+            "amount" to "1",
+            "refundMemo" to "some text",
+          )
+        )
+      }
+    val error = JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+    Assertions.assertEquals(
+      "refund_memo and refund_memo_type must both be specified or both be omitted",
+      error,
+    )
+  }
+
   private fun postQuote(sellAsset: String, sellAmount: String, buyAsset: String): String {
     return sep38Client.postQuote(sellAsset, sellAmount, buyAsset, Sep38Context.SEP6).id
   }
