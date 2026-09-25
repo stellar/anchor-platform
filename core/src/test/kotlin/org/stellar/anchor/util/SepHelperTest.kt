@@ -3,6 +3,7 @@ package org.stellar.anchor.util
 import io.mockk.every
 import io.mockk.mockkStatic
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -74,5 +75,28 @@ internal class SepHelperTest {
       exceptionThrown = true
     }
     assertTrue(exceptionThrown, "InvalidConfigException was expected but not thrown")
+  }
+
+  @Test
+  fun `isValidSepTransactionId accepts generated ids`() {
+    assertTrue(SepHelper.isValidSepTransactionId(SepHelper.generateSepTransactionId()))
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "",
+        "..",
+        "../clients",
+        "not-a-uuid",
+        "1-1-1-1-1",
+        "9a0a0f9c-3b1c-4f1e-8d3a-2b6f4f0e7c11/..",
+        "9a0a0f9c-3b1c-4f1e-8d3a-2b6f4f0e7c11?x=1",
+        " 9a0a0f9c-3b1c-4f1e-8d3a-2b6f4f0e7c11",
+      ]
+  )
+  fun `isValidSepTransactionId rejects anything that is not a transaction id`(id: String) {
+    assertFalse(SepHelper.isValidSepTransactionId(id))
   }
 }
