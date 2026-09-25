@@ -897,6 +897,103 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 deposit-exchange rejects an unknown quote_id`() {
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "10",
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
+        "quote_id" to "not-a-real-quote-id",
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(request, exchange = true) }
+    Assertions.assertEquals("Quote not found", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects a source asset that conflicts with the quote`() {
+    val quoteId =
+      postQuote(
+        "iso4217:USD",
+        "10",
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+      )
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:CAD",
+        "amount" to "10",
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(request, exchange = true) }
+    Assertions.assertEquals(
+      "source asset(iso4217:CAD) does not match quote sell asset(iso4217:USD)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects a destination asset that conflicts with the quote`() {
+    // destination_asset always resolves to the SEP-6-enabled USDC issuer (GDQO -- the only USDC
+    // asset with a sep6 block), so a mismatch can't be reached by naming a second issuer. Instead,
+    // the quote is firmed for a different buy asset (native) than the request's destination_asset
+    // (USDC) will ever resolve to.
+    val quoteId = postQuote("iso4217:USD", "10", "stellar:native")
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "10",
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(request, exchange = true) }
+    Assertions.assertEquals(
+      "destination asset(stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP) " +
+        "does not match quote buy asset(stellar:native)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects an amount that conflicts with the quote, then accepts a matching request with the same quote_id`() {
+    val quoteId =
+      postQuote(
+        "iso4217:USD",
+        "10",
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+      )
+    val mismatchedRequest =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "5",
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(mismatchedRequest, exchange = true) }
+    Assertions.assertEquals(
+      "amount(5) does not match quote sell amount(10)",
+      errorMessage(ex),
+    )
+
+    // The rejection above must not have consumed the quote -- a subsequent request with the same
+    // quote_id and the matching amount succeeds.
+    val matchingRequest = mismatchedRequest + ("amount" to "10")
+    val response = sep6Client.deposit(matchingRequest, exchange = true)
+    assert(!response.id.isNullOrEmpty())
+  }
+
+  @Test
   fun `test sep6 deposit falls back to the JWT's own account when account param is omitted`() {
     val request = mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")
     val response = sep6Client.deposit(request)
