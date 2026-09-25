@@ -560,12 +560,7 @@ public class Sep6Service {
     // the underlying G so that legacy rows predating muxed-aware storage remain
     // reachable by their original creator. The listing endpoint stays strict, so
     // legacy rows are reachable by direct ID only — they are not enumerable.
-    if (txn == null || !webAuthAccountMatches(txn.getWebAuthAccount(), token)) {
-      throw new NotFoundException("transaction not found");
-    }
-    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
-      throw new NotFoundException("transaction not found");
-    }
+    txn = requireOwnedTransaction(txn, token);
 
     sep6TransactionQueriedCounter.increment();
     String lang = validateLanguage(languageConfig, request.getLang());
@@ -641,6 +636,28 @@ public class Sep6Service {
       }
     }
     return response;
+  }
+
+  /**
+   * Confirms a SEP-6 transaction belongs to the requesting token, under the same no-disclosure rule
+   * {@link #findTransaction} enforces: an unknown transaction, one created under another account,
+   * or one created under the same account with a different memo are all indistinguishable 404s.
+   *
+   * @param txn the transaction looked up by id/stellar id/external id, or null if none matched.
+   * @param token the requesting SEP-10/SEP-45 token.
+   * @return the same transaction, for chaining.
+   * @throws NotFoundException if the transaction is null, or doesn't belong to the token's account
+   *     and memo.
+   */
+  private Sep6Transaction requireOwnedTransaction(Sep6Transaction txn, WebAuthJwt token)
+      throws NotFoundException {
+    if (txn == null || !webAuthAccountMatches(txn.getWebAuthAccount(), token)) {
+      throw new NotFoundException("transaction not found");
+    }
+    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
+      throw new NotFoundException("transaction not found");
+    }
+    return txn;
   }
 
   /**
