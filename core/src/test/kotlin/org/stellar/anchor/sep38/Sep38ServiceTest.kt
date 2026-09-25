@@ -54,6 +54,10 @@ class Sep38ServiceTest {
     override fun isAuthEnforced(): Boolean {
       return false
     }
+
+    override fun getMaxQuoteExpirationSeconds(): Int {
+      return 604800 // 7 days
+    }
   }
 
   companion object {
@@ -802,7 +806,7 @@ class Sep38ServiceTest {
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("Unsupported country code", ex.message)
 
-    // unsupported expire_after
+    // valid expire_after falls through to the next validation (context)
     ex = assertThrows {
       sep38Service.postQuote(
         token,
@@ -812,12 +816,101 @@ class Sep38ServiceTest {
           .sellDeliveryMethod("WIRE")
           .buyAssetName(stellarUSDC)
           .countryCode("US")
-          .expireAfter("2022-04-18T23:33:24.629719Z")
+          .expireAfter(Instant.now().plus(1, ChronoUnit.DAYS).toString())
           .build(),
       )
     }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("Unsupported context. Should be one of [sep6, sep24, sep31].", ex.message)
+
+    // malformed expire_after
+    ex = assertThrows {
+      sep38Service.postQuote(
+        token,
+        Sep38PostQuoteRequest.builder()
+          .sellAssetName(fiatUSD)
+          .sellAmount("1.23")
+          .sellDeliveryMethod("WIRE")
+          .buyAssetName(stellarUSDC)
+          .countryCode("US")
+          .expireAfter("not-an-instant")
+          .build(),
+      )
+    }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals("expire_after is invalid", ex.message)
+
+    // expire_after just inside the grace period (30s in the past) falls through
+    ex = assertThrows {
+      sep38Service.postQuote(
+        token,
+        Sep38PostQuoteRequest.builder()
+          .sellAssetName(fiatUSD)
+          .sellAmount("1.23")
+          .sellDeliveryMethod("WIRE")
+          .buyAssetName(stellarUSDC)
+          .countryCode("US")
+          .expireAfter(Instant.now().minusSeconds(30).toString())
+          .build(),
+      )
+    }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals("Unsupported context. Should be one of [sep6, sep24, sep31].", ex.message)
+
+    // expire_after just outside the grace period (90s in the past) is rejected
+    ex = assertThrows {
+      sep38Service.postQuote(
+        token,
+        Sep38PostQuoteRequest.builder()
+          .sellAssetName(fiatUSD)
+          .sellAmount("1.23")
+          .sellDeliveryMethod("WIRE")
+          .buyAssetName(stellarUSDC)
+          .countryCode("US")
+          .expireAfter(Instant.now().minusSeconds(90).toString())
+          .build(),
+      )
+    }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals("expire_after cannot be in the past", ex.message)
+
+    // expire_after in the past
+    ex = assertThrows {
+      sep38Service.postQuote(
+        token,
+        Sep38PostQuoteRequest.builder()
+          .sellAssetName(fiatUSD)
+          .sellAmount("1.23")
+          .sellDeliveryMethod("WIRE")
+          .buyAssetName(stellarUSDC)
+          .countryCode("US")
+          .expireAfter(Instant.now().minus(1, ChronoUnit.DAYS).toString())
+          .build(),
+      )
+    }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals("expire_after cannot be in the past", ex.message)
+
+    // expire_after beyond the configured maximum
+    ex = assertThrows {
+      sep38Service.postQuote(
+        token,
+        Sep38PostQuoteRequest.builder()
+          .sellAssetName(fiatUSD)
+          .sellAmount("1.23")
+          .sellDeliveryMethod("WIRE")
+          .buyAssetName(stellarUSDC)
+          .countryCode("US")
+          .expireAfter("9999-12-31T23:59:59Z")
+          .build(),
+      )
+    }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals(
+      "expire_after exceeds the maximum quote expiration of " +
+        "${sep38Config.maxQuoteExpirationSeconds} seconds",
+      ex.message,
+    )
   }
 
   @ValueSource(strings = [ACCOUNT, SMART_WALLET_ACCOUNT])
@@ -927,6 +1020,111 @@ class Sep38ServiceTest {
     wantEvent.quote.fee = mockFee
 
     JSONAssert.assertEquals(json(wantEvent), json(slotEvent.captured), STRICT)
+  }
+
+  @Test
+  fun `test POST quote fails when the rate callback's expires_at exceeds the maximum quote expiration`() {
+    // The rate callback may round up or otherwise transform expire_after (see ANCHOR-1314): the
+    // client's request itself can be within bounds, or omit expire_after entirely, while the
+    // callback's own transformation still produces an expires_at beyond what the anchor is
+    // configured to honor. That must be rejected too, not just an out-of-bounds expire_after.
+    val account = ACCOUNT
+    val tooFarInTheFuture =
+      Instant.now().plusSeconds(sep38Config.maxQuoteExpirationSeconds.toLong() + 3600)
+    val rate =
+      GetRateResponse.Rate.builder()
+        .id("789")
+        .price("1.02")
+        .sellAmount("103")
+        .buyAmount("100")
+        .expiresAt(tooFarInTheFuture)
+        .fee(mockSellAssetFee(fiatUSD))
+        .build()
+    val getRateReq =
+      GetRateRequest.builder()
+        .type(FIRM)
+        .sellAsset(fiatUSD)
+        .sellAmount("103")
+        .buyAsset(stellarUSDC)
+        .clientId(account)
+        .build()
+    every { mockRateIntegration.getRate(getRateReq) } returns GetRateResponse(rate)
+
+    sep38Service =
+      Sep38Service(
+        sep38Config,
+        sep38Service.assetService,
+        mockRateIntegration,
+        mockQuoteStore,
+        eventService,
+      )
+
+    val token = createWebAuthJwt(account)
+    val ex =
+      assertThrows<ServerErrorException> {
+        sep38Service.postQuote(
+          token,
+          Sep38PostQuoteRequest.builder()
+            .context(SEP31)
+            .sellAssetName(fiatUSD)
+            .sellAmount("103")
+            .buyAssetName(stellarUSDC)
+            .build(),
+        )
+      }
+    assertTrue(ex.message!!.contains("exceeds the maximum quote expiration"))
+    verify(exactly = 0) { mockQuoteStore.save(any()) }
+  }
+
+  @Test
+  fun `test POST quote fails with a distinct message when the rate callback returns a null expires_at`() {
+    // ExchangeAmountsCalculator and Sep31Service's own expiry checks (quote.getExpiresAt() !=
+    // null && ...) treat a null expiresAt as never-expiring, so a callback that omits it must be
+    // rejected here rather than producing a quote valid forever. Asserted with its own message,
+    // distinct from the "exceeds the maximum" case: null doesn't exceed anything, it's missing.
+    val account = ACCOUNT
+    val rate =
+      GetRateResponse.Rate.builder()
+        .id("790")
+        .price("1.02")
+        .sellAmount("103")
+        .buyAmount("100")
+        .fee(mockSellAssetFee(fiatUSD))
+        .build()
+    val getRateReq =
+      GetRateRequest.builder()
+        .type(FIRM)
+        .sellAsset(fiatUSD)
+        .sellAmount("103")
+        .buyAsset(stellarUSDC)
+        .clientId(account)
+        .build()
+    every { mockRateIntegration.getRate(getRateReq) } returns GetRateResponse(rate)
+
+    sep38Service =
+      Sep38Service(
+        sep38Config,
+        sep38Service.assetService,
+        mockRateIntegration,
+        mockQuoteStore,
+        eventService,
+      )
+
+    val token = createWebAuthJwt(account)
+    val ex =
+      assertThrows<ServerErrorException> {
+        sep38Service.postQuote(
+          token,
+          Sep38PostQuoteRequest.builder()
+            .context(SEP31)
+            .sellAssetName(fiatUSD)
+            .sellAmount("103")
+            .buyAssetName(stellarUSDC)
+            .build(),
+        )
+      }
+    assertEquals("Rate callback returned a null expires_at", ex.message)
+    verify(exactly = 0) { mockQuoteStore.save(any()) }
   }
 
   @ValueSource(strings = [ACCOUNT, SMART_WALLET_ACCOUNT])

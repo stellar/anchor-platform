@@ -8,7 +8,9 @@ import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.stellar.sdk.xdr.Asset;
 import org.stellar.sdk.xdr.Memo;
 import org.stellar.sdk.xdr.OperationType;
@@ -93,6 +95,8 @@ public class LedgerTransaction {
   @Data
   @AllArgsConstructor
   @NoArgsConstructor
+  @ToString(doNotUseGetters = true)
+  @EqualsAndHashCode(doNotUseGetters = true)
   public static class LedgerInvokeHostFunctionOperation implements LedgerPayment {
     String contractId;
     String hostFunction;

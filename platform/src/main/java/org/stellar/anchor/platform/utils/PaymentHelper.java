@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.utils;
 
 import static java.util.stream.Collectors.toList;
+import static org.stellar.anchor.util.Log.warnF;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,6 +21,7 @@ import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
 import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
 import org.stellar.anchor.util.AssetHelper;
+import org.stellar.sdk.xdr.Asset;
 
 public class PaymentHelper {
 
@@ -31,6 +33,18 @@ public class PaymentHelper {
       case INVOKE_HOST_FUNCTION -> ledgerOperation.getInvokeHostFunctionOperation();
       default -> null;
     };
+  }
+
+  static Asset resolveSacAsset(SacToAssetMapper sacToAssetMapper, String contractId) {
+    if (sacToAssetMapper == null || contractId == null) {
+      return null;
+    }
+    try {
+      return sacToAssetMapper.getAssetFromSac(contractId);
+    } catch (RuntimeException rex) {
+      warnF("Unable to resolve the asset of contract {}. ex={}", contractId, rex.getMessage());
+      return null;
+    }
   }
 
   public static void addStellarTransaction(
@@ -83,7 +97,8 @@ public class PaymentHelper {
                                           new Amount(
                                               AssetHelper.fromXdrAmount(payment.getAmount()),
                                               AssetHelper.getSep11AssetName(
-                                                  sacToAssetMapper.getAssetFromSac(
+                                                  resolveSacAsset(
+                                                      sacToAssetMapper,
                                                       ((LedgerTransaction
                                                                   .LedgerInvokeHostFunctionOperation)
                                                               payment)
