@@ -69,6 +69,8 @@ platform_api.auth.type:
 platform_api.base_url:
 platform_server.context_path:
 platform_server.management_server_port:
+platform_server.max_patch_records:
+platform_server.max_request_body_size:
 platform_server.port:
 rate_limit.enabled:
 rate_limit.max_transactions_per_window:

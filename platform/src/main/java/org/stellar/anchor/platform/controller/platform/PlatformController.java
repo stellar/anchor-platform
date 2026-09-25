@@ -13,8 +13,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.platform.*;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
+import org.stellar.anchor.platform.config.PlatformServerConfig;
 import org.stellar.anchor.platform.service.TransactionService;
 import org.stellar.anchor.util.TransactionsParams;
 
@@ -22,9 +24,12 @@ import org.stellar.anchor.util.TransactionsParams;
 public class PlatformController {
 
   private final TransactionService transactionService;
+  private final PlatformServerConfig platformServerConfig;
 
-  PlatformController(TransactionService transactionService) {
+  PlatformController(
+      TransactionService transactionService, PlatformServerConfig platformServerConfig) {
     this.transactionService = transactionService;
+    this.platformServerConfig = platformServerConfig;
   }
 
   @Deprecated // ANCHOR-641 Use Rpc method GET_TRANSACTION instead
@@ -49,6 +54,13 @@ public class PlatformController {
       method = {RequestMethod.PATCH})
   public PatchTransactionsResponse patchTransactions(@RequestBody PatchTransactionsRequest request)
       throws AnchorException {
+    int limit = platformServerConfig.getMaxPatchRecords();
+    if (request.getRecords() != null && request.getRecords().size() > limit) {
+      throw new BadRequestException(
+          String.format(
+              "The number of records (%d) exceeds the limit of %d.",
+              request.getRecords().size(), limit));
+    }
     return transactionService.patchTransactions(request);
   }
 

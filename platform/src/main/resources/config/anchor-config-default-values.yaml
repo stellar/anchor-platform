@@ -200,6 +200,11 @@ platform_server:
   # The management_server_port is the port used by Spring actuator.
   # https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html
   management_server_port: 9085
+  # The maximum size, in bytes, of a request body the Platform server accepts. Larger requests
+  # are rejected with HTTP 413 before they are read into memory.
+  max_request_body_size: 1048576
+  # The maximum number of records a single PATCH /transactions request can update.
+  max_patch_records: 1000
 
 ######################
 # Rate Limit Configuration
