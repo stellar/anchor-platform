@@ -871,6 +871,32 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 deposit-exchange rejects a funding method that conflicts with the quote`() {
+    val quoteId =
+      postQuote(
+        "iso4217:USD",
+        "10",
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        sellDeliveryMethod = "WIRE",
+      )
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "10",
+        "account" to clientWalletAccount,
+        "funding_method" to "SWIFT",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(request, exchange = true) }
+    Assertions.assertEquals(
+      "funding_method(SWIFT) does not match quote sell delivery method(WIRE)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
   fun `test sep6 deposit falls back to the JWT's own account when account param is omitted`() {
     val request = mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")
     val response = sep6Client.deposit(request)
@@ -985,6 +1011,31 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       JSONCompareMode.LENIENT,
     )
     Assertions.assertNotNull(savedWithdrawTxn.transaction.moreInfoUrl)
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects a funding method that conflicts with the quote`() {
+    val quoteId =
+      postQuote(
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        "10",
+        "iso4217:USD",
+        buyDeliveryMethod = "WIRE",
+      )
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "10",
+        "funding_method" to "bank_account",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.withdraw(request, exchange = true) }
+    Assertions.assertEquals(
+      "funding_method(bank_account) does not match quote buy delivery method(WIRE)",
+      errorMessage(ex),
+    )
   }
 
   @Test
@@ -1147,8 +1198,23 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
-  private fun postQuote(sellAsset: String, sellAmount: String, buyAsset: String): String {
-    return sep38Client.postQuote(sellAsset, sellAmount, buyAsset, Sep38Context.SEP6).id
+  private fun postQuote(
+    sellAsset: String,
+    sellAmount: String,
+    buyAsset: String,
+    sellDeliveryMethod: String? = null,
+    buyDeliveryMethod: String? = null,
+  ): String {
+    return sep38Client
+      .postQuote(
+        sellAsset,
+        sellAmount,
+        buyAsset,
+        Sep38Context.SEP6,
+        sellDeliveryMethod = sellDeliveryMethod,
+        buyDeliveryMethod = buyDeliveryMethod,
+      )
+      .id
   }
 
   /**
