@@ -1426,6 +1426,48 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  @Test
+  fun `test platform PATCH refuses SEP-6 info update with nothing requested`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+
+    val before = getTransactionRaw(client, txId)
+
+    val ex = assertThrows<SepException> { requestSep6InfoUpdate(txId, emptyList()) }
+    Assertions.assertEquals(
+      "required_info_updates must not be empty when status is pending_transaction_info_update",
+      errorMessage(ex),
+    )
+
+    val after = getTransactionRaw(client, txId)
+    Assertions.assertEquals(before.get("status").asString, after.get("status").asString)
+  }
+
+  @Test
+  fun `test platform PATCH moves SEP-6 to info update and exposes what was requested`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+
+    requestSep6InfoUpdate(txId, listOf("dest", "dest_extra"), "please update your destination")
+
+    val rawTxn = getTransactionRaw(client, txId)
+    Assertions.assertEquals("pending_transaction_info_update", rawTxn.get("status").asString)
+    Assertions.assertEquals(
+      setOf("dest", "dest_extra"),
+      rawTxn.getAsJsonObject("required_info_updates").keySet(),
+    )
+
+    val platformTxn = platformApiClient.getTransactionByRpc(txId)
+    Assertions.assertEquals("please update your destination", platformTxn.requiredInfoMessage)
+    Assertions.assertEquals(listOf("dest", "dest_extra"), platformTxn.requiredInfoUpdates)
+  }
+
   companion object {
 
     private val SEP6_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS =
