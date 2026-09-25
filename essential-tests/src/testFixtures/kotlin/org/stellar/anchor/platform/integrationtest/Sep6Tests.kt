@@ -4,6 +4,8 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
@@ -18,10 +20,18 @@ import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepNotFoundException
 import org.stellar.anchor.api.exception.SepValidationException
+import org.stellar.anchor.api.platform.PatchTransactionRequest
+import org.stellar.anchor.api.platform.PatchTransactionsRequest
+import org.stellar.anchor.api.platform.PlatformTransactionData
 import org.stellar.anchor.api.rpc.RpcRequest
+import org.stellar.anchor.api.rpc.RpcResponse
+import org.stellar.anchor.api.sep.SepTransactionStatus
+import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep38.Sep38Context
+import org.stellar.anchor.api.sep.sep38.Sep38QuoteResponse
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
+import org.stellar.anchor.client.Sep12Client
 import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.client.Sep6Client
 import org.stellar.anchor.platform.IntegrationTestBase
@@ -112,6 +122,35 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     query.forEach { (key, value) -> urlBuilder.addQueryParameter(key, value) }
     val rawJson = client.httpGet(urlBuilder.build().toString(), client.jwt)!!
     return JsonParser.parseString(rawJson).asJsonObject.getAsJsonArray("transactions")
+  }
+
+  /**
+   * Fetches GET /transaction as a raw JSON object, bypassing [Sep6Client.getTransaction]'s parsed
+   * response -- Gson silently nulls absent fields on a parsed object, which would hide a missing
+   * required field from schema assertions. Returns the whole response body, including its top-level
+   * wrapper, so callers can assert the wrapper's key set as well as the nested `transaction`
+   * object.
+   */
+  private fun getTransactionRaw(client: Sep6Client, id: String): JsonObject {
+    val url =
+      "${toml.getString("TRANSFER_SERVER")}/transaction"
+        .toHttpUrl()
+        .newBuilder()
+        .addQueryParameter("id", id)
+        .build()
+        .toString()
+    val rawJson = client.httpGet(url, client.jwt)!!
+    return JsonParser.parseString(rawJson).asJsonObject
+  }
+
+  /**
+   * Fetches GET /info as a raw JSON object, bypassing [Sep6Client.getInfo]'s parsed response --
+   * Gson silently re-serializes the DTO, which would hide a malformed or extra raw field from the
+   * per-asset field-metadata assertions.
+   */
+  private fun getInfoRaw(): JsonObject {
+    val rawJson = sep6Client.httpGet("${toml.getString("TRANSFER_SERVER")}/info")!!
+    return JsonParser.parseString(rawJson).asJsonObject
   }
 
   /**
@@ -1147,6 +1186,605 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     return sep38Client.postQuote(sellAsset, sellAmount, buyAsset, Sep38Context.SEP6).id
   }
 
+  // --- SEP-6 coverage audit (ANCHOR-1296): closes audit assertions #10, #11, #12, #16, #17 plus
+  // the exchange-endpoint entry-condition gap PR #2017 deferred. See
+  // .specs/features/sep6-coverage/spec.md.
+
+  @Test
+  fun `test sep6 GET transaction returns a schema-complete deposit record`() {
+    val fixture = createAccountWithDepositAndWithdrawal()
+
+    val raw = getTransactionRaw(fixture.client, fixture.depositId)
+    Assertions.assertEquals(setOf("transaction"), raw.keySet()) {
+      "expected the /transaction response's only top-level key to be 'transaction', got ${raw.keySet()}"
+    }
+
+    val txn = raw.getAsJsonObject("transaction")
+    assertValidSep6TransactionSchema(txn, "to")
+    Assertions.assertEquals("deposit", txn.get("kind").asString)
+    Assertions.assertEquals(fixture.depositId, txn.get("id").asString)
+  }
+
+  @Test
+  fun `test sep6 GET transaction returns a schema-complete withdrawal record`() {
+    val fixture = createAccountWithDepositAndWithdrawal()
+
+    val raw = getTransactionRaw(fixture.client, fixture.withdrawId)
+    Assertions.assertEquals(setOf("transaction"), raw.keySet()) {
+      "expected the /transaction response's only top-level key to be 'transaction', got ${raw.keySet()}"
+    }
+
+    val txn = raw.getAsJsonObject("transaction")
+    assertValidSep6TransactionSchema(txn, "from")
+    Assertions.assertEquals("withdrawal", txn.get("kind").asString)
+    Assertions.assertEquals(fixture.withdrawId, txn.get("id").asString)
+  }
+
+  @Test
+  fun `test sep6 TOML TRANSFER_SERVER is a well-formed URL`() {
+    val transferServer: String? = toml.getString("TRANSFER_SERVER")
+    Assertions.assertNotNull(transferServer) {
+      "expected the TOML to contain a TRANSFER_SERVER value"
+    }
+
+    val url =
+      assertDoesNotThrow({
+        "expected TRANSFER_SERVER ($transferServer) to parse as an absolute URL"
+      }) {
+        transferServer!!.toHttpUrl()
+      }
+
+    val isLocalHttp = url.scheme == "http" && url.host in setOf("localhost", "host.docker.internal")
+    Assertions.assertTrue(url.scheme == "https" || isLocalHttp) {
+      "expected TRANSFER_SERVER's scheme to be https, or http only when the host is localhost or" +
+        " host.docker.internal, got ${url.scheme}://${url.host}"
+    }
+
+    Assertions.assertFalse(transferServer!!.endsWith("/")) {
+      "expected TRANSFER_SERVER ($transferServer) to not end with '/'"
+    }
+  }
+
+  @Test
+  fun `test sep6 TOML TRANSFER_SERVER serves the SEP-6 info endpoint`() {
+    val transferServer: String = toml.getString("TRANSFER_SERVER")
+
+    // Any non-200 response already throws inside SepClient.handleResponse, so successfully
+    // reaching and parsing the body below is itself the assertion that GET /info responded 200.
+    val rawJson = sep6Client.httpGet("$transferServer/info")!!
+    val info = JsonParser.parseString(rawJson).asJsonObject
+
+    Assertions.assertTrue(info.has("deposit")) {
+      "expected TRANSFER_SERVER's /info response to contain a 'deposit' key, got $info"
+    }
+    Assertions.assertTrue(info.has("withdraw")) {
+      "expected TRANSFER_SERVER's /info response to contain a 'withdraw' key, got $info"
+    }
+  }
+
+  @Test
+  fun `test sep6 info deposit fields are exactly the type field listing the funding methods`() {
+    val info = getInfoRaw()
+
+    for (operation in listOf("deposit", "deposit-exchange")) {
+      val assets = info.getAsJsonObject(operation)
+      Assertions.assertTrue(assets.size() > 0) {
+        "expected '$operation' to list at least one asset in /info"
+      }
+      assets.entrySet().forEach { (assetCode, assetJson) ->
+        val asset = assetJson.asJsonObject
+        val fields = asset.getAsJsonObject("fields")
+        Assertions.assertEquals(setOf("type"), fields.keySet()) {
+          "expected '$operation.$assetCode.fields' to have exactly the key 'type', got ${fields.keySet()}"
+        }
+
+        val fundingMethods = asset.getAsJsonArray("funding_methods").map { it.asString }
+        val choices = fields.getAsJsonObject("type").getAsJsonArray("choices").map { it.asString }
+        Assertions.assertEquals(fundingMethods, choices) {
+          "expected '$operation.$assetCode.fields.type.choices' ($choices) to equal" +
+            " 'funding_methods' ($fundingMethods), element-for-element, in order"
+        }
+      }
+    }
+  }
+
+  @Test
+  fun `test sep6 info fields entries carry only description, optional and choices`() {
+    val info = getInfoRaw()
+
+    for (operation in listOf("deposit", "deposit-exchange")) {
+      val assets = info.getAsJsonObject(operation)
+      Assertions.assertTrue(assets.size() > 0) {
+        "expected '$operation' to list at least one asset in /info"
+      }
+      assets.entrySet().forEach { (assetCode, assetJson) ->
+        val fields = assetJson.asJsonObject.getAsJsonObject("fields")
+        fields.entrySet().forEach { (fieldName, fieldJson) ->
+          val field = fieldJson.asJsonObject
+          val description = field.get("description")
+          Assertions.assertTrue(
+            description != null &&
+              description.isJsonPrimitive &&
+              description.asJsonPrimitive.isString &&
+              description.asString.isNotEmpty()
+          ) {
+            "expected '$operation.$assetCode.fields.$fieldName.description' to be a non-empty" +
+              " string, got $description"
+          }
+          val unknown = field.keySet() - setOf("description", "optional", "choices")
+          Assertions.assertTrue(unknown.isEmpty()) {
+            "unexpected key(s) $unknown in '$operation.$assetCode.fields.$fieldName': $field"
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun `test sep6 info withdraw types are exactly the funding methods with empty fields`() {
+    val info = getInfoRaw()
+
+    for (operation in listOf("withdraw", "withdraw-exchange")) {
+      val assets = info.getAsJsonObject(operation)
+      Assertions.assertTrue(assets.size() > 0) {
+        "expected '$operation' to list at least one asset in /info"
+      }
+      assets.entrySet().forEach { (assetCode, assetJson) ->
+        val asset = assetJson.asJsonObject
+        val fundingMethods = asset.getAsJsonArray("funding_methods").map { it.asString }.toSet()
+        val types = asset.getAsJsonObject("types")
+        Assertions.assertEquals(fundingMethods, types.keySet()) {
+          "expected '$operation.$assetCode.types' key set (${types.keySet()}) to equal" +
+            " 'funding_methods' ($fundingMethods)"
+        }
+        types.entrySet().forEach { (method, typeJson) ->
+          val fields = typeJson.asJsonObject.getAsJsonObject("fields")
+          Assertions.assertEquals(0, fields.size()) {
+            "expected '$operation.$assetCode.types.$method.fields' to be empty, got $fields"
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun `test sep6 info omits assets with SEP-6 disabled`() {
+    val info = getInfoRaw()
+
+    for (operation in listOf("deposit", "deposit-exchange", "withdraw", "withdraw-exchange")) {
+      val assets = info.getAsJsonObject(operation)
+      Assertions.assertTrue(assets.size() > 0) {
+        "expected '$operation' to list at least one asset in /info"
+      }
+      Assertions.assertFalse(assets.has("JPYC")) {
+        "expected 'JPYC' (sep6.enabled: false) to be absent from '$operation', got ${assets.keySet()}"
+      }
+    }
+  }
+
+  /** Known-good `/deposit-exchange` request, reused by the JWT test and the per-parameter tests. */
+  private fun depositExchangeRequest(): Map<String, String> =
+    mapOf(
+      "destination_asset" to "USDC",
+      "source_asset" to "iso4217:USD",
+      "amount" to "1",
+      "account" to clientWalletAccount,
+      "type" to "SWIFT",
+    )
+
+  /**
+   * Known-good `/withdraw-exchange` request, reused by the JWT test and the per-parameter tests.
+   */
+  private fun withdrawExchangeRequest(): Map<String, String> =
+    mapOf(
+      "destination_asset" to "iso4217:USD",
+      "source_asset" to "USDC",
+      "amount" to "1",
+      "type" to "bank_account",
+    )
+
+  @Test
+  fun `test sep6 deposit-exchange rejects request without JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.deposit(depositExchangeRequest(), exchange = true)
+    }
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects request without JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.withdraw(withdrawExchangeRequest(), exchange = true)
+    }
+  }
+
+  /**
+   * Asserts a `SepValidationException`'s raw body's `error` field equals exactly `The "<paramName>"
+   * parameter is missing.` -- parsed from the JSON body, not a `contains` match.
+   */
+  private fun assertMissingParameterError(ex: SepValidationException, paramName: String) {
+    val body = JsonParser.parseString(ex.message).asJsonObject
+    Assertions.assertEquals("The \"$paramName\" parameter is missing.", body.get("error").asString)
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects request without destination_asset`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.deposit(depositExchangeRequest() - "destination_asset", exchange = true)
+      }
+    assertMissingParameterError(ex, "destination_asset")
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects request without source_asset`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.deposit(depositExchangeRequest() - "source_asset", exchange = true)
+      }
+    assertMissingParameterError(ex, "source_asset")
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects request without amount`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.deposit(depositExchangeRequest() - "amount", exchange = true)
+      }
+    assertMissingParameterError(ex, "amount")
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects request without source_asset`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(withdrawExchangeRequest() - "source_asset", exchange = true)
+      }
+    assertMissingParameterError(ex, "source_asset")
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects request without destination_asset`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(withdrawExchangeRequest() - "destination_asset", exchange = true)
+      }
+    assertMissingParameterError(ex, "destination_asset")
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects request without amount`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep6Client.withdraw(withdrawExchangeRequest() - "amount", exchange = true)
+      }
+    assertMissingParameterError(ex, "amount")
+  }
+
+  /**
+   * Asserts a quote-backed SEP-6 exchange's raw transaction record agrees with the SEP-38 quote and
+   * satisfies the SEP-6 Amount Formula -- computed here from the quote's own fields, never read
+   * back from [txn]'s stored copy (audit Step 4's exact complaint: today's tests only compare
+   * against a hardcoded/stored value). Every comparison is numeric ([BigDecimal.compareTo]/
+   * subtraction), never string equality, since the transaction's amount strings and the quote's
+   * amount strings are independently formatted and can differ in scale/trailing zeros.
+   */
+  private fun assertAmountsAgreeWithQuote(txn: JsonObject, quote: Sep38QuoteResponse) {
+    val amountInAsset = txn.get("amount_in_asset").asString
+    val amountOutAsset = txn.get("amount_out_asset").asString
+    val feeDetails = txn.getAsJsonObject("fee_details")
+    val feeAsset = feeDetails.get("asset").asString
+    val amountOutString = txn.get("amount_out").asString
+    val amountIn = BigDecimal(txn.get("amount_in").asString)
+    val amountOut = BigDecimal(amountOutString)
+    val feeTotal = BigDecimal(feeDetails.get("total").asString)
+
+    Assertions.assertEquals(0, amountIn.compareTo(BigDecimal(quote.sellAmount))) {
+      "expected amount_in ($amountIn) to equal the quote's sell_amount (${quote.sellAmount}) numerically"
+    }
+    Assertions.assertEquals(quote.sellAsset, amountInAsset) {
+      "expected amount_in_asset ($amountInAsset) to equal the quote's sell_asset (${quote.sellAsset})"
+    }
+    Assertions.assertEquals(0, amountOut.compareTo(BigDecimal(quote.buyAmount))) {
+      "expected amount_out ($amountOut) to equal the quote's buy_amount (${quote.buyAmount}) numerically"
+    }
+    Assertions.assertEquals(quote.buyAsset, amountOutAsset) {
+      "expected amount_out_asset ($amountOutAsset) to equal the quote's buy_asset (${quote.buyAsset})"
+    }
+    Assertions.assertEquals(0, feeTotal.compareTo(BigDecimal(quote.fee.total))) {
+      "expected fee_details.total ($feeTotal) to equal the quote's fee.total (${quote.fee.total}) numerically"
+    }
+    Assertions.assertEquals(quote.fee.asset, feeAsset) {
+      "expected fee_details.asset ($feeAsset) to equal the quote's fee.asset (${quote.fee.asset})"
+    }
+
+    // Precondition (spec.md edge case): the formula below is only valid in sell-asset units. If
+    // the reference server ever quotes the fee in the buy asset, fail loudly here instead of
+    // computing the formula in mixed units.
+    Assertions.assertEquals(amountInAsset, feeAsset) {
+      "Amount Formula precondition failed: fee_details.asset ($feeAsset) must equal" +
+        " amount_in_asset ($amountInAsset) to compute the formula in sell-asset units"
+    }
+
+    val price = BigDecimal(quote.price)
+    val computedAmountOut = amountIn.subtract(feeTotal).divide(price, 10, RoundingMode.HALF_UP)
+    val scale = amountOutString.substringAfter('.', "").length
+    val tolerance = BigDecimal.ONE.movePointLeft(scale)
+    val diff = computedAmountOut.subtract(amountOut).abs()
+    Assertions.assertTrue(diff < tolerance) {
+      "expected abs((amount_in - fee_details.total) / price - amount_out) ($diff) to be less" +
+        " than one unit in amount_out's last decimal place ($tolerance); amount_in=$amountIn," +
+        " fee_details.total=$feeTotal, price=$price, amount_out=$amountOut"
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange with quote satisfies the amount formula`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val quoteClient = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), jwt)
+
+    val quoteId =
+      quoteClient
+        .postQuote(
+          "iso4217:USD",
+          "10",
+          "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+          Sep38Context.SEP6,
+        )
+        .id
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "10",
+        "account" to keyPair.address,
+        "type" to "SWIFT",
+        "quote_id" to quoteId,
+      )
+
+    val response = client.deposit(request, exchange = true)
+    val txn = getTransactionRaw(client, response.id!!).getAsJsonObject("transaction")
+    val quote = quoteClient.getQuote(quoteId)
+
+    assertAmountsAgreeWithQuote(txn, quote)
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange with quote satisfies the amount formula`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val quoteClient = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), jwt)
+
+    val quoteId =
+      quoteClient
+        .postQuote(
+          "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+          "10",
+          "iso4217:USD",
+          Sep38Context.SEP6,
+        )
+        .id
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "10",
+        "type" to "bank_account",
+        "quote_id" to quoteId,
+      )
+
+    val response = client.withdraw(request, exchange = true)
+    val txn = getTransactionRaw(client, response.id!!).getAsJsonObject("transaction")
+    val quote = quoteClient.getQuote(quoteId)
+
+    assertAmountsAgreeWithQuote(txn, quote)
+  }
+
+  /**
+   * Sends a JSON-RPC batch to the Platform API and asserts it succeeded -- HTTP success AND no
+   * individual batch item carrying an `error` (a failed item still returns HTTP 200, so both must
+   * be checked to catch a silently-failed step; the resource-handling gap Copilot flagged on
+   *
+   * #2025). [json] is a JSON array of RPC request objects with `%TX_ID%` standing in for [txId].
+   */
+  private fun sendRpcBatch(json: String, txId: String) {
+    val rpcRequestListType = object : TypeToken<List<RpcRequest>>() {}.type
+    val rpcRequests: List<RpcRequest> =
+      gson.fromJson(json.replace("%TX_ID%", txId), rpcRequestListType)
+
+    platformApiClient.sendRpcRequest(rpcRequests).use { response ->
+      Assertions.assertTrue(response.isSuccessful) {
+        "expected the RPC batch call to succeed, got HTTP ${response.code}"
+      }
+      val body = response.body!!.string()
+      val rpcResponseListType = object : TypeToken<List<RpcResponse>>() {}.type
+      val rpcResponses: List<RpcResponse> = gson.fromJson(body, rpcResponseListType)
+      rpcResponses.forEachIndexed { index, rpcResponse ->
+        Assertions.assertNull(rpcResponse.error) {
+          "expected no error in RPC batch response item $index, got ${rpcResponse.error}: $body"
+        }
+      }
+    }
+  }
+
+  /**
+   * Creates a fresh-keypair deposit and drives it to `on_hold` via RPC: `request_offchain_funds`
+   * (incomplete -> pending_user_transfer_start), then `notify_transaction_on_hold`
+   * (pending_user_transfer_start -> on_hold) -- the #2025 CI-proven fixture with
+   * `notify_transaction_on_hold` inserted between its two steps.
+   */
+  private fun createOnHoldDeposit(): Pair<Sep6Client, String> {
+    val (client, ids) = createAccountWithDeposits(1)
+    val depositId = ids[0]
+    sendRpcBatch(onHoldRpcBatchRequests, depositId)
+    return client to depositId
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports on_hold`() {
+    val (client, depositId) = createOnHoldDeposit()
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("on_hold", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  @Test
+  fun `test sep6 on_hold deposit resumes to pending_anchor when funds are received`() {
+    val (client, depositId) = createOnHoldDeposit()
+    sendRpcBatch(offchainFundsReceivedRpcRequest, depositId)
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("pending_anchor", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports pending_customer_info_update for a NEEDS_INFO customer`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    // Its own Sep12Client/customer -- never the shared sep6Client's wallet customer. Cross-test
+    // customer updates caused real optimistic-locking flakiness in this codebase before (#2022).
+    val freshSep12Client = Sep12Client(toml.getString("KYC_SERVER"), jwt)
+
+    val customer =
+      freshSep12Client.putCustomer(
+        Sep12PutCustomerRequest.builder().account(keyPair.address).build()
+      )!!
+    val depositId =
+      client.deposit(mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")).id!!
+
+    sendRpcBatch(
+      notifyCustomerInfoUpdatedRpcRequest.replace("%CUSTOMER_ID%", customer.id),
+      depositId
+    )
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("pending_customer_info_update", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  /**
+   * Sets a SEP-6 transaction directly to [status] via the deprecated Platform API PATCH
+   * (`@Deprecated // ANCHOR-641`) -- the only writer of `required_info_message` /
+   * `required_info_updates` for SEP-6 (`TransactionService.java:386-394`), and the only way to
+   * reach `pending_transaction_info_update`, `too_small`, `too_large`, and `no_market`: no RPC or
+   * business flow ever sets any of the four for SEP-6.
+   */
+  @Suppress("DEPRECATION")
+  private fun patchStatus(
+    txId: String,
+    status: SepTransactionStatus,
+    requiredInfoMessage: String? = null,
+    requiredInfoUpdates: List<String>? = null,
+  ) {
+    val request =
+      PatchTransactionsRequest.builder()
+        .records(
+          listOf(
+            PatchTransactionRequest(
+              PlatformTransactionData.builder()
+                .id(txId)
+                .status(status)
+                .requiredInfoMessage(requiredInfoMessage)
+                .requiredInfoUpdates(requiredInfoUpdates)
+                .build()
+            )
+          )
+        )
+        .build()
+
+    // The transaction may still be concurrently touched by an async event/observer, racing this
+    // PATCH into the same OptimisticLockingFailureException Sep31Tests.kt's `requestInfoUpdate`
+    // retries on -- same defensive pattern, applied here for the same deprecated PATCH API.
+    var attempt = 0
+    while (true) {
+      try {
+        platformApiClient.patchTransaction(request)
+        return
+      } catch (ex: SepException) {
+        attempt++
+        if (attempt >= 5 || ex.message?.contains("modified by another request") != true) {
+          throw ex
+        }
+        Thread.sleep(500)
+      }
+    }
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports pending_transaction_info_update with its required info`() {
+    val (client, ids) = createAccountWithDeposits(1)
+    val depositId = ids[0]
+    val requiredInfoMessage = "Please provide additional destination details"
+
+    patchStatus(
+      depositId,
+      SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE,
+      requiredInfoMessage,
+      listOf("dest", "dest_extra"),
+    )
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("pending_transaction_info_update", txn.get("status").asString)
+    Assertions.assertEquals(requiredInfoMessage, txn.get("required_info_message").asString)
+    val requiredInfoUpdates = txn.getAsJsonObject("required_info_updates")
+    Assertions.assertEquals(setOf("dest", "dest_extra"), requiredInfoUpdates.keySet())
+    requiredInfoUpdates.entrySet().forEach { (fieldName, fieldJson) ->
+      val description = fieldJson.asJsonObject.get("description")
+      Assertions.assertTrue(
+        description != null &&
+          description.isJsonPrimitive &&
+          description.asJsonPrimitive.isString &&
+          description.asString.isNotEmpty()
+      ) {
+        "expected 'required_info_updates.$fieldName.description' to be a non-empty string, got $description"
+      }
+    }
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports too_small`() {
+    val (client, ids) = createAccountWithDeposits(1)
+    val depositId = ids[0]
+
+    patchStatus(depositId, SepTransactionStatus.TOO_SMALL)
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("too_small", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports too_large`() {
+    val (client, ids) = createAccountWithDeposits(1)
+    val depositId = ids[0]
+
+    patchStatus(depositId, SepTransactionStatus.TOO_LARGE)
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("too_large", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
+  @Test
+  fun `test sep6 GET transaction reports no_market`() {
+    val (client, ids) = createAccountWithDeposits(1)
+    val depositId = ids[0]
+
+    patchStatus(depositId, SepTransactionStatus.NO_MARKET)
+
+    val txn = getTransactionRaw(client, depositId).getAsJsonObject("transaction")
+    Assertions.assertEquals("no_market", txn.get("status").asString)
+    assertValidSep6TransactionSchema(txn, "to")
+  }
+
   companion object {
 
     private val SEP6_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS =
@@ -1177,6 +1815,88 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
             "message": "test message 2",
             "external_transaction_id": "%EXTERNAL_TRANSACTION_ID%",
             "amount_in": { "amount": "1" }
+          }
+        }
+      ]
+      """
+        .trimIndent()
+
+    /**
+     * Reaches `on_hold` from a fresh `incomplete` deposit: `request_offchain_funds` moves it to
+     * `pending_user_transfer_start`, then `notify_transaction_on_hold` moves it to `on_hold` --
+     * the #2025 CI-proven `request_offchain_funds` -> `notify_offchain_funds_received` fixture with
+     * `notify_transaction_on_hold` inserted between the two steps.
+     */
+    private val onHoldRpcBatchRequests =
+      """
+      [
+        {
+          "id": "1",
+          "method": "request_offchain_funds",
+          "jsonrpc": "2.0",
+          "params": {
+            "transaction_id": "%TX_ID%",
+            "message": "on_hold fixture: requesting offchain funds",
+            "amount_in": { "amount": "1", "asset": "iso4217:USD" },
+            "amount_out": {
+              "amount": "1",
+              "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+            },
+            "fee_details": { "total": "0", "asset": "iso4217:USD" },
+            "amount_expected": { "amount": "1" }
+          }
+        },
+        {
+          "id": "2",
+          "method": "notify_transaction_on_hold",
+          "jsonrpc": "2.0",
+          "params": {
+            "transaction_id": "%TX_ID%",
+            "message": "on_hold fixture: placing on hold for additional checks"
+          }
+        }
+      ]
+      """
+        .trimIndent()
+
+    /** Resumes an `on_hold` deposit to `pending_anchor`. */
+    private val offchainFundsReceivedRpcRequest =
+      """
+      [
+        {
+          "id": "3",
+          "method": "notify_offchain_funds_received",
+          "jsonrpc": "2.0",
+          "params": {
+            "transaction_id": "%TX_ID%",
+            "message": "on_hold fixture: offchain funds received",
+            "funds_received_at": "2023-07-04T12:34:56Z",
+            "external_transaction_id": "ext-on-hold-1",
+            "amount_in": { "amount": "1" },
+            "amount_out": { "amount": "1" },
+            "fee_details": { "total": "0", "asset": "iso4217:USD" }
+          }
+        }
+      ]
+      """
+        .trimIndent()
+
+    /**
+     * Moves an `incomplete` deposit to `pending_customer_info_update`. `%CUSTOMER_ID%` is filled in
+     * by the caller with a customer id the reference server reports as `NEEDS_INFO`.
+     */
+    private val notifyCustomerInfoUpdatedRpcRequest =
+      """
+      [
+        {
+          "id": "1",
+          "method": "notify_customer_info_updated",
+          "jsonrpc": "2.0",
+          "params": {
+            "transaction_id": "%TX_ID%",
+            "message": "NEEDS_INFO fixture: customer info updated",
+            "customer_id": "%CUSTOMER_ID%",
+            "customer_type": "sep6"
           }
         }
       ]

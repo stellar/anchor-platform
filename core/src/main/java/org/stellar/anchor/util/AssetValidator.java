@@ -205,6 +205,25 @@ public class AssetValidator {
       }
     }
 
+    // Validate fields.transaction entries
+    if (sep31Info.getFields() != null && sep31Info.getFields().getTransaction() != null) {
+      for (Map.Entry<String, AssetInfo.Field> entry :
+          sep31Info.getFields().getTransaction().entrySet()) {
+        String fieldName = entry.getKey();
+        AssetInfo.Field field = entry.getValue();
+        if (field == null) {
+          errors.add(
+              format(
+                  "Asset %s: SEP-31 fields.transaction.%s must not be empty.", assetId, fieldName));
+        } else if (StringUtils.isBlank(field.getDescription())) {
+          errors.add(
+              format(
+                  "Asset %s: SEP-31 fields.transaction.%s 'description' must not be blank.",
+                  assetId, fieldName));
+        }
+      }
+    }
+
     if (!errors.isEmpty()) {
       throw new InvalidConfigException(errors);
     }

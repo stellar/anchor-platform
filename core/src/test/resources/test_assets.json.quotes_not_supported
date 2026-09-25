@@ -53,6 +53,7 @@
         "fields": {
           "transaction": {
             "type": {
+              "description": "type of deposit to make",
               "choices": [
                 "SWIFT"
               ]

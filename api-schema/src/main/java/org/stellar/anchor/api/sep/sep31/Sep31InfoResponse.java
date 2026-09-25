@@ -36,6 +36,8 @@ public class Sep31InfoResponse {
     List<String> fundingMethods;
 
     Sep12Response sep12;
+
+    FieldsResponse fields;
   }
 
   @Data
@@ -52,5 +54,17 @@ public class Sep31InfoResponse {
   @Data
   public static class Sep12TypeResponse {
     String description;
+  }
+
+  @Data
+  public static class FieldsResponse {
+    Map<String, FieldResponse> transaction;
+  }
+
+  @Data
+  public static class FieldResponse {
+    String description;
+    List<String> choices;
+    boolean optional;
   }
 }
