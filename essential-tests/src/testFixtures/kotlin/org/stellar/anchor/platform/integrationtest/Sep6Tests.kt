@@ -1136,6 +1136,99 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 withdraw-exchange rejects an unknown quote_id`() {
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "10",
+        "type" to "bank_account",
+        "quote_id" to "not-a-real-quote-id",
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.withdraw(request, exchange = true) }
+    Assertions.assertEquals("Quote not found", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects a source asset that conflicts with the quote`() {
+    // source_asset always resolves to the SEP-6-enabled USDC issuer (GDQO -- the only USDC asset
+    // with a sep6 withdraw block), so a mismatch can't be reached by naming a second issuer.
+    // Instead, the quote is firmed for a different sell asset (native) than the request's
+    // source_asset (USDC) will ever resolve to.
+    val quoteId = postQuote("stellar:native", "10", "iso4217:USD")
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "10",
+        "type" to "bank_account",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.withdraw(request, exchange = true) }
+    Assertions.assertEquals(
+      "source asset(stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP) " +
+        "does not match quote sell asset(stellar:native)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects a destination asset that conflicts with the quote`() {
+    val quoteId =
+      postQuote(
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        "10",
+        "iso4217:USD",
+      )
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:CAD",
+        "source_asset" to "USDC",
+        "amount" to "10",
+        "type" to "bank_account",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.withdraw(request, exchange = true) }
+    Assertions.assertEquals(
+      "destination asset(iso4217:CAD) does not match quote buy asset(iso4217:USD)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects an amount that conflicts with the quote, then accepts a matching request with the same quote_id`() {
+    val quoteId =
+      postQuote(
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        "10",
+        "iso4217:USD",
+      )
+    val mismatchedRequest =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "5",
+        "type" to "bank_account",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.withdraw(mismatchedRequest, exchange = true) }
+    Assertions.assertEquals(
+      "amount(5) does not match quote sell amount(10)",
+      errorMessage(ex),
+    )
+
+    // The rejection above must not have consumed the quote -- a subsequent request with the same
+    // quote_id and the matching amount succeeds.
+    val matchingRequest = mismatchedRequest + ("amount" to "10")
+    val response = sep6Client.withdraw(matchingRequest, exchange = true)
+    assert(!response.id.isNullOrEmpty())
+  }
+
+  @Test
   fun `test sep6 deposit rejects account outside destination policy`() {
     val freshAccount = KeyPair.random().accountId
     val ex =
