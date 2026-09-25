@@ -49,6 +49,7 @@ public class PojoSep6Transaction implements Sep6Transaction {
   String requestClientIpAddress;
   List<String> requiredInfoUpdates;
   Map<String, InstructionField> instructions;
+  Map<String, String> fields;
   List<FeeDescription> feeDetailsList;
 
   public void setFeeDetails(FeeDetails feeDetails) {

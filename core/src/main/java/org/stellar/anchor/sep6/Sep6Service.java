@@ -48,6 +48,8 @@ public class Sep6Service {
       counter(MetricConstants.SEP6_TRANSACTION_REQUESTED);
   private final Counter sep6TransactionQueriedCounter =
       counter(MetricConstants.SEP6_TRANSACTION_QUERIED);
+  private final Counter sep6TransactionPatchedCounter =
+      counter(MetricConstants.SEP6_TRANSACTION_PATCHED);
   private final Counter sep6WithdrawalCounter =
       counter(
           MetricConstants.SEP6_TRANSACTION_CREATED,
@@ -240,7 +242,7 @@ public class Sep6Service {
     if (request.getQuoteId() != null) {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
-              request.getQuoteId(), sellAsset, buyAsset, request.getAmount());
+              request.getQuoteId(), sellAsset, buyAsset, request.getAmount(), fundingMethod, null);
       requestValidator.validateAmount(
           amounts.getAmountOut(),
           buyAsset.getCode(),
@@ -436,7 +438,7 @@ public class Sep6Service {
     if (request.getQuoteId() != null) {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
-              request.getQuoteId(), sellAsset, buyAsset, request.getAmount());
+              request.getQuoteId(), sellAsset, buyAsset, request.getAmount(), null, fundingMethod);
     } else {
       // TODO(philip): remove this
       // If a quote is not provided, set the fee and out amounts to 0.
@@ -560,17 +562,70 @@ public class Sep6Service {
     // the underlying G so that legacy rows predating muxed-aware storage remain
     // reachable by their original creator. The listing endpoint stays strict, so
     // legacy rows are reachable by direct ID only — they are not enumerable.
-    if (txn == null || !webAuthAccountMatches(txn.getWebAuthAccount(), token)) {
-      throw new NotFoundException("transaction not found");
-    }
-    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
-      throw new NotFoundException("transaction not found");
-    }
+    txn = requireOwnedTransaction(txn, token);
 
     sep6TransactionQueriedCounter.increment();
     String lang = validateLanguage(languageConfig, request.getLang());
     return new Sep6GetTransactionResponse(
         Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang));
+  }
+
+  /**
+   * Applies a wallet's answer to a {@code pending_transaction_info_update} request, per SEP-6
+   * "PATCH Transaction". On success the transaction returns to {@code pending_anchor} and the
+   * supplied field values are persisted for the business server to read back.
+   *
+   * @param token the requesting SEP-10/SEP-45 token.
+   * @param request the PATCH request, with {@code id} set from the path.
+   * @return the transaction in its new state, in the same shape {@code GET /transaction} returns.
+   * @throws AnchorException on every rejection defined by S6PQ-05..14.
+   */
+  @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
+  public Sep6GetTransactionResponse patchTransaction(
+      WebAuthJwt token, Sep6PatchTransactionRequest request) throws AnchorException {
+    if (token == null) {
+      throw new SepNotAuthorizedException("missing token");
+    }
+    if (request == null) {
+      throw new SepValidationException("missing request");
+    }
+
+    Sep6Transaction txn =
+        requireOwnedTransaction(txnStore.findByTransactionId(request.getId()), token);
+
+    if (!Objects.equals(
+        txn.getStatus(), SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE.toString())) {
+      infoF("Transaction ({}) does not need update", txn.getId());
+      throw new BadRequestException(
+          String.format("transaction (id=%s) does not need update", txn.getId()));
+    }
+
+    validatePatchTransactionFields(txn, request);
+
+    Map<String, String> fields = txn.getFields();
+    if (fields == null) {
+      fields = new HashMap<>();
+    }
+    fields.putAll(request.getTransaction());
+    txn.setFields(fields);
+    txn.setStatus(SepTransactionStatus.PENDING_ANCHOR.toString());
+    txn.setRequiredInfoUpdates(null);
+    txn.setRequiredInfoMessage(null);
+    txn.setUpdatedAt(Instant.now());
+
+    Sep6Transaction savedTxn = txnStore.save(txn);
+    eventSession.publish(
+        AnchorEvent.builder()
+            .id(UUID.randomUUID().toString())
+            .sep("6")
+            .type(AnchorEvent.Type.TRANSACTION_STATUS_CHANGED)
+            .transaction(TransactionMapper.toGetTransactionResponse(savedTxn, assetService))
+            .build());
+
+    sep6TransactionPatchedCounter.increment();
+    String lang = validateLanguage(languageConfig, null);
+    return new Sep6GetTransactionResponse(
+        Sep6TransactionUtils.fromTxn(savedTxn, moreInfoUrlConstructor, lang));
   }
 
   private InfoResponse buildInfoResponse() {
@@ -641,6 +696,76 @@ public class Sep6Service {
       }
     }
     return response;
+  }
+
+  /**
+   * Confirms a SEP-6 transaction belongs to the requesting token, under the same no-disclosure rule
+   * {@link #findTransaction} enforces: an unknown transaction, one created under another account,
+   * or one created under the same account with a different memo are all indistinguishable 404s.
+   *
+   * @param txn the transaction looked up by id/stellar id/external id, or null if none matched.
+   * @param token the requesting SEP-10/SEP-45 token.
+   * @return the same transaction, for chaining.
+   * @throws NotFoundException if the transaction is null, or doesn't belong to the token's account
+   *     and memo.
+   */
+  private Sep6Transaction requireOwnedTransaction(Sep6Transaction txn, WebAuthJwt token)
+      throws NotFoundException {
+    if (txn == null || !webAuthAccountMatches(txn.getWebAuthAccount(), token)) {
+      throw new NotFoundException("transaction not found");
+    }
+    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
+      throw new NotFoundException("transaction not found");
+    }
+    return txn;
+  }
+
+  /**
+   * Validates a SEP-6 PATCH request's supplied fields against the transaction's {@code
+   * required_info_updates}.
+   *
+   * @param txn is the Sep6Transaction already stored in the database.
+   * @param request is the Sep6PatchTransactionRequest request.
+   * @throws BadRequestException if the stored transaction is not expecting any info update.
+   * @throws BadRequestException if the request carries no fields.
+   * @throws BadRequestException if a supplied field is not expected, has a null value, or a
+   *     requested field is missing.
+   */
+  void validatePatchTransactionFields(Sep6Transaction txn, Sep6PatchTransactionRequest request)
+      throws BadRequestException {
+    List<String> expectedFields = txn.getRequiredInfoUpdates();
+    if (expectedFields == null || expectedFields.isEmpty()) {
+      infoF("Transaction ({}) is not expecting any updates", txn.getId());
+      throw new BadRequestException(
+          String.format("Transaction (%s) is not expecting any updates", txn.getId()));
+    }
+
+    Map<String, String> requestFields = request.getTransaction();
+    if (requestFields == null || requestFields.isEmpty()) {
+      infoF("Transaction ({}) patch request is missing fields", txn.getId());
+      throw new BadRequestException("transaction must be specified");
+    }
+
+    for (Map.Entry<String, String> entry : requestFields.entrySet()) {
+      String fieldName = entry.getKey();
+      if (!expectedFields.contains(fieldName)) {
+        infoF("{} is not a expected field", fieldName);
+        throw new BadRequestException(String.format("[%s] is not a expected field", fieldName));
+      }
+      // A JSON null value deserializes to a null map entry -- without this check it would still
+      // count as "supplied" below.
+      if (entry.getValue() == null) {
+        infoF("{} was patched with a null value", fieldName);
+        throw new BadRequestException(String.format("[%s] must not be null", fieldName));
+      }
+    }
+
+    for (String fieldName : expectedFields) {
+      if (!requestFields.containsKey(fieldName)) {
+        infoF("{} is required but was not provided", fieldName);
+        throw new BadRequestException(String.format("[%s] is required", fieldName));
+      }
+    }
   }
 
   /**

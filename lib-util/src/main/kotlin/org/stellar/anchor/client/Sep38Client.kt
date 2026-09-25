@@ -56,7 +56,9 @@ class Sep38Client(private val endpoint: String, private val jwt: String) : SepCl
     sellAmount: String,
     buyAsset: String,
     context: Sep38Context = SEP31,
-    expireAfter: Instant? = null
+    expireAfter: Instant? = null,
+    sellDeliveryMethod: String? = null,
+    buyDeliveryMethod: String? = null,
   ): Sep38QuoteResponse {
     // build request body
     val requestBody =
@@ -68,6 +70,12 @@ class Sep38Client(private val endpoint: String, private val jwt: String) : SepCl
       )
     if (expireAfter != null) {
       requestBody["expire_after"] = DateTimeFormatter.ISO_INSTANT.format(expireAfter)
+    }
+    if (sellDeliveryMethod != null) {
+      requestBody["sell_delivery_method"] = sellDeliveryMethod
+    }
+    if (buyDeliveryMethod != null) {
+      requestBody["buy_delivery_method"] = buyDeliveryMethod
     }
 
     val responseBody = httpPost("$endpoint/quote", requestBody, jwt)

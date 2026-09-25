@@ -18,7 +18,11 @@ import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepNotFoundException
 import org.stellar.anchor.api.exception.SepValidationException
+import org.stellar.anchor.api.platform.PatchTransactionRequest
+import org.stellar.anchor.api.platform.PatchTransactionsRequest
+import org.stellar.anchor.api.platform.PlatformTransactionData.builder
 import org.stellar.anchor.api.rpc.RpcRequest
+import org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
@@ -454,6 +458,50 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 deposit from a wallet supporting claimable balances proceeds normally`() {
+    // This anchor doesn't support claimable balances (sep6.features.claimable_balances is false --
+    // see the existing `/info` assertion, "claimable_balances": false). Per sep-0006.md, a wallet
+    // may still send `claimable_balances_supported=true`; the anchor must fall back to the ordinary
+    // deposit flow rather than reject the request or otherwise misbehave.
+    val request =
+      mapOf(
+        "asset_code" to "USDC",
+        "account" to clientWalletAccount,
+        "amount" to "1",
+        "type" to "SWIFT",
+        "claimable_balances_supported" to "true",
+      )
+    val response = sep6Client.deposit(request)
+    assert(!response.id.isNullOrEmpty())
+
+    val savedDepositTxn = getTransactionRaw(sep6Client, response.id!!)
+    Assertions.assertFalse(savedDepositTxn.has("claimable_balance_id")) {
+      "expected no claimable_balance_id on a deposit from an anchor that doesn't support claimable balances, got: $savedDepositTxn"
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange from a wallet supporting claimable balances proceeds normally`() {
+    // Same non-support as the plain-deposit case above, exercised through /deposit-exchange.
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "1",
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
+        "claimable_balances_supported" to "true",
+      )
+    val response = sep6Client.deposit(request, exchange = true)
+    assert(!response.id.isNullOrEmpty())
+
+    val savedDepositTxn = getTransactionRaw(sep6Client, response.id!!)
+    Assertions.assertFalse(savedDepositTxn.has("claimable_balance_id")) {
+      "expected no claimable_balance_id on a deposit-exchange from an anchor that doesn't support claimable balances, got: $savedDepositTxn"
+    }
+  }
+
+  @Test
   fun `test sep6 GET transactions does not leak another memo's transactions on a shared account`() {
     val sharedKeyPair = SigningKeyPair(KeyPair.random())
     val noMemoJwt = authenticateWithoutMemo(sharedKeyPair)
@@ -867,6 +915,129 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 deposit-exchange rejects a funding method that conflicts with the quote`() {
+    val quoteId =
+      postQuote(
+        "iso4217:USD",
+        "10",
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        sellDeliveryMethod = "WIRE",
+      )
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "10",
+        "account" to clientWalletAccount,
+        "funding_method" to "SWIFT",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(request, exchange = true) }
+    Assertions.assertEquals(
+      "funding_method(SWIFT) does not match quote sell delivery method(WIRE)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects an unknown quote_id`() {
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "10",
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
+        "quote_id" to "not-a-real-quote-id",
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(request, exchange = true) }
+    Assertions.assertEquals("Quote not found", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects a source asset that conflicts with the quote`() {
+    val quoteId =
+      postQuote(
+        "iso4217:USD",
+        "10",
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+      )
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:CAD",
+        "amount" to "10",
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(request, exchange = true) }
+    Assertions.assertEquals(
+      "source asset(iso4217:CAD) does not match quote sell asset(iso4217:USD)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects a destination asset that conflicts with the quote`() {
+    // destination_asset always resolves to the SEP-6-enabled USDC issuer (GDQO -- the only USDC
+    // asset with a sep6 block), so a mismatch can't be reached by naming a second issuer. Instead,
+    // the quote is firmed for a different buy asset (native) than the request's destination_asset
+    // (USDC) will ever resolve to.
+    val quoteId = postQuote("iso4217:USD", "10", "stellar:native")
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "10",
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(request, exchange = true) }
+    Assertions.assertEquals(
+      "destination asset(stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP) " +
+        "does not match quote buy asset(stellar:native)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange rejects an amount that conflicts with the quote, then accepts a matching request with the same quote_id`() {
+    val quoteId =
+      postQuote(
+        "iso4217:USD",
+        "10",
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+      )
+    val mismatchedRequest =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "5",
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.deposit(mismatchedRequest, exchange = true) }
+    Assertions.assertEquals(
+      "amount(5) does not match quote sell amount(10)",
+      errorMessage(ex),
+    )
+
+    // The rejection above must not have consumed the quote -- a subsequent request with the same
+    // quote_id and the matching amount succeeds.
+    val matchingRequest = mismatchedRequest + ("amount" to "10")
+    val response = sep6Client.deposit(matchingRequest, exchange = true)
+    assert(!response.id.isNullOrEmpty())
+  }
+
+  @Test
   fun `test sep6 deposit falls back to the JWT's own account when account param is omitted`() {
     val request = mapOf("asset_code" to "USDC", "amount" to "1", "type" to "SWIFT")
     val response = sep6Client.deposit(request)
@@ -981,6 +1152,124 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       JSONCompareMode.LENIENT,
     )
     Assertions.assertNotNull(savedWithdrawTxn.transaction.moreInfoUrl)
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects a funding method that conflicts with the quote`() {
+    val quoteId =
+      postQuote(
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        "10",
+        "iso4217:USD",
+        buyDeliveryMethod = "WIRE",
+      )
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "10",
+        "funding_method" to "bank_account",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.withdraw(request, exchange = true) }
+    Assertions.assertEquals(
+      "funding_method(bank_account) does not match quote buy delivery method(WIRE)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects an unknown quote_id`() {
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "10",
+        "type" to "bank_account",
+        "quote_id" to "not-a-real-quote-id",
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.withdraw(request, exchange = true) }
+    Assertions.assertEquals("Quote not found", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects a source asset that conflicts with the quote`() {
+    // source_asset always resolves to the SEP-6-enabled USDC issuer (GDQO -- the only USDC asset
+    // with a sep6 withdraw block), so a mismatch can't be reached by naming a second issuer.
+    // Instead, the quote is firmed for a different sell asset (native) than the request's
+    // source_asset (USDC) will ever resolve to.
+    val quoteId = postQuote("stellar:native", "10", "iso4217:USD")
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "10",
+        "type" to "bank_account",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.withdraw(request, exchange = true) }
+    Assertions.assertEquals(
+      "source asset(stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP) " +
+        "does not match quote sell asset(stellar:native)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects a destination asset that conflicts with the quote`() {
+    val quoteId =
+      postQuote(
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        "10",
+        "iso4217:USD",
+      )
+    val request =
+      mapOf(
+        "destination_asset" to "iso4217:CAD",
+        "source_asset" to "USDC",
+        "amount" to "10",
+        "type" to "bank_account",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.withdraw(request, exchange = true) }
+    Assertions.assertEquals(
+      "destination asset(iso4217:CAD) does not match quote buy asset(iso4217:USD)",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep6 withdraw-exchange rejects an amount that conflicts with the quote, then accepts a matching request with the same quote_id`() {
+    val quoteId =
+      postQuote(
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        "10",
+        "iso4217:USD",
+      )
+    val mismatchedRequest =
+      mapOf(
+        "destination_asset" to "iso4217:USD",
+        "source_asset" to "USDC",
+        "amount" to "5",
+        "type" to "bank_account",
+        "quote_id" to quoteId,
+      )
+
+    val ex = assertThrows<SepException> { sep6Client.withdraw(mismatchedRequest, exchange = true) }
+    Assertions.assertEquals(
+      "amount(5) does not match quote sell amount(10)",
+      errorMessage(ex),
+    )
+
+    // The rejection above must not have consumed the quote -- a subsequent request with the same
+    // quote_id and the matching amount succeeds.
+    val matchingRequest = mismatchedRequest + ("amount" to "10")
+    val response = sep6Client.withdraw(matchingRequest, exchange = true)
+    assert(!response.id.isNullOrEmpty())
   }
 
   @Test
@@ -1143,8 +1432,340 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
-  private fun postQuote(sellAsset: String, sellAmount: String, buyAsset: String): String {
-    return sep38Client.postQuote(sellAsset, sellAmount, buyAsset, Sep38Context.SEP6).id
+  private fun postQuote(
+    sellAsset: String,
+    sellAmount: String,
+    buyAsset: String,
+    sellDeliveryMethod: String? = null,
+    buyDeliveryMethod: String? = null,
+  ): String {
+    return sep38Client
+      .postQuote(
+        sellAsset,
+        sellAmount,
+        buyAsset,
+        Sep38Context.SEP6,
+        sellDeliveryMethod = sellDeliveryMethod,
+        buyDeliveryMethod = buyDeliveryMethod,
+      )
+      .id
+  }
+
+  /**
+   * Moves a SEP-6 transaction into `pending_transaction_info_update` through the deprecated
+   * Platform API `PATCH /transactions` -- the only entry path into that status for SEP-6. The
+   * transaction just created by [Sep6Client.withdraw]/[Sep6Client.deposit] may still be
+   * concurrently touched by an async event/observer, racing this PATCH into the same
+   * OptimisticLockingFailureException `TransactionService` throws as "Transaction was modified by
+   * another request. Please re-read the transaction state and retry if appropriate." -- so retry on
+   * that exact message, as `Sep31Tests.kt`'s `requestInfoUpdate` does.
+   */
+  private fun requestSep6InfoUpdate(
+    txId: String,
+    fieldNames: List<String>,
+    message: String? = null,
+  ) {
+    val request =
+      PatchTransactionsRequest.builder()
+        .records(
+          listOf(
+            PatchTransactionRequest(
+              builder()
+                .id(txId)
+                .status(PENDING_TRANSACTION_INFO_UPDATE)
+                .requiredInfoUpdates(fieldNames)
+                .requiredInfoMessage(message)
+                .build()
+            )
+          )
+        )
+        .build()
+
+    var attempt = 0
+    while (true) {
+      try {
+        platformApiClient.patchTransaction(request)
+        return
+      } catch (ex: SepException) {
+        attempt++
+        if (attempt >= 5 || ex.message?.contains("modified by another request") != true) {
+          throw ex
+        }
+        Thread.sleep(500)
+      }
+    }
+  }
+
+  /**
+   * Fetches GET /transaction as a raw JSON object, bypassing [Sep6Client.getTransaction]'s parsed
+   * response -- Gson silently nulls absent fields on a parsed object, which would hide an absent
+   * `required_info_updates`/`required_info_message` key from a strict "field is gone" assertion.
+   */
+  private fun getTransactionRaw(client: Sep6Client, id: String): JsonObject {
+    val rawJson =
+      client.httpGet("${toml.getString("TRANSFER_SERVER")}/transaction?id=$id", client.jwt)!!
+    return JsonParser.parseString(rawJson).asJsonObject.getAsJsonObject("transaction")
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction supplies the requested fields`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+
+    requestSep6InfoUpdate(txId, listOf("dest", "dest_extra"))
+
+    val patchResponse =
+      client.patchTransaction(
+        txId,
+        """{"transaction": {"dest": "12345678901234", "dest_extra": "021000021"}}""",
+      )
+    Assertions.assertEquals(txId, patchResponse.transaction.id)
+    Assertions.assertEquals("pending_anchor", patchResponse.transaction.status)
+
+    // The reference server asynchronously moves a pending_anchor transaction with no KYC on to
+    // another status right after this PATCH (Sep6EventProcessor.kt), so the exact post-PATCH
+    // status can't be pinned here -- only that the required-info fields are gone and the
+    // transaction has left pending_transaction_info_update.
+    val rawTxn = getTransactionRaw(client, txId)
+    Assertions.assertFalse(rawTxn.has("required_info_updates"))
+    Assertions.assertFalse(rawTxn.has("required_info_message"))
+    Assertions.assertNotEquals("pending_transaction_info_update", rawTxn.get("status").asString)
+
+    val platformTxn = platformApiClient.getTransactionByRpc(txId)
+    Assertions.assertEquals(
+      mapOf("dest" to "12345678901234", "dest_extra" to "021000021"),
+      platformTxn.fields,
+    )
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction keeps earlier fields across rounds`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+
+    // Round 1: only "dest" is requested and supplied.
+    requestSep6InfoUpdate(txId, listOf("dest"))
+    client.patchTransaction(txId, """{"transaction": {"dest": "111"}}""")
+
+    // Round 2: the anchor asks again, this time for "dest" (a new value) and "dest_extra".
+    requestSep6InfoUpdate(txId, listOf("dest", "dest_extra"))
+    client.patchTransaction(
+      txId,
+      """{"transaction": {"dest": "222", "dest_extra": "021000021"}}""",
+    )
+
+    val platformTxn = platformApiClient.getTransactionByRpc(txId)
+    Assertions.assertEquals(mapOf("dest" to "222", "dest_extra" to "021000021"), platformTxn.fields)
+  }
+
+  /**
+   * A 400 body carries `{"error": "..."}`; [SepClient.handleResponse] preserves it raw rather than
+   * parsing it (see its comment), so tests that need the exact message extract it themselves.
+   */
+  private fun errorMessage(ex: SepException): String =
+    JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+
+  @Test
+  fun `test sep6 PATCH transaction rejects an unknown id`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+
+    val ex =
+      assertThrows<SepNotFoundException> {
+        client.patchTransaction(UUID.randomUUID().toString(), """{"transaction": {"dest": "1"}}""")
+      }
+    Assertions.assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects another account's transaction`() {
+    val ownerKeyPair = SigningKeyPair(KeyPair.random())
+    val ownerClient =
+      Sep6Client(toml.getString("TRANSFER_SERVER"), authenticateWithoutMemo(ownerKeyPair))
+    val txId =
+      ownerClient
+        .withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1"))
+        .id!!
+    requestSep6InfoUpdate(txId, listOf("dest"))
+
+    val otherKeyPair = SigningKeyPair(KeyPair.random())
+    val otherClient =
+      Sep6Client(toml.getString("TRANSFER_SERVER"), authenticateWithoutMemo(otherKeyPair))
+
+    val ex =
+      assertThrows<SepNotFoundException> {
+        otherClient.patchTransaction(txId, """{"transaction": {"dest": "1"}}""")
+      }
+    Assertions.assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects the same account under another memo`() {
+    val sharedKeyPair = SigningKeyPair(KeyPair.random())
+    val memoAClient =
+      Sep6Client(toml.getString("TRANSFER_SERVER"), authenticateWithMemo(sharedKeyPair, 111UL))
+    val memoBClient =
+      Sep6Client(toml.getString("TRANSFER_SERVER"), authenticateWithMemo(sharedKeyPair, 222UL))
+
+    val txId =
+      memoAClient
+        .withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1"))
+        .id!!
+    requestSep6InfoUpdate(txId, listOf("dest"))
+
+    val ex =
+      assertThrows<SepNotFoundException> {
+        memoBClient.patchTransaction(txId, """{"transaction": {"dest": "1"}}""")
+      }
+    Assertions.assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects a transaction not awaiting an update`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    // Never moved into pending_transaction_info_update.
+
+    val ex =
+      assertThrows<SepValidationException> {
+        client.patchTransaction(txId, """{"transaction": {"dest": "1"}}""")
+      }
+    Assertions.assertEquals("transaction (id=$txId) does not need update", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects an empty transaction object`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    requestSep6InfoUpdate(txId, listOf("dest"))
+
+    val ex =
+      assertThrows<SepValidationException> {
+        client.patchTransaction(txId, """{"transaction": {}}""")
+      }
+    Assertions.assertEquals("transaction must be specified", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects an unexpected field and changes nothing`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    requestSep6InfoUpdate(txId, listOf("dest"))
+
+    val before = platformApiClient.getTransactionByRpc(txId)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        client.patchTransaction(txId, """{"transaction": {"unexpected": "value"}}""")
+      }
+    Assertions.assertEquals("[unexpected] is not a expected field", errorMessage(ex))
+
+    val after = platformApiClient.getTransactionByRpc(txId)
+    Assertions.assertEquals(before.status, after.status)
+    Assertions.assertEquals(before.requiredInfoUpdates, after.requiredInfoUpdates)
+    Assertions.assertEquals(before.requiredInfoMessage, after.requiredInfoMessage)
+    Assertions.assertNull(after.fields)
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects a null field value`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    requestSep6InfoUpdate(txId, listOf("dest"))
+
+    val ex =
+      assertThrows<SepValidationException> {
+        client.patchTransaction(txId, """{"transaction": {"dest": null}}""")
+      }
+    Assertions.assertEquals("[dest] must not be null", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects a missing requested field`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+    requestSep6InfoUpdate(txId, listOf("dest", "dest_extra"))
+
+    val ex =
+      assertThrows<SepValidationException> {
+        client.patchTransaction(txId, """{"transaction": {"dest": "1"}}""")
+      }
+    Assertions.assertEquals("[dest_extra] is required", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 PATCH transaction rejects a request without a JWT`() {
+    val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
+    assertThrows<SepNotAuthorizedException> {
+      noAuthClient.patchTransaction(
+        UUID.randomUUID().toString(),
+        """{"transaction": {"dest": "1"}}"""
+      )
+    }
+  }
+
+  @Test
+  fun `test platform PATCH refuses SEP-6 info update with nothing requested`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+
+    val before = getTransactionRaw(client, txId)
+
+    val ex = assertThrows<SepException> { requestSep6InfoUpdate(txId, emptyList()) }
+    Assertions.assertEquals(
+      "required_info_updates must not be empty when status is pending_transaction_info_update",
+      errorMessage(ex),
+    )
+
+    val after = getTransactionRaw(client, txId)
+    Assertions.assertEquals(before.get("status").asString, after.get("status").asString)
+  }
+
+  @Test
+  fun `test platform PATCH moves SEP-6 to info update and exposes what was requested`() {
+    val keyPair = SigningKeyPair(KeyPair.random())
+    val jwt = authenticateWithoutMemo(keyPair)
+    val client = Sep6Client(toml.getString("TRANSFER_SERVER"), jwt)
+    val txId =
+      client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
+
+    requestSep6InfoUpdate(txId, listOf("dest", "dest_extra"), "please update your destination")
+
+    val rawTxn = getTransactionRaw(client, txId)
+    Assertions.assertEquals("pending_transaction_info_update", rawTxn.get("status").asString)
+    Assertions.assertEquals(
+      setOf("dest", "dest_extra"),
+      rawTxn.getAsJsonObject("required_info_updates").keySet(),
+    )
+
+    val platformTxn = platformApiClient.getTransactionByRpc(txId)
+    Assertions.assertEquals("please update your destination", platformTxn.requiredInfoMessage)
+    Assertions.assertEquals(listOf("dest", "dest_extra"), platformTxn.requiredInfoUpdates)
   }
 
   companion object {

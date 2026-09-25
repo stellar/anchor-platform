@@ -418,6 +418,112 @@ class TransactionServiceTest {
   }
 
   @Test
+  fun `test patchTransactions rejects a SEP-6 transition to pending_transaction_info_update with an empty required_info_updates`() {
+    val txId = "testTxId"
+    val tx = JdbcSep6Transaction()
+    tx.id = txId
+    tx.status = SepTransactionStatus.PENDING_ANCHOR.toString()
+    tx.kind = "deposit"
+    val data = PlatformTransactionData()
+    data.id = txId
+    data.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    data.requiredInfoUpdates = emptyList()
+    val request =
+      PatchTransactionsRequest.builder().records(listOf(PatchTransactionRequest(data))).build()
+
+    every { sep31TransactionStore.findByTransactionId(any()) } returns null
+    every { sep6TransactionStore.findByTransactionId(any()) } returns tx
+    every { sep24TransactionStore.findByTransactionId(any()) } returns null
+
+    val ex = assertThrows<AnchorException> { transactionService.patchTransactions(request) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals(
+      "required_info_updates must not be empty when status is pending_transaction_info_update",
+      ex.message,
+    )
+    verify(exactly = 0) { sep6TransactionStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransactions rejects a SEP-6 transition to pending_transaction_info_update with no required_info_updates anywhere`() {
+    val txId = "testTxId"
+    val tx = JdbcSep6Transaction()
+    tx.id = txId
+    tx.status = SepTransactionStatus.PENDING_ANCHOR.toString()
+    tx.kind = "deposit"
+    val data = PlatformTransactionData()
+    data.id = txId
+    data.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    val request =
+      PatchTransactionsRequest.builder().records(listOf(PatchTransactionRequest(data))).build()
+
+    every { sep31TransactionStore.findByTransactionId(any()) } returns null
+    every { sep6TransactionStore.findByTransactionId(any()) } returns tx
+    every { sep24TransactionStore.findByTransactionId(any()) } returns null
+
+    val ex = assertThrows<AnchorException> { transactionService.patchTransactions(request) }
+    assertInstanceOf(BadRequestException::class.java, ex)
+    assertEquals(
+      "required_info_updates must not be empty when status is pending_transaction_info_update",
+      ex.message,
+    )
+    verify(exactly = 0) { sep6TransactionStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransactions accepts a SEP-6 transition to pending_transaction_info_update when required_info_updates is already stored`() {
+    val txId = "testTxId"
+    val tx = JdbcSep6Transaction()
+    tx.id = txId
+    tx.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE.toString()
+    tx.kind = "deposit"
+    tx.requiredInfoUpdates = listOf("dest")
+    val data = PlatformTransactionData()
+    data.id = txId
+    data.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    data.requiredInfoMessage = "please update your destination"
+    val request =
+      PatchTransactionsRequest.builder().records(listOf(PatchTransactionRequest(data))).build()
+
+    every { sep31TransactionStore.findByTransactionId(any()) } returns null
+    every { sep6TransactionStore.findByTransactionId(any()) } returns tx
+    every { sep24TransactionStore.findByTransactionId(any()) } returns null
+
+    assertDoesNotThrow { transactionService.patchTransactions(request) }
+
+    verify(exactly = 1) { sep6TransactionStore.save(any()) }
+    verify(exactly = 1) { eventSession.publish(any()) }
+    assertEquals(listOf("dest"), tx.requiredInfoUpdates)
+  }
+
+  @Test
+  fun `test patchTransactions accepts a SEP-6 transition to pending_transaction_info_update with a non-empty required_info_updates in the patch`() {
+    val txId = "testTxId"
+    val tx = JdbcSep6Transaction()
+    tx.id = txId
+    tx.status = SepTransactionStatus.PENDING_ANCHOR.toString()
+    tx.kind = "deposit"
+    val data = PlatformTransactionData()
+    data.id = txId
+    data.status = SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+    data.requiredInfoUpdates = listOf("dest", "dest_extra")
+    val request =
+      PatchTransactionsRequest.builder().records(listOf(PatchTransactionRequest(data))).build()
+
+    every { sep31TransactionStore.findByTransactionId(any()) } returns null
+    every { sep6TransactionStore.findByTransactionId(any()) } returns tx
+    every { sep24TransactionStore.findByTransactionId(any()) } returns null
+
+    assertDoesNotThrow { transactionService.patchTransactions(request) }
+
+    verify(exactly = 1) { sep6TransactionStore.save(any()) }
+    verify(exactly = 1) { eventSession.publish(any()) }
+    assertEquals(listOf("dest", "dest_extra"), tx.requiredInfoUpdates)
+  }
+
+  @Test
   fun test_updateSep31Transaction() {
     val quoteId = "my-quote-id"
     val gson = GsonUtils.getInstance()
