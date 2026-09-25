@@ -2438,4 +2438,178 @@ class Sep6ServiceTest {
 
     assertDoesNotThrow { sep6Service.validatePatchTransactionFields(txn, request) }
   }
+
+  @Test
+  fun `test patchTransaction succeeds and returns the transaction to pending_anchor`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates = listOf("dest", "dest_extra")
+    txn.requiredInfoMessage = "please update your bank details"
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
+
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(txn.id)
+        .transaction(mapOf("dest" to "12345678901234", "dest_extra" to "021000021"))
+        .build()
+
+    val response = sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+
+    assertEquals(txn.id, response.transaction.id)
+    assertEquals("pending_anchor", response.transaction.status)
+    assertEquals("pending_anchor", txn.status)
+    assertEquals(null, txn.requiredInfoUpdates)
+    assertEquals(null, txn.requiredInfoMessage)
+    assertEquals(
+      mapOf("dest" to "12345678901234", "dest_extra" to "021000021"),
+      txn.fields,
+    )
+    verify(exactly = 1) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction publishes exactly one TRANSACTION_STATUS_CHANGED event`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates = listOf("dest")
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
+    val slotEvent = slot<AnchorEvent>()
+    every { eventSession.publish(capture(slotEvent)) } returns Unit
+
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "1")).build()
+    sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+
+    verify(exactly = 1) { eventSession.publish(any()) }
+    assertEquals(AnchorEvent.Type.TRANSACTION_STATUS_CHANGED, slotEvent.captured.type)
+    assertEquals("6", slotEvent.captured.sep)
+    assertEquals("pending_anchor", slotEvent.captured.transaction.status.toString())
+  }
+
+  @Test
+  fun `test patchTransaction keeps earlier fields across rounds`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.status = "pending_transaction_info_update"
+    txn.fields = mutableMapOf("a" to "1", "b" to "2")
+    txn.requiredInfoUpdates = listOf("b", "c")
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
+
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(txn.id)
+        .transaction(mapOf("b" to "3", "c" to "4"))
+        .build()
+    sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+
+    assertEquals(mapOf("a" to "1", "b" to "3", "c" to "4"), txn.fields)
+  }
+
+  @Test
+  fun `test patchTransaction with unknown id throws not found`() {
+    every { txnStore.findByTransactionId(any()) } returns null
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(UUID.randomUUID().toString())
+        .transaction(mapOf("dest" to "1"))
+        .build()
+
+    val ex =
+      assertThrows<NotFoundException> {
+        sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction not found", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction for a foreign account throws not found`() {
+    val txn = createDepositTxn("other-account")
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates = listOf("dest")
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "1")).build()
+
+    val ex =
+      assertThrows<NotFoundException> {
+        sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction not found", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction for a foreign memo throws not found`() {
+    val txn = createDepositTxn(TEST_ACCOUNT, "other-memo")
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates = listOf("dest")
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "1")).build()
+
+    val ex =
+      assertThrows<NotFoundException> {
+        sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction not found", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction with wrong status throws bad request`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.status = "pending_anchor"
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "1")).build()
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction (id=${txn.id}) does not need update", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction validator failure propagates and changes nothing`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates = listOf("dest")
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(txn.id)
+        .transaction(mapOf("dest" to "1", "unexpected" to "2"))
+        .build()
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("[unexpected] is not a expected field", ex.message)
+    assertEquals("pending_transaction_info_update", txn.status)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction with null token throws not authorized`() {
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(UUID.randomUUID().toString())
+        .transaction(mapOf("dest" to "1"))
+        .build()
+
+    assertThrows<SepNotAuthorizedException> { sep6Service.patchTransaction(null, request) }
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
 }

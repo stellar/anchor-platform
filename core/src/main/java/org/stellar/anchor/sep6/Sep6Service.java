@@ -48,6 +48,8 @@ public class Sep6Service {
       counter(MetricConstants.SEP6_TRANSACTION_REQUESTED);
   private final Counter sep6TransactionQueriedCounter =
       counter(MetricConstants.SEP6_TRANSACTION_QUERIED);
+  private final Counter sep6TransactionPatchedCounter =
+      counter(MetricConstants.SEP6_TRANSACTION_PATCHED);
   private final Counter sep6WithdrawalCounter =
       counter(
           MetricConstants.SEP6_TRANSACTION_CREATED,
@@ -566,6 +568,64 @@ public class Sep6Service {
     String lang = validateLanguage(languageConfig, request.getLang());
     return new Sep6GetTransactionResponse(
         Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang));
+  }
+
+  /**
+   * Applies a wallet's answer to a {@code pending_transaction_info_update} request, per SEP-6
+   * "PATCH Transaction". On success the transaction returns to {@code pending_anchor} and the
+   * supplied field values are persisted for the business server to read back.
+   *
+   * @param token the requesting SEP-10/SEP-45 token.
+   * @param request the PATCH request, with {@code id} set from the path.
+   * @return the transaction in its new state, in the same shape {@code GET /transaction} returns.
+   * @throws AnchorException on every rejection defined by S6PQ-05..14.
+   */
+  @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
+  public Sep6GetTransactionResponse patchTransaction(
+      WebAuthJwt token, Sep6PatchTransactionRequest request) throws AnchorException {
+    if (token == null) {
+      throw new SepNotAuthorizedException("missing token");
+    }
+    if (request == null) {
+      throw new SepValidationException("missing request");
+    }
+
+    Sep6Transaction txn =
+        requireOwnedTransaction(txnStore.findByTransactionId(request.getId()), token);
+
+    if (!Objects.equals(
+        txn.getStatus(), SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE.toString())) {
+      infoF("Transaction ({}) does not need update", txn.getId());
+      throw new BadRequestException(
+          String.format("transaction (id=%s) does not need update", txn.getId()));
+    }
+
+    validatePatchTransactionFields(txn, request);
+
+    Map<String, String> fields = txn.getFields();
+    if (fields == null) {
+      fields = new HashMap<>();
+    }
+    fields.putAll(request.getTransaction());
+    txn.setFields(fields);
+    txn.setStatus(SepTransactionStatus.PENDING_ANCHOR.toString());
+    txn.setRequiredInfoUpdates(null);
+    txn.setRequiredInfoMessage(null);
+    txn.setUpdatedAt(Instant.now());
+
+    Sep6Transaction savedTxn = txnStore.save(txn);
+    eventSession.publish(
+        AnchorEvent.builder()
+            .id(UUID.randomUUID().toString())
+            .sep("6")
+            .type(AnchorEvent.Type.TRANSACTION_STATUS_CHANGED)
+            .transaction(TransactionMapper.toGetTransactionResponse(savedTxn, assetService))
+            .build());
+
+    sep6TransactionPatchedCounter.increment();
+    String lang = validateLanguage(languageConfig, null);
+    return new Sep6GetTransactionResponse(
+        Sep6TransactionUtils.fromTxn(savedTxn, moreInfoUrlConstructor, lang));
   }
 
   private InfoResponse buildInfoResponse() {

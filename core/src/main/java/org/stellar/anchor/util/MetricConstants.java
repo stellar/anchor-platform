@@ -13,6 +13,7 @@ public class MetricConstants {
   public static final String SEP6_TRANSACTION_REQUESTED = "sep6.transaction.requested";
   public static final String SEP6_TRANSACTION_CREATED = "sep6.transaction.created";
   public static final String SEP6_TRANSACTION_QUERIED = "sep6.transaction.queried";
+  public static final String SEP6_TRANSACTION_PATCHED = "sep6.transaction.patched";
   public static final String TV_SEP6_WITHDRAWAL = "withdrawal";
   public static final String TV_SEP6_WITHDRAWAL_EXCHANGE = "withdrawal_exchange";
   public static final String TV_SEP6_DEPOSIT = "deposit";
