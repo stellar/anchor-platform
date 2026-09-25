@@ -458,6 +458,50 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep6 deposit from a wallet supporting claimable balances proceeds normally`() {
+    // This anchor doesn't support claimable balances (sep6.features.claimable_balances is false --
+    // see the existing `/info` assertion, "claimable_balances": false). Per sep-0006.md, a wallet
+    // may still send `claimable_balances_supported=true`; the anchor must fall back to the ordinary
+    // deposit flow rather than reject the request or otherwise misbehave.
+    val request =
+      mapOf(
+        "asset_code" to "USDC",
+        "account" to clientWalletAccount,
+        "amount" to "1",
+        "type" to "SWIFT",
+        "claimable_balances_supported" to "true",
+      )
+    val response = sep6Client.deposit(request)
+    assert(!response.id.isNullOrEmpty())
+
+    val savedDepositTxn = getTransactionRaw(sep6Client, response.id!!)
+    Assertions.assertFalse(savedDepositTxn.has("claimable_balance_id")) {
+      "expected no claimable_balance_id on a deposit from an anchor that doesn't support claimable balances, got: $savedDepositTxn"
+    }
+  }
+
+  @Test
+  fun `test sep6 deposit-exchange from a wallet supporting claimable balances proceeds normally`() {
+    // Same non-support as the plain-deposit case above, exercised through /deposit-exchange.
+    val request =
+      mapOf(
+        "destination_asset" to "USDC",
+        "source_asset" to "iso4217:USD",
+        "amount" to "1",
+        "account" to clientWalletAccount,
+        "type" to "SWIFT",
+        "claimable_balances_supported" to "true",
+      )
+    val response = sep6Client.deposit(request, exchange = true)
+    assert(!response.id.isNullOrEmpty())
+
+    val savedDepositTxn = getTransactionRaw(sep6Client, response.id!!)
+    Assertions.assertFalse(savedDepositTxn.has("claimable_balance_id")) {
+      "expected no claimable_balance_id on a deposit-exchange from an anchor that doesn't support claimable balances, got: $savedDepositTxn"
+    }
+  }
+
+  @Test
   fun `test sep6 GET transactions does not leak another memo's transactions on a shared account`() {
     val sharedKeyPair = SigningKeyPair(KeyPair.random())
     val noMemoJwt = authenticateWithoutMemo(sharedKeyPair)
