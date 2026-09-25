@@ -629,7 +629,7 @@ class Sep6ServiceTest {
     every { eventSession.publish(capture(slotEvent)) } returns Unit
 
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -669,7 +669,7 @@ class Sep6ServiceTest {
 
     // Verify effects
     verify(exactly = 1) {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100")
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100", any(), any())
     }
     verify(exactly = 1) { txnStore.save(any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
@@ -724,6 +724,8 @@ class Sep6ServiceTest {
         TEST_QUOTE_ID,
         any(),
         capture(slotBuyAsset),
+        any(),
+        any(),
         any(),
       )
     } returns
@@ -1259,7 +1261,7 @@ class Sep6ServiceTest {
     every { eventSession.publish(capture(slotEvent)) } returns Unit
 
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -1299,7 +1301,7 @@ class Sep6ServiceTest {
 
     // Verify effects
     verify(exactly = 1) {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100")
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100", any(), any())
     }
     verify(exactly = 1) { txnStore.save(any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
@@ -1345,6 +1347,8 @@ class Sep6ServiceTest {
         TEST_QUOTE_ID,
         any(),
         capture(slotBuyAsset),
+        any(),
+        any(),
         any(),
       )
     } returns
@@ -2055,7 +2059,7 @@ class Sep6ServiceTest {
   @Test
   fun `test depositExchange rejects already-bound quote`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } throws BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
     val request =
       StartDepositExchangeRequest.builder()
@@ -2073,7 +2077,7 @@ class Sep6ServiceTest {
   @Test
   fun `test depositExchange bind failure rejects second use`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -2101,7 +2105,7 @@ class Sep6ServiceTest {
   @Test
   fun `test withdrawExchange rejects already-bound quote`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } throws BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
     val request =
       StartWithdrawExchangeRequest.builder()
@@ -2118,7 +2122,7 @@ class Sep6ServiceTest {
   @Test
   fun `test withdrawExchange bind failure rejects second use`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -2140,6 +2144,132 @@ class Sep6ServiceTest {
         .build()
     val ex = assertThrows<BadRequestException> { sep6Service.withdrawExchange(token, request) }
     assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test depositExchange passes the funding method as the sell delivery method`() {
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset("iso4217:USD")
+        .amountOut("98")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("2", TEST_ASSET_SEP38_FORMAT))
+        .build()
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+
+    sep6Service.depositExchange(token, request)
+
+    verify(exactly = 1) {
+      exchangeAmountsCalculator.calculateFromQuote(
+        TEST_QUOTE_ID,
+        any(),
+        any(),
+        any(),
+        "SWIFT",
+        null
+      )
+    }
+  }
+
+  @Test
+  fun `test withdrawExchange passes the funding method as the buy delivery method`() {
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset("iso4217:USD")
+        .feeDetails(FeeDetails("2", "iso4217:USD"))
+        .build()
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+
+    sep6Service.withdrawExchange(token, request)
+
+    verify(exactly = 1) {
+      exchangeAmountsCalculator.calculateFromQuote(
+        TEST_QUOTE_ID,
+        any(),
+        any(),
+        any(),
+        null,
+        "bank_account",
+      )
+    }
+  }
+
+  @Test
+  fun `test depositExchange propagates a funding-method conflict and persists nothing`() {
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
+    } throws
+      BadRequestException("funding_method(SWIFT) does not match quote sell delivery method(WIRE)")
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+
+    val ex = assertThrows<BadRequestException> { sep6Service.depositExchange(token, request) }
+    assertEquals(
+      "funding_method(SWIFT) does not match quote sell delivery method(WIRE)",
+      ex.message,
+    )
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { exchangeAmountsCalculator.bindQuoteToTransaction(any(), any()) }
+  }
+
+  @Test
+  fun `test withdrawExchange propagates a funding-method conflict and persists nothing`() {
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
+    } throws
+      BadRequestException(
+        "funding_method(bank_account) does not match quote buy delivery method(WIRE)"
+      )
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+
+    val ex = assertThrows<BadRequestException> { sep6Service.withdrawExchange(token, request) }
+    assertEquals(
+      "funding_method(bank_account) does not match quote buy delivery method(WIRE)",
+      ex.message,
+    )
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { exchangeAmountsCalculator.bindQuoteToTransaction(any(), any()) }
   }
 
   @Test
@@ -2244,7 +2374,7 @@ class Sep6ServiceTest {
   @Test
   fun `test depositExchange rejects a quote whose credited amount exceeds max_amount`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -2275,7 +2405,7 @@ class Sep6ServiceTest {
   @Test
   fun `test depositExchange rejects a quote whose credited amount is below min_amount`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -2311,7 +2441,7 @@ class Sep6ServiceTest {
     every { txnStore.save(any()) } returns null
     every { eventSession.publish(any()) } returns Unit
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("10001")
