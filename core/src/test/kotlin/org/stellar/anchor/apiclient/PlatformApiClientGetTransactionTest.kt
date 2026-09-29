@@ -11,7 +11,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
-import org.stellar.anchor.api.exception.BadRequestException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.auth.AuthHelper
 
 class PlatformApiClientGetTransactionTest {
@@ -72,13 +72,13 @@ class PlatformApiClientGetTransactionTest {
   fun `getTransaction rejects anything that is not a transaction id without sending a request`(
     id: String
   ) {
-    assertThrows(BadRequestException::class.java) { client().getTransaction(id) }
+    assertThrows(SepValidationException::class.java) { client().getTransaction(id) }
     assertEquals(0, server.requestCount)
   }
 
   @Test
   fun `getTransaction rejects a null id without sending a request`() {
-    assertThrows(BadRequestException::class.java) { client().getTransaction(null) }
+    assertThrows(SepValidationException::class.java) { client().getTransaction(null) }
     assertEquals(0, server.requestCount)
   }
 }

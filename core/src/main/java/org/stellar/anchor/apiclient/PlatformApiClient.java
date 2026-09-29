@@ -16,8 +16,8 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.springframework.data.domain.Sort;
 import org.stellar.anchor.api.exception.AnchorException;
-import org.stellar.anchor.api.exception.BadRequestException;
 import org.stellar.anchor.api.exception.InvalidConfigException;
+import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.platform.*;
 import org.stellar.anchor.api.rpc.RpcRequest;
 import org.stellar.anchor.api.rpc.method.*;
@@ -46,7 +46,7 @@ public class PlatformApiClient extends BaseApiClient {
   @Deprecated // ANCHOR-641 Use getTransactionByRpc instead
   public GetTransactionResponse getTransaction(String id) throws IOException, AnchorException {
     if (!isValidSepTransactionId(id)) {
-      throw new BadRequestException("Invalid transaction id");
+      throw new SepValidationException("Invalid transaction id");
     }
     HttpUrl baseUrl = HttpUrl.parse(endpoint);
     if (baseUrl == null) {
