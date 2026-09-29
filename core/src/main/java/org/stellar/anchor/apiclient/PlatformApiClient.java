@@ -18,6 +18,7 @@ import okhttp3.Response;
 import org.springframework.data.domain.Sort;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.InvalidConfigException;
+import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.platform.*;
 import org.stellar.anchor.api.rpc.RpcErrorCode;
