@@ -16,6 +16,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.springframework.web.util.UriComponentsBuilder
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
@@ -299,7 +300,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 deposit rejects request without asset_code`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.deposit(validInteractiveRequest - "asset_code" - "asset_issuer")
       }
     assertEquals("missing 'asset_code'", errorMessage(ex))
@@ -308,7 +309,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 deposit rejects an invalid account`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.deposit(validInteractiveRequest + ("account" to "not a valid account"))
       }
     assertEquals("invalid account not a valid account", errorMessage(ex))
@@ -317,7 +318,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 deposit rejects unsupported asset_code`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.deposit(
           validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
         )
@@ -328,7 +329,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 multipart deposit rejects request without asset_code`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.depositMultipart(validInteractiveRequest - "asset_code" - "asset_issuer")
       }
     assertEquals("missing 'asset_code'", errorMessage(ex))
@@ -337,7 +338,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 multipart deposit rejects unsupported asset_code`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.depositMultipart(
           validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
         )
@@ -348,7 +349,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 multipart deposit rejects an invalid account`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.depositMultipart(validInteractiveRequest + ("account" to "not a valid account"))
       }
     assertEquals("invalid account not a valid account", errorMessage(ex))
@@ -357,7 +358,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 multipart withdraw rejects request without asset_code`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.withdrawMultipart(validInteractiveRequest - "asset_code" - "asset_issuer")
       }
     assertEquals("missing 'asset_code'", errorMessage(ex))
@@ -366,7 +367,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 multipart withdraw rejects unsupported asset_code`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.withdrawMultipart(
           validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
         )
@@ -377,7 +378,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 multipart withdraw rejects an invalid account`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.withdrawMultipart(
           validInteractiveRequest + ("account" to "not a valid account")
         )
@@ -393,7 +394,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 withdraw rejects request without asset_code`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.withdraw(validInteractiveRequest - "asset_code" - "asset_issuer")
       }
     assertEquals("missing 'asset_code'", errorMessage(ex))
@@ -402,7 +403,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 withdraw rejects unsupported asset_code`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.withdraw(
           validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
         )
@@ -413,7 +414,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 withdraw rejects an invalid account`() {
     val ex =
-      assertThrows<SepException> {
+      assertThrows<SepValidationException> {
         sep24Client.withdraw(validInteractiveRequest + ("account" to "not a valid account"))
       }
     assertEquals("invalid account not a valid account", errorMessage(ex))
