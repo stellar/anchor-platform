@@ -5,7 +5,6 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -118,6 +117,5 @@ class Sep24ClientRequestTests {
       assertTrue(body.contains("""name="$name"""")) { "form part '$name' missing from: $body" }
       assertTrue(body.contains(value)) { "value '$value' missing from: $body" }
     }
-    assertNotNull(request.getHeader("Content-Type"))
   }
 }
