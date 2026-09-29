@@ -355,6 +355,37 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep24 multipart withdraw rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep24Client.withdrawMultipart(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep24Client.withdrawMultipart(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects an invalid account`() {
+    val ex =
+      assertThrows<SepException> {
+        sep24Client.withdrawMultipart(
+          validInteractiveRequest + ("account" to "not a valid account")
+        )
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
+
+  @Test
   fun `test sep24 withdraw rejects request without JWT`() {
     assertThrows<SepNotAuthorizedException> { noAuthSep24Client.withdraw(validInteractiveRequest) }
   }
