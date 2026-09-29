@@ -25,7 +25,8 @@ class Sep24ClientRequestTests {
   private lateinit var server: MockWebServer
 
   private val jwt = "test-jwt"
-  private val fields = mapOf("asset_code" to "USDC", "account" to "GABC")
+  private val fields =
+    mapOf("asset_code" to "USDC", "asset_issuer" to "GISSUER", "account" to "GABC")
 
   @BeforeEach
   fun startServer() {
