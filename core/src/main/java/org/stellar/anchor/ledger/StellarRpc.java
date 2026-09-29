@@ -288,7 +288,7 @@ public class StellarRpc implements LedgerClient {
   }
 
   public SimulateTransactionResponse simulateTransaction(Transaction transaction) {
-    return sorobanServer.simulateTransaction(transaction);
+    return sorobanServer.simulateTransaction(transaction, null, null, false);
   }
 
   public GetLatestLedgerResponse getLatestLedger() {
