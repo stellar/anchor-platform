@@ -315,6 +315,17 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep24 deposit rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepException> {
+        sep24Client.deposit(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
   fun `test sep24 withdraw rejects request without JWT`() {
     assertThrows<SepNotAuthorizedException> { noAuthSep24Client.withdraw(validInteractiveRequest) }
   }
