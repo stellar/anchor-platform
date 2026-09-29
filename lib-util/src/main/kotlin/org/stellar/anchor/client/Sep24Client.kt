@@ -7,7 +7,7 @@ import org.stellar.anchor.api.sep.sep24.InteractiveTransactionResponse
 import org.stellar.anchor.api.sep.sep24.Sep24GetTransactionResponse
 import org.stellar.anchor.api.sep.sep24.WithdrawTransactionResponse
 
-class Sep24Client(private val endpoint: String, private val jwt: String) : SepClient() {
+class Sep24Client(private val endpoint: String, private val jwt: String?) : SepClient() {
   fun getInfo(): InfoResponse {
     val responseBody = httpGet("$endpoint/info", jwt)
     return gson.fromJson(responseBody, InfoResponse::class.java)
