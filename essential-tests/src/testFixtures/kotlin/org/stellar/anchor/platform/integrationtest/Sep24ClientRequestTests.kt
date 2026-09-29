@@ -1,0 +1,122 @@
+package org.stellar.anchor.platform.integrationtest
+
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.stellar.anchor.client.Sep24Client
+
+/**
+ * Pins what [Sep24Client] actually puts on the wire: the route it names, the body encoding it
+ * promises, and the `Authorization` header. The e2e tests in [Sep24Tests] can't: deposit and
+ * withdraw emit identical validation errors, and the JSON and multipart controller methods build
+ * the same request map, so a client pointed at the wrong route, or posting JSON where it claims
+ * multipart, would still pass every one of them.
+ *
+ * Needs no running stack.
+ */
+class Sep24ClientRequestTests {
+  private lateinit var server: MockWebServer
+
+  private val jwt = "test-jwt"
+  private val fields = mapOf("asset_code" to "USDC", "account" to "GABC")
+
+  @BeforeEach
+  fun startServer() {
+    server = MockWebServer()
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .setBody(
+          """{"type":"interactive_customer_info_needed","url":"https://example.com/interactive","id":"txn-1"}"""
+        )
+    )
+    server.start()
+  }
+
+  @AfterEach
+  fun stopServer() {
+    server.shutdown()
+  }
+
+  private fun client(jwt: String?) = Sep24Client(server.url("").toString().trimEnd('/'), jwt)
+
+  private fun recorded(): RecordedRequest = server.takeRequest()
+
+  @Test
+  fun `test sep24 client deposit posts JSON to the deposit route`() {
+    val response = client(jwt).deposit(fields)
+
+    val request = recorded()
+    assertEquals("POST", request.method)
+    assertEquals("/transactions/deposit/interactive", request.path)
+    assertTrue(request.getHeader("Content-Type")!!.startsWith("application/json"))
+    assertEquals("Bearer $jwt", request.getHeader("Authorization"))
+    assertEquals("txn-1", response.id)
+  }
+
+  @Test
+  fun `test sep24 client withdraw posts JSON to the withdraw route`() {
+    client(jwt).withdraw(fields)
+
+    val request = recorded()
+    assertEquals("POST", request.method)
+    assertEquals("/transactions/withdraw/interactive", request.path)
+    assertTrue(request.getHeader("Content-Type")!!.startsWith("application/json"))
+    assertEquals("Bearer $jwt", request.getHeader("Authorization"))
+  }
+
+  @Test
+  fun `test sep24 client depositMultipart posts form data to the deposit route`() {
+    client(jwt).depositMultipart(fields)
+
+    val request = recorded()
+    assertEquals("POST", request.method)
+    assertEquals("/transactions/deposit/interactive", request.path)
+    assertTrue(request.getHeader("Content-Type")!!.startsWith("multipart/form-data"))
+    assertEquals("Bearer $jwt", request.getHeader("Authorization"))
+    assertFormFields(request)
+  }
+
+  @Test
+  fun `test sep24 client withdrawMultipart posts form data to the withdraw route`() {
+    client(jwt).withdrawMultipart(fields)
+
+    val request = recorded()
+    assertEquals("POST", request.method)
+    assertEquals("/transactions/withdraw/interactive", request.path)
+    assertTrue(request.getHeader("Content-Type")!!.startsWith("multipart/form-data"))
+    assertEquals("Bearer $jwt", request.getHeader("Authorization"))
+    assertFormFields(request)
+  }
+
+  @Test
+  fun `test sep24 client sends no Authorization header without a JWT`() {
+    client(null).deposit(fields)
+
+    assertNull(recorded().getHeader("Authorization"))
+  }
+
+  @Test
+  fun `test sep24 client sends no Authorization header on a multipart call without a JWT`() {
+    client(null).withdrawMultipart(fields)
+
+    assertNull(recorded().getHeader("Authorization"))
+  }
+
+  /** Each supplied field must travel as its own form part, with the supplied value. */
+  private fun assertFormFields(request: RecordedRequest) {
+    val body = request.body.readUtf8()
+    fields.forEach { (name, value) ->
+      assertTrue(body.contains("""name="$name"""")) { "form part '$name' missing from: $body" }
+      assertTrue(body.contains(value)) { "value '$value' missing from: $body" }
+    }
+    assertNotNull(request.getHeader("Content-Type"))
+  }
+}
