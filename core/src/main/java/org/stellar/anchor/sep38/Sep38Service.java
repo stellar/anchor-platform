@@ -37,6 +37,7 @@ import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.util.Log;
 
 public class Sep38Service {
+  final Sep38Config sep38Config;
   final AssetService assetService;
   final RateIntegration rateIntegration;
   final Sep38QuoteStore sep38QuoteStore;
@@ -44,6 +45,9 @@ public class Sep38Service {
   final InfoResponse infoResponse;
   final Map<String, InfoResponse.Asset> assetMap;
   final int pricePrecision = 10;
+  // Absorbs request latency and clock skew, so a client asking to expire "now" isn't rejected
+  // just because a few seconds elapsed in transit.
+  static final long EXPIRE_AFTER_GRACE_PERIOD_SECONDS = 60;
   final Counter sep38PriceQueriedCounter = Metrics.counter(SEP38_PRICE_QUERIED);
   final Counter sep38QuoteCreatedCounter = Metrics.counter(SEP38_QUOTE_CREATED);
 
@@ -54,6 +58,7 @@ public class Sep38Service {
       Sep38QuoteStore sep38QuoteStore,
       EventService eventService) {
     debug("sep38Config:", sep38Config);
+    this.sep38Config = sep38Config;
     this.assetService = assetService;
     this.rateIntegration = rateIntegration;
     this.sep38QuoteStore = sep38QuoteStore;
@@ -360,7 +365,39 @@ public class Sep38Service {
               "Unable to calculate total_price with buy_amount: %s and sell_amount: %s",
               rate.getBuyAmount(), rate.getSellAmount()));
     }
+    // The rate callback computes the actual expires_at - it may round up or otherwise transform
+    // the requested expire_after (or apply its own default policy when none was given) - so the
+    // max-expiration ceiling must be enforced against what it actually returns, not only against
+    // the client's raw expire_after validated above. Without this, a callback that rounds up to
+    // e.g. the next day's noon can push expires_at past the configured maximum even when
+    // expire_after itself was in bounds, or exceed a small configured maximum by default.
+    if (rate.getExpiresAt() == null) {
+      // ExchangeAmountsCalculator/Sep31Service's own expiry checks treat a null expiresAt as
+      // never-expiring, so letting one through here would produce a quote valid forever - a
+      // stricter bypass of this ceiling than any finite value could be.
+      throw new ServerErrorException("Rate callback returned a null expires_at");
+    }
+    int maxQuoteExpirationSeconds = getValidatedMaxQuoteExpirationSeconds();
+    if (rate.getExpiresAt().isAfter(Instant.now().plusSeconds(maxQuoteExpirationSeconds))) {
+      throw new ServerErrorException(
+          "Rate callback returned expires_at="
+              + rate.getExpiresAt()
+              + ", which exceeds the maximum quote expiration of "
+              + maxQuoteExpirationSeconds
+              + " seconds");
+    }
     return rate;
+  }
+
+  private int getValidatedMaxQuoteExpirationSeconds() throws ServerErrorException {
+    Integer maxQuoteExpirationSeconds = sep38Config.getMaxQuoteExpirationSeconds();
+    if (maxQuoteExpirationSeconds == null || maxQuoteExpirationSeconds <= 0) {
+      // PropertySep38Config.validate() rejects this at startup, but sep38Config is an interface -
+      // guard against a misconfigured or non-validated implementation instead of unboxing a null
+      // Integer, which would surface as a raw NullPointerException.
+      throw new ServerErrorException("sep38.max_quote_expiration_seconds is not configured");
+    }
+    return maxQuoteExpirationSeconds;
   }
 
   private Pair<String, Pair<String, String>> validateToken(WebAuthJwt token)
@@ -471,10 +508,27 @@ public class Sep38Service {
 
     // validate expireAfter
     if (!Objects.toString(request.getExpireAfter(), "").isEmpty()) {
+      Instant expireAfter;
       try {
-        Instant.parse(request.getExpireAfter());
+        expireAfter = Instant.parse(request.getExpireAfter());
       } catch (Exception ex) {
         throw new BadRequestException("expire_after is invalid");
+      }
+      // A firm-price quote is a free option on the anchor's book: the client picks when to
+      // exercise it, and the anchor is bound either way. Without a ceiling here, the client's
+      // own expire_after becomes the anchor's entire expiry policy (see ANCHOR-1314) - reject
+      // both a request the anchor can never honor (already expired) and one that leaves the
+      // anchor exposed indefinitely, rather than silently complying with either.
+      Instant now = Instant.now();
+      if (expireAfter.isBefore(now.minusSeconds(EXPIRE_AFTER_GRACE_PERIOD_SECONDS))) {
+        throw new BadRequestException("expire_after cannot be in the past");
+      }
+      int maxQuoteExpirationSeconds = getValidatedMaxQuoteExpirationSeconds();
+      if (expireAfter.isAfter(now.plusSeconds(maxQuoteExpirationSeconds))) {
+        throw new BadRequestException(
+            "expire_after exceeds the maximum quote expiration of "
+                + maxQuoteExpirationSeconds
+                + " seconds");
       }
     }
 

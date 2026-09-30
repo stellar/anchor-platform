@@ -69,6 +69,8 @@ platform_api.auth.type:
 platform_api.base_url:
 platform_server.context_path:
 platform_server.management_server_port:
+platform_server.max_patch_records:
+platform_server.max_request_body_size:
 platform_server.port:
 rate_limit.enabled:
 rate_limit.max_transactions_per_window:
@@ -108,6 +110,7 @@ sep31.enabled:
 sep31.payment_type:
 sep38.auth_enforced:
 sep38.enabled:
+sep38.max_quote_expiration_seconds:
 sep38.sep10_enforced:
 sep45.auth_timeout:
 sep45.client_allow_list:
