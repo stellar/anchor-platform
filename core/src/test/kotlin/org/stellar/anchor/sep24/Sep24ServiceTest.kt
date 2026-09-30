@@ -847,6 +847,16 @@ internal class Sep24ServiceTest {
     assertEquals(response.transactions.size, 2)
   }
 
+  @Test
+  fun `test find transactions rejects a null request`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Service.findTransactions(createTestWebAuthJwt(), null)
+      }
+
+    assertEquals("missing request object", ex.message)
+  }
+
   @ParameterizedTest
   @ValueSource(strings = ["deposit", "withdrawal"])
   fun `test find transactions with validation error`(kind: String) {
