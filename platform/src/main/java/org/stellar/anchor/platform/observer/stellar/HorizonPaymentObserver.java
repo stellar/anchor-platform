@@ -11,6 +11,7 @@ import static org.stellar.anchor.util.ReflectionUtil.getField;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.responses.operations.InvokeHostFunctionOperationResponse.*;
 
+import io.micrometer.core.instrument.Metrics;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -19,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.exception.EventPublishException;
+import org.stellar.anchor.api.exception.LedgerDecodeException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
@@ -27,6 +29,7 @@ import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.PaymentTransferEvent;
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig;
 import org.stellar.anchor.platform.observer.PaymentListener;
+import org.stellar.anchor.platform.service.AnchorMetrics;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.Log;
 import org.stellar.sdk.MuxedAccount;
@@ -207,6 +210,19 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
       // publish the message.
       errorEx("Failed to send event to payment listeners.", ex);
       setStatus(PUBLISHER_ERROR);
+    } catch (LedgerDecodeException dex) {
+      errorEx(
+          String.format(
+              "Skipping operation %s of transaction %s: it cannot be decoded",
+              operationResponse.getId(), operationResponse.getTransactionHash()),
+          dex);
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+      try {
+        saveHorizonCursor(operationResponse.getPagingToken());
+      } catch (TransactionException tex) {
+        errorEx("Cannot save the cursor to database", tex);
+        setStatus(DATABASE_ERROR);
+      }
     } catch (TransactionException tex) {
       errorEx("Cannot save the cursor to database", tex);
       setStatus(DATABASE_ERROR);

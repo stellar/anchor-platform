@@ -8,6 +8,7 @@ import static org.stellar.anchor.platform.observer.stellar.StellarRpcPaymentObse
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
+import io.micrometer.core.instrument.Metrics;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.time.Instant;
@@ -22,6 +23,7 @@ import lombok.Getter;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.LedgerDecodeException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
@@ -35,6 +37,7 @@ import org.stellar.anchor.ledger.PaymentTransferEvent;
 import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig;
 import org.stellar.anchor.platform.observer.PaymentListener;
+import org.stellar.anchor.platform.service.AnchorMetrics;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
@@ -193,6 +196,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       txn =
           LedgerClientHelper.waitForTransactionAvailable(
               stellarRpc, result.event.getTransactionHash());
+    } catch (LedgerDecodeException dex) {
+      errorF(
+          "Skipping transfer event of transaction {}: it cannot be decoded. ex={}",
+          result.event.getTransactionHash(),
+          dex.toString());
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+      return;
     } catch (LedgerException lex) {
       throw new IOException(
           "Transaction is not available: " + result.event.getTransactionHash(), lex);
