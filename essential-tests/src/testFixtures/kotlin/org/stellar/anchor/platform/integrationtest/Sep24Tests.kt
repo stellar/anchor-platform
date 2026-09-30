@@ -1,11 +1,15 @@
 package org.stellar.anchor.platform.integrationtest
 
+import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -31,9 +35,12 @@ import org.stellar.anchor.client.Sep24Client
 import org.stellar.anchor.platform.*
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.StringHelper.json
+import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.anchor.IncompleteDepositTransaction
 import org.stellar.walletsdk.anchor.IncompleteWithdrawalTransaction
+import org.stellar.walletsdk.anchor.auth
 import org.stellar.walletsdk.asset.IssuedAssetId
+import org.stellar.walletsdk.horizon.SigningKeyPair
 
 // The tests must be executed in order. Currency is disabled.
 // Some of the tests depend on the result of previous tests. The lifecycle must be PER_CLASS
@@ -296,6 +303,90 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   private fun errorMessage(ex: SepException): String =
     JsonParser.parseString(ex.message).asJsonObject.get("error").asString
 
+  /** A fresh, isolated account: counting and ordering assertions never share state (AD-03). */
+  private class TestAccount(val accountId: String, val jwt: String, val client: Sep24Client)
+
+  private val http = OkHttpClient()
+
+  private fun newAccount(): TestAccount {
+    val keyPair = KeyPair.random()
+    val jwt = runBlocking { anchor.auth().authenticate(SigningKeyPair(keyPair)) }.token
+    return TestAccount(
+      keyPair.accountId,
+      jwt,
+      Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), jwt),
+    )
+  }
+
+  /** [issuer] `null` omits `asset_issuer`, which the deposit then stores as null. */
+  private fun createDeposit(account: TestAccount, issuer: String? = USDC_GDQO_ISSUER): String =
+    account.client
+      .deposit(
+        buildMap {
+          put("asset_code", "USDC")
+          put("amount", "1")
+          if (issuer != null) put("asset_issuer", issuer)
+        }
+      )
+      .id
+
+  private fun createWithdrawal(account: TestAccount): String =
+    account.client
+      .withdraw(mapOf("asset_code" to "USDC", "asset_issuer" to USDC_GDQO_ISSUER, "amount" to "1"))
+      .id
+
+  /**
+   * Reads `GET /transactions` as the raw `transactions` array, with or without a `Content-Type`.
+   * Gson silently nulls absent fields, so a parsed object cannot back a schema assertion.
+   */
+  private fun listRaw(
+    account: TestAccount,
+    query: Map<String, String>,
+    contentType: String? = null,
+  ): JsonArray {
+    val url = "${toml.getString("TRANSFER_SERVER_SEP0024")}/transactions".toHttpUrl().newBuilder()
+    query.forEach { (key, value) -> url.addQueryParameter(key, value) }
+    val request =
+      Request.Builder()
+        .url(url.build())
+        .header("Authorization", "Bearer ${account.jwt}")
+        .apply { if (contentType != null) header("Content-Type", contentType) }
+        .get()
+        .build()
+    http.newCall(request).execute().use { response ->
+      val body = response.body?.string()
+      assertEquals(200, response.code) {
+        "GET /transactions (Content-Type=$contentType) answered ${response.code}: $body"
+      }
+      return JsonParser.parseString(body).asJsonObject.getAsJsonArray("transactions")
+    }
+  }
+
+  private fun JsonArray.ids(): List<String> = map { it.asJsonObject.get("id").asString }
+
+  @Test
+  fun `test sep24 GET transactions answers the same with a JSON Content-Type`() {
+    val account = newAccount()
+    val created = setOf(createDeposit(account), createDeposit(account))
+    val query = mapOf("asset_code" to "USDC")
+
+    val withoutHeader = listRaw(account, query).ids()
+    val withHeader = listRaw(account, query, "application/json").ids()
+    val viaClient = account.client.getTransactions(query).transactions.map { it.id }
+
+    assertEquals(created, withoutHeader.toSet()) {
+      "the request without a Content-Type must list both fixture deposits, or the comparison below is vacuous"
+    }
+    assertEquals(withoutHeader, withHeader)
+    assertEquals(withoutHeader, viaClient)
+  }
+
+  @Test
+  fun `test sep24 GET transactions reports a missing asset_code despite a JSON Content-Type`() {
+    val ex = assertThrows<SepValidationException> { sep24Client.getTransactions(mapOf()) }
+    assertEquals("The \"asset_code\" parameter is missing.", errorMessage(ex))
+  }
+
   @Test
   fun `test sep24 GET transaction rejects request without JWT`() {
     assertThrows<SepNotAuthorizedException> {
@@ -491,6 +582,8 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertEquals("invalid account not a valid account", errorMessage(ex))
   }
 }
+
+private const val USDC_GDQO_ISSUER = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
 
 /** A request the interactive endpoints accept; each negative test breaks exactly one field. */
 private val validInteractiveRequest =

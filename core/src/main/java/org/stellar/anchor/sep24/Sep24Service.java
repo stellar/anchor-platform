@@ -430,6 +430,11 @@ public class Sep24Service {
       throw new SepNotAuthorizedException("missing token");
     }
 
+    if (txReq == null) {
+      info("missing request object");
+      throw new SepValidationException("missing request object");
+    }
+
     String assetCode = txReq.getAssetCode();
     String assetIssuer = null;
 
