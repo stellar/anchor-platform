@@ -613,10 +613,11 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 GET transactions bare asset code lists every issuer`() {
     val fixture = mixedIssuerAccount()
+    val gbbdDepositId = createDeposit(fixture.account, USDC_GBBD_ISSUER)
 
     val ids = listIds(fixture.account, "USDC")
 
-    assertEquals(setOf(fixture.withdrawalId, fixture.depositId), ids.toSet())
+    assertEquals(setOf(fixture.withdrawalId, fixture.depositId, gbbdDepositId), ids.toSet())
   }
 
   @Test
