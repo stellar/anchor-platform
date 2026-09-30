@@ -169,16 +169,24 @@ class Sep24ClientRequestTests {
   fun `test sep24 client getTransactions sends the given query parameters with the JWT`() {
     // '&', '=', '+' and '#' are the delimiters an unencoded query would let split or truncate it
     val pagingId = "p 1/é&x=y+z#f"
-    val query = mapOf("asset_code" to "USDC", "paging_id" to pagingId)
+    val query =
+      mapOf(
+        "asset_code" to "USDC",
+        "kind" to "deposit",
+        "limit" to "5",
+        "paging_id" to pagingId,
+        "no_older_than" to "2024-01-01T00:00:00Z",
+      )
 
     val response = client(jwt).getTransactions(query)
 
     val request = recorded()
     assertEquals("GET", request.method)
     assertEquals("/transactions", request.requestUrl!!.encodedPath)
-    assertEquals(setOf("asset_code", "paging_id"), request.requestUrl!!.queryParameterNames)
-    assertEquals("USDC", request.requestUrl!!.queryParameter("asset_code"))
-    assertEquals(pagingId, request.requestUrl!!.queryParameter("paging_id"))
+    assertEquals(query.keys, request.requestUrl!!.queryParameterNames)
+    query.forEach { (name, value) ->
+      assertEquals(value, request.requestUrl!!.queryParameter(name)) { "query parameter '$name'" }
+    }
     assertEquals("Bearer $jwt", request.getHeader("Authorization"))
     assertEquals(2, response.transactions.size)
     assertTrue(response.transactions[0] is DepositTransactionResponse)
