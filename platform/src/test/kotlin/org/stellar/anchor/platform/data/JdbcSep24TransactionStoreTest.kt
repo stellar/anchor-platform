@@ -465,41 +465,7 @@ class JdbcSep24TransactionStoreTest {
 
   @Test
   fun `findTransactions with paging_id accepts the legacy account-memo row for its memo caller`() {
-    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns
-      pagingTxn("GACCOUNT:12345", null)
-    every {
-      txnRepo.findTransactionsWithMemoAndFilters(
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        any()
-      )
-    } returns emptyList()
-    every {
-      txnRepo.findTransactionsWithFilters(any(), any(), any(), any(), any(), any(), any())
-    } returns emptyList()
-    val request = GetTransactionsRequest.of("USDC", null, 10, null, "paging-txn-id", null)
-
-    store.findTransactions("GACCOUNT", "12345", "USDC", null, request)
-
-    val olderThanSlot = slot<Instant>()
-    verify {
-      txnRepo.findTransactionsWithMemoAndFilters(
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        capture(olderThanSlot),
-        any()
-      )
-    }
-    assertEquals(Instant.parse("2024-06-15T12:00:00Z"), olderThanSlot.captured)
+    assertPagingAccepted("GACCOUNT", "12345", pagingTxn("GACCOUNT:12345", null))
   }
 
   @Test
