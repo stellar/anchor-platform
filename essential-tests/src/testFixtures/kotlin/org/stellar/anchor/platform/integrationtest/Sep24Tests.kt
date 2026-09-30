@@ -15,6 +15,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation
@@ -511,6 +512,46 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
 
     assertEquals(created.drop(1).toSet(), ids.toSet())
     assertEquals(2, ids.size)
+  }
+
+  @Test
+  fun `test sep24 GET transactions kind=withdrawal returns only withdrawals`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+    val withdrawalId = createWithdrawal(account)
+
+    val list = listRaw(account, mapOf("asset_code" to "USDC", "kind" to "withdrawal"))
+
+    list.item(withdrawalId)
+    assertFalse(list.ids().contains(depositId)) {
+      "expected kind=withdrawal to exclude the deposit ($depositId)"
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transactions kind=deposit returns only deposits`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+    val withdrawalId = createWithdrawal(account)
+
+    val list = listRaw(account, mapOf("asset_code" to "USDC", "kind" to "deposit"))
+
+    list.item(depositId)
+    assertFalse(list.ids().contains(withdrawalId)) {
+      "expected kind=deposit to exclude the withdrawal ($withdrawalId)"
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transactions pages from the caller's own paging_id`() {
+    val account = newAccount()
+    val created = createDeposits(account, 3)
+
+    val ids = listRaw(account, mapOf("asset_code" to "USDC", "paging_id" to created.last())).ids()
+
+    assertEquals(created.dropLast(1).toSet(), ids.toSet())
+    assertEquals(2, ids.size)
+    assertFalse(ids.contains(created.last())) { "the paging transaction itself must not be listed" }
   }
 
   @Test
