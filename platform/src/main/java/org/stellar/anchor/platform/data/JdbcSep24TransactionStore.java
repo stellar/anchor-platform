@@ -63,7 +63,11 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
 
   @Override
   public List<Sep24Transaction> findTransactions(
-      String accountId, String accountMemo, GetTransactionsRequest tr)
+      String accountId,
+      String accountMemo,
+      String assetCode,
+      String assetIssuer,
+      GetTransactionsRequest tr)
       throws SepValidationException {
     int limit = DEFAULT_LIMIT;
     if (tr.getLimit() != null && tr.getLimit() > 0) {
@@ -97,13 +101,14 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
     if (accountMemo == null) {
       return new ArrayList<>(
           txnRepo.findTransactionsWithFilters(
-              accountId, tr.getAssetCode(), tr.getKind(), noOlderThan, olderThan, pageable));
+              accountId, assetCode, assetIssuer, tr.getKind(), noOlderThan, olderThan, pageable));
     } else {
       List<JdbcSep24Transaction> txns =
           txnRepo.findTransactionsWithMemoAndFilters(
               accountId,
               accountMemo,
-              tr.getAssetCode(),
+              assetCode,
+              assetIssuer,
               tr.getKind(),
               noOlderThan,
               olderThan,
@@ -116,7 +121,8 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
         txns =
             txnRepo.findTransactionsWithFilters(
                 accountId + ":" + accountMemo,
-                tr.getAssetCode(),
+                assetCode,
+                assetIssuer,
                 tr.getKind(),
                 noOlderThan,
                 olderThan,
