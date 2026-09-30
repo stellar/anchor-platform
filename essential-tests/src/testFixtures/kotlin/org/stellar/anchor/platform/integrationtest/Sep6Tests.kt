@@ -23,12 +23,12 @@ import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.PatchTransactionRequest
 import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.api.platform.PlatformTransactionData
+import org.stellar.anchor.api.platform.PlatformTransactionData.builder
 import org.stellar.anchor.api.rpc.RpcRequest
 import org.stellar.anchor.api.rpc.RpcResponse
 import org.stellar.anchor.api.sep.SepTransactionStatus
-import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
-import org.stellar.anchor.api.platform.PlatformTransactionData.builder
 import org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE
+import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.api.sep.sep38.Sep38QuoteResponse
 import org.stellar.anchor.apiclient.PlatformApiClient
@@ -511,7 +511,8 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     val response = sep6Client.deposit(request)
     assert(!response.id.isNullOrEmpty())
 
-    val savedDepositTxn = getTransactionRaw(sep6Client, response.id!!)
+    val savedDepositTxn =
+      getTransactionRaw(sep6Client, response.id!!).getAsJsonObject("transaction")
     Assertions.assertFalse(savedDepositTxn.has("claimable_balance_id")) {
       "expected no claimable_balance_id on a deposit from an anchor that doesn't support claimable balances, got: $savedDepositTxn"
     }
@@ -532,7 +533,8 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     val response = sep6Client.deposit(request, exchange = true)
     assert(!response.id.isNullOrEmpty())
 
-    val savedDepositTxn = getTransactionRaw(sep6Client, response.id!!)
+    val savedDepositTxn =
+      getTransactionRaw(sep6Client, response.id!!).getAsJsonObject("transaction")
     Assertions.assertFalse(savedDepositTxn.has("claimable_balance_id")) {
       "expected no claimable_balance_id on a deposit-exchange from an anchor that doesn't support claimable balances, got: $savedDepositTxn"
     }
@@ -1533,17 +1535,6 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
-  /**
-   * Fetches GET /transaction as a raw JSON object, bypassing [Sep6Client.getTransaction]'s parsed
-   * response -- Gson silently nulls absent fields on a parsed object, which would hide an absent
-   * `required_info_updates`/`required_info_message` key from a strict "field is gone" assertion.
-   */
-  private fun getTransactionRaw(client: Sep6Client, id: String): JsonObject {
-    val rawJson =
-      client.httpGet("${toml.getString("TRANSFER_SERVER")}/transaction?id=$id", client.jwt)!!
-    return JsonParser.parseString(rawJson).asJsonObject.getAsJsonObject("transaction")
-  }
-
   @Test
   fun `test sep6 PATCH transaction supplies the requested fields`() {
     val keyPair = SigningKeyPair(KeyPair.random())
@@ -1566,7 +1557,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     // another status right after this PATCH (Sep6EventProcessor.kt), so the exact post-PATCH
     // status can't be pinned here -- only that the required-info fields are gone and the
     // transaction has left pending_transaction_info_update.
-    val rawTxn = getTransactionRaw(client, txId)
+    val rawTxn = getTransactionRaw(client, txId).getAsJsonObject("transaction")
     Assertions.assertFalse(rawTxn.has("required_info_updates"))
     Assertions.assertFalse(rawTxn.has("required_info_message"))
     Assertions.assertNotEquals("pending_transaction_info_update", rawTxn.get("status").asString)
@@ -1771,7 +1762,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     val txId =
       client.withdraw(mapOf("asset_code" to "USDC", "type" to "bank_account", "amount" to "1")).id!!
 
-    val before = getTransactionRaw(client, txId)
+    val before = getTransactionRaw(client, txId).getAsJsonObject("transaction")
 
     val ex = assertThrows<SepException> { requestSep6InfoUpdate(txId, emptyList()) }
     Assertions.assertEquals(
@@ -1779,7 +1770,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       errorMessage(ex),
     )
 
-    val after = getTransactionRaw(client, txId)
+    val after = getTransactionRaw(client, txId).getAsJsonObject("transaction")
     Assertions.assertEquals(before.get("status").asString, after.get("status").asString)
   }
 
@@ -1793,7 +1784,7 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
 
     requestSep6InfoUpdate(txId, listOf("dest", "dest_extra"), "please update your destination")
 
-    val rawTxn = getTransactionRaw(client, txId)
+    val rawTxn = getTransactionRaw(client, txId).getAsJsonObject("transaction")
     Assertions.assertEquals("pending_transaction_info_update", rawTxn.get("status").asString)
     Assertions.assertEquals(
       setOf("dest", "dest_extra"),
@@ -1984,10 +1975,6 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
       }
     val error = JsonParser.parseString(ex.message).asJsonObject.get("error").asString
     Assertions.assertEquals("Invalid memo type: foo", error)
-  }
-
-  private fun postQuote(sellAsset: String, sellAmount: String, buyAsset: String): String {
-    return sep38Client.postQuote(sellAsset, sellAmount, buyAsset, Sep38Context.SEP6).id
   }
 
   // --- SEP-6 coverage audit (ANCHOR-1296): closes audit assertions #10, #11, #12, #16, #17 plus
