@@ -2,6 +2,7 @@ package org.stellar.anchor.platform.integrationtest
 
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -291,6 +292,22 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
    */
   private fun errorMessage(ex: SepException): String =
     JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+
+  @Test
+  fun `test sep24 GET transaction rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> {
+      noAuthSep24Client.getTransaction(mapOf("id" to UUID.randomUUID().toString()))
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transaction rejects request naming no transaction`() {
+    val ex = assertThrows<SepValidationException> { sep24Client.getTransaction(mapOf()) }
+    assertEquals(
+      "One of id, stellar_transaction_id or external_transaction_id is required.",
+      errorMessage(ex),
+    )
+  }
 
   @Test
   fun `test sep24 deposit rejects request without JWT`() {
