@@ -239,6 +239,7 @@ class JdbcSep24TransactionStoreTest {
     val pagingTxn = JdbcSep24Transaction()
     val pagingTime = Instant.parse("2024-06-15T12:00:00Z")
     pagingTxn.startedAt = pagingTime
+    pagingTxn.webAuthAccount = "GACCOUNT"
 
     every { txnRepo.findOneByTransactionId("paging-txn-id") } returns pagingTxn
     every {
@@ -366,5 +367,92 @@ class JdbcSep24TransactionStoreTest {
         any()
       )
     }
+  }
+
+  private fun pagingTxn(account: String?, memo: String?) =
+    JdbcSep24Transaction().apply {
+      webAuthAccount = account
+      webAuthAccountMemo = memo
+      startedAt = Instant.parse("2024-06-15T12:00:00Z")
+    }
+
+  private fun assertPagingRejected(accountId: String, accountMemo: String?) {
+    val request = GetTransactionsRequest.of("USDC", null, 10, null, "paging-txn-id", null)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        store.findTransactions(accountId, accountMemo, "USDC", null, request)
+      }
+
+    assertEquals("invalid paging_id field: paging-txn-id", ex.message)
+  }
+
+  @Test
+  fun `findTransactions with paging_id accepts the legacy account-memo row for its memo caller`() {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns
+      pagingTxn("GACCOUNT:12345", null)
+    every {
+      txnRepo.findTransactionsWithMemoAndFilters(
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any()
+      )
+    } returns emptyList()
+    every {
+      txnRepo.findTransactionsWithFilters(any(), any(), any(), any(), any(), any(), any())
+    } returns emptyList()
+    val request = GetTransactionsRequest.of("USDC", null, 10, null, "paging-txn-id", null)
+
+    store.findTransactions("GACCOUNT", "12345", "USDC", null, request)
+
+    val olderThanSlot = slot<Instant>()
+    verify {
+      txnRepo.findTransactionsWithMemoAndFilters(
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        capture(olderThanSlot),
+        any()
+      )
+    }
+    assertEquals(Instant.parse("2024-06-15T12:00:00Z"), olderThanSlot.captured)
+  }
+
+  @Test
+  fun `findTransactions with paging_id rejects another account's transaction like a missing one`() {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns pagingTxn("GOTHER", null)
+
+    assertPagingRejected("GACCOUNT", null)
+  }
+
+  @Test
+  fun `findTransactions with paging_id rejects another memo's transaction on the same account`() {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns pagingTxn("GACCOUNT", "99999")
+    assertPagingRejected("GACCOUNT", "12345")
+
+    // a memo-less caller must not page a memo-scoped row either
+    assertPagingRejected("GACCOUNT", null)
+  }
+
+  @Test
+  fun `findTransactions with paging_id rejects a G-stored transaction for a muxed caller`() {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns pagingTxn("GACCOUNT", null)
+
+    assertPagingRejected("MMUXEDACCOUNT", null)
+  }
+
+  @Test
+  fun `findTransactions with paging_id rejects a transaction that does not exist`() {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns null
+
+    assertPagingRejected("GACCOUNT", null)
   }
 }

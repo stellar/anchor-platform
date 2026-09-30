@@ -79,7 +79,9 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
 
     if (tr.getPagingId() != null) {
       Sep24Transaction txn = txnRepo.findOneByTransactionId(tr.getPagingId());
-      if (txn != null) {
+      // A paging_id the caller could not list is reported exactly like one that does not exist, so
+      // the endpoint never reveals whether a transaction id is in use.
+      if (txn != null && isVisibleTo(txn, accountId, accountMemo)) {
         olderThan = txn.getStartedAt();
       } else {
         throw new SepValidationException(
@@ -130,6 +132,21 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
       }
       return new ArrayList<>(txns);
     }
+  }
+
+  /**
+   * Whether {@code txn} could appear in this caller's unfiltered listing. It mirrors the three row
+   * shapes the listing queries match, including the legacy {@code account:memo} encoding, so a
+   * paging_id can never point at a row the caller could not list.
+   */
+  private static boolean isVisibleTo(Sep24Transaction txn, String accountId, String accountMemo) {
+    String owner = txn.getWebAuthAccount();
+    String ownerMemo = txn.getWebAuthAccountMemo();
+    if (accountMemo == null) {
+      return accountId.equals(owner) && ownerMemo == null;
+    }
+    return (accountId.equals(owner) && accountMemo.equals(ownerMemo))
+        || ((accountId + ":" + accountMemo).equals(owner) && ownerMemo == null);
   }
 
   @Override
