@@ -554,6 +554,81 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertFalse(ids.contains(created.last())) { "the paging transaction itself must not be listed" }
   }
 
+  /**
+   * One account holding a withdrawal stored with issuer GDQO and a deposit stored with no issuer
+   * (the wallet omitted `asset_issuer`, so the row keeps null even though AP resolved one).
+   */
+  private class MixedIssuerAccount(
+    val account: TestAccount,
+    val withdrawalId: String,
+    val depositId: String,
+  )
+
+  private fun mixedIssuerAccount(): MixedIssuerAccount {
+    val account = newAccount()
+    return MixedIssuerAccount(
+      account,
+      createWithdrawal(account),
+      createDeposit(account, issuer = null),
+    )
+  }
+
+  private fun listIds(account: TestAccount, assetCode: String): List<String> =
+    listRaw(account, mapOf("asset_code" to assetCode)).ids()
+
+  @Test
+  fun `test sep24 GET transactions stellar asset with the owning issuer includes the withdrawal`() {
+    val fixture = mixedIssuerAccount()
+
+    val list = listRaw(fixture.account, mapOf("asset_code" to "stellar:USDC:$USDC_GDQO_ISSUER"))
+
+    list.item(fixture.withdrawalId)
+  }
+
+  @Test
+  fun `test sep24 GET transactions stellar asset with another issuer excludes the withdrawal`() {
+    val fixture = mixedIssuerAccount()
+    listRaw(fixture.account, mapOf("asset_code" to "USDC")).item(fixture.withdrawalId)
+
+    val ids = listIds(fixture.account, "stellar:USDC:$USDC_GBBD_ISSUER")
+
+    assertFalse(ids.contains(fixture.withdrawalId)) {
+      "a USDC/GDQO withdrawal must not be listed under the GBBD issuer"
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transactions stellar asset without an issuer equals the bare code`() {
+    val fixture = mixedIssuerAccount()
+
+    val bare = listIds(fixture.account, "USDC")
+    val stellarForm = listIds(fixture.account, "stellar:USDC")
+
+    assertEquals(setOf(fixture.withdrawalId, fixture.depositId), bare.toSet()) {
+      "the bare code must list both fixture transactions, or the comparison below is vacuous"
+    }
+    assertEquals(bare.toSet(), stellarForm.toSet())
+  }
+
+  @Test
+  fun `test sep24 GET transactions bare asset code lists every issuer`() {
+    val fixture = mixedIssuerAccount()
+
+    val ids = listIds(fixture.account, "USDC")
+
+    assertEquals(setOf(fixture.withdrawalId, fixture.depositId), ids.toSet())
+  }
+
+  @Test
+  fun `test sep24 GET transactions stellar asset includes a deposit created without an issuer`() {
+    val fixture = mixedIssuerAccount()
+
+    listOf(USDC_GDQO_ISSUER, USDC_GBBD_ISSUER).forEach { issuer ->
+      val list = listRaw(fixture.account, mapOf("asset_code" to "stellar:USDC:$issuer"))
+      list.item(fixture.depositId)
+    }
+  }
+
   @Test
   fun `test sep24 GET transactions rejects request without JWT`() {
     assertThrows<SepNotAuthorizedException> {
@@ -787,6 +862,9 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
 }
 
 private const val USDC_GDQO_ISSUER = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+
+/** The second USDC issuer configured with SEP-24 enabled. */
+private const val USDC_GBBD_ISSUER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
 
 /** A request the interactive endpoints accept; each negative test breaks exactly one field. */
 private val validInteractiveRequest =

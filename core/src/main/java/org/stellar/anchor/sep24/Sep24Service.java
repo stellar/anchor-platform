@@ -457,7 +457,8 @@ public class Sep24Service {
     }
     String tokenAccount = Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
     List<Sep24Transaction> txns =
-        txnStore.findTransactions(tokenAccount, token.getAccountMemo(), txReq);
+        txnStore.findTransactions(
+            tokenAccount, token.getAccountMemo(), assetCode, assetIssuer, txReq);
     GetTransactionsResponse result = new GetTransactionsResponse();
     List<TransactionResponse> list = new ArrayList<>();
     debugF("found {} transactions", txns.size());
