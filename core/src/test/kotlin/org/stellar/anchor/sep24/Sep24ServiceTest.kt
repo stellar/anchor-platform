@@ -916,9 +916,11 @@ internal class Sep24ServiceTest {
     every { txnStore.findByTransactionId(any()) } returns testTxn
 
     val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
-    assertThrows<SepNotFoundException> {
-      sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
-    }
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
+      }
+    assertEquals("transaction not found", ex.message)
   }
 
   @Test
@@ -928,7 +930,11 @@ internal class Sep24ServiceTest {
     every { txnStore.findByTransactionId(any()) } returns testTxn
 
     val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
-    assertThrows<SepNotFoundException> { sep24Service.findTransaction(createTestWebAuthJwt(), gtr) }
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Service.findTransaction(createTestWebAuthJwt(), gtr)
+      }
+    assertEquals("transaction not found", ex.message)
   }
 
   @Test
@@ -938,9 +944,11 @@ internal class Sep24ServiceTest {
     every { txnStore.findByTransactionId(any()) } returns testTxn
 
     val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
-    assertThrows<SepNotFoundException> {
-      sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
-    }
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
+      }
+    assertEquals("transaction not found", ex.message)
   }
 
   @Test
@@ -962,7 +970,11 @@ internal class Sep24ServiceTest {
     every { txnStore.findByTransactionId(any()) } returns testTxn
 
     val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
-    assertThrows<SepNotFoundException> { sep24Service.findTransaction(createTestWebAuthJwt(), gtr) }
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Service.findTransaction(createTestWebAuthJwt(), gtr)
+      }
+    assertEquals("transaction not found", ex.message)
   }
 
   @ParameterizedTest
@@ -983,10 +995,12 @@ internal class Sep24ServiceTest {
     }
 
     every { txnStore.findByTransactionId(any()) } returns null
-    assertThrows<SepNotFoundException> {
-      val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
-      sep24Service.findTransaction(createTestWebAuthJwt(), gtr)
-    }
+    val notFound =
+      assertThrows<SepNotFoundException> {
+        val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+        sep24Service.findTransaction(createTestWebAuthJwt(), gtr)
+      }
+    assertEquals("transaction not found", notFound.message)
 
     val badTxn = createTestTransaction(kind)
     badTxn.kind = "na"
@@ -1083,7 +1097,8 @@ internal class Sep24ServiceTest {
       sep24Service.findTransaction(muxedAJwt, gtr).transaction.id,
     )
     // muxed-B (same underlying G) cannot
-    assertThrows<SepNotFoundException> { sep24Service.findTransaction(muxedBJwt, gtr) }
+    val ex = assertThrows<SepNotFoundException> { sep24Service.findTransaction(muxedBJwt, gtr) }
+    assertEquals("transaction not found", ex.message)
   }
 
   @Test
