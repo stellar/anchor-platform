@@ -344,6 +344,19 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     query: Map<String, String>,
     contentType: String? = null,
   ): JsonArray {
+    val (status, body) = listResponse(account, query, contentType)
+    assertEquals(200, status) {
+      "GET /transactions (Content-Type=$contentType) answered $status: $body"
+    }
+    return JsonParser.parseString(body).asJsonObject.getAsJsonArray("transactions")
+  }
+
+  /** The bare `GET /transactions` answer, as (status, body), without the client's error mapping. */
+  private fun listResponse(
+    account: TestAccount,
+    query: Map<String, String>,
+    contentType: String? = null,
+  ): Pair<Int, String?> {
     val url = "${toml.getString("TRANSFER_SERVER_SEP0024")}/transactions".toHttpUrl().newBuilder()
     query.forEach { (key, value) -> url.addQueryParameter(key, value) }
     val request =
@@ -354,11 +367,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
         .get()
         .build()
     http.newCall(request).execute().use { response ->
-      val body = response.body?.string()
-      assertEquals(200, response.code) {
-        "GET /transactions (Content-Type=$contentType) answered ${response.code}: $body"
-      }
-      return JsonParser.parseString(body).asJsonObject.getAsJsonArray("transactions")
+      return response.code to response.body?.string()
     }
   }
 
@@ -385,6 +394,42 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   fun `test sep24 GET transactions reports a missing asset_code despite a JSON Content-Type`() {
     val ex = assertThrows<SepValidationException> { sep24Client.getTransactions(mapOf()) }
     assertEquals("The \"asset_code\" parameter is missing.", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 GET transactions rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> {
+      noAuthSep24Client.getTransactions(mapOf("asset_code" to "USDC"))
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transactions rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.getTransactions(mapOf("asset_code" to "NOT_SUPPORTED"))
+      }
+    assertEquals("asset code not supported", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 GET transactions rejects request without asset_code`() {
+    val (status, body) = listResponse(newAccount(), mapOf())
+
+    assertEquals(400, status) { "expected 400 but got $status: $body" }
+    assertEquals(
+      "The \"asset_code\" parameter is missing.",
+      JsonParser.parseString(body).asJsonObject.get("error").asString,
+    )
+  }
+
+  @Test
+  fun `test sep24 GET transactions rejects an invalid no_older_than`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.getTransactions(mapOf("asset_code" to "USDC", "no_older_than" to "not-a-date"))
+      }
+    assertEquals("invalid no_older_than field: not-a-date", errorMessage(ex))
   }
 
   @Test
