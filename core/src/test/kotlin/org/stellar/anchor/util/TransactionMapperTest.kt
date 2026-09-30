@@ -441,6 +441,7 @@ class TransactionMapperTest {
             "field" to InstructionField.builder().value("value").description("description").build()
           )
         feeDetails = FeeDetails("10.0", "USD")
+        fields = mapOf("dest" to "123")
       }
 
     val actual =
@@ -476,6 +477,8 @@ class TransactionMapperTest {
         .refundMemoType(sepTxn.refundMemoType)
         .clientDomain(sepTxn.clientDomain)
         .clientName(sepTxn.clientName)
+        .requiredInfoMessage(sepTxn.requiredInfoMessage)
+        .requiredInfoUpdates(sepTxn.requiredInfoUpdates)
         .customers(
           Customers.builder()
             .sender(StellarId(null, sepTxn.webAuthAccount, sepTxn.webAuthAccountMemo))
@@ -490,9 +493,48 @@ class TransactionMapperTest {
 
     // Add the "funding_method" field
     jsonObject.addProperty("fundingMethod", sepTxn.type)
+    // PlatformTransactionData's builder has no slot for `fields` (it lives on
+    // GetTransactionResponse instead), so add it directly rather than switching this whole
+    // builder chain to GetTransactionResponse.
+    jsonObject.add("fields", gson.toJsonTree(sepTxn.fields))
     // Convert back to JSON string if needed
     val expectedJsonString = gson.toJson(jsonObject)
 
     JSONAssert.assertEquals(expectedJsonString, actual, true)
+  }
+
+  @Test
+  fun `test SEP-6 transaction mapping omits fields and required info when unset`() {
+    val sepTxn =
+      PojoSep6Transaction().apply {
+        id = UUID.randomUUID().toString()
+        transactionId = this.id
+        status = "pending_anchor"
+        kind = "deposit"
+        amountExpected = "100.0"
+        amountIn = "100.0"
+        amountInAsset = "USD"
+        amountOut = "100.0"
+        amountOutAsset = "USDC"
+        feeDetails = FeeDetails("10.0", "USD")
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        webAuthAccount = "webAuthAccount"
+        webAuthAccountMemo = "webAuthAccountMemo"
+        requestAssetCode = "USDC"
+        requestAssetIssuer = "issuer"
+        type = "bank_account"
+      }
+
+    val actual =
+      GsonUtils.getInstance()
+        .toJson(TransactionMapper.toGetTransactionResponse(sepTxn, assertService))
+    val actualJsonObject = gson.fromJson(actual, JsonObject::class.java)
+
+    assertEquals(false, actualJsonObject.has("fields"))
+    assertEquals(false, actualJsonObject.has("required_info_message"))
+    assertEquals(false, actualJsonObject.has("required_info_updates"))
   }
 }

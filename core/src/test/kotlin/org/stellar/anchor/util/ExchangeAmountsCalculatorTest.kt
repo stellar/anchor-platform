@@ -229,4 +229,147 @@ class ExchangeAmountsCalculatorTest {
       assertThrows<BadRequestException> { calculator.bindQuoteToTransaction("q-cancel", "T2") }
     assert(ex.message!!.contains("has already been used"))
   }
+
+  @Test
+  fun `test calculateFromQuote rejects a sell delivery method mismatch`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns
+      usdcQuote().apply { sellDeliveryMethod = "WIRE" }
+    val ex =
+      assertThrows<BadRequestException> {
+        calculator.calculateFromQuote(
+          quoteId,
+          assetService.getAsset("USDC"),
+          null,
+          "100",
+          "SWIFT",
+          null
+        )
+      }
+    assertEquals(
+      "funding_method(SWIFT) does not match quote sell delivery method(WIRE)",
+      ex.message,
+    )
+  }
+
+  @Test
+  fun `test calculateFromQuote rejects a buy delivery method mismatch`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns
+      usdcQuote().apply { buyDeliveryMethod = "WIRE" }
+    val ex =
+      assertThrows<BadRequestException> {
+        calculator.calculateFromQuote(
+          quoteId,
+          assetService.getAsset("USDC"),
+          null,
+          "100",
+          null,
+          "bank_account",
+        )
+      }
+    assertEquals(
+      "funding_method(bank_account) does not match quote buy delivery method(WIRE)",
+      ex.message,
+    )
+  }
+
+  @Test
+  fun `test calculateFromQuote accepts a matching sell delivery method`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns
+      usdcQuote().apply { sellDeliveryMethod = "WIRE" }
+    val result =
+      calculator.calculateFromQuote(
+        quoteId,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        "WIRE",
+        null
+      )
+    assertEquals(
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset("iso4217:USD")
+        .feeDetails(FeeDetails("2", "iso4217:USD"))
+        .build(),
+      result,
+    )
+  }
+
+  @Test
+  fun `test calculateFromQuote accepts a matching buy delivery method`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns
+      usdcQuote().apply { buyDeliveryMethod = "WIRE" }
+    val result =
+      calculator.calculateFromQuote(
+        quoteId,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        null,
+        "WIRE"
+      )
+    assertEquals(
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset("iso4217:USD")
+        .feeDetails(FeeDetails("2", "iso4217:USD"))
+        .build(),
+      result,
+    )
+  }
+
+  @Test
+  fun `test calculateFromQuote accepts a non-null funding method when the quote has no delivery method`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
+    val result =
+      calculator.calculateFromQuote(
+        quoteId,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        "SWIFT",
+        "bank_account",
+      )
+    assertEquals(
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset("iso4217:USD")
+        .feeDetails(FeeDetails("2", "iso4217:USD"))
+        .build(),
+      result,
+    )
+  }
+
+  @Test
+  fun `test calculateFromQuote accepts a null funding method when the quote has a delivery method`() {
+    val quoteId = "id"
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns
+      usdcQuote().apply {
+        sellDeliveryMethod = "WIRE"
+        buyDeliveryMethod = "WIRE"
+      }
+    val result =
+      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100", null, null)
+    assertEquals(
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset("iso4217:USD")
+        .feeDetails(FeeDetails("2", "iso4217:USD"))
+        .build(),
+      result,
+    )
+  }
 }
