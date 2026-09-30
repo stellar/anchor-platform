@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.stellar.anchor.api.exception.AccountNotFoundException;
+import org.stellar.anchor.api.exception.LedgerDecodeException;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.config.StellarNetworkConfig;
 import org.stellar.anchor.ledger.LedgerClientHelper.ParseResult;
@@ -137,8 +138,9 @@ public class Horizon implements LedgerClient {
     TransactionEnvelope txnEnv;
     try {
       txnEnv = TransactionEnvelope.fromXdrBase64(txnResponse.getEnvelopeXdr());
-    } catch (IOException ioex) {
-      throw new LedgerException("Unable to parse transaction envelope", ioex);
+    } catch (IOException | RuntimeException ex) {
+      throw new LedgerDecodeException(
+          "Unable to parse transaction envelope for hash=" + txnHash, ex);
     }
 
     // The relationship between TOID and application order is defined at:
@@ -154,7 +156,8 @@ public class Horizon implements LedgerClient {
     try {
       txResult = txnResponse.parseResultXdr();
     } catch (RuntimeException rex) {
-      throw new LedgerException("Unable to parse transaction result for hash=" + txnHash, rex);
+      throw new LedgerDecodeException(
+          "Unable to parse transaction result for hash=" + txnHash, rex);
     }
     OperationResult[] opResults = LedgerClientHelper.parseOperationResults(txResult, txnHash);
     List<LedgerOperation> operations =
