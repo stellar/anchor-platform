@@ -324,7 +324,9 @@ class JdbcSep24TransactionStoreTest {
 
   @Test
   fun `findTransactions forwards the issuer to the memo query and its legacy fallback`() {
-    val request = GetTransactionsRequest.of("USDC", null, 10, null, null, null)
+    // The request still carries the raw stellar: form; only the explicit arguments may reach the
+    // repo.
+    val request = GetTransactionsRequest.of("stellar:USDC:GISSUER", null, 10, null, null, null)
 
     every {
       txnRepo.findTransactionsWithMemoAndFilters(
