@@ -31,6 +31,8 @@ import org.stellar.anchor.api.sep.sep24.TransactionResponse
 import org.stellar.anchor.api.sep.sep6.Sep6TransactionResponse
 import org.stellar.anchor.api.shared.Amount
 import org.stellar.anchor.api.shared.FeeDetails
+import org.stellar.anchor.api.shared.RefundPayment
+import org.stellar.anchor.api.shared.Refunds
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.client.ClientConfig.CallbackUrls
 import org.stellar.anchor.client.CustodialClient
@@ -301,6 +303,89 @@ class ClientStatusCallbackHandlerTest {
     assertEquals("client.com", sep24Txn.clientDomain)
     assertEquals("quote-id", sep24Txn.quoteId)
     assertEquals("message", sep24Txn.message)
+  }
+
+  @Test
+  fun `fromSep24Txn restores the request asset from the expected amount asset`() {
+    fun txnWithExpectedAsset(asset: String) =
+      GetTransactionResponse.builder()
+        .id("sep24-id")
+        .sep(SEP_24)
+        .kind(Kind.WITHDRAWAL)
+        .status(COMPLETED)
+        .amountExpected(Amount("10", asset))
+        .build()
+
+    val issued = ClientStatusCallbackHandler.fromSep24Txn(txnWithExpectedAsset(USDC_ID))
+    assertEquals("USDC", issued.requestAssetCode)
+    assertEquals(USDC_ISSUER, issued.requestAssetIssuer)
+
+    val native = ClientStatusCallbackHandler.fromSep24Txn(txnWithExpectedAsset("stellar:native"))
+    assertEquals("native", native.requestAssetCode)
+    Assertions.assertNull(native.requestAssetIssuer)
+
+    val fiat = ClientStatusCallbackHandler.fromSep24Txn(txnWithExpectedAsset("iso4217:USD"))
+    Assertions.assertNull(fiat.requestAssetCode)
+    Assertions.assertNull(fiat.requestAssetIssuer)
+  }
+
+  @Test
+  fun `buildHttpRequest delivers a SEP-24 callback for a completed withdrawal with refund payments`() {
+    // Resolves an asset exactly as the real service does: a known code and issuer, otherwise null.
+    val usdc = mockk<AssetInfo>(relaxed = true)
+    every { usdc.significantDecimals } returns 7
+    every { assetService.getAsset(any(), any()) } answers
+      {
+        if (firstArg<String?>() == "USDC" && secondArg<String?>() == USDC_ISSUER) usdc else null
+      }
+    val refundedEvent = AnchorEvent()
+    refundedEvent.transaction =
+      GetTransactionResponse.builder()
+        .id("sep24-id")
+        .sep(SEP_24)
+        .kind(Kind.WITHDRAWAL)
+        .status(COMPLETED)
+        .startedAt(java.time.Instant.now())
+        .amountExpected(Amount("1", USDC_ID))
+        .amountIn(Amount("1", USDC_ID))
+        .amountOut(Amount("1", "iso4217:USD"))
+        .refunds(
+          Refunds.builder()
+            .amountRefunded(Amount("1", USDC_ID))
+            .amountFee(Amount("0.1", USDC_ID))
+            .payments(
+              arrayOf(
+                RefundPayment.builder()
+                  .id("1")
+                  .idType(RefundPayment.IdType.STELLAR)
+                  .amount(Amount("0.6", USDC_ID))
+                  .fee(Amount("0.1", USDC_ID))
+                  .build(),
+                RefundPayment.builder()
+                  .id("2")
+                  .idType(RefundPayment.IdType.STELLAR)
+                  .amount(Amount("0.4", USDC_ID))
+                  .fee(Amount("0", USDC_ID))
+                  .build(),
+              )
+            )
+            .build()
+        )
+        .build()
+
+    val request = handler.buildHttpRequest(signer, refundedEvent)
+
+    assertNotNull(request)
+    val body = okio.Buffer().also { request!!.body!!.writeTo(it) }.readUtf8()
+    val transaction = JsonParser.parseString(body).asJsonObject.getAsJsonObject("transaction")
+    assertEquals("sep24-id", transaction.get("id").asString)
+    assertEquals(true, transaction.get("refunded").asBoolean)
+    val refunds = transaction.getAsJsonObject("refunds")
+    assertEquals(
+      0,
+      java.math.BigDecimal("1").compareTo(refunds.get("amount_refunded").asBigDecimal)
+    )
+    assertEquals(2, refunds.getAsJsonArray("payments").size())
   }
 
   @Test
@@ -756,3 +841,6 @@ class ClientStatusCallbackHandlerTest {
     )
   }
 }
+
+private const val USDC_ISSUER = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+private const val USDC_ID = "stellar:USDC:$USDC_ISSUER"
