@@ -44,10 +44,12 @@ class Sep24ClientRequestTests {
           MockResponse()
             .setResponseCode(200)
             .setBody(
-              if (request.requestUrl?.encodedPath == "/transaction") {
-                """{"transaction":{"id":"txn-1","kind":"$transactionKind"}}"""
-              } else {
-                """{"type":"interactive_customer_info_needed","url":"https://example.com/interactive","id":"txn-1"}"""
+              when (request.requestUrl?.encodedPath) {
+                "/transaction" -> """{"transaction":{"id":"txn-1","kind":"$transactionKind"}}"""
+                "/transactions" ->
+                  """{"transactions":[{"id":"d-1","kind":"deposit"},{"id":"w-1","kind":"withdrawal"}]}"""
+                else ->
+                  """{"type":"interactive_customer_info_needed","url":"https://example.com/interactive","id":"txn-1"}"""
               }
             )
       }
@@ -159,6 +161,33 @@ class Sep24ClientRequestTests {
   @Test
   fun `test sep24 client getTransaction sends no Authorization header without a JWT`() {
     client(null).getTransaction(mapOf("id" to "txn-1"))
+
+    assertNull(recorded().getHeader("Authorization"))
+  }
+
+  @Test
+  fun `test sep24 client getTransactions sends the given query parameters with the JWT`() {
+    // '&', '=', '+' and '#' are the delimiters an unencoded query would let split or truncate it
+    val pagingId = "p 1/é&x=y+z#f"
+    val query = mapOf("asset_code" to "USDC", "paging_id" to pagingId)
+
+    val response = client(jwt).getTransactions(query)
+
+    val request = recorded()
+    assertEquals("GET", request.method)
+    assertEquals("/transactions", request.requestUrl!!.encodedPath)
+    assertEquals(setOf("asset_code", "paging_id"), request.requestUrl!!.queryParameterNames)
+    assertEquals("USDC", request.requestUrl!!.queryParameter("asset_code"))
+    assertEquals(pagingId, request.requestUrl!!.queryParameter("paging_id"))
+    assertEquals("Bearer $jwt", request.getHeader("Authorization"))
+    assertEquals(2, response.transactions.size)
+    assertTrue(response.transactions[0] is DepositTransactionResponse)
+    assertTrue(response.transactions[1] is WithdrawTransactionResponse)
+  }
+
+  @Test
+  fun `test sep24 client getTransactions sends no Authorization header without a JWT`() {
+    client(null).getTransactions(mapOf("asset_code" to "USDC"))
 
     assertNull(recorded().getHeader("Authorization"))
   }
