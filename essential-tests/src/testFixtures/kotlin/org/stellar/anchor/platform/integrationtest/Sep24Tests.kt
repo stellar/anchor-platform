@@ -17,6 +17,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.springframework.web.util.UriComponentsBuilder
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.SepNotFoundException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.apiclient.PlatformApiClient
@@ -307,6 +308,37 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
       "One of id, stellar_transaction_id or external_transaction_id is required.",
       errorMessage(ex),
     )
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns 404 for an unknown id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Client.getTransaction(mapOf("id" to UUID.randomUUID().toString()))
+      }
+    assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns 404 for an unknown external_transaction_id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Client.getTransaction(
+          mapOf("external_transaction_id" to "unknown-${UUID.randomUUID()}")
+        )
+      }
+    assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns 404 for an unknown stellar_transaction_id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Client.getTransaction(
+          mapOf("stellar_transaction_id" to "unknown-${UUID.randomUUID()}")
+        )
+      }
+    assertEquals("transaction not found", ex.message)
   }
 
   @Test
