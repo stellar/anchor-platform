@@ -1,8 +1,11 @@
 package org.stellar.anchor.platform.integrationtest
 
 import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import java.net.URI
+import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
@@ -394,6 +397,76 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   fun `test sep24 GET transactions reports a missing asset_code despite a JSON Content-Type`() {
     val ex = assertThrows<SepValidationException> { sep24Client.getTransactions(mapOf()) }
     assertEquals("The \"asset_code\" parameter is missing.", errorMessage(ex))
+  }
+
+  private fun JsonObject.string(field: String): String {
+    val element = get(field)
+    assertTrue(element != null && element.isJsonPrimitive && element.asJsonPrimitive.isString) {
+      "expected '$field' to be a string in $this"
+    }
+    return element.asString
+  }
+
+  /** The SEP-24 transaction shape `stellar-anchor-tests` requires, on the raw list item. */
+  private fun assertListItem(
+    item: JsonObject,
+    kind: String,
+    accountField: String,
+    account: String
+  ) {
+    assertTrue(item.string("id").isNotEmpty())
+    assertEquals(kind, item.string("kind"))
+    assertEquals("incomplete", item.string("status"))
+    val moreInfoUrl = URI(item.string("more_info_url"))
+    assertTrue(moreInfoUrl.isAbsolute && moreInfoUrl.scheme in setOf("http", "https")) {
+      "expected an absolute http(s) more_info_url but got $moreInfoUrl"
+    }
+    Instant.parse(item.string("started_at"))
+    assertEquals(account, item.string(accountField))
+  }
+
+  private fun JsonArray.item(id: String): JsonObject {
+    assertTrue(size() > 0) { "the list is empty, so no item can be checked" }
+    val found = firstOrNull { it.asJsonObject.get("id").asString == id }
+    assertNotNull(found) { "expected transaction $id in the list, got ${ids()}" }
+    return found!!.asJsonObject
+  }
+
+  @Test
+  fun `test sep24 GET transactions returns an empty list for a fresh account`() {
+    val list = listRaw(newAccount(), mapOf("asset_code" to "USDC"))
+
+    assertEquals(0, list.size())
+  }
+
+  @Test
+  fun `test sep24 GET transactions lists a withdrawal`() {
+    val account = newAccount()
+    val withdrawalId = createWithdrawal(account)
+
+    val list = listRaw(account, mapOf("asset_code" to "USDC"))
+
+    assertEquals(withdrawalId, list.item(withdrawalId).string("id"))
+  }
+
+  @Test
+  fun `test sep24 GET transactions returns deposits in the SEP-24 shape`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+
+    val item = listRaw(account, mapOf("asset_code" to "USDC")).item(depositId)
+
+    assertListItem(item, "deposit", "to", account.accountId)
+  }
+
+  @Test
+  fun `test sep24 GET transactions returns withdrawals in the SEP-24 shape`() {
+    val account = newAccount()
+    val withdrawalId = createWithdrawal(account)
+
+    val item = listRaw(account, mapOf("asset_code" to "USDC")).item(withdrawalId)
+
+    assertListItem(item, "withdrawal", "from", account.accountId)
   }
 
   @Test
