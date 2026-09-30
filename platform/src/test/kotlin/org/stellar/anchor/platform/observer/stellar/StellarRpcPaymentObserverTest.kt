@@ -170,6 +170,46 @@ class StellarRpcPaymentObserverTest {
   }
 
   @Test
+  fun `processTransferEvent skips a transaction that cannot be decoded instead of retrying`() {
+    val event = eventWithId("e1")
+    every { event.transactionHash } returns "poisonTx"
+    every { event.operationIndex } returns 0L
+    every { stellarRpc.getTransaction("poisonTx") } throws
+      org.stellar.anchor.api.exception.LedgerDecodeException(
+        "Unable to parse transaction envelope",
+        IllegalArgumentException("Unknown enum value: 22"),
+      )
+
+    assertDoesNotThrow {
+      observer.processTransferEvent(
+        StellarRpcPaymentObserver.ShouldProcessResult.builder()
+          .event(event)
+          .shouldProcess(true)
+          .build()
+      )
+    }
+    verify(exactly = 0) { observer.processOperation(any(), any(), any()) }
+  }
+
+  @Test
+  fun `processEvents moves past an undecodable transaction and processes the next event`() {
+    val poison = eventWithId("e1")
+    every { poison.transactionHash } returns "poisonTx"
+    every { poison.operationIndex } returns 0L
+    val next = eventWithId("e2")
+    processAll()
+    every { stellarRpc.getTransaction("poisonTx") } throws
+      org.stellar.anchor.api.exception.LedgerDecodeException(
+        "Unable to parse transaction envelope",
+        IllegalArgumentException("Unknown enum value: 22"),
+      )
+    every { observer.processTransferEvent(match { it.event === next }) } answers {}
+
+    assertEquals("END", observer.processEvents(listOf(poison, next), "END"))
+    verify(exactly = 1) { observer.processTransferEvent(match { it.event === next }) }
+  }
+
+  @Test
   fun `processTransferEvent credits a contract call the ledger parser did not model`() {
     val event = eventWithId("e1")
     every { event.transactionHash } returns "txHashRouter"
