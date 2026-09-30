@@ -119,7 +119,9 @@ class Sep24ClientRequestTests {
 
   @Test
   fun `test sep24 client getTransaction sends the given query parameters with the JWT`() {
-    val query = mapOf("external_transaction_id" to "ext 1/é", "lang" to "en")
+    // '&', '=', '+' and '#' are the delimiters an unencoded query would let split or truncate it
+    val externalTransactionId = "ext 1/é&x=y+z#f"
+    val query = mapOf("external_transaction_id" to externalTransactionId, "lang" to "en")
 
     val response = client(jwt).getTransaction(query)
 
@@ -127,7 +129,10 @@ class Sep24ClientRequestTests {
     assertEquals("GET", request.method)
     assertEquals("/transaction", request.requestUrl!!.encodedPath)
     assertEquals(setOf("external_transaction_id", "lang"), request.requestUrl!!.queryParameterNames)
-    assertEquals("ext 1/é", request.requestUrl!!.queryParameter("external_transaction_id"))
+    assertEquals(
+      externalTransactionId,
+      request.requestUrl!!.queryParameter("external_transaction_id"),
+    )
     assertEquals("en", request.requestUrl!!.queryParameter("lang"))
     assertEquals("Bearer $jwt", request.getHeader("Authorization"))
     assertEquals("txn-1", response.transaction.id)
