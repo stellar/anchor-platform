@@ -469,6 +469,50 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertListItem(item, "withdrawal", "from", account.accountId)
   }
 
+  /** Creates [count] deposits one after another, so their `started_at` strictly increases. */
+  private fun createDeposits(account: TestAccount, count: Int): List<String> =
+    (1..count).map { createDeposit(account) }
+
+  @Test
+  fun `test sep24 GET transactions honors limit exactly`() {
+    val account = newAccount()
+    val created = createDeposits(account, 3)
+
+    val ids = listRaw(account, mapOf("asset_code" to "USDC", "limit" to "1")).ids()
+
+    assertEquals(listOf(created.last()), ids)
+  }
+
+  @Test
+  fun `test sep24 GET transactions are ordered by started_at descending`() {
+    val account = newAccount()
+    val created = createDeposits(account, 3)
+
+    val ids = listRaw(account, mapOf("asset_code" to "USDC")).ids()
+
+    assertEquals(3, ids.size) {
+      "expected all 3 fixture deposits before comparing their order, got $ids"
+    }
+    assertEquals(created.reversed(), ids)
+  }
+
+  @Test
+  fun `test sep24 GET transactions no_older_than excludes the boundary`() {
+    val account = newAccount()
+    val created = createDeposits(account, 3)
+    val oldest = listRaw(account, mapOf("asset_code" to "USDC")).item(created.first())
+
+    val ids =
+      listRaw(
+          account,
+          mapOf("asset_code" to "USDC", "no_older_than" to oldest.string("started_at")),
+        )
+        .ids()
+
+    assertEquals(created.drop(1).toSet(), ids.toSet())
+    assertEquals(2, ids.size)
+  }
+
   @Test
   fun `test sep24 GET transactions rejects request without JWT`() {
     assertThrows<SepNotAuthorizedException> {
