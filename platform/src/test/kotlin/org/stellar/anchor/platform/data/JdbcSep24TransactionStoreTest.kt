@@ -389,6 +389,80 @@ class JdbcSep24TransactionStoreTest {
     assertEquals("invalid paging_id field: paging-txn-id", ex.message)
   }
 
+  /** Acceptance is proven by the `olderThan` the repo receives, not by the absence of an error. */
+  private fun assertPagingAccepted(
+    accountId: String,
+    accountMemo: String?,
+    txn: JdbcSep24Transaction
+  ) {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns txn
+    every {
+      txnRepo.findTransactionsWithMemoAndFilters(
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any()
+      )
+    } returns emptyList()
+    every {
+      txnRepo.findTransactionsWithFilters(any(), any(), any(), any(), any(), any(), any())
+    } returns emptyList()
+    val request = GetTransactionsRequest.of("USDC", null, 10, null, "paging-txn-id", null)
+
+    store.findTransactions(accountId, accountMemo, "USDC", null, request)
+
+    val olderThanSlot = slot<Instant>()
+    if (accountMemo == null) {
+      verify {
+        txnRepo.findTransactionsWithFilters(
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          capture(olderThanSlot),
+          any()
+        )
+      }
+    } else {
+      verify {
+        txnRepo.findTransactionsWithMemoAndFilters(
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          capture(olderThanSlot),
+          any()
+        )
+      }
+    }
+    assertEquals(txn.startedAt, olderThanSlot.captured)
+  }
+
+  @Test
+  fun `findTransactions with paging_id accepts a memo caller's own memo-column row`() {
+    assertPagingAccepted("GACCOUNT", "12345", pagingTxn("GACCOUNT", "12345"))
+  }
+
+  @Test
+  fun `findTransactions with paging_id rejects another account's legacy account-memo row`() {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns
+      pagingTxn("GOTHER:12345", null)
+
+    assertPagingRejected("GACCOUNT", "12345")
+  }
+
+  @Test
+  fun `findTransactions with paging_id accepts a muxed caller's own row`() {
+    assertPagingAccepted("MMUXEDACCOUNT", null, pagingTxn("MMUXEDACCOUNT", null))
+  }
+
   @Test
   fun `findTransactions with paging_id accepts the legacy account-memo row for its memo caller`() {
     every { txnRepo.findOneByTransactionId("paging-txn-id") } returns
