@@ -1,13 +1,16 @@
 package org.stellar.anchor.client
 
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MultipartBody
 import okhttp3.Request
 import org.stellar.anchor.api.sep.sep24.DepositTransactionResponse
+import org.stellar.anchor.api.sep.sep24.GetTransactionsResponse
 import org.stellar.anchor.api.sep.sep24.InfoResponse
 import org.stellar.anchor.api.sep.sep24.InteractiveTransactionResponse
 import org.stellar.anchor.api.sep.sep24.Sep24GetTransactionResponse
+import org.stellar.anchor.api.sep.sep24.TransactionResponse
 import org.stellar.anchor.api.sep.sep24.WithdrawTransactionResponse
 
 class Sep24Client(private val endpoint: String, private val jwt: String?) : SepClient() {
@@ -68,15 +71,28 @@ class Sep24Client(private val endpoint: String, private val jwt: String?) : SepC
     return parseTransaction(httpGet(urlBuilder.build().toString(), jwt))
   }
 
+  /** Sends each entry of [request] verbatim as a query parameter of `GET /transactions`. */
+  fun getTransactions(request: Map<String, String>): GetTransactionsResponse {
+    val urlBuilder = "$endpoint/transactions".toHttpUrl().newBuilder()
+    request.forEach { (key, value) -> urlBuilder.addQueryParameter(key, value) }
+
+    val root = JsonParser.parseString(httpGet(urlBuilder.build().toString(), jwt)).asJsonObject
+    return GetTransactionsResponse().apply {
+      transactions =
+        root.getAsJsonArray("transactions").map { parseTransactionObject(it.asJsonObject) }
+    }
+  }
+
   private fun parseTransaction(responseBody: String?): Sep24GetTransactionResponse {
     val root = JsonParser.parseString(responseBody).asJsonObject
-    val txnJson = root.getAsJsonObject("transaction")
-    val transaction =
-      if (txnJson.get("kind").asString == "withdrawal") {
-        gson.fromJson(txnJson, WithdrawTransactionResponse::class.java)
-      } else {
-        gson.fromJson(txnJson, DepositTransactionResponse::class.java)
-      }
+    val transaction = parseTransactionObject(root.getAsJsonObject("transaction"))
     return Sep24GetTransactionResponse().apply { this.transaction = transaction }
   }
+
+  private fun parseTransactionObject(txnJson: JsonObject): TransactionResponse =
+    if (txnJson.get("kind").asString == "withdrawal") {
+      gson.fromJson(txnJson, WithdrawTransactionResponse::class.java)
+    } else {
+      gson.fromJson(txnJson, DepositTransactionResponse::class.java)
+    }
 }
