@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.api.sep.sep24.DepositTransactionResponse
+import org.stellar.anchor.api.sep.sep24.WithdrawTransactionResponse
 import org.stellar.anchor.client.Sep24Client
 
 /**
@@ -28,6 +30,11 @@ class Sep24ClientRequestTests {
   private val fields =
     mapOf("asset_code" to "USDC", "asset_issuer" to "GISSUER", "account" to "GABC")
 
+  /**
+   * The `kind` the mock serves for `GET /transaction`; a test sets it before calling the client.
+   */
+  private var transactionKind = "deposit"
+
   @BeforeEach
   fun startServer() {
     server = MockWebServer()
@@ -38,7 +45,7 @@ class Sep24ClientRequestTests {
             .setResponseCode(200)
             .setBody(
               if (request.requestUrl?.encodedPath == "/transaction") {
-                """{"transaction":{"id":"txn-1","kind":"deposit"}}"""
+                """{"transaction":{"id":"txn-1","kind":"$transactionKind"}}"""
               } else {
                 """{"type":"interactive_customer_info_needed","url":"https://example.com/interactive","id":"txn-1"}"""
               }
@@ -136,6 +143,17 @@ class Sep24ClientRequestTests {
     assertEquals("en", request.requestUrl!!.queryParameter("lang"))
     assertEquals("Bearer $jwt", request.getHeader("Authorization"))
     assertEquals("txn-1", response.transaction.id)
+    assertTrue(response.transaction is DepositTransactionResponse)
+  }
+
+  @Test
+  fun `test sep24 client getTransaction parses a withdrawal as a WithdrawTransactionResponse`() {
+    transactionKind = "withdrawal"
+
+    val response = client(jwt).getTransaction(mapOf("id" to "txn-1"))
+
+    assertEquals("txn-1", response.transaction.id)
+    assertTrue(response.transaction is WithdrawTransactionResponse)
   }
 
   @Test
