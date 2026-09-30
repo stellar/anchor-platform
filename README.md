@@ -21,6 +21,13 @@ rates, and off-chain transaction status updates.
 The goal of the Anchor Platform is to abstract all Stellar-specific functionality and requirements for running an
 anchor, allowing businesses to focus on the core business logic necessary to provide these services.
 
+## Reporting Security Vulnerabilities
+
+> [!NOTE]
+> Please do not report security vulnerabilities through public GitHub issues. Submit them through our HackerOne
+> program using the report format described in [SECURITY.md](SECURITY.md). Reports that don't follow it are sent back
+> for a rewrite before triage.
+
 ## Getting Started
 
 To get started, visit the [Anchor Platform documentation](https://developers.stellar.org/docs/platforms/anchor-platform).
