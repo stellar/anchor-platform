@@ -1,6 +1,7 @@
 package org.stellar.anchor.client
 
 import com.google.gson.JsonParser
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MultipartBody
 import okhttp3.Request
 import org.stellar.anchor.api.sep.sep24.DepositTransactionResponse
@@ -56,6 +57,18 @@ class Sep24Client(private val endpoint: String, private val jwt: String?) : SepC
 
   fun getTransaction(id: String, assetCode: String): Sep24GetTransactionResponse {
     val responseBody = httpGet("$endpoint/transaction?id=$id&asset_code=$assetCode", jwt)
+    return parseTransaction(responseBody)
+  }
+
+  /** Sends each entry of [request] verbatim as a query parameter of `GET /transaction`. */
+  fun getTransaction(request: Map<String, String>): Sep24GetTransactionResponse {
+    val urlBuilder = "$endpoint/transaction".toHttpUrl().newBuilder()
+    request.forEach { (key, value) -> urlBuilder.addQueryParameter(key, value) }
+
+    return parseTransaction(httpGet(urlBuilder.build().toString(), jwt))
+  }
+
+  private fun parseTransaction(responseBody: String?): Sep24GetTransactionResponse {
     val root = JsonParser.parseString(responseBody).asJsonObject
     val txnJson = root.getAsJsonObject("transaction")
     val transaction =
