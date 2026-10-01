@@ -23,6 +23,9 @@ dependencies {
   implementation(variantOf(libs.java.stellar.sdk) { classifier("uber") })
 
   implementation(project(mapOf("path" to ":api-schema")))
+
+  testImplementation(libs.bundles.junit)
+  testImplementation(libs.ktor.server.test.host)
 }
 
 tasks {

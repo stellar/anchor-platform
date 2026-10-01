@@ -5,6 +5,7 @@ import static org.stellar.anchor.util.MathHelper.decimal;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.stellar.anchor.api.exception.InvalidStellarAccountException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.sdk.KeyPair;
@@ -12,6 +13,10 @@ import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.xdr.MemoType;
 
 public class SepHelper {
+  private static final Pattern SEP_TRANSACTION_ID_PATTERN =
+      Pattern.compile(
+          "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+
   public enum AccountType {
     Classic,
     Muxed,
@@ -36,6 +41,10 @@ public class SepHelper {
    */
   public static String generateSepTransactionId() {
     return UUID.randomUUID().toString();
+  }
+
+  public static boolean isValidSepTransactionId(String id) {
+    return id != null && SEP_TRANSACTION_ID_PATTERN.matcher(id).matches();
   }
 
   public static String memoTypeString(MemoType memoType) {

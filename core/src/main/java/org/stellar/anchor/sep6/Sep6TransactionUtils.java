@@ -1,13 +1,47 @@
 package org.stellar.anchor.sep6;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.stellar.anchor.MoreInfoUrlConstructor;
+import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.sep.sep6.Sep6TransactionResponse;
 import org.stellar.anchor.api.shared.RefundPayment;
 import org.stellar.anchor.api.shared.Refunds;
+import org.stellar.anchor.util.StringHelper;
 
 public class Sep6TransactionUtils {
+
+  /**
+   * SEP-6 stores `required_info_updates` as a flat list of field names (there is no per-field
+   * metadata store for SEP-6, unlike SEP-31's `Sep31Info.Fields`), but the SEP-6 spec requires the
+   * wire response in the same per-field object format as `/info` (name -> {description, choices,
+   * optional}). Synthesize that shape here, at the response boundary only -- a humanized version of
+   * the field name is the best available description, since no richer metadata exists upstream.
+   *
+   * <p>The list is copied verbatim from the business server's RPC payload with no element
+   * validation ({@code TransactionService}'s SEP-6 branch does not reject a null or blank entry the
+   * way SEP-31's does), so a null or blank name must be skipped here rather than passed to {@link
+   * StringHelper#humanizeSnakeCase}, which would NPE on null and produce an unusable empty JSON key
+   * for blank -- either would otherwise fail every future read of the transaction.
+   */
+  private static Map<String, AssetInfo.Field> toRequiredInfoUpdatesFields(
+      List<String> requiredInfoUpdates) {
+    if (requiredInfoUpdates == null || requiredInfoUpdates.isEmpty()) {
+      return null;
+    }
+    Map<String, AssetInfo.Field> fields = new LinkedHashMap<>();
+    for (String fieldName : requiredInfoUpdates) {
+      if (fieldName == null || fieldName.trim().isEmpty()) {
+        continue;
+      }
+      fields.put(
+          fieldName,
+          AssetInfo.Field.builder().description(StringHelper.humanizeSnakeCase(fieldName)).build());
+    }
+    return fields.isEmpty() ? null : fields;
+  }
 
   /**
    * Converts a SEP-6 database transaction object to a SEP-6 API transaction object.
@@ -65,7 +99,7 @@ public class Sep6TransactionUtils {
             .message(txn.getMessage())
             .refunds(refunds)
             .requiredInfoMessage(txn.getRequiredInfoMessage())
-            .requiredInfoUpdates(txn.getRequiredInfoUpdates())
+            .requiredInfoUpdates(toRequiredInfoUpdatesFields(txn.getRequiredInfoUpdates()))
             .instructions(txn.getInstructions());
 
     if (Sep6Transaction.Kind.valueOf(txn.getKind().toUpperCase().replace("-", "_")).isDeposit()) {

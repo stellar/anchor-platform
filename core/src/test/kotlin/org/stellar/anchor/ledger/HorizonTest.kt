@@ -9,12 +9,15 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.stellar.anchor.api.exception.AccountNotFoundException
+import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.sdk.Asset
 import org.stellar.sdk.AssetTypeCreditAlphaNum
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Server
 import org.stellar.sdk.TrustLineAsset
+import org.stellar.sdk.exception.BadRequestException
 import org.stellar.sdk.requests.AccountsRequestBuilder
 import org.stellar.sdk.responses.AccountResponse
 import org.stellar.sdk.responses.AccountResponse.Balance
@@ -136,6 +139,49 @@ internal class HorizonTest {
     every { horizon.server } returns server
     every { horizon.hasTrustline(account, asset) } answers { callOriginal() }
     assertFalse(horizon.hasTrustline(account, asset))
+  }
+
+  @Test
+  fun `test getAccount with a genuine 404 falls back to account-not-found`() {
+    val server = mockk<Server>()
+    val accountsRequestBuilder: AccountsRequestBuilder = mockk()
+    val account = KeyPair.random().accountId
+
+    every { server.accounts() } returns accountsRequestBuilder
+    every { accountsRequestBuilder.account(account) } throws
+      BadRequestException(404, "not found", null, null)
+
+    val horizon = mockk<Horizon>()
+    every { horizon.server } returns server
+    every { horizon.getAccount(account) } answers { callOriginal() }
+
+    assertThrows<AccountNotFoundException> { horizon.getAccount(account) }
+  }
+
+  @Test
+  fun `test getAccount with a non-404 4xx fails closed instead of account-not-found`() {
+    val server = mockk<Server>()
+    val accountsRequestBuilder: AccountsRequestBuilder = mockk()
+    val account = KeyPair.random().accountId
+
+    for (code in listOf(400, 401, 403, 406)) {
+      every { server.accounts() } returns accountsRequestBuilder
+      every { accountsRequestBuilder.account(account) } throws
+        BadRequestException(code, "blocked", null, null)
+
+      val horizon = mockk<Horizon>()
+      every { horizon.server } returns server
+      every { horizon.getAccount(account) } answers { callOriginal() }
+
+      // AccountNotFoundException extends LedgerException, so asserting the exception is a
+      // LedgerException alone would also pass on the vulnerable fallback. The point of this
+      // test is that a non-404 4xx must NOT take the account-not-found fallback.
+      val exception = assertThrows<LedgerException> { horizon.getAccount(account) }
+      assertFalse(
+        exception is AccountNotFoundException,
+        "HTTP $code must fail closed as a plain LedgerException, not be treated as account-not-found",
+      )
+    }
   }
 
   @Test
