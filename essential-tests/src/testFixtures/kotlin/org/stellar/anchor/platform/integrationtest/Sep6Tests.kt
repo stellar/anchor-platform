@@ -12,6 +12,7 @@ import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
@@ -47,6 +48,7 @@ import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.anchor.auth
 import org.stellar.walletsdk.horizon.SigningKeyPair
 
+@Order(RUN_AFTER_PLATFORM_API_TESTS)
 class Sep6Tests : IntegrationTestBase(TestConfig()) {
   private val sep6Client = Sep6Client(toml.getString("TRANSFER_SERVER"), token.token)
   private val sep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)

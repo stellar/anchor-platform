@@ -28,6 +28,7 @@ import org.stellar.anchor.util.GsonUtils
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Execution(ExecutionMode.SAME_THREAD)
+@Order(RUN_AFTER_PLATFORM_API_TESTS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class CallbackApiTests : IntegrationTestBase(TestConfig()) {
 
