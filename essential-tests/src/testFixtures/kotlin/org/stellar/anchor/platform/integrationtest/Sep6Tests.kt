@@ -4,6 +4,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import io.ktor.http.Url
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
@@ -41,6 +42,7 @@ import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.gson
 import org.stellar.anchor.util.Log
+import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.anchor.auth
 import org.stellar.walletsdk.horizon.SigningKeyPair
@@ -51,6 +53,8 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
   private val platformApiClient =
     PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
+  private val anchorReferenceServerClient =
+    AnchorReferenceServerClient(Url(config.env["reference.server.url"]!!))
 
   private fun authenticateWithMemo(keyPair: SigningKeyPair, memoId: ULong): String {
     return runBlocking { anchor.auth().authenticate(keyPair, memoId = memoId) }.token
@@ -2480,10 +2484,19 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
    * (incomplete -> pending_user_transfer_start), then `notify_transaction_on_hold`
    * (pending_user_transfer_start -> on_hold) -- the #2025 CI-proven fixture with
    * `notify_transaction_on_hold` inserted between its two steps.
+   *
+   * The deposit is registered for `skip-auto-advance` first: `Sep6EventProcessor` reacts to the
+   * `pending_user_transfer_start` status event by calling `notify_offchain_funds_received` itself,
+   * and when that call lands after this fixture's own `notify_transaction_on_hold` the deposit
+   * reads `pending_anchor` instead of `on_hold`. The registration can only happen once the deposit
+   * id exists, so a reaction to the creation event that already started may still finish; that one
+   * moves the deposit to `pending_customer_info_update`, a valid source for
+   * `request_offchain_funds`.
    */
   private fun createOnHoldDeposit(): Pair<Sep6Client, String> {
     val (client, ids) = createAccountWithDeposits(1)
     val depositId = ids[0]
+    runBlocking { anchorReferenceServerClient.skipSep6AutoAdvance(depositId) }
     sendRpcBatch(onHoldRpcBatchRequests, depositId)
     return client to depositId
   }
