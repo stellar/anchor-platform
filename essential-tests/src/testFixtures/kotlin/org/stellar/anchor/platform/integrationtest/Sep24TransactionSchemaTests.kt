@@ -323,4 +323,61 @@ class Sep24TransactionSchemaTests {
         )
       }
   }
+
+  // S24CV-18: the more_info_url query carries a JWT, so no failure message may print it.
+
+  private fun withTokenInUrl(txn: JsonObject) =
+    txn.with("more_info_url", "\"https://example.com/info?token=SECRET\"")
+
+  private fun assertMessageHasNoSecret(
+    field: String,
+    block: () -> Unit,
+  ) {
+    val ex = assertThrows<AssertionError> { block() }
+    assertTrue(ex.message!!.contains("'$field'")) {
+      "the failure must still name '$field', but was: ${ex.message}"
+    }
+    assertTrue(!ex.message!!.contains("SECRET")) {
+      "the failure leaked the more_info_url query: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `a missing-field failure does not print the more_info_url query`() {
+    val txn = withTokenInUrl(pendingDeposit()).without("amount_in")
+
+    assertMessageHasNoSecret("amount_in") { assertSep24TransactionSchema(txn, DEPOSIT_PENDING) }
+  }
+
+  @Test
+  fun `a missing-kind failure does not print the more_info_url query`() {
+    val txn = withTokenInUrl(pendingDeposit()).without("kind")
+
+    assertMessageHasNoSecret("kind") { assertSep24TransactionSchema(txn, DEPOSIT_PENDING) }
+  }
+
+  @Test
+  fun `a more_info_url of the wrong type is reported without its query`() {
+    val txn = pendingDeposit().with("more_info_url", "\"/sep24/more_info?token=SECRET\"")
+
+    assertMessageHasNoSecret("more_info_url") { assertSep24TransactionSchema(txn, DEPOSIT_PENDING) }
+  }
+
+  @Test
+  fun `reading a missing string field does not print the more_info_url query`() {
+    val txn = withTokenInUrl(pendingDeposit())
+
+    assertMessageHasNoSecret("no_such_field") { requireJsonString(txn, "no_such_field") }
+  }
+
+  @Test
+  fun `redaction keeps the URL up to the query and leaves a URL without a query alone`() {
+    assertTrue(
+      redactedForLog(withTokenInUrl(pendingDeposit())).contains("\"https://example.com/info\"")
+    )
+    assertTrue(
+      redactedForLog(pendingDeposit().with("more_info_url", "\"https://example.com/plain\""))
+        .contains("\"https://example.com/plain\"")
+    )
+  }
 }

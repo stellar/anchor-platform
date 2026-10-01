@@ -5,6 +5,7 @@ import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import java.net.URI
 import java.time.OffsetDateTime
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 
 /** The kind and status a SEP-24 transaction is checked as. The case carries the kind. */
@@ -119,7 +120,7 @@ internal fun assertSep24TransactionSchema(transaction: JsonObject, schemaCase: S
   // The kind goes first: a deposit checked as a withdrawal would otherwise be reported as a long
   // list of missing withdrawal fields instead of as the wrong kind it is.
   if (!transaction.has("kind")) {
-    fail<Unit>("'kind' is required but is missing: $transaction")
+    fail<Unit>("'kind' is required but is missing: ${redactedForLog(transaction)}")
   }
   checkType(transaction, "kind", JsonType.STRING, nullable = false)
   val kind = transaction.get("kind").asString
@@ -130,7 +131,7 @@ internal fun assertSep24TransactionSchema(transaction: JsonObject, schemaCase: S
   requiredFor(schemaCase).forEach { field ->
     if (!transaction.has(field)) {
       fail<Unit>(
-        "'$field' is required for a ${schemaCase.name} transaction but is missing: $transaction"
+        "'$field' is required for a ${schemaCase.name} transaction but is missing: ${redactedForLog(transaction)}"
       )
     }
   }
@@ -174,6 +175,38 @@ private fun checkType(obj: JsonObject, field: String, type: JsonType, nullable: 
     }
   if (!ok) {
     val allowed = if (nullable) "${type.label} or null" else type.label
-    fail<Unit>("'$field' must be $allowed, got $value")
+    fail<Unit>("'$field' must be $allowed, got ${valueForLog(field, value)}")
   }
 }
+
+/**
+ * The object as text for a failure message, with `more_info_url` cut at its `?`: the query carries
+ * a JWT, and a failure message ends up in CI logs.
+ */
+internal fun redactedForLog(transaction: JsonObject): String {
+  val copy = transaction.deepCopy()
+  val url = copy.get("more_info_url")
+  if (url != null && url.isJsonPrimitive && url.asJsonPrimitive.isString) {
+    copy.addProperty("more_info_url", url.asString.substringBefore('?'))
+  }
+  return copy.toString()
+}
+
+/** A string field of [obj], failing with a message that names the field. */
+internal fun requireJsonString(obj: JsonObject, field: String): String {
+  val element = obj.get(field)
+  assertTrue(element != null && element.isJsonPrimitive && element.asJsonPrimitive.isString) {
+    "expected '$field' to be a string in ${redactedForLog(obj)}"
+  }
+  return element.asString
+}
+
+/**
+ * A field value for a failure message; `more_info_url` is cut at its `?` (see [redactedForLog]).
+ */
+private fun valueForLog(field: String, value: JsonElement): String =
+  if (field == "more_info_url" && value.isJsonPrimitive && value.asJsonPrimitive.isString) {
+    "\"${value.asString.substringBefore('?')}\""
+  } else {
+    value.toString()
+  }

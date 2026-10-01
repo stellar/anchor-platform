@@ -402,13 +402,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertEquals("The \"asset_code\" parameter is missing.", errorMessage(ex))
   }
 
-  private fun JsonObject.string(field: String): String {
-    val element = get(field)
-    assertTrue(element != null && element.isJsonPrimitive && element.asJsonPrimitive.isString) {
-      "expected '$field' to be a string in $this"
-    }
-    return element.asString
-  }
+  private fun JsonObject.string(field: String): String = requireJsonString(this, field)
 
   /** The SEP-24 transaction shape `stellar-anchor-tests` requires, on the raw list item. */
   private fun assertListItem(
