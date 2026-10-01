@@ -802,6 +802,31 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep24 GET transaction returns a pending_user_transfer_start withdrawal in the SEP-24 shape`() {
+    val account = newAccount()
+    val withdrawalId = createWithdrawal(account)
+    sendRpc(SEP24_PENDING_WITHDRAWAL_RPC, withdrawalId)
+
+    val txn = getTransactionRaw(account, withdrawalId)
+
+    assertEquals(withdrawalId, txn.string("id"))
+    assertEquals("pending_user_transfer_start", txn.string("status"))
+    assertEquals("100", txn.string("amount_in"))
+    assertEquals("stellar:USDC:$USDC_GDQO_ISSUER", txn.string("amount_in_asset"))
+    assertEquals("95", txn.string("amount_out"))
+    assertEquals("iso4217:USD", txn.string("amount_out_asset"))
+    assertEquals("withdrawal", txn.string("kind"))
+    assertEquals(account.accountId, txn.string("from"))
+    val anchorAccount = txn.string("withdraw_anchor_account")
+    assertTrue(runCatching { KeyPair.fromAccountId(anchorAccount) }.isSuccess) {
+      "withdraw_anchor_account must be a valid Stellar account, got $anchorAccount"
+    }
+    assertTrue(txn.string("withdraw_memo").isNotEmpty())
+    assertEquals("id", txn.string("withdraw_memo_type"))
+    assertSep24TransactionSchema(txn, Sep24SchemaCase.WITHDRAWAL_PENDING_USER_TRANSFER_START)
+  }
+
+  @Test
   fun `test sep24 GET transaction resolves a transaction by external_transaction_id`() {
     val depositId = sep24Client.deposit(mapOf("asset_code" to "USDC")).id
 
@@ -1023,6 +1048,36 @@ private const val SEP24_PENDING_DEPOSIT_RPC =
         "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
       },
       "fee_details": { "total": "5", "asset": "iso4217:USD" },
+      "amount_expected": { "amount": "100" }
+    }
+  }
+]
+"""
+
+/**
+ * Moves a fresh SEP-24 withdrawal from `incomplete` to `pending_user_transfer_start`. It sends no
+ * `memo` or `destination_account`: the test profile's SEP-24 deposit info generator is `self`,
+ * which fills them in itself and rejects a request that carries them.
+ */
+private const val SEP24_PENDING_WITHDRAWAL_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "request_onchain_funds",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "pending withdrawal fixture",
+      "amount_in": {
+        "amount": "100",
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      },
+      "amount_out": { "amount": "95", "asset": "iso4217:USD" },
+      "fee_details": {
+        "total": "5",
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      },
       "amount_expected": { "amount": "100" }
     }
   }
