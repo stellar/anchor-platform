@@ -57,11 +57,18 @@ class Sep24TransactionSchemaTests {
            "from": "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG" }"""
     )
 
-  /** The check must fail, and its message must name the offending [field]. */
+  /**
+   * The check must fail with an assertion failure whose message names the offending [field]. When
+   * it accepts the object, or breaks some other way, the failure says which case and field.
+   */
   private fun assertRejected(txn: JsonObject, schemaCase: Sep24SchemaCase, field: String) {
-    val ex = assertThrows<AssertionError> { assertSep24TransactionSchema(txn, schemaCase) }
-    assertTrue(ex.message!!.contains("'$field'")) {
-      "the failure must name '$field', but was: ${ex.message}"
+    val failure = runCatching { assertSep24TransactionSchema(txn, schemaCase) }.exceptionOrNull()
+    assertTrue(failure is AssertionError) {
+      "${schemaCase.name}: expected a rejection naming '$field', but the check " +
+        (failure?.let { "threw $it" } ?: "accepted the object")
+    }
+    assertTrue(failure!!.message!!.contains("'$field'")) {
+      "${schemaCase.name}: the failure must name '$field', but was: ${failure.message}"
     }
   }
 
@@ -329,13 +336,17 @@ class Sep24TransactionSchemaTests {
   private fun withTokenInUrl(txn: JsonObject) =
     txn.with("more_info_url", "\"https://example.com/info?token=SECRET\"")
 
-  private fun assertMessageHasNoSecret(
-    field: String,
-    block: () -> Unit,
-  ) {
+  /**
+   * The failure names [field], still shows [visible] (the URL up to its `?`, so redaction cannot
+   * pass by dropping the URL altogether), and never shows the token.
+   */
+  private fun assertMessageHasNoSecret(field: String, visible: String, block: () -> Unit) {
     val ex = assertThrows<AssertionError> { block() }
     assertTrue(ex.message!!.contains("'$field'")) {
       "the failure must still name '$field', but was: ${ex.message}"
+    }
+    assertTrue(ex.message!!.contains(visible)) {
+      "the failure must still show '$visible', but was: ${ex.message}"
     }
     assertTrue(!ex.message!!.contains("SECRET")) {
       "the failure leaked the more_info_url query: ${ex.message}"
@@ -346,28 +357,36 @@ class Sep24TransactionSchemaTests {
   fun `a missing-field failure does not print the more_info_url query`() {
     val txn = withTokenInUrl(pendingDeposit()).without("amount_in")
 
-    assertMessageHasNoSecret("amount_in") { assertSep24TransactionSchema(txn, DEPOSIT_PENDING) }
+    assertMessageHasNoSecret("amount_in", "https://example.com/info") {
+      assertSep24TransactionSchema(txn, DEPOSIT_PENDING)
+    }
   }
 
   @Test
   fun `a missing-kind failure does not print the more_info_url query`() {
     val txn = withTokenInUrl(pendingDeposit()).without("kind")
 
-    assertMessageHasNoSecret("kind") { assertSep24TransactionSchema(txn, DEPOSIT_PENDING) }
+    assertMessageHasNoSecret("kind", "https://example.com/info") {
+      assertSep24TransactionSchema(txn, DEPOSIT_PENDING)
+    }
   }
 
   @Test
   fun `a more_info_url of the wrong type is reported without its query`() {
     val txn = pendingDeposit().with("more_info_url", "\"/sep24/more_info?token=SECRET\"")
 
-    assertMessageHasNoSecret("more_info_url") { assertSep24TransactionSchema(txn, DEPOSIT_PENDING) }
+    assertMessageHasNoSecret("more_info_url", "/sep24/more_info") {
+      assertSep24TransactionSchema(txn, DEPOSIT_PENDING)
+    }
   }
 
   @Test
   fun `reading a missing string field does not print the more_info_url query`() {
     val txn = withTokenInUrl(pendingDeposit())
 
-    assertMessageHasNoSecret("no_such_field") { requireJsonString(txn, "no_such_field") }
+    assertMessageHasNoSecret("no_such_field", "https://example.com/info") {
+      requireJsonString(txn, "no_such_field")
+    }
   }
 
   @Test
@@ -379,5 +398,27 @@ class Sep24TransactionSchemaTests {
       redactedForLog(pendingDeposit().with("more_info_url", "\"https://example.com/plain\""))
         .contains("\"https://example.com/plain\"")
     )
+  }
+
+  @Test
+  fun `reading a field that is not a string fails naming the field`() {
+    val txn = pendingDeposit().with("amount_in", "100")
+
+    val ex = assertThrows<AssertionError> { requireJsonString(txn, "amount_in") }
+
+    assertTrue(ex.message!!.contains("'amount_in'")) {
+      "the failure must name 'amount_in', but was: ${ex.message}"
+    }
+  }
+
+  @Test
+  fun `redaction leaves the object it was given unchanged`() {
+    val txn = withTokenInUrl(pendingDeposit())
+
+    redactedForLog(txn)
+
+    assertTrue(txn.get("more_info_url").asString.endsWith("?token=SECRET")) {
+      "redactedForLog changed its argument: ${txn.get("more_info_url")}"
+    }
   }
 }
