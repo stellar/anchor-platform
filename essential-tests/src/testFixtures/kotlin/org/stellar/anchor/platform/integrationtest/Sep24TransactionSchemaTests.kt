@@ -214,4 +214,113 @@ class Sep24TransactionSchemaTests {
   fun `rejects a deposit checked as a withdrawal`() {
     assertRejected(pendingDeposit(), WITHDRAWAL_PENDING_USER_TRANSFER_START, "kind")
   }
+
+  // Every required field of every case, written out from the spec's schema table. The lists are
+  // deliberately not read from the implementation: a check that dropped a field from its own list
+  // would otherwise agree with a test that read the same list.
+
+  private val alwaysRequired = listOf("id", "kind", "status", "more_info_url", "started_at")
+  private val pendingAmounts =
+    listOf("amount_in", "amount_in_asset", "amount_out", "amount_out_asset")
+  private val completedFields = listOf("stellar_transaction_id", "completed_at")
+  private val withdrawalPendingFields =
+    pendingAmounts +
+      listOf("withdraw_memo", "withdraw_memo_type", "withdraw_anchor_account", "from")
+
+  private fun completed(txn: JsonObject) =
+    txn
+      .with("status", "\"completed\"")
+      .with("stellar_transaction_id", "\"abc123\"")
+      .with("completed_at", "\"2026-10-01T12:05:00Z\"")
+
+  private fun compliantFixture(schemaCase: Sep24SchemaCase): JsonObject =
+    when (schemaCase) {
+      DEPOSIT_INCOMPLETE -> incompleteDeposit()
+      DEPOSIT_PENDING -> pendingDeposit()
+      DEPOSIT_COMPLETED -> completed(pendingDeposit())
+      WITHDRAWAL_INCOMPLETE -> incompleteWithdrawal()
+      WITHDRAWAL_PENDING_USER_TRANSFER_START -> pendingWithdrawal()
+      WITHDRAWAL_COMPLETED -> completed(pendingWithdrawal())
+    }
+
+  private val requiredByCase: Map<Sep24SchemaCase, List<String>> =
+    mapOf(
+      DEPOSIT_INCOMPLETE to alwaysRequired + "to",
+      DEPOSIT_PENDING to alwaysRequired + pendingAmounts + "to",
+      DEPOSIT_COMPLETED to alwaysRequired + pendingAmounts + "to" + completedFields,
+      WITHDRAWAL_INCOMPLETE to alwaysRequired + "from",
+      WITHDRAWAL_PENDING_USER_TRANSFER_START to alwaysRequired + withdrawalPendingFields,
+      WITHDRAWAL_COMPLETED to alwaysRequired + withdrawalPendingFields + completedFields,
+    )
+
+  @Test
+  fun `accepts a compliant fixture for every case, so the removal tests below are not vacuous`() {
+    Sep24SchemaCase.values().forEach { schemaCase ->
+      assertSep24TransactionSchema(compliantFixture(schemaCase), schemaCase)
+    }
+  }
+
+  @Test
+  fun `rejects the removal of each required field of every case`() {
+    Sep24SchemaCase.values().forEach { schemaCase ->
+      requiredByCase.getValue(schemaCase).forEach { field ->
+        assertRejected(compliantFixture(schemaCase).without(field), schemaCase, field)
+      }
+    }
+  }
+
+  @Test
+  fun `rejects a null from on a withdrawal because from is not nullable there`() {
+    assertRejected(
+      pendingWithdrawal().with("from", "null"),
+      WITHDRAWAL_PENDING_USER_TRANSFER_START,
+      "from",
+    )
+  }
+
+  @Test
+  fun `accepts a null from on a deposit and a null to on a withdrawal`() {
+    assertSep24TransactionSchema(pendingDeposit().with("from", "null"), DEPOSIT_PENDING)
+    assertSep24TransactionSchema(
+      pendingWithdrawal().with("to", "null"),
+      WITHDRAWAL_PENDING_USER_TRANSFER_START,
+    )
+  }
+
+  @Test
+  fun `rejects an id sent as a number`() {
+    assertRejected(pendingDeposit().with("id", "42"), DEPOSIT_PENDING, "id")
+  }
+
+  @Test
+  fun `rejects a null more_info_url`() {
+    assertRejected(pendingDeposit().with("more_info_url", "null"), DEPOSIT_PENDING, "more_info_url")
+  }
+
+  @Test
+  fun `accepts each of the 15 SEP-24 statuses`() {
+    listOf(
+        "incomplete",
+        "pending_anchor",
+        "pending_external",
+        "pending_stellar",
+        "pending_trust",
+        "pending_user",
+        "pending_user_transfer_start",
+        "pending_user_transfer_complete",
+        "completed",
+        "refunded",
+        "expired",
+        "no_market",
+        "too_small",
+        "too_large",
+        "error",
+      )
+      .forEach { status ->
+        assertSep24TransactionSchema(
+          pendingDeposit().with("status", "\"$status\""),
+          DEPOSIT_PENDING,
+        )
+      }
+  }
 }
