@@ -827,6 +827,23 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep24 more_info_url of a deposit is served as HTML`() {
+    val account = newAccount()
+    val moreInfoUrl = getTransactionRaw(account, createDeposit(account)).string("more_info_url")
+    // The query carries the URL's JWT, so failure messages name only the part before it.
+    val shown = moreInfoUrl.substringBefore('?')
+
+    // A plain GET, as a wallet opens it: the URL carries its own token, so no Authorization header.
+    http.newCall(Request.Builder().url(moreInfoUrl).get().build()).execute().use { response ->
+      assertEquals(200, response.code) { "GET $shown answered ${response.code}" }
+      val contentType = response.header("Content-Type")
+      assertTrue(contentType != null && contentType.startsWith("text/html")) {
+        "expected $shown to be served as text/html but got Content-Type: $contentType"
+      }
+    }
+  }
+
+  @Test
   fun `test sep24 GET transaction resolves a transaction by external_transaction_id`() {
     val depositId = sep24Client.deposit(mapOf("asset_code" to "USDC")).id
 
