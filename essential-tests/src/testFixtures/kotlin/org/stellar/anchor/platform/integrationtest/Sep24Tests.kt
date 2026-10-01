@@ -714,6 +714,28 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep24 TOML has a valid transfer server URL`() {
+    // No fallback to TRANSFER_SERVER: stellar-anchor-tests accepts that for anchors that omit the
+    // SEP-24 key, but AP's own TOML sets it, so a fallback would hide its removal.
+    val transferServer = toml.getString("TRANSFER_SERVER_SEP0024")
+
+    assertTrue(!transferServer.isNullOrBlank()) {
+      "stellar.toml must carry a non-blank TRANSFER_SERVER_SEP0024"
+    }
+    val uri = URI(transferServer)
+    assertTrue(uri.isAbsolute) {
+      "TRANSFER_SERVER_SEP0024 must be an absolute URL: $transferServer"
+    }
+    val localHttpHosts = setOf("localhost", "host.docker.internal")
+    assertTrue(uri.scheme == "https" || (uri.scheme == "http" && uri.host in localHttpHosts)) {
+      "TRANSFER_SERVER_SEP0024 must use https, or http only on $localHttpHosts: $transferServer"
+    }
+    assertFalse(transferServer.endsWith("/")) {
+      "TRANSFER_SERVER_SEP0024 must not end with '/': $transferServer"
+    }
+  }
+
+  @Test
   fun `test sep24 GET transaction resolves a transaction by external_transaction_id`() {
     val depositId = sep24Client.deposit(mapOf("asset_code" to "USDC")).id
 
