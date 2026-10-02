@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.MoreInfoUrlConstructor
 import org.stellar.anchor.TestConstants.Companion.TEST_ACCOUNT
@@ -720,6 +721,30 @@ internal class Sep24ServiceTest {
   }
 
   @Test
+  fun `test deposit rejects an unknown asset_code as unsupported`() {
+    val request = createTestTransactionRequest()
+    request["asset_code"] = "USDC_NA"
+
+    val ex =
+      assertThrows<SepValidationException> { sep24Service.deposit(createTestWebAuthJwt(), request) }
+
+    assertEquals("invalid operation for asset USDC_NA", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test deposit rejects a non-Stellar asset_code`() {
+    val request = createTestTransactionRequest()
+    request["asset_code"] = "USD"
+    request["asset_issuer"] = ""
+
+    val ex =
+      assertThrows<SepValidationException> { sep24Service.deposit(createTestWebAuthJwt(), request) }
+
+    assertEquals("The asset_code (USD) of the deposit request must be a stellar asset.", ex.message)
+  }
+
+  @Test
   fun `test deposit with bad requests`() {
     assertThrows<SepValidationException> {
       val request = createTestTransactionRequest()
@@ -784,7 +809,7 @@ internal class Sep24ServiceTest {
   @ParameterizedTest
   @ValueSource(strings = ["deposit", "withdrawal"])
   fun `test find transactions`(kind: String) {
-    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any()) } returns
+    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any(), any(), any()) } returns
       createTestTransactions(kind)
     val gtr =
       GetTransactionsRequest.of(TEST_ASSET, kind, 10, "2021-12-20T19:30:58+00:00", "1", "en-US")
@@ -814,13 +839,45 @@ internal class Sep24ServiceTest {
       ["stellar:native", "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"]
   )
   fun `test find transactions with different asset code types`(assetCode: String) {
-    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any()) } returns
+    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any(), any(), any()) } returns
       createTestTransactions("deposit")
     val gtr =
       GetTransactionsRequest.of(assetCode, "deposit", 10, "2021-12-20T19:30:58+00:00", "1", "en-US")
     val response = sep24Service.findTransactions(createTestWebAuthJwt(), gtr)
 
     assertEquals(response.transactions.size, 2)
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+    "USDC,USDC,",
+    "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP,USDC,GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+    "stellar:native,native,",
+  )
+  fun `test find transactions hands the store the parsed asset code and issuer`(
+    requested: String,
+    expectedCode: String,
+    expectedIssuer: String?,
+  ) {
+    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any(), any(), any()) } returns
+      emptyList()
+    val gtr = GetTransactionsRequest.of(requested, "deposit", 10, null, null, "en-US")
+
+    sep24Service.findTransactions(createTestWebAuthJwt(), gtr)
+
+    verify(exactly = 1) {
+      txnStore.findTransactions(TEST_ACCOUNT, any(), expectedCode, expectedIssuer, any())
+    }
+  }
+
+  @Test
+  fun `test find transactions rejects a null request`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Service.findTransactions(createTestWebAuthJwt(), null)
+      }
+
+    assertEquals("missing request object", ex.message)
   }
 
   @ParameterizedTest
@@ -892,9 +949,11 @@ internal class Sep24ServiceTest {
     every { txnStore.findByTransactionId(any()) } returns testTxn
 
     val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
-    assertThrows<SepNotFoundException> {
-      sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
-    }
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
+      }
+    assertEquals("transaction not found", ex.message)
   }
 
   @Test
@@ -904,7 +963,11 @@ internal class Sep24ServiceTest {
     every { txnStore.findByTransactionId(any()) } returns testTxn
 
     val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
-    assertThrows<SepNotFoundException> { sep24Service.findTransaction(createTestWebAuthJwt(), gtr) }
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Service.findTransaction(createTestWebAuthJwt(), gtr)
+      }
+    assertEquals("transaction not found", ex.message)
   }
 
   @Test
@@ -914,9 +977,11 @@ internal class Sep24ServiceTest {
     every { txnStore.findByTransactionId(any()) } returns testTxn
 
     val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
-    assertThrows<SepNotFoundException> {
-      sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
-    }
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Service.findTransaction(createTestWebAuthJwtWithMemo(), gtr)
+      }
+    assertEquals("transaction not found", ex.message)
   }
 
   @Test
@@ -938,7 +1003,11 @@ internal class Sep24ServiceTest {
     every { txnStore.findByTransactionId(any()) } returns testTxn
 
     val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
-    assertThrows<SepNotFoundException> { sep24Service.findTransaction(createTestWebAuthJwt(), gtr) }
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Service.findTransaction(createTestWebAuthJwt(), gtr)
+      }
+    assertEquals("transaction not found", ex.message)
   }
 
   @ParameterizedTest
@@ -959,10 +1028,12 @@ internal class Sep24ServiceTest {
     }
 
     every { txnStore.findByTransactionId(any()) } returns null
-    assertThrows<SepNotFoundException> {
-      val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
-      sep24Service.findTransaction(createTestWebAuthJwt(), gtr)
-    }
+    val notFound =
+      assertThrows<SepNotFoundException> {
+        val gtr = GetTransactionRequest(TEST_TRANSACTION_ID_0, null, null, "en-US")
+        sep24Service.findTransaction(createTestWebAuthJwt(), gtr)
+      }
+    assertEquals("transaction not found", notFound.message)
 
     val badTxn = createTestTransaction(kind)
     badTxn.kind = "na"
@@ -1059,7 +1130,8 @@ internal class Sep24ServiceTest {
       sep24Service.findTransaction(muxedAJwt, gtr).transaction.id,
     )
     // muxed-B (same underlying G) cannot
-    assertThrows<SepNotFoundException> { sep24Service.findTransaction(muxedBJwt, gtr) }
+    val ex = assertThrows<SepNotFoundException> { sep24Service.findTransaction(muxedBJwt, gtr) }
+    assertEquals("transaction not found", ex.message)
   }
 
   @Test
@@ -1084,17 +1156,19 @@ internal class Sep24ServiceTest {
   @Test
   fun `test find transactions only returns rows for own muxed sub-id`() {
     val muxedAJwt = TestHelper.createMuxedWebAuthJwt(TEST_ACCOUNT, 11L)
-    every { txnStore.findTransactions(muxedAJwt.muxedAccount, null, any()) } returns
+    every { txnStore.findTransactions(muxedAJwt.muxedAccount, null, any(), any(), any()) } returns
       createTestTransactions("deposit")
-    every { txnStore.findTransactions(TEST_ACCOUNT, null, any()) } returns emptyList()
+    every { txnStore.findTransactions(TEST_ACCOUNT, null, any(), any(), any()) } returns emptyList()
 
     val request = GetTransactionsRequest()
     request.assetCode = TEST_ASSET
     val response = sep24Service.findTransactions(muxedAJwt, request)
 
     assertEquals(2, response.transactions.size)
-    verify(exactly = 1) { txnStore.findTransactions(muxedAJwt.muxedAccount, null, any()) }
-    verify(exactly = 0) { txnStore.findTransactions(TEST_ACCOUNT, null, any()) }
+    verify(exactly = 1) {
+      txnStore.findTransactions(muxedAJwt.muxedAccount, null, any(), any(), any())
+    }
+    verify(exactly = 0) { txnStore.findTransactions(TEST_ACCOUNT, null, any(), any(), any()) }
   }
 
   private fun createTestWebAuthJwt(): WebAuthJwt {

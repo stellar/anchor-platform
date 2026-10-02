@@ -307,6 +307,21 @@ public class ClientStatusCallbackHandler extends EventHandler {
     return sep6Txn;
   }
 
+  /**
+   * The event only carries the asset the wallet asked for as the asset of {@code amount_expected}
+   * (built from the stored request asset by {@code TransactionMapper}), so the request asset that
+   * {@link org.stellar.anchor.sep24.Sep24Helper#fromTxn} resolves the refund amounts with is read
+   * back from there. Without it that lookup gets no asset and building the payload of a transaction
+   * with refund payments fails, so its callback is never delivered.
+   */
+  private static void setRequestAsset(JdbcSep24Transaction txn, String assetId) {
+    if (assetId == null) return;
+    String[] parts = assetId.split(":");
+    if (parts.length < 2 || !"stellar".equals(parts[0])) return;
+    txn.setRequestAssetCode(parts[1]);
+    if (parts.length > 2) txn.setRequestAssetIssuer(parts[2]);
+  }
+
   static Sep24Transaction fromSep24Txn(GetTransactionResponse txn) {
     JdbcSep24Transaction sep24Txn = new JdbcSep24Transaction();
     sep24Txn.setId(txn.getId());
@@ -323,6 +338,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
     }
     if (txn.getAmountExpected() != null) {
       sep24Txn.setAmountExpected(txn.getAmountExpected().getAmount());
+      setRequestAsset(sep24Txn, txn.getAmountExpected().getAsset());
     }
     if (txn.getFeeDetails() != null) {
       sep24Txn.setFeeDetails(txn.getFeeDetails());
