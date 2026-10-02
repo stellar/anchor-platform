@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.integrationtest
 
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
@@ -14,12 +15,15 @@ import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.springframework.web.util.UriComponentsBuilder
 import org.stellar.anchor.api.exception.SepException
+import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
+import org.stellar.anchor.client.Sep24Client
 import org.stellar.anchor.platform.*
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.StringHelper.json
@@ -277,7 +281,153 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
       assertThrows<SepException> { platformApiClient.getTransaction(txnId) }
     }
   }
+
+  private val sep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), token.token)
+  private val noAuthSep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), null)
+
+  /**
+   * A 400 body carries `{"error": "..."}`; [SepClient.handleResponse] preserves it raw rather than
+   * parsing it, so tests that need the exact message extract it themselves.
+   */
+  private fun errorMessage(ex: SepException): String =
+    JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+
+  @Test
+  fun `test sep24 deposit rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> { noAuthSep24Client.deposit(validInteractiveRequest) }
+  }
+
+  @Test
+  fun `test sep24 deposit rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.deposit(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 deposit rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.deposit(validInteractiveRequest + ("account" to "not a valid account"))
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 deposit rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.deposit(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart deposit rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.depositMultipart(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart deposit rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.depositMultipart(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart deposit rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.depositMultipart(validInteractiveRequest + ("account" to "not a valid account"))
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdrawMultipart(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdrawMultipart(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdrawMultipart(
+          validInteractiveRequest + ("account" to "not a valid account")
+        )
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> { noAuthSep24Client.withdraw(validInteractiveRequest) }
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdraw(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdraw(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdraw(validInteractiveRequest + ("account" to "not a valid account"))
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
 }
+
+/** A request the interactive endpoints accept; each negative test breaks exactly one field. */
+private val validInteractiveRequest =
+  mapOf(
+    "asset_code" to "USDC",
+    "asset_issuer" to "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+    "account" to "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+  )
 
 private const val withdrawRequest =
   """{
