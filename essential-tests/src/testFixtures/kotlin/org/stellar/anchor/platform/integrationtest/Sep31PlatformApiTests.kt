@@ -1,5 +1,7 @@
 package org.stellar.anchor.platform.integrationtest
 
+import io.ktor.http.Url
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
@@ -7,9 +9,12 @@ import org.junit.jupiter.api.TestMethodOrder
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerRequest
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.reference.client.AnchorReferenceServerClient
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class Sep31PlatformApiTests : PlatformApiTests() {
+  private val anchorReferenceServerClient =
+    AnchorReferenceServerClient(Url(config.env["reference.server.url"]!!))
   /**
    * 1. pending_receiver -> request_onchain_funds (called by reference server Sep31EventProcessor)
    * 2. pending_sender -> notify_onchain_funds_received
@@ -61,6 +66,12 @@ class Sep31PlatformApiTests : PlatformApiTests() {
 
     val receiveRequest = gson.fromJson(receiveRequestJson, Sep31PostTransactionRequest::class.java)
     val receiveResponse = sep31Client.postTransaction(receiveRequest)
+
+    // This flow drives the transaction through RPC calls itself (including an error/recovery
+    // path the reference server doesn't know about), so it must opt out of the reference server's
+    // own automatic advancement -- otherwise both race to advance the same transaction. The
+    // creation reaction (request_onchain_funds) still runs: it is what the wait below relies on.
+    runBlocking { anchorReferenceServerClient.skipSep31AutoAdvance(receiveResponse.id) }
 
     val maxAttempts = 60
     for (attempt in 1..maxAttempts) {
@@ -148,7 +159,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_RESPONSES =
               },
               "amount_out": {},
               "fee_details": {
-                "total": "1",
+                "total": "1.00",
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "transfer_received_at": "2024-06-13T20:02:49Z",
@@ -199,7 +210,7 @@ private const val SEP_31_RECEIVE_REFUNDED_SHORT_FLOW_ACTION_RESPONSES =
               },
               "amount_out": {},
               "fee_details": {
-                "total": "1",
+                "total": "1.00",
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "transfer_received_at": "2024-06-13T20:02:49Z",
@@ -343,7 +354,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               },
               "amount_out": {},
               "fee_details": {
-                "total": "1",
+                "total": "1.00",
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "started_at": "2024-06-25T20:33:17.013738Z",
@@ -396,7 +407,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               },
               "amount_out": {},
               "fee_details": {
-                "total": "1",
+                "total": "1.00",
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "started_at": "2024-06-25T20:33:17.013738Z",
@@ -449,7 +460,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               },
               "amount_out": {},
               "fee_details": {
-                "total": "1",
+                "total": "1.00",
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "started_at": "2024-06-25T20:33:17.013738Z",
@@ -502,7 +513,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               },
               "amount_out": {},
               "fee_details": {
-                "total": "1",
+                "total": "1.00",
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "started_at": "2024-06-25T20:33:17.013738Z",
@@ -555,7 +566,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               },
               "amount_out": {},
               "fee_details": {
-                "total": "1",
+                "total": "1.00",
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "started_at": "2024-06-25T20:33:17.013738Z",
@@ -609,7 +620,7 @@ private const val SEP_31_RECEIVE_COMPLETE_FULL_WITH_RECOVERY_FLOW_ACTION_RESPONS
               },
               "amount_out": {},
               "fee_details": {
-                "total": "1",
+                "total": "1.00",
                 "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
               },
               "started_at": "2024-06-25T20:33:17.013738Z",

@@ -48,7 +48,7 @@ class Sep12ServiceTest {
       "MBFZNZTFSI6TWLVAID7VOLCIFX2PMUOS2X7U6H4TNK4PAPSHPWMMUAAAAAAAAAPCIA2IM"
     private const val CLIENT_DOMAIN = "demo-wallet.stellar.org"
     private const val TEST_HOST_URL = "http://localhost:8080"
-    private const val TEST_TRANSACTION_ID = "test-transaction-id"
+    private const val TEST_TRANSACTION_ID = "9a0a0f9c-3b1c-4f1e-8d3a-2b6f4f0e7c11"
     private const val wantedSep12GetCustomerResponse =
       """
 {
@@ -253,6 +253,32 @@ class Sep12ServiceTest {
     val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
     assertEquals("The transaction specified does not exist", ex.message)
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "../clients",
+        "../../clients/some-wallet",
+        "../transactions?sep=24&page_size=2000000000",
+        "../health",
+        "..",
+        "not-a-uuid",
+        "9a0a0f9c-3b1c-4f1e-8d3a-2b6f4f0e7c11/../../clients",
+      ]
+  )
+  fun `test transaction_id that is not a transaction id is rejected without calling the platform`(
+    transactionId: String
+  ) {
+    val request = Sep12GetCustomerRequest.builder().transactionId(transactionId).build()
+    val jwtToken = createJwtToken(TEST_ACCOUNT)
+
+    val ex: SepException = assertThrows { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("The transaction specified does not exist", ex.message)
+    verify(exactly = 0) { platformApiClient.getTransaction(any()) }
   }
 
   @Test

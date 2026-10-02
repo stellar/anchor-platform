@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
@@ -22,6 +23,7 @@ import org.stellar.anchor.platform.config.PlatformApiConfig;
 import org.stellar.anchor.platform.config.PlatformServerConfig;
 import org.stellar.anchor.platform.data.JdbcClientConfigRepo;
 import org.stellar.anchor.platform.service.*;
+import org.stellar.anchor.platform.utils.RequestBodySizeLimitFilter;
 import org.stellar.anchor.sep24.Sep24DepositInfoGenerator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31DepositInfoGenerator;
@@ -62,6 +64,25 @@ public class PlatformServerBeans {
 
     FilterRegistrationBean<Filter> registrationBean = new FilterRegistrationBean<>();
     registrationBean.setFilter(anchorToPlatformFilter);
+    return registrationBean;
+  }
+
+  @Bean
+  public FilterRegistrationBean<RequestBodySizeLimitFilter> requestBodySizeLimitFilter(
+      PlatformServerConfig platformServerConfig) throws InvalidConfigException {
+    long maxRequestBodySize = platformServerConfig.getMaxRequestBodySize();
+    if (maxRequestBodySize <= 0) {
+      throw new InvalidConfigException(
+          "platform_server.max_request_body_size must be a positive number of bytes");
+    }
+    if (platformServerConfig.getMaxPatchRecords() <= 0) {
+      throw new InvalidConfigException("platform_server.max_patch_records must be positive");
+    }
+    FilterRegistrationBean<RequestBodySizeLimitFilter> registrationBean =
+        new FilterRegistrationBean<>();
+    registrationBean.setFilter(new RequestBodySizeLimitFilter(maxRequestBodySize));
+    registrationBean.addUrlPatterns("/*");
+    registrationBean.setOrder(Ordered.HIGHEST_PRECEDENCE);
     return registrationBean;
   }
 

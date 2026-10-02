@@ -352,6 +352,15 @@ public interface Sep6Transaction extends SepTransaction {
 
   void setInstructions(Map<String, InstructionField> instructions);
 
+  /**
+   * Values a wallet supplied through <code>PATCH /transactions/:id</code>, keyed by field name.
+   *
+   * @return the wallet-supplied field values.
+   */
+  Map<String, String> getFields();
+
+  void setFields(Map<String, String> fields);
+
   enum Kind {
     DEPOSIT("deposit"),
     WITHDRAWAL("withdrawal"),

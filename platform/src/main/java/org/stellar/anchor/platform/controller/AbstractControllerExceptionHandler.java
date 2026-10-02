@@ -6,6 +6,7 @@ import static org.stellar.anchor.util.Log.*;
 import io.sentry.SentryLevel;
 import jakarta.transaction.NotSupportedException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -14,6 +15,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.sep.CustomerInfoNeededResponse;
 import org.stellar.anchor.api.sep.SepExceptionResponse;
+import org.stellar.anchor.platform.utils.RequestBodySizeLimitFilter;
 
 public abstract class AbstractControllerExceptionHandler {
   @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -32,10 +34,17 @@ public abstract class AbstractControllerExceptionHandler {
   }
 
   @ExceptionHandler(HttpMessageNotReadableException.class)
-  @ResponseStatus(value = HttpStatus.BAD_REQUEST)
-  public SepExceptionResponse handleRandomException(HttpMessageNotReadableException ex) {
+  public ResponseEntity<SepExceptionResponse> handleRandomException(
+      HttpMessageNotReadableException ex) {
+    for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+      if (cause instanceof RequestBodySizeLimitFilter.RequestBodyTooLargeException) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+            .body(new SepExceptionResponse("The request body is too large."));
+      }
+    }
     debugF("Spring is unable to read HTTP message: {}", ex.getMessage());
-    return new SepExceptionResponse("Your request body is wrong in some way.");
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(new SepExceptionResponse("Your request body is wrong in some way."));
   }
 
   @ResponseStatus(HttpStatus.FORBIDDEN)

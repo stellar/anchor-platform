@@ -7,6 +7,7 @@ import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import javax.net.ssl.SSLProtocolException
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -207,6 +208,47 @@ class StellarPaymentObserverTest {
 
     verify(exactly = 0) { paymentStreamerCursorStore.saveHorizonCursor(any()) }
     assertEquals(ObserverStatus.PUBLISHER_ERROR, observer.status)
+  }
+
+  @Test
+  fun `processOperation skips an operation whose transaction cannot be decoded and keeps running`() {
+    val observer =
+      spyk(
+        HorizonPaymentObserver(
+          Horizon(TEST_HORIZON_URI),
+          stellarPaymentObserverConfig,
+          null,
+          paymentObservingAccountsManager,
+          paymentStreamerCursorStore,
+        )
+      )
+    val operationResponse = mockk<OperationResponse>(relaxed = true)
+    every { operationResponse.pagingToken } returns "999"
+    every { observer.toPaymentTransferEvent(operationResponse) } throws
+      org.stellar.anchor.api.exception.LedgerDecodeException(
+        "Unable to parse transaction envelope",
+        IllegalArgumentException("Unknown enum value: 22"),
+      )
+
+    val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+    io.micrometer.core.instrument.Metrics.addRegistry(registry)
+    try {
+      observer.processOperation(operationResponse)
+
+      verify(exactly = 1) { paymentStreamerCursorStore.saveHorizonCursor("999") }
+      assertNotEquals(ObserverStatus.PUBLISHER_ERROR, observer.status)
+      assertEquals(
+        1.0,
+        registry
+          .counter(
+            org.stellar.anchor.platform.service.AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED
+              .toString()
+          )
+          .count(),
+      )
+    } finally {
+      io.micrometer.core.instrument.Metrics.removeRegistry(registry)
+    }
   }
 
   @Test
