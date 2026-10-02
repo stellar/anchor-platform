@@ -35,7 +35,36 @@ public class ExchangeAmountsCalculator {
   public Amounts calculateFromQuote(
       String quoteId, AssetInfo sellAsset, AssetInfo buyAsset, String sellAmount)
       throws AnchorException {
-    Sep38Quote quote = validateQuoteAgainstRequestInfo(quoteId, sellAsset, buyAsset, sellAmount);
+    return calculateFromQuote(quoteId, sellAsset, buyAsset, sellAmount, null, null);
+  }
+
+  /**
+   * Calculates the amounts from a saved quote, also checking the request's funding method against
+   * the quote's delivery method. Only SEP-6 passes delivery methods; SEP-24 and SEP-31 keep using
+   * the 4-arg overload, which delegates here with {@code null, null} (no funding-method check).
+   *
+   * @param quoteId The quote ID
+   * @param sellAsset The asset the user is selling
+   * @param buyAsset The asset the user is buying (the request's destination asset)
+   * @param sellAmount The amount the user is selling
+   * @param sellDeliveryMethod The funding method for a deposit-exchange request, checked against
+   *     the quote's {@code sellDeliveryMethod}; null to skip the check
+   * @param buyDeliveryMethod The funding method for a withdraw-exchange request, checked against
+   *     the quote's {@code buyDeliveryMethod}; null to skip the check
+   * @return The amounts
+   * @throws AnchorException if the quote is invalid
+   */
+  public Amounts calculateFromQuote(
+      String quoteId,
+      AssetInfo sellAsset,
+      AssetInfo buyAsset,
+      String sellAmount,
+      String sellDeliveryMethod,
+      String buyDeliveryMethod)
+      throws AnchorException {
+    Sep38Quote quote =
+        validateQuoteAgainstRequestInfo(
+            quoteId, sellAsset, buyAsset, sellAmount, sellDeliveryMethod, buyDeliveryMethod);
     return Amounts.builder()
         .amountIn(quote.getSellAmount())
         .amountInAsset(quote.getSellAsset())
@@ -58,6 +87,33 @@ public class ExchangeAmountsCalculator {
    */
   public Sep38Quote validateQuoteAgainstRequestInfo(
       String quoteId, AssetInfo sellAsset, AssetInfo buyAsset, String sellAmount)
+      throws AnchorException {
+    return validateQuoteAgainstRequestInfo(quoteId, sellAsset, buyAsset, sellAmount, null, null);
+  }
+
+  /**
+   * validate the quote info against Sep6 or Sep24 or request info, also checking the request's
+   * funding method against the quote's delivery method. Only SEP-6 passes delivery methods.
+   *
+   * @param quoteId The quote ID
+   * @param sellAsset The asset the user is selling. It can be null for sep24 deposit request
+   * @param buyAsset The amount the user is buying. It can be null for sep24 withdraw request
+   * @param sellAmount The amount the user is selling. It can be null for sep24 deposit and withdraw
+   *     requests
+   * @param sellDeliveryMethod The funding method for a deposit-exchange request, checked against
+   *     the quote's {@code sellDeliveryMethod}; null to skip the check
+   * @param buyDeliveryMethod The funding method for a withdraw-exchange request, checked against
+   *     the quote's {@code buyDeliveryMethod}; null to skip the check
+   * @return The quote
+   * @throws AnchorException if the quote is invalid
+   */
+  public Sep38Quote validateQuoteAgainstRequestInfo(
+      String quoteId,
+      AssetInfo sellAsset,
+      AssetInfo buyAsset,
+      String sellAmount,
+      String sellDeliveryMethod,
+      String buyDeliveryMethod)
       throws AnchorException {
     Sep38Quote quote = sep38QuoteStore.findByQuoteId(quoteId);
     if (quote == null) {
@@ -92,6 +148,24 @@ public class ExchangeAmountsCalculator {
           String.format(
               "amount(%s) does not match quote sell amount(%s)",
               sellAmount, quote.getSellAmount()));
+    }
+
+    if (sellDeliveryMethod != null
+        && !StringHelper.isEmpty(quote.getSellDeliveryMethod())
+        && !sellDeliveryMethod.equals(quote.getSellDeliveryMethod())) {
+      throw new BadRequestException(
+          String.format(
+              "funding_method(%s) does not match quote sell delivery method(%s)",
+              sellDeliveryMethod, quote.getSellDeliveryMethod()));
+    }
+
+    if (buyDeliveryMethod != null
+        && !StringHelper.isEmpty(quote.getBuyDeliveryMethod())
+        && !buyDeliveryMethod.equals(quote.getBuyDeliveryMethod())) {
+      throw new BadRequestException(
+          String.format(
+              "funding_method(%s) does not match quote buy delivery method(%s)",
+              buyDeliveryMethod, quote.getBuyDeliveryMethod()));
     }
 
     FeeDetails fee = quote.getFee();
