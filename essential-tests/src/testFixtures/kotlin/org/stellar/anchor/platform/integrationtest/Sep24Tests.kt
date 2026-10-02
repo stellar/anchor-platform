@@ -1,12 +1,15 @@
 package org.stellar.anchor.platform.integrationtest
 
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode.SAME_THREAD
@@ -14,12 +17,17 @@ import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.springframework.web.util.UriComponentsBuilder
 import org.stellar.anchor.api.exception.SepException
+import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.SepNotFoundException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.PatchTransactionsRequest
+import org.stellar.anchor.api.rpc.RpcRequest
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
+import org.stellar.anchor.client.Sep24Client
 import org.stellar.anchor.platform.*
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.StringHelper.json
@@ -277,7 +285,259 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
       assertThrows<SepException> { platformApiClient.getTransaction(txnId) }
     }
   }
+
+  private val sep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), token.token)
+  private val noAuthSep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), null)
+
+  /**
+   * A 400 body carries `{"error": "..."}`; [SepClient.handleResponse] preserves it raw rather than
+   * parsing it, so tests that need the exact message extract it themselves.
+   */
+  private fun errorMessage(ex: SepException): String =
+    JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+
+  @Test
+  fun `test sep24 GET transaction rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> {
+      noAuthSep24Client.getTransaction(mapOf("id" to UUID.randomUUID().toString()))
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transaction rejects request naming no transaction`() {
+    val ex = assertThrows<SepValidationException> { sep24Client.getTransaction(mapOf()) }
+    assertEquals(
+      "One of id, stellar_transaction_id or external_transaction_id is required.",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns 404 for an unknown id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Client.getTransaction(mapOf("id" to UUID.randomUUID().toString()))
+      }
+    assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns 404 for an unknown external_transaction_id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Client.getTransaction(
+          mapOf("external_transaction_id" to "unknown-${UUID.randomUUID()}")
+        )
+      }
+    assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns 404 for an unknown stellar_transaction_id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Client.getTransaction(
+          mapOf("stellar_transaction_id" to "unknown-${UUID.randomUUID()}")
+        )
+      }
+    assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep24 GET transaction resolves a transaction by external_transaction_id`() {
+    val depositId = sep24Client.deposit(mapOf("asset_code" to "USDC")).id
+
+    val externalTransactionId = "sep24-404s-external-${UUID.randomUUID()}"
+    val rpcActionRequests: List<RpcRequest> =
+      gson.fromJson(
+        SEP24_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS.replace("%TX_ID%", depositId)
+          .replace("%EXTERNAL_TRANSACTION_ID%", externalTransactionId),
+        object : TypeToken<List<RpcRequest>>() {}.type,
+      )
+    platformApiClient.sendRpcRequest(rpcActionRequests).use { response ->
+      assertTrue(response.isSuccessful) { "RPC setup failed with HTTP ${response.code}" }
+    }
+
+    val found =
+      sep24Client.getTransaction(mapOf("external_transaction_id" to externalTransactionId))
+    assertEquals(depositId, found.transaction.id)
+  }
+
+  @Test
+  fun `test sep24 deposit rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> { noAuthSep24Client.deposit(validInteractiveRequest) }
+  }
+
+  @Test
+  fun `test sep24 deposit rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.deposit(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 deposit rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.deposit(validInteractiveRequest + ("account" to "not a valid account"))
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 deposit rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.deposit(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart deposit rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.depositMultipart(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart deposit rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.depositMultipart(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart deposit rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.depositMultipart(validInteractiveRequest + ("account" to "not a valid account"))
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdrawMultipart(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdrawMultipart(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdrawMultipart(
+          validInteractiveRequest + ("account" to "not a valid account")
+        )
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> { noAuthSep24Client.withdraw(validInteractiveRequest) }
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdraw(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdraw(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdraw(validInteractiveRequest + ("account" to "not a valid account"))
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
 }
+
+/** A request the interactive endpoints accept; each negative test breaks exactly one field. */
+private val validInteractiveRequest =
+  mapOf(
+    "asset_code" to "USDC",
+    "asset_issuer" to "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+    "account" to "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+  )
+
+/**
+ * The first two steps of `SEP_24_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_REQUESTS`
+ * (Sep24PlatformApiTests.kt), with the external transaction id left to the caller so each run looks
+ * up a value no other test uses.
+ */
+private const val SEP24_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS =
+  """
+[
+  {
+    "id": "1",
+    "method": "request_offchain_funds",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "test message 1",
+      "amount_in": { "amount": "100", "asset": "iso4217:USD" },
+      "amount_out": {
+        "amount": "95",
+        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+      },
+      "fee_details": { "total": "5", "asset": "iso4217:USD" },
+      "amount_expected": { "amount": "100" }
+    }
+  },
+  {
+    "id": "2",
+    "method": "notify_offchain_funds_received",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "test message 2",
+      "funds_received_at": "2023-07-04T12:34:56Z",
+      "external_transaction_id": "%EXTERNAL_TRANSACTION_ID%",
+      "amount_in": { "amount": "100" }
+    }
+  }
+]
+"""
 
 private const val withdrawRequest =
   """{
