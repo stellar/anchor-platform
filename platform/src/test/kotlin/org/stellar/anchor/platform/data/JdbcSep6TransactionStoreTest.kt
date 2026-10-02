@@ -133,6 +133,7 @@ class JdbcSep6TransactionStoreTest {
     val pagingTxn = JdbcSep6Transaction()
     val pagingTime = Instant.parse("2024-06-15T12:00:00Z")
     pagingTxn.startedAt = pagingTime
+    pagingTxn.webAuthAccount = "GACCOUNT"
 
     every { txnRepo.findOneByTransactionId("paging-txn-id") } returns pagingTxn
     every { txnRepo.findTransactionsWithFilters(any(), any(), any(), any(), any(), any()) } returns
@@ -156,6 +157,136 @@ class JdbcSep6TransactionStoreTest {
     val request = GetTransactionsRequest.builder().assetCode("USDC").pagingId("bad-id").build()
 
     assertThrows<SepValidationException> { store.findTransactions("GACCOUNT", null, request) }
+  }
+
+  private fun pagingRow(owner: String?, memo: String?, startedAt: Instant): JdbcSep6Transaction =
+    JdbcSep6Transaction().apply {
+      webAuthAccount = owner
+      webAuthAccountMemo = memo
+      this.startedAt = startedAt
+    }
+
+  /**
+   * The caller's `accountId`/`accountMemo` page with `row`; returns the `olderThan` it was given.
+   */
+  private fun pageWith(row: JdbcSep6Transaction, accountId: String, accountMemo: String?): Instant {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns row
+    every { txnRepo.findTransactionsWithFilters(any(), any(), any(), any(), any(), any()) } returns
+      emptyList()
+    every {
+      txnRepo.findTransactionsWithMemoAndFilters(any(), any(), any(), any(), any(), any(), any())
+    } returns emptyList()
+
+    val request =
+      GetTransactionsRequest.builder().assetCode("USDC").pagingId("paging-txn-id").build()
+    store.findTransactions(accountId, accountMemo, request)
+
+    val olderThanSlot = slot<Instant>()
+    if (accountMemo == null) {
+      verify {
+        txnRepo.findTransactionsWithFilters(
+          any(),
+          any(),
+          any(),
+          any(),
+          capture(olderThanSlot),
+          any()
+        )
+      }
+    } else {
+      verify {
+        txnRepo.findTransactionsWithMemoAndFilters(
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          capture(olderThanSlot),
+          any()
+        )
+      }
+    }
+    return olderThanSlot.captured
+  }
+
+  /** Every ownership mismatch must answer exactly like a nonexistent id, and run no listing. */
+  private fun assertPagingRejected(
+    row: JdbcSep6Transaction?,
+    accountId: String,
+    accountMemo: String?
+  ) {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns row
+
+    val request =
+      GetTransactionsRequest.builder().assetCode("USDC").pagingId("paging-txn-id").build()
+    val ex =
+      assertThrows<SepValidationException> {
+        store.findTransactions(accountId, accountMemo, request)
+      }
+
+    assertEquals("invalid paging_id field: paging-txn-id", ex.message)
+    verify(exactly = 0) {
+      txnRepo.findTransactionsWithFilters(any(), any(), any(), any(), any(), any())
+    }
+    verify(exactly = 0) {
+      txnRepo.findTransactionsWithMemoAndFilters(any(), any(), any(), any(), any(), any(), any())
+    }
+  }
+
+  @Test
+  fun `findTransactions pages from an own no-memo row`() {
+    val time = Instant.parse("2024-06-15T12:00:00Z")
+
+    assertEquals(time, pageWith(pagingRow("GACCOUNT", null, time), "GACCOUNT", null))
+  }
+
+  @Test
+  fun `findTransactions pages from an own memo row`() {
+    val time = Instant.parse("2024-06-16T12:00:00Z")
+
+    assertEquals(time, pageWith(pagingRow("GACCOUNT", "111", time), "GACCOUNT", "111"))
+  }
+
+  @Test
+  fun `findTransactions pages from an own muxed row`() {
+    val time = Instant.parse("2024-06-17T12:00:00Z")
+
+    assertEquals(time, pageWith(pagingRow("MMUXED", null, time), "MMUXED", null))
+  }
+
+  @Test
+  fun `findTransactions rejects a paging_id owned by a different account`() {
+    assertPagingRejected(pagingRow("GOTHER", null, Instant.now()), "GACCOUNT", null)
+  }
+
+  @Test
+  fun `findTransactions rejects a paging_id owned by a different memo`() {
+    assertPagingRejected(pagingRow("GACCOUNT", "111", Instant.now()), "GACCOUNT", "222")
+  }
+
+  @Test
+  fun `findTransactions rejects a memo row for a caller without a memo`() {
+    assertPagingRejected(pagingRow("GACCOUNT", "111", Instant.now()), "GACCOUNT", null)
+  }
+
+  @Test
+  fun `findTransactions rejects a no-memo row for a caller with a memo`() {
+    assertPagingRejected(pagingRow("GACCOUNT", null, Instant.now()), "GACCOUNT", "111")
+  }
+
+  @Test
+  fun `findTransactions rejects a G row for a muxed caller`() {
+    assertPagingRejected(pagingRow("GACCOUNT", null, Instant.now()), "MMUXED", null)
+  }
+
+  @Test
+  fun `findTransactions rejects a muxed row for a G caller`() {
+    assertPagingRejected(pagingRow("MMUXED", null, Instant.now()), "GACCOUNT", null)
+  }
+
+  @Test
+  fun `findTransactions rejects a nonexistent paging_id with the same message`() {
+    assertPagingRejected(null, "GACCOUNT", null)
   }
 
   @Test
