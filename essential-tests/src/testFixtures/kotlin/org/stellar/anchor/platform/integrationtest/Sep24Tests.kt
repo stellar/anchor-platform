@@ -1,12 +1,23 @@
 package org.stellar.anchor.platform.integrationtest
 
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import java.net.URI
+import java.time.Instant
+import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode.SAME_THREAD
@@ -14,18 +25,26 @@ import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.springframework.web.util.UriComponentsBuilder
 import org.stellar.anchor.api.exception.SepException
+import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.SepNotFoundException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.PatchTransactionsRequest
+import org.stellar.anchor.api.rpc.RpcRequest
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
+import org.stellar.anchor.client.Sep24Client
 import org.stellar.anchor.platform.*
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.StringHelper.json
+import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.anchor.IncompleteDepositTransaction
 import org.stellar.walletsdk.anchor.IncompleteWithdrawalTransaction
+import org.stellar.walletsdk.anchor.auth
 import org.stellar.walletsdk.asset.IssuedAssetId
+import org.stellar.walletsdk.horizon.SigningKeyPair
 
 // The tests must be executed in order. Currency is disabled.
 // Some of the tests depend on the result of previous tests. The lifecycle must be PER_CLASS
@@ -277,7 +296,623 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
       assertThrows<SepException> { platformApiClient.getTransaction(txnId) }
     }
   }
+
+  private val sep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), token.token)
+  private val noAuthSep24Client = Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), null)
+
+  /**
+   * A 400 body carries `{"error": "..."}`; [SepClient.handleResponse] preserves it raw rather than
+   * parsing it, so tests that need the exact message extract it themselves.
+   */
+  private fun errorMessage(ex: SepException): String =
+    JsonParser.parseString(ex.message).asJsonObject.get("error").asString
+
+  /** A fresh, isolated account: counting and ordering assertions never share state (AD-03). */
+  private class TestAccount(val accountId: String, val jwt: String, val client: Sep24Client)
+
+  private val http = OkHttpClient()
+
+  private fun newAccount(): TestAccount {
+    val keyPair = KeyPair.random()
+    val jwt = runBlocking { anchor.auth().authenticate(SigningKeyPair(keyPair)) }.token
+    return TestAccount(
+      keyPair.accountId,
+      jwt,
+      Sep24Client(toml.getString("TRANSFER_SERVER_SEP0024"), jwt),
+    )
+  }
+
+  /** [issuer] `null` omits `asset_issuer`, which the deposit then stores as null. */
+  private fun createDeposit(account: TestAccount, issuer: String? = USDC_GDQO_ISSUER): String =
+    account.client
+      .deposit(
+        buildMap {
+          put("asset_code", "USDC")
+          put("amount", "1")
+          if (issuer != null) put("asset_issuer", issuer)
+        }
+      )
+      .id
+
+  private fun createWithdrawal(account: TestAccount): String =
+    account.client
+      .withdraw(mapOf("asset_code" to "USDC", "asset_issuer" to USDC_GDQO_ISSUER, "amount" to "1"))
+      .id
+
+  /**
+   * Reads `GET /transactions` as the raw `transactions` array, with or without a `Content-Type`.
+   * Gson silently nulls absent fields, so a parsed object cannot back a schema assertion.
+   */
+  private fun listRaw(
+    account: TestAccount,
+    query: Map<String, String>,
+    contentType: String? = null,
+  ): JsonArray {
+    val (status, body) = listResponse(account, query, contentType)
+    assertEquals(200, status) {
+      "GET /transactions (Content-Type=$contentType) answered $status: $body"
+    }
+    return JsonParser.parseString(body).asJsonObject.getAsJsonArray("transactions")
+  }
+
+  /** The bare `GET /transactions` answer, as (status, body), without the client's error mapping. */
+  private fun listResponse(
+    account: TestAccount,
+    query: Map<String, String>,
+    contentType: String? = null,
+  ): Pair<Int, String?> {
+    val url = "${toml.getString("TRANSFER_SERVER_SEP0024")}/transactions".toHttpUrl().newBuilder()
+    query.forEach { (key, value) -> url.addQueryParameter(key, value) }
+    val request =
+      Request.Builder()
+        .url(url.build())
+        .header("Authorization", "Bearer ${account.jwt}")
+        .apply { if (contentType != null) header("Content-Type", contentType) }
+        .get()
+        .build()
+    http.newCall(request).execute().use { response ->
+      return response.code to response.body?.string()
+    }
+  }
+
+  private fun JsonArray.ids(): List<String> = map { it.asJsonObject.get("id").asString }
+
+  @Test
+  fun `test sep24 GET transactions answers the same with a JSON Content-Type`() {
+    val account = newAccount()
+    val created = setOf(createDeposit(account), createDeposit(account))
+    val query = mapOf("asset_code" to "USDC")
+
+    val withoutHeader = listRaw(account, query).ids()
+    val withHeader = listRaw(account, query, "application/json").ids()
+    val viaClient = account.client.getTransactions(query).transactions.map { it.id }
+
+    assertEquals(created, withoutHeader.toSet()) {
+      "the request without a Content-Type must list both fixture deposits, or the comparison below is vacuous"
+    }
+    assertEquals(withoutHeader, withHeader)
+    assertEquals(withoutHeader, viaClient)
+  }
+
+  @Test
+  fun `test sep24 GET transactions reports a missing asset_code despite a JSON Content-Type`() {
+    val ex = assertThrows<SepValidationException> { sep24Client.getTransactions(mapOf()) }
+    assertEquals("The \"asset_code\" parameter is missing.", errorMessage(ex))
+  }
+
+  private fun JsonObject.string(field: String): String {
+    val element = get(field)
+    assertTrue(element != null && element.isJsonPrimitive && element.asJsonPrimitive.isString) {
+      "expected '$field' to be a string in $this"
+    }
+    return element.asString
+  }
+
+  /** The SEP-24 transaction shape `stellar-anchor-tests` requires, on the raw list item. */
+  private fun assertListItem(
+    item: JsonObject,
+    kind: String,
+    accountField: String,
+    account: String
+  ) {
+    assertTrue(item.string("id").isNotEmpty())
+    assertEquals(kind, item.string("kind"))
+    assertEquals("incomplete", item.string("status"))
+    val moreInfoUrl = URI(item.string("more_info_url"))
+    assertTrue(moreInfoUrl.isAbsolute && moreInfoUrl.scheme in setOf("http", "https")) {
+      "expected an absolute http(s) more_info_url but got $moreInfoUrl"
+    }
+    Instant.parse(item.string("started_at"))
+    assertEquals(account, item.string(accountField))
+  }
+
+  private fun JsonArray.item(id: String): JsonObject {
+    assertTrue(size() > 0) { "the list is empty, so no item can be checked" }
+    val found = firstOrNull { it.asJsonObject.get("id").asString == id }
+    assertNotNull(found) { "expected transaction $id in the list, got ${ids()}" }
+    return found!!.asJsonObject
+  }
+
+  @Test
+  fun `test sep24 GET transactions returns an empty list for a fresh account`() {
+    val list = listRaw(newAccount(), mapOf("asset_code" to "USDC"))
+
+    assertEquals(0, list.size())
+  }
+
+  @Test
+  fun `test sep24 GET transactions lists a withdrawal`() {
+    val account = newAccount()
+    val withdrawalId = createWithdrawal(account)
+
+    val list = listRaw(account, mapOf("asset_code" to "USDC"))
+
+    assertEquals(withdrawalId, list.item(withdrawalId).string("id"))
+  }
+
+  @Test
+  fun `test sep24 GET transactions returns deposits in the SEP-24 shape`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+
+    val item = listRaw(account, mapOf("asset_code" to "USDC")).item(depositId)
+
+    assertListItem(item, "deposit", "to", account.accountId)
+  }
+
+  @Test
+  fun `test sep24 GET transactions returns withdrawals in the SEP-24 shape`() {
+    val account = newAccount()
+    val withdrawalId = createWithdrawal(account)
+
+    val item = listRaw(account, mapOf("asset_code" to "USDC")).item(withdrawalId)
+
+    assertListItem(item, "withdrawal", "from", account.accountId)
+  }
+
+  /** Creates [count] deposits one after another, so their `started_at` strictly increases. */
+  private fun createDeposits(account: TestAccount, count: Int): List<String> =
+    (1..count).map { createDeposit(account) }
+
+  @Test
+  fun `test sep24 GET transactions honors limit exactly`() {
+    val account = newAccount()
+    val created = createDeposits(account, 3)
+
+    val ids = listRaw(account, mapOf("asset_code" to "USDC", "limit" to "1")).ids()
+
+    assertEquals(listOf(created.last()), ids)
+  }
+
+  @Test
+  fun `test sep24 GET transactions are ordered by started_at descending`() {
+    val account = newAccount()
+    val created = createDeposits(account, 3)
+
+    val ids = listRaw(account, mapOf("asset_code" to "USDC")).ids()
+
+    assertEquals(3, ids.size) {
+      "expected all 3 fixture deposits before comparing their order, got $ids"
+    }
+    assertEquals(created.reversed(), ids)
+  }
+
+  @Test
+  fun `test sep24 GET transactions no_older_than excludes the boundary`() {
+    val account = newAccount()
+    val created = createDeposits(account, 3)
+    val oldest = listRaw(account, mapOf("asset_code" to "USDC")).item(created.first())
+
+    val ids =
+      listRaw(
+          account,
+          mapOf("asset_code" to "USDC", "no_older_than" to oldest.string("started_at")),
+        )
+        .ids()
+
+    assertEquals(created.drop(1).toSet(), ids.toSet())
+    assertEquals(2, ids.size)
+  }
+
+  @Test
+  fun `test sep24 GET transactions kind=withdrawal returns only withdrawals`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+    val withdrawalId = createWithdrawal(account)
+
+    val list = listRaw(account, mapOf("asset_code" to "USDC", "kind" to "withdrawal"))
+
+    list.item(withdrawalId)
+    assertFalse(list.ids().contains(depositId)) {
+      "expected kind=withdrawal to exclude the deposit ($depositId)"
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transactions kind=deposit returns only deposits`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+    val withdrawalId = createWithdrawal(account)
+
+    val list = listRaw(account, mapOf("asset_code" to "USDC", "kind" to "deposit"))
+
+    list.item(depositId)
+    assertFalse(list.ids().contains(withdrawalId)) {
+      "expected kind=deposit to exclude the withdrawal ($withdrawalId)"
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transactions pages from the caller's own paging_id`() {
+    val account = newAccount()
+    val created = createDeposits(account, 3)
+
+    val ids = listRaw(account, mapOf("asset_code" to "USDC", "paging_id" to created.last())).ids()
+
+    assertEquals(created.dropLast(1).toSet(), ids.toSet())
+    assertEquals(2, ids.size)
+    assertFalse(ids.contains(created.last())) { "the paging transaction itself must not be listed" }
+  }
+
+  /**
+   * One account holding a withdrawal stored with issuer GDQO and a deposit stored with no issuer
+   * (the wallet omitted `asset_issuer`, so the row keeps null even though AP resolved one).
+   */
+  private class MixedIssuerAccount(
+    val account: TestAccount,
+    val withdrawalId: String,
+    val depositId: String,
+  )
+
+  private fun mixedIssuerAccount(): MixedIssuerAccount {
+    val account = newAccount()
+    return MixedIssuerAccount(
+      account,
+      createWithdrawal(account),
+      createDeposit(account, issuer = null),
+    )
+  }
+
+  private fun listIds(account: TestAccount, assetCode: String): List<String> =
+    listRaw(account, mapOf("asset_code" to assetCode)).ids()
+
+  @Test
+  fun `test sep24 GET transactions stellar asset with the owning issuer includes the withdrawal`() {
+    val fixture = mixedIssuerAccount()
+
+    val list = listRaw(fixture.account, mapOf("asset_code" to "stellar:USDC:$USDC_GDQO_ISSUER"))
+
+    list.item(fixture.withdrawalId)
+  }
+
+  @Test
+  fun `test sep24 GET transactions stellar asset with another issuer excludes the withdrawal`() {
+    val fixture = mixedIssuerAccount()
+    listRaw(fixture.account, mapOf("asset_code" to "USDC")).item(fixture.withdrawalId)
+
+    val ids = listIds(fixture.account, "stellar:USDC:$USDC_GBBD_ISSUER")
+
+    assertFalse(ids.contains(fixture.withdrawalId)) {
+      "a USDC/GDQO withdrawal must not be listed under the GBBD issuer"
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transactions stellar asset without an issuer equals the bare code`() {
+    val fixture = mixedIssuerAccount()
+
+    val bare = listIds(fixture.account, "USDC")
+    val stellarForm = listIds(fixture.account, "stellar:USDC")
+
+    assertEquals(setOf(fixture.withdrawalId, fixture.depositId), bare.toSet()) {
+      "the bare code must list both fixture transactions, or the comparison below is vacuous"
+    }
+    assertEquals(bare.toSet(), stellarForm.toSet())
+  }
+
+  @Test
+  fun `test sep24 GET transactions bare asset code lists every issuer`() {
+    val fixture = mixedIssuerAccount()
+    val gbbdDepositId = createDeposit(fixture.account, USDC_GBBD_ISSUER)
+
+    val ids = listIds(fixture.account, "USDC")
+
+    assertEquals(setOf(fixture.withdrawalId, fixture.depositId, gbbdDepositId), ids.toSet())
+  }
+
+  @Test
+  fun `test sep24 GET transactions stellar asset includes a deposit created without an issuer`() {
+    val fixture = mixedIssuerAccount()
+
+    listOf(USDC_GDQO_ISSUER, USDC_GBBD_ISSUER).forEach { issuer ->
+      val list = listRaw(fixture.account, mapOf("asset_code" to "stellar:USDC:$issuer"))
+      list.item(fixture.depositId)
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transactions rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> {
+      noAuthSep24Client.getTransactions(mapOf("asset_code" to "USDC"))
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transactions rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.getTransactions(mapOf("asset_code" to "NOT_SUPPORTED"))
+      }
+    assertEquals("asset code not supported", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 GET transactions rejects request without asset_code`() {
+    val (status, body) = listResponse(newAccount(), mapOf())
+
+    assertEquals(400, status) { "expected 400 but got $status: $body" }
+    assertEquals(
+      "The \"asset_code\" parameter is missing.",
+      JsonParser.parseString(body).asJsonObject.get("error").asString,
+    )
+  }
+
+  @Test
+  fun `test sep24 GET transactions rejects an invalid no_older_than`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.getTransactions(mapOf("asset_code" to "USDC", "no_older_than" to "not-a-date"))
+      }
+    assertEquals("invalid no_older_than field: not-a-date", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 GET transaction rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> {
+      noAuthSep24Client.getTransaction(mapOf("id" to UUID.randomUUID().toString()))
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transaction rejects request naming no transaction`() {
+    val ex = assertThrows<SepValidationException> { sep24Client.getTransaction(mapOf()) }
+    assertEquals(
+      "One of id, stellar_transaction_id or external_transaction_id is required.",
+      errorMessage(ex),
+    )
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns 404 for an unknown id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Client.getTransaction(mapOf("id" to UUID.randomUUID().toString()))
+      }
+    assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns 404 for an unknown external_transaction_id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Client.getTransaction(
+          mapOf("external_transaction_id" to "unknown-${UUID.randomUUID()}")
+        )
+      }
+    assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns 404 for an unknown stellar_transaction_id`() {
+    val ex =
+      assertThrows<SepNotFoundException> {
+        sep24Client.getTransaction(
+          mapOf("stellar_transaction_id" to "unknown-${UUID.randomUUID()}")
+        )
+      }
+    assertEquals("transaction not found", ex.message)
+  }
+
+  @Test
+  fun `test sep24 GET transaction resolves a transaction by external_transaction_id`() {
+    val depositId = sep24Client.deposit(mapOf("asset_code" to "USDC")).id
+
+    val externalTransactionId = "sep24-404s-external-${UUID.randomUUID()}"
+    val rpcActionRequests: List<RpcRequest> =
+      gson.fromJson(
+        SEP24_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS.replace("%TX_ID%", depositId)
+          .replace("%EXTERNAL_TRANSACTION_ID%", externalTransactionId),
+        object : TypeToken<List<RpcRequest>>() {}.type,
+      )
+    platformApiClient.sendRpcRequest(rpcActionRequests).use { response ->
+      assertTrue(response.isSuccessful) { "RPC setup failed with HTTP ${response.code}" }
+    }
+
+    val found =
+      sep24Client.getTransaction(mapOf("external_transaction_id" to externalTransactionId))
+    assertEquals(depositId, found.transaction.id)
+  }
+
+  @Test
+  fun `test sep24 deposit rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> { noAuthSep24Client.deposit(validInteractiveRequest) }
+  }
+
+  @Test
+  fun `test sep24 deposit rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.deposit(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 deposit rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.deposit(validInteractiveRequest + ("account" to "not a valid account"))
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 deposit rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.deposit(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart deposit rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.depositMultipart(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart deposit rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.depositMultipart(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart deposit rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.depositMultipart(validInteractiveRequest + ("account" to "not a valid account"))
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdrawMultipart(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdrawMultipart(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 multipart withdraw rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdrawMultipart(
+          validInteractiveRequest + ("account" to "not a valid account")
+        )
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects request without JWT`() {
+    assertThrows<SepNotAuthorizedException> { noAuthSep24Client.withdraw(validInteractiveRequest) }
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects request without asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdraw(validInteractiveRequest - "asset_code" - "asset_issuer")
+      }
+    assertEquals("missing 'asset_code'", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects unsupported asset_code`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdraw(
+          validInteractiveRequest - "asset_issuer" + ("asset_code" to "NOT_SUPPORTED")
+        )
+      }
+    assertEquals("invalid operation for asset NOT_SUPPORTED", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep24 withdraw rejects an invalid account`() {
+    val ex =
+      assertThrows<SepValidationException> {
+        sep24Client.withdraw(validInteractiveRequest + ("account" to "not a valid account"))
+      }
+    assertEquals("invalid account not a valid account", errorMessage(ex))
+  }
 }
+
+private const val USDC_GDQO_ISSUER = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+
+/** The second USDC issuer configured with SEP-24 enabled. */
+private const val USDC_GBBD_ISSUER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+
+/** A request the interactive endpoints accept; each negative test breaks exactly one field. */
+private val validInteractiveRequest =
+  mapOf(
+    "asset_code" to "USDC",
+    "asset_issuer" to "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+    "account" to "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG",
+  )
+
+/**
+ * The first two steps of `SEP_24_DEPOSIT_COMPLETE_SHORT_FLOW_ACTION_REQUESTS`
+ * (Sep24PlatformApiTests.kt), with the external transaction id left to the caller so each run looks
+ * up a value no other test uses.
+ */
+private const val SEP24_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS =
+  """
+[
+  {
+    "id": "1",
+    "method": "request_offchain_funds",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "test message 1",
+      "amount_in": { "amount": "100", "asset": "iso4217:USD" },
+      "amount_out": {
+        "amount": "95",
+        "asset": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+      },
+      "fee_details": { "total": "5", "asset": "iso4217:USD" },
+      "amount_expected": { "amount": "100" }
+    }
+  },
+  {
+    "id": "2",
+    "method": "notify_offchain_funds_received",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "test message 2",
+      "funds_received_at": "2023-07-04T12:34:56Z",
+      "external_transaction_id": "%EXTERNAL_TRANSACTION_ID%",
+      "amount_in": { "amount": "100" }
+    }
+  }
+]
+"""
 
 private const val withdrawRequest =
   """{
