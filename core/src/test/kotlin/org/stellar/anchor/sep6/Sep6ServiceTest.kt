@@ -12,6 +12,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.MoreInfoUrlConstructor
@@ -629,7 +631,7 @@ class Sep6ServiceTest {
     every { eventSession.publish(capture(slotEvent)) } returns Unit
 
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -669,7 +671,7 @@ class Sep6ServiceTest {
 
     // Verify effects
     verify(exactly = 1) {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100")
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100", any(), any())
     }
     verify(exactly = 1) { txnStore.save(any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
@@ -724,6 +726,8 @@ class Sep6ServiceTest {
         TEST_QUOTE_ID,
         any(),
         capture(slotBuyAsset),
+        any(),
+        any(),
         any(),
       )
     } returns
@@ -1050,6 +1054,46 @@ class Sep6ServiceTest {
     )
   }
 
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "some text|''|refund_memo and refund_memo_type must both be specified or both be omitted|true",
+        "''|text|refund_memo and refund_memo_type must both be specified or both be omitted|true",
+        "abc|foo|Invalid memo type: foo|true",
+        "abc|id|Invalid memo abc of type: MEMO_ID|true",
+        "abc|return|Invalid refund_memo/refund_memo_type: |false",
+        "not-valid-base64!!|hash|Invalid refund_memo/refund_memo_type: |false",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|text|Invalid refund_memo/refund_memo_type: |false",
+      ],
+    delimiter = '|',
+  )
+  fun `test withdraw rejects a malformed refund memo`(
+    refundMemo: String,
+    refundMemoType: String,
+    expectedMessage: String,
+    exact: Boolean,
+  ) {
+    val request =
+      StartWithdrawRequest.builder()
+        .assetCode(TEST_ASSET)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .refundMemo(refundMemo)
+        .refundMemoType(refundMemoType)
+        .build()
+
+    val ex = assertThrows<SepValidationException> { sep6Service.withdraw(token, request) }
+    if (exact) {
+      assertEquals(expectedMessage, ex.message)
+    } else {
+      Assertions.assertTrue(ex.message!!.startsWith(expectedMessage)) {
+        "Expected message to start with '$expectedMessage' but was '${ex.message}'"
+      }
+    }
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
   @Test
   fun `test withdraw from requested account`() {
     val slotTxn = slot<Sep6Transaction>()
@@ -1259,7 +1303,7 @@ class Sep6ServiceTest {
     every { eventSession.publish(capture(slotEvent)) } returns Unit
 
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -1299,7 +1343,7 @@ class Sep6ServiceTest {
 
     // Verify effects
     verify(exactly = 1) {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100")
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), "100", any(), any())
     }
     verify(exactly = 1) { txnStore.save(any()) }
     verify(exactly = 1) { eventSession.publish(any()) }
@@ -1345,6 +1389,8 @@ class Sep6ServiceTest {
         TEST_QUOTE_ID,
         any(),
         capture(slotBuyAsset),
+        any(),
+        any(),
         any(),
       )
     } returns
@@ -1448,6 +1494,47 @@ class Sep6ServiceTest {
       gson.toJson(response),
       JSONCompareMode.LENIENT,
     )
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "some text|''|refund_memo and refund_memo_type must both be specified or both be omitted|true",
+        "''|text|refund_memo and refund_memo_type must both be specified or both be omitted|true",
+        "abc|foo|Invalid memo type: foo|true",
+        "abc|id|Invalid memo abc of type: MEMO_ID|true",
+        "abc|return|Invalid refund_memo/refund_memo_type: |false",
+        "not-valid-base64!!|hash|Invalid refund_memo/refund_memo_type: |false",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|text|Invalid refund_memo/refund_memo_type: |false",
+      ],
+    delimiter = '|',
+  )
+  fun `test withdraw-exchange rejects a malformed refund memo`(
+    refundMemo: String,
+    refundMemoType: String,
+    expectedMessage: String,
+    exact: Boolean,
+  ) {
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .fundingMethod("bank_account")
+        .amount("100")
+        .refundMemo(refundMemo)
+        .refundMemoType(refundMemoType)
+        .build()
+
+    val ex = assertThrows<SepValidationException> { sep6Service.withdrawExchange(token, request) }
+    if (exact) {
+      assertEquals(expectedMessage, ex.message)
+    } else {
+      Assertions.assertTrue(ex.message!!.startsWith(expectedMessage)) {
+        "Expected message to start with '$expectedMessage' but was '${ex.message}'"
+      }
+    }
+    verify(exactly = 0) { txnStore.save(any()) }
   }
 
   @Test
@@ -1713,9 +1800,11 @@ class Sep6ServiceTest {
     val request = GetTransactionRequest.builder().id(depositTxn.id).lang("en-US").build()
     every { txnStore.findByTransactionId(depositTxn.id) } returns depositTxn
 
-    assertThrows<NotFoundException> {
-      sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
-    }
+    val ex =
+      assertThrows<NotFoundException> {
+        sep6Service.findTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction not found", ex.message)
 
     verify { txnStore.findByTransactionId(depositTxn.id) }
   }
@@ -1737,6 +1826,39 @@ class Sep6ServiceTest {
       sep6Service.findTransactions(TestHelper.createWebAuthJwt("other-account"), request)
     }
     verify { txnStore wasNot Called }
+  }
+
+  @Test
+  fun `test find transactions with omitted account queries store with token account`() {
+    val depositTxn = createDepositTxn(TEST_ACCOUNT)
+    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any()) } returns listOf(depositTxn)
+    val request =
+      GetTransactionsRequest.builder().assetCode(TEST_ASSET).limit(10).lang("en-US").build()
+
+    val response = sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+
+    verify(exactly = 1) { txnStore.findTransactions(TEST_ACCOUNT, null, request) }
+    assertEquals(1, response.transactions.size)
+  }
+
+  @Test
+  fun `test find transactions with blank account behaves like omitted account`() {
+    val depositTxn = createDepositTxn(TEST_ACCOUNT)
+    every { txnStore.findTransactions(TEST_ACCOUNT, any(), any()) } returns listOf(depositTxn)
+    val request =
+      GetTransactionsRequest.builder()
+        .assetCode(TEST_ASSET)
+        .account("")
+        .limit(10)
+        .lang("en-US")
+        .build()
+
+    val response = assertDoesNotThrow {
+      sep6Service.findTransactions(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+    }
+
+    verify(exactly = 1) { txnStore.findTransactions(TEST_ACCOUNT, null, request) }
+    assertEquals(1, response.transactions.size)
   }
 
   @Test
@@ -2020,7 +2142,7 @@ class Sep6ServiceTest {
   @Test
   fun `test depositExchange rejects already-bound quote`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } throws BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
     val request =
       StartDepositExchangeRequest.builder()
@@ -2038,7 +2160,7 @@ class Sep6ServiceTest {
   @Test
   fun `test depositExchange bind failure rejects second use`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -2066,7 +2188,7 @@ class Sep6ServiceTest {
   @Test
   fun `test withdrawExchange rejects already-bound quote`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } throws BadRequestException("quote(id=$TEST_QUOTE_ID) has already been used")
     val request =
       StartWithdrawExchangeRequest.builder()
@@ -2083,7 +2205,7 @@ class Sep6ServiceTest {
   @Test
   fun `test withdrawExchange bind failure rejects second use`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -2105,6 +2227,132 @@ class Sep6ServiceTest {
         .build()
     val ex = assertThrows<BadRequestException> { sep6Service.withdrawExchange(token, request) }
     assert(ex.message!!.contains("has already been used"))
+  }
+
+  @Test
+  fun `test depositExchange passes the funding method as the sell delivery method`() {
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset("iso4217:USD")
+        .amountOut("98")
+        .amountOutAsset(TEST_ASSET_SEP38_FORMAT)
+        .feeDetails(FeeDetails("2", TEST_ASSET_SEP38_FORMAT))
+        .build()
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+
+    sep6Service.depositExchange(token, request)
+
+    verify(exactly = 1) {
+      exchangeAmountsCalculator.calculateFromQuote(
+        TEST_QUOTE_ID,
+        any(),
+        any(),
+        any(),
+        "SWIFT",
+        null
+      )
+    }
+  }
+
+  @Test
+  fun `test withdrawExchange passes the funding method as the buy delivery method`() {
+    every { txnStore.save(any()) } returns null
+    every { eventSession.publish(any()) } returns Unit
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
+    } returns
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset("iso4217:USD")
+        .feeDetails(FeeDetails("2", "iso4217:USD"))
+        .build()
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+
+    sep6Service.withdrawExchange(token, request)
+
+    verify(exactly = 1) {
+      exchangeAmountsCalculator.calculateFromQuote(
+        TEST_QUOTE_ID,
+        any(),
+        any(),
+        any(),
+        null,
+        "bank_account",
+      )
+    }
+  }
+
+  @Test
+  fun `test depositExchange propagates a funding-method conflict and persists nothing`() {
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
+    } throws
+      BadRequestException("funding_method(SWIFT) does not match quote sell delivery method(WIRE)")
+    val request =
+      StartDepositExchangeRequest.builder()
+        .destinationAsset(TEST_ASSET)
+        .sourceAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .amount("100")
+        .account(TEST_ACCOUNT)
+        .fundingMethod("SWIFT")
+        .build()
+
+    val ex = assertThrows<BadRequestException> { sep6Service.depositExchange(token, request) }
+    assertEquals(
+      "funding_method(SWIFT) does not match quote sell delivery method(WIRE)",
+      ex.message,
+    )
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { exchangeAmountsCalculator.bindQuoteToTransaction(any(), any()) }
+  }
+
+  @Test
+  fun `test withdrawExchange propagates a funding-method conflict and persists nothing`() {
+    every {
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
+    } throws
+      BadRequestException(
+        "funding_method(bank_account) does not match quote buy delivery method(WIRE)"
+      )
+    val request =
+      StartWithdrawExchangeRequest.builder()
+        .sourceAsset(TEST_ASSET)
+        .destinationAsset("iso4217:USD")
+        .quoteId(TEST_QUOTE_ID)
+        .fundingMethod("bank_account")
+        .amount("100")
+        .build()
+
+    val ex = assertThrows<BadRequestException> { sep6Service.withdrawExchange(token, request) }
+    assertEquals(
+      "funding_method(bank_account) does not match quote buy delivery method(WIRE)",
+      ex.message,
+    )
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { exchangeAmountsCalculator.bindQuoteToTransaction(any(), any()) }
   }
 
   @Test
@@ -2209,7 +2457,7 @@ class Sep6ServiceTest {
   @Test
   fun `test depositExchange rejects a quote whose credited amount exceeds max_amount`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -2240,7 +2488,7 @@ class Sep6ServiceTest {
   @Test
   fun `test depositExchange rejects a quote whose credited amount is below min_amount`() {
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("100")
@@ -2276,7 +2524,7 @@ class Sep6ServiceTest {
     every { txnStore.save(any()) } returns null
     every { eventSession.publish(any()) } returns Unit
     every {
-      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any())
+      exchangeAmountsCalculator.calculateFromQuote(TEST_QUOTE_ID, any(), any(), any(), any(), any())
     } returns
       Amounts.builder()
         .amountIn("10001")
@@ -2299,5 +2547,282 @@ class Sep6ServiceTest {
     val response = sep6ServiceWithRealValidator.depositExchange(token, request)
     assertNotNull(response.id)
     verify(exactly = 1) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects null requested list`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = null
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "12345")).build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("Transaction (${txn.id}) is not expecting any updates", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects empty requested list`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = emptyList()
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "12345")).build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("Transaction (${txn.id}) is not expecting any updates", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects null transaction`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest")
+    val request = Sep6PatchTransactionRequest.builder().id(txn.id).transaction(null).build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("transaction must be specified", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects empty transaction`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest")
+    val request = Sep6PatchTransactionRequest.builder().id(txn.id).transaction(emptyMap()).build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("transaction must be specified", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects unexpected field`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest")
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(txn.id)
+        .transaction(mapOf("dest" to "12345", "unexpected" to "value"))
+        .build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("[unexpected] is not a expected field", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects null value`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest")
+    // A JSON `"dest": null` deserializes to a null map entry -- this must not silently count as
+    // the field having been supplied.
+    val request =
+      gson.fromJson(
+        """{"id": "${txn.id}", "transaction": {"dest": null}}""",
+        Sep6PatchTransactionRequest::class.java,
+      )
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("[dest] must not be null", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields rejects missing requested field`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest", "dest_extra")
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "12345")).build()
+
+    val ex =
+      assertThrows<BadRequestException> { sep6Service.validatePatchTransactionFields(txn, request) }
+    assertEquals("[dest_extra] is required", ex.message)
+  }
+
+  @Test
+  fun `test validatePatchTransactionFields accepts all requested fields supplied`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.requiredInfoUpdates = listOf("dest", "dest_extra")
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(txn.id)
+        .transaction(mapOf("dest" to "12345", "dest_extra" to "021000021"))
+        .build()
+
+    assertDoesNotThrow { sep6Service.validatePatchTransactionFields(txn, request) }
+  }
+
+  @Test
+  fun `test patchTransaction succeeds and returns the transaction to pending_anchor`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates = listOf("dest", "dest_extra")
+    txn.requiredInfoMessage = "please update your bank details"
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
+
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(txn.id)
+        .transaction(mapOf("dest" to "12345678901234", "dest_extra" to "021000021"))
+        .build()
+
+    val response = sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+
+    assertEquals(txn.id, response.transaction.id)
+    assertEquals("pending_anchor", response.transaction.status)
+    assertEquals("pending_anchor", txn.status)
+    assertEquals(null, txn.requiredInfoUpdates)
+    assertEquals(null, txn.requiredInfoMessage)
+    assertEquals(
+      mapOf("dest" to "12345678901234", "dest_extra" to "021000021"),
+      txn.fields,
+    )
+    verify(exactly = 1) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction publishes exactly one TRANSACTION_STATUS_CHANGED event`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates = listOf("dest")
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
+    val slotEvent = slot<AnchorEvent>()
+    every { eventSession.publish(capture(slotEvent)) } returns Unit
+
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "1")).build()
+    sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+
+    verify(exactly = 1) { eventSession.publish(any()) }
+    assertEquals(AnchorEvent.Type.TRANSACTION_STATUS_CHANGED, slotEvent.captured.type)
+    assertEquals("6", slotEvent.captured.sep)
+    assertEquals("pending_anchor", slotEvent.captured.transaction.status.toString())
+  }
+
+  @Test
+  fun `test patchTransaction keeps earlier fields across rounds`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.status = "pending_transaction_info_update"
+    txn.fields = mutableMapOf("a" to "1", "b" to "2")
+    txn.requiredInfoUpdates = listOf("b", "c")
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    every { txnStore.save(any()) } answers { firstArg() }
+
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(txn.id)
+        .transaction(mapOf("b" to "3", "c" to "4"))
+        .build()
+    sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+
+    assertEquals(mapOf("a" to "1", "b" to "3", "c" to "4"), txn.fields)
+  }
+
+  @Test
+  fun `test patchTransaction with unknown id throws not found`() {
+    every { txnStore.findByTransactionId(any()) } returns null
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(UUID.randomUUID().toString())
+        .transaction(mapOf("dest" to "1"))
+        .build()
+
+    val ex =
+      assertThrows<NotFoundException> {
+        sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction not found", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction for a foreign account throws not found`() {
+    val txn = createDepositTxn("other-account")
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates = listOf("dest")
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "1")).build()
+
+    val ex =
+      assertThrows<NotFoundException> {
+        sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction not found", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction for a foreign memo throws not found`() {
+    val txn = createDepositTxn(TEST_ACCOUNT, "other-memo")
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates = listOf("dest")
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "1")).build()
+
+    val ex =
+      assertThrows<NotFoundException> {
+        sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction not found", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction with wrong status throws bad request`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.status = "pending_anchor"
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    val request =
+      Sep6PatchTransactionRequest.builder().id(txn.id).transaction(mapOf("dest" to "1")).build()
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("transaction (id=${txn.id}) does not need update", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction validator failure propagates and changes nothing`() {
+    val txn = createDepositTxn(TEST_ACCOUNT)
+    txn.status = "pending_transaction_info_update"
+    txn.requiredInfoUpdates = listOf("dest")
+    every { txnStore.findByTransactionId(txn.id) } returns txn
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(txn.id)
+        .transaction(mapOf("dest" to "1", "unexpected" to "2"))
+        .build()
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep6Service.patchTransaction(TestHelper.createWebAuthJwt(TEST_ACCOUNT), request)
+      }
+    assertEquals("[unexpected] is not a expected field", ex.message)
+    assertEquals("pending_transaction_info_update", txn.status)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test patchTransaction with null token throws not authorized`() {
+    val request =
+      Sep6PatchTransactionRequest.builder()
+        .id(UUID.randomUUID().toString())
+        .transaction(mapOf("dest" to "1"))
+        .build()
+
+    assertThrows<SepNotAuthorizedException> { sep6Service.patchTransaction(null, request) }
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
   }
 }

@@ -104,7 +104,7 @@ fun Route.testSep24(
       } catch (e: Exception) {
         log.error { e }
         call.respondText(
-          "Error occurred: ${e.message}",
+          "An internal error occurred",
           status = HttpStatusCode.InternalServerError,
         )
       }

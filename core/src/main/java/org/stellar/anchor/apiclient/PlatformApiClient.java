@@ -1,7 +1,9 @@
 package org.stellar.anchor.apiclient;
 
 import static org.stellar.anchor.api.rpc.method.RpcMethod.*;
+import static org.stellar.anchor.util.SepHelper.isValidSepTransactionId;
 
+import com.google.gson.JsonParseException;
 import jakarta.annotation.Nullable;
 import java.io.IOException;
 import java.util.HashMap;
@@ -16,8 +18,12 @@ import okhttp3.Response;
 import org.springframework.data.domain.Sort;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.InvalidConfigException;
+import org.stellar.anchor.api.exception.SepException;
+import org.stellar.anchor.api.exception.SepValidationException;
 import org.stellar.anchor.api.platform.*;
+import org.stellar.anchor.api.rpc.RpcErrorCode;
 import org.stellar.anchor.api.rpc.RpcRequest;
+import org.stellar.anchor.api.rpc.RpcResponse;
 import org.stellar.anchor.api.rpc.method.*;
 import org.stellar.anchor.api.rpc.method.NotifyRefundSentRequest.Refund;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
@@ -43,7 +49,16 @@ public class PlatformApiClient extends BaseApiClient {
    */
   @Deprecated // ANCHOR-641 Use getTransactionByRpc instead
   public GetTransactionResponse getTransaction(String id) throws IOException, AnchorException {
-    Request request = getRequestBuilder().url(endpoint + "/transactions/" + id).get().build();
+    if (!isValidSepTransactionId(id)) {
+      throw new SepValidationException("Invalid transaction id");
+    }
+    HttpUrl baseUrl = HttpUrl.parse(endpoint);
+    if (baseUrl == null) {
+      throw new InvalidConfigException(
+          String.format("Invalid endpoint: %s of the client.", endpoint));
+    }
+    HttpUrl url = baseUrl.newBuilder().addPathSegment("transactions").addPathSegment(id).build();
+    Request request = getRequestBuilder().url(url).get().build();
     String responseBody = handleResponse(client.newCall(request).execute());
     return gson.fromJson(responseBody, GetTransactionResponse.class);
   }
@@ -230,7 +245,37 @@ public class PlatformApiClient extends BaseApiClient {
             .params(requestParams)
             .build();
 
-    sendRpcRequest(List.of(rpcRequest));
+    try (Response response = sendRpcRequest(List.of(rpcRequest))) {
+      if (!response.isSuccessful() || response.body() == null) {
+        throw new IOException(
+            String.format(
+                "RPC notification %s failed with HTTP status %d", method, response.code()));
+      }
+      RpcResponse[] rpcResponses;
+      try {
+        rpcResponses = gson.fromJson(response.body().string(), RpcResponse[].class);
+      } catch (JsonParseException jpex) {
+        throw new IOException(
+            String.format("RPC notification %s returned an unreadable response", method), jpex);
+      }
+      if (rpcResponses == null) {
+        throw new IOException(String.format("RPC notification %s returned no response", method));
+      }
+      for (RpcResponse rpcResponse : rpcResponses) {
+        RpcResponse.RpcError error = rpcResponse.getError();
+        if (error == null) {
+          continue;
+        }
+        String message =
+            String.format(
+                "RPC notification %s failed: code=%d, message=%s",
+                method, error.getCode(), error.getMessage());
+        if (error.getCode() == RpcErrorCode.INTERNAL_ERROR.getErrorCode()) {
+          throw new IOException(message);
+        }
+        throw new SepException(message);
+      }
+    }
   }
 
   public Response sendRpcRequest(List<RpcRequest> rpcRequests) throws IOException, AnchorException {

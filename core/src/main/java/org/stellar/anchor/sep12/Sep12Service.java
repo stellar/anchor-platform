@@ -4,6 +4,7 @@ import static org.stellar.anchor.api.platform.PlatformTransactionData.Sep.SEP_12
 import static org.stellar.anchor.util.Log.infoF;
 import static org.stellar.anchor.util.MetricConstants.*;
 import static org.stellar.anchor.util.MetricConstants.SEP12_CUSTOMER;
+import static org.stellar.anchor.util.SepHelper.isValidSepTransactionId;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
@@ -259,6 +260,9 @@ public class Sep12Service {
             && ("sep31-sender".equals(requestBase.getType())
                 || "sep31-receiver".equals(requestBase.getType()));
     if (requestBase.getTransactionId() != null) {
+      if (!isValidSepTransactionId(requestBase.getTransactionId())) {
+        throw new SepNotAuthorizedException("The transaction specified does not exist");
+      }
       try {
         // `transactionId` should be used in conjunction with customer type `type` (sep6,
         // sep31-sender, sep-31-receiver) to get the customer account and memo

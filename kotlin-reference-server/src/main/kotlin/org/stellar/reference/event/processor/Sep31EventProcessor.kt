@@ -1,5 +1,6 @@
 package org.stellar.reference.event.processor
 
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.runBlocking
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.platform.*
@@ -18,6 +19,17 @@ class Sep31EventProcessor(
   companion object {
     val requiredKyc =
       listOf("bank_account_number", "bank_account_type", "bank_number", "bank_branch_number")
+
+    // Lets a test that drives a transaction through RPC calls itself (e.g. exercising an
+    // error/recovery path this processor doesn't know about) opt that one transaction out of
+    // automatic advancement, instead of disabling it for every transaction. Populated only via the
+    // test-only `/sep31/transactions/{id}/skip-auto-advance` route (see Sep31TestRoute.kt) -- kept
+    // out of transaction data so this can't be triggered by a real anchor's own message content.
+    private val manualRpcTestTransactions = ConcurrentHashMap.newKeySet<String>()
+
+    fun skipAutoAdvance(transactionId: String) {
+      manualRpcTestTransactions.add(transactionId)
+    }
   }
 
   override suspend fun onQuoteCreated(event: SendEventRequest) {
@@ -55,6 +67,13 @@ class Sep31EventProcessor(
 
   override suspend fun onTransactionStatusChanged(event: SendEventRequest) {
     val transaction = event.payload.transaction!!
+    if (manualRpcTestTransactions.contains(transaction.id)) {
+      log.info {
+        "Transaction ${transaction.id} opts out of automatic advancement -- skipping reaction to" +
+          " status ${transaction.status}"
+      }
+      return
+    }
     when (val status = transaction.status) {
       PENDING_SENDER -> {
         log.info { "Transaction ${transaction.id} is in pending_sender status" }
@@ -85,17 +104,45 @@ class Sep31EventProcessor(
   }
 
   override suspend fun onCustomerUpdated(event: SendEventRequest) {
-    platformClient
-      .getTransactions(
-        GetTransactionsRequest.builder()
-          .sep(TransactionsSeps.SEP_31)
-          .orderBy(TransactionsOrderBy.CREATED_AT)
-          .order(TransactionsOrder.ASC)
-          .statuses(listOf(PENDING_CUSTOMER_INFO_UPDATE))
-          .build()
-      )
-      .records
+    val updatedCustomerId = event.payload.customer?.id ?: return
+    fetchAllPendingCustomerInfoUpdateTransactions(TransactionsSeps.SEP_31)
+      .filter { it.customers?.receiver?.id == updatedCustomerId }
       .forEach { notifyCustomerUpdated(it) }
+  }
+
+  // The Platform API paginates /transactions (20 records per page by default), so a single
+  // unpaginated call can silently miss pending transactions past the first page.
+  private suspend fun fetchAllPendingCustomerInfoUpdateTransactions(
+    sep: TransactionsSeps
+  ): List<GetTransactionResponse> {
+    val pageSize = 20
+    val allRecords = mutableListOf<GetTransactionResponse>()
+    var pageNumber = 0
+    var previousPageIds: List<String>? = null
+    while (true) {
+      val page =
+        platformClient
+          .getTransactions(
+            GetTransactionsRequest.builder()
+              .sep(sep)
+              .orderBy(TransactionsOrderBy.CREATED_AT)
+              .order(TransactionsOrder.ASC)
+              .statuses(listOf(PENDING_CUSTOMER_INFO_UPDATE))
+              .pageSize(pageSize)
+              .pageNumber(pageNumber)
+              .build()
+          )
+          .records
+      // The Platform API caps its internal offset, so past that cap every "next" page repeats
+      // the same records instead of advancing. Stop instead of looping forever.
+      val pageIds = page.map { it.id }
+      if (pageIds.isNotEmpty() && pageIds == previousPageIds) break
+      allRecords.addAll(page)
+      if (page.size < pageSize) break
+      previousPageIds = pageIds
+      pageNumber++
+    }
+    return allRecords
   }
 
   private fun notifyCustomerUpdated(transaction: GetTransactionResponse) {

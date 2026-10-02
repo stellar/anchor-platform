@@ -15,6 +15,7 @@ import org.stellar.anchor.auth.WebAuthJwt;
 import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.platform.utils.TransactionCreationRateLimiter;
 import org.stellar.anchor.sep6.Sep6Service;
+import org.stellar.anchor.util.StringHelper;
 
 @RestController
 @CrossOrigin(origins = "*")
@@ -140,12 +141,18 @@ public class Sep6Controller {
       @RequestParam(value = "type", required = false) String type,
       @RequestParam(value = "amount", required = false) String amount,
       @RequestParam(value = "country_code", required = false) String countryCode,
-      @RequestParam(value = "refundMemo", required = false) String refundMemo,
-      @RequestParam(value = "refundMemoType", required = false) String refundMemoType)
+      @RequestParam(value = "refund_memo", required = false) String refundMemo,
+      @RequestParam(value = "refund_memo_type", required = false) String refundMemoType)
       throws AnchorException {
     debugF("GET /withdraw");
     WebAuthJwt token = SepRequestHelper.getToken(request);
     rateLimiter.checkAndRecord(token);
+    // Deprecated, non-spec aliases kept for backwards compatibility with clients that predate the
+    // fix to the correct SEP-6 parameter names above. Read directly off the request (rather than as
+    // typed @RequestParam args) so this overload's erased signature doesn't collide with
+    // withdraw-exchange's. Remove once no client depends on them.
+    String refundMemoAlias = request.getParameter("refundMemo");
+    String refundMemoTypeAlias = request.getParameter("refundMemoType");
     StartWithdrawRequest startWithdrawRequest =
         StartWithdrawRequest.builder()
             .assetCode(assetCode)
@@ -154,8 +161,9 @@ public class Sep6Controller {
             .type(type)
             .amount(amount)
             .countryCode(countryCode)
-            .refundMemo(refundMemo)
-            .refundMemoType(refundMemoType)
+            .refundMemo(StringHelper.isEmpty(refundMemo) ? refundMemoAlias : refundMemo)
+            .refundMemoType(
+                StringHelper.isEmpty(refundMemoType) ? refundMemoTypeAlias : refundMemoType)
             .requestClientIpAddress(getClientIpAddress(request))
             .build();
     return sep6Service.withdraw(token, startWithdrawRequest);
@@ -207,7 +215,7 @@ public class Sep6Controller {
   public GetTransactionsResponse getTransactions(
       HttpServletRequest request,
       @RequestParam(value = "asset_code") String assetCode,
-      @RequestParam(value = "account") String account,
+      @RequestParam(value = "account", required = false) String account,
       @RequestParam(required = false, value = "kind") String kind,
       @RequestParam(required = false, value = "limit") Integer limit,
       @RequestParam(required = false, value = "paging_id") String pagingId,
@@ -263,5 +271,24 @@ public class Sep6Controller {
             .externalTransactionId(externalTransactionId)
             .build();
     return sep6Service.findTransaction(token, getTransactionRequest);
+  }
+
+  @CrossOrigin(origins = "*")
+  @RequestMapping(
+      value = "/transactions/{id}",
+      consumes = {MediaType.APPLICATION_JSON_VALUE},
+      produces = {MediaType.APPLICATION_JSON_VALUE},
+      method = {RequestMethod.PATCH})
+  public Sep6GetTransactionResponse patchTransaction(
+      HttpServletRequest servletRequest,
+      @PathVariable(name = "id") String id,
+      @RequestBody Sep6PatchTransactionRequest request)
+      throws AnchorException {
+    WebAuthJwt token = SepRequestHelper.getToken(servletRequest);
+    if (request != null) {
+      request.setId(id);
+    }
+    debugF("PATCH /transactions id={}", id);
+    return sep6Service.patchTransaction(token, request);
   }
 }

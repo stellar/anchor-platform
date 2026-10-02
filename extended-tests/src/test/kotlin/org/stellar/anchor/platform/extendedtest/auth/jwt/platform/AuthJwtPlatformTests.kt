@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.extendedtest.auth.jwt.platform
 
 import io.mockk.mockk
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import okhttp3.OkHttpClient
@@ -43,7 +44,9 @@ internal class AuthJwtPlatformTests : AbstractAuthIntegrationTest() {
     // Assert the request does not throw a 403.
     // As for the correctness of the request/response, it should be tested in the platform server
     // integration tests.
-    assertThrows<SepNotFoundException> { jwtPlatformClient.getTransaction("my_id") }
+    assertThrows<SepNotFoundException> {
+      jwtPlatformClient.getTransaction(UUID.randomUUID().toString())
+    }
   }
 
   @ParameterizedTest
@@ -69,9 +72,11 @@ internal class AuthJwtPlatformTests : AbstractAuthIntegrationTest() {
     assertEquals(403, response.code)
 
     // Check if the wrong JWT key will cause a 403.
-    assertThrows<SepNotAuthorizedException> { jwtWrongKeyPlatformClient.getTransaction("my_id") }
     assertThrows<SepNotAuthorizedException> {
-      jwtExpiredTokenPlatformClient.getTransaction("my_id")
+      jwtWrongKeyPlatformClient.getTransaction(UUID.randomUUID().toString())
+    }
+    assertThrows<SepNotAuthorizedException> {
+      jwtExpiredTokenPlatformClient.getTransaction(UUID.randomUUID().toString())
     }
   }
 
