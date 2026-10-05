@@ -42,6 +42,7 @@ auth:
 sep24:
   # Encryption key for interactive JWT
   interactiveJwtKey: "secret_sep24_interactive_url_jwt_secret"
+  moreInfoJwtKey: "secret_sep24_more_info_url_jwt_secret"
 
 data:
   url: reference-db:5433

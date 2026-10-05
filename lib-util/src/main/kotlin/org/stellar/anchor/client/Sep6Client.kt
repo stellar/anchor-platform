@@ -1,11 +1,13 @@
 package org.stellar.anchor.client
 
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import org.stellar.anchor.api.sep.sep6.GetTransactionsResponse
 import org.stellar.anchor.api.sep.sep6.InfoResponse
 import org.stellar.anchor.api.sep.sep6.Sep6GetTransactionResponse
 import org.stellar.anchor.api.sep.sep6.StartDepositResponse
 import org.stellar.anchor.api.sep.sep6.StartWithdrawResponse
 
-class Sep6Client(private val endpoint: String, var jwt: String) : SepClient() {
+class Sep6Client(private val endpoint: String, var jwt: String?) : SepClient() {
   fun getInfo(): InfoResponse {
     val responseBody = httpGet("$endpoint/info")
     return gson.fromJson(responseBody, InfoResponse::class.java)
@@ -32,6 +34,28 @@ class Sep6Client(private val endpoint: String, var jwt: String) : SepClient() {
     val url = request.entries.fold(baseUrl) { acc, entry -> "$acc${entry.key}=${entry.value}&" }
 
     val responseBody = httpGet(url, jwt)
+    return gson.fromJson(responseBody, Sep6GetTransactionResponse::class.java)
+  }
+
+  fun getTransactions(request: Map<String, String>): GetTransactionsResponse {
+    val urlBuilder = "$endpoint/transactions".toHttpUrl().newBuilder()
+    request.forEach { (key, value) -> urlBuilder.addQueryParameter(key, value) }
+
+    val responseBody = httpGet(urlBuilder.build().toString(), jwt)
+    return gson.fromJson(responseBody, GetTransactionsResponse::class.java)
+  }
+
+  /**
+   * Sends `PATCH /transactions/:id`. `body` is the raw JSON request body -- a raw string, rather
+   * than a typed request, so tests can send malformed shapes (`{}`, a null field value) without a
+   * typed builder getting in the way. Errors surface through [SepClient]'s status -> exception
+   * mapping (400 -> [org.stellar.anchor.api.exception.SepValidationException], 404 ->
+   * [org.stellar.anchor.api.exception.SepNotFoundException], 403 ->
+   * [org.stellar.anchor.api.exception.SepNotAuthorizedException]).
+   */
+  fun patchTransaction(id: String, body: String): Sep6GetTransactionResponse {
+    val headers = mapOf("Authorization" to "Bearer $jwt", "Content-Type" to "application/json")
+    val responseBody = httpPatch("$endpoint/transactions/$id", body, headers)
     return gson.fromJson(responseBody, Sep6GetTransactionResponse::class.java)
   }
 }

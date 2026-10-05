@@ -328,8 +328,13 @@ public class Sep45Service {
    * @return true if the entry has account credentials, false otherwise
    */
   private boolean hasAccountCredentials(SorobanAuthorizationEntry entry) {
-    return entry
-        .getCredentials()
+    SorobanCredentials credentials = entry.getCredentials();
+    if (credentials == null
+        || credentials.getDiscriminant() != SorobanCredentialsType.SOROBAN_CREDENTIALS_ADDRESS
+        || credentials.getAddress() == null) {
+      return false;
+    }
+    return credentials
         .getAddress()
         .getAddress()
         .getDiscriminant()

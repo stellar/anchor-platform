@@ -7,10 +7,14 @@ import static org.stellar.anchor.util.NetUtil.getDomainFromURL;
 import static org.stellar.anchor.util.OkHttpUtil.buildJsonRequestBody;
 import static org.stellar.anchor.util.StringHelper.json;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -21,6 +25,8 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.apache.commons.lang3.StringUtils;
 import org.stellar.anchor.MoreInfoUrlConstructor;
+import org.stellar.anchor.api.asset.AssetInfo;
+import org.stellar.anchor.api.asset.Sep31Info;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.InternalServerErrorException;
@@ -40,7 +46,9 @@ import org.stellar.anchor.sep31.Sep31Refunds;
 import org.stellar.anchor.sep31.Sep31Transaction;
 import org.stellar.anchor.sep6.Sep6Transaction;
 import org.stellar.anchor.sep6.Sep6TransactionUtils;
+import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
+import org.stellar.anchor.util.StringHelper;
 import org.stellar.sdk.KeyPair;
 
 public class ClientStatusCallbackHandler extends EventHandler {
@@ -100,7 +108,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
 
     if (request != null) {
       try (Response response = httpClient.newCall(request).execute()) {
-        debugF("Sending event: {} to client status api: {}", json(event), request.url());
+        debugF("Sending event: {} to client status api: {}", redactedJson(event), request.url());
         if (response.code() < 200 || response.code() >= 400) {
           errorF("Failed to send event to client status API. Error code: {}", response.code());
           return false;
@@ -117,7 +125,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
     if (callbackUrl == null) {
       Log.debugF(
           "No callback URL found for event: {} for client: {}",
-          json(event),
+          redactedJson(event),
           clientConfig.getName());
       return null;
     }
@@ -206,7 +214,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
           return json(txn24Response);
         case SEP_31:
           Sep31Transaction sep31Txn = fromSep31Txn(event.getTransaction());
-          return json(sep31Txn.toSep31GetTransactionResponse());
+          return sep31CallbackPayload(sep31Txn);
         default:
           throw new SepException(
               String.format("Unsupported SEP: %s", event.getTransaction().getSep()));
@@ -216,6 +224,42 @@ public class ClientStatusCallbackHandler extends EventHandler {
     } else {
       throw new InternalServerErrorException("Event must have either a transaction or a customer");
     }
+  }
+
+  /**
+   * SEP-31's public GET/PATCH transaction response has no `fields` property -- it's not part of the
+   * protocol, and {@link Sep31Transaction#toSep31GetTransactionResponse()} is the exact type {@code
+   * Sep31Controller} returns to the SEP-31 client for those endpoints, so adding it there would
+   * leak submitted field values into that public response too. The callback recipient (the
+   * receiving anchor's own business server) does need these values to act on a
+   * pending_transaction_info_update correction, so they're merged into just this JSON instead.
+   */
+  private static String sep31CallbackPayload(Sep31Transaction sep31Txn) {
+    Gson gson = GsonUtils.getInstance();
+    JsonObject responseJson =
+        gson.toJsonTree(sep31Txn.toSep31GetTransactionResponse()).getAsJsonObject();
+    if (sep31Txn.getFields() != null && !sep31Txn.getFields().isEmpty()) {
+      responseJson
+          .getAsJsonObject("transaction")
+          .add("fields", gson.toJsonTree(sep31Txn.getFields()));
+    }
+    return gson.toJson(responseJson);
+  }
+
+  /**
+   * Renders an event as JSON for logging, with SEP-31 `fields` (raw submitted values -- e.g. bank
+   * account/routing numbers) stripped out first, so enabling DEBUG logging doesn't persist those
+   * values to application logs. Only used for log lines -- the actual callback/event payloads sent
+   * to consumers are built separately and are unaffected.
+   */
+  static String redactedJson(AnchorEvent event) {
+    Gson gson = GsonUtils.getInstance();
+    JsonObject root = gson.toJsonTree(event).getAsJsonObject();
+    JsonObject transaction = root.getAsJsonObject("transaction");
+    if (transaction != null) {
+      transaction.remove("fields");
+    }
+    return gson.toJson(root);
   }
 
   static Sep6Transaction fromSep6Txn(GetTransactionResponse txn) {
@@ -345,6 +389,31 @@ public class ClientStatusCallbackHandler extends EventHandler {
     sep31Txn.setToAccount(txn.getDestinationAccount());
     sep31Txn.setClientDomain(txn.getClientDomain());
     sep31Txn.setQuoteId(txn.getQuoteId());
+    sep31Txn.setFields(txn.getFields());
+
+    // GetTransactionResponse.requiredInfoUpdates is a flat field-name list (shared with SEP-6), so
+    // it's expanded back into the Sep31Info.Fields shape a SEP-31 client callback body expects --
+    // see TransactionMapper.toGetTransactionResponse(Sep31Transaction) for the other direction.
+    // requiredInfoUpdatesFields carries that same map's real per-field metadata alongside the flat
+    // list; prefer it over a humanized placeholder whenever it has an entry for the field.
+    if (txn.getRequiredInfoUpdates() != null && !txn.getRequiredInfoUpdates().isEmpty()) {
+      Map<String, AssetInfo.Field> realFieldMetadata = txn.getRequiredInfoUpdatesFields();
+      Map<String, AssetInfo.Field> requiredFields = new HashMap<>();
+      for (String fieldName : txn.getRequiredInfoUpdates()) {
+        AssetInfo.Field realField =
+            realFieldMetadata == null ? null : realFieldMetadata.get(fieldName);
+        requiredFields.put(
+            fieldName,
+            realField != null
+                ? realField
+                : AssetInfo.Field.builder()
+                    .description(StringHelper.humanizeSnakeCase(fieldName))
+                    .build());
+      }
+      Sep31Info.Fields requiredInfoUpdates = new Sep31Info.Fields();
+      requiredInfoUpdates.setTransaction(requiredFields);
+      sep31Txn.setRequiredInfoUpdates(requiredInfoUpdates);
+    }
 
     if (txn.getRefunds() != null) {
       List<RefundPayment> paymentList =

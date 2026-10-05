@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ResponseStatus
+import org.stellar.anchor.api.exception.SepRateLimitExceededException
 import org.stellar.anchor.platform.controller.sep.SepControllerExceptionHandler
 
 /**
@@ -54,5 +55,27 @@ class AbstractControllerExceptionHandlerTest {
     val responseStatus = method.getAnnotation(ResponseStatus::class.java)
 
     assertEquals(HttpStatus.BAD_REQUEST, responseStatus.value)
+  }
+
+  @Test
+  fun `rate limit exceeded returns the exception message`() {
+    val handler = SepControllerExceptionHandler()
+    val ex = SepRateLimitExceededException("too many requests")
+
+    val response = handler.handleRateLimitExceeded(ex)
+
+    assertEquals("too many requests", response.error)
+  }
+
+  @Test
+  fun `rate limit handler method is annotated to produce HTTP 429`() {
+    val method =
+      AbstractControllerExceptionHandler::class
+        .java
+        .getMethod("handleRateLimitExceeded", SepRateLimitExceededException::class.java)
+
+    val responseStatus = method.getAnnotation(ResponseStatus::class.java)
+
+    assertEquals(HttpStatus.TOO_MANY_REQUESTS, responseStatus.value)
   }
 }

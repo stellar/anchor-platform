@@ -48,6 +48,8 @@ public class Sep6Service {
       counter(MetricConstants.SEP6_TRANSACTION_REQUESTED);
   private final Counter sep6TransactionQueriedCounter =
       counter(MetricConstants.SEP6_TRANSACTION_QUERIED);
+  private final Counter sep6TransactionPatchedCounter =
+      counter(MetricConstants.SEP6_TRANSACTION_PATCHED);
   private final Counter sep6WithdrawalCounter =
       counter(
           MetricConstants.SEP6_TRANSACTION_CREATED,
@@ -94,6 +96,25 @@ public class Sep6Service {
     return infoResponse;
   }
 
+  /**
+   * Builds the transaction memo for a deposit/deposit-exchange request. When the caller omits both
+   * `account` and `memo` -- falling back entirely to the JWT's own identity -- and the JWT carries
+   * a legacy `G...:memo` subject (accountMemo is only ever set for that form, never for a muxed
+   * subject, since a muxed M-address already carries its own sub-account identifier), default the
+   * memo to that accountMemo (type "id"). Otherwise the created deposit would be addressed to the
+   * shared base account with no memo distinguishing this JWT's specific sub-account.
+   */
+  private Memo resolveDepositMemo(
+      WebAuthJwt token, String requestAccount, String requestMemo, String requestMemoType)
+      throws AnchorException {
+    if (StringHelper.isEmpty(requestAccount)
+        && StringHelper.isEmpty(requestMemo)
+        && token.getAccountMemo() != null) {
+      return makeMemo(token.getAccountMemo(), "id");
+    }
+    return makeMemo(requestMemo, requestMemoType);
+  }
+
   public StartDepositResponse deposit(WebAuthJwt token, StartDepositRequest request)
       throws AnchorException {
     sep6TransactionRequestedCounter.increment();
@@ -120,8 +141,11 @@ public class Sep6Service {
           asset.getSep6().getDeposit().getMinAmount(),
           asset.getSep6().getDeposit().getMaxAmount());
     }
+    // When omitted, the account established by the JWT is used -- getOwnerAccount() prefers the
+    // muxed (M...) address over the demuxed base account, matching webAuthAccount below, so a
+    // muxed JWT's sub-account destination isn't silently lost when the caller omits `account`.
     String destinationAccount =
-        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, destinationAccount);
 
     String id = generateSepTransactionId();
@@ -157,7 +181,8 @@ public class Sep6Service {
       }
     }
 
-    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
+    Memo memo =
+        resolveDepositMemo(token, request.getAccount(), request.getMemo(), request.getMemoType());
 
     if (memo != null) {
       debug("Set the transaction memo.", memo);
@@ -208,15 +233,16 @@ public class Sep6Service {
         fundingMethod, buyAsset.getCode(), buyAsset.getSep6().getDeposit().getMethods());
     requestValidator.validateAmount(
         request.getAmount(), sellAsset.getCode(), sellAsset.getSignificantDecimals(), null, null);
+    // See deposit() above for why getOwnerAccount() (not getAccount()) is the correct fallback.
     String destinationAccount =
-        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, destinationAccount);
 
     Amounts amounts;
     if (request.getQuoteId() != null) {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
-              request.getQuoteId(), sellAsset, buyAsset, request.getAmount());
+              request.getQuoteId(), sellAsset, buyAsset, request.getAmount(), fundingMethod, null);
       requestValidator.validateAmount(
           amounts.getAmountOut(),
           buyAsset.getCode(),
@@ -237,7 +263,8 @@ public class Sep6Service {
               .build();
     }
 
-    Memo memo = makeMemo(request.getMemo(), request.getMemoType());
+    Memo memo =
+        resolveDepositMemo(token, request.getAccount(), request.getMemo(), request.getMemoType());
     String id = generateSepTransactionId();
 
     Sep6TransactionBuilder builder =
@@ -322,9 +349,11 @@ public class Sep6Service {
           asset.getSep6().getWithdraw().getMinAmount(),
           asset.getSep6().getWithdraw().getMaxAmount());
     }
+    // See deposit() above for why getOwnerAccount() (not getAccount()) is the correct fallback.
     String sourceAccount =
-        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, sourceAccount);
+    validateRefundMemo(request.getRefundMemo(), request.getRefundMemoType());
 
     String id = generateSepTransactionId();
 
@@ -399,9 +428,11 @@ public class Sep6Service {
         sellAsset.getSignificantDecimals(),
         sellAsset.getSep6().getWithdraw().getMinAmount(),
         sellAsset.getSep6().getWithdraw().getMaxAmount());
+    // See deposit() above for why getOwnerAccount() (not getAccount()) is the correct fallback.
     String sourceAccount =
-        StringHelper.isEmpty(request.getAccount()) ? token.getAccount() : request.getAccount();
+        StringHelper.isEmpty(request.getAccount()) ? token.getOwnerAccount() : request.getAccount();
     requestValidator.validateDestinationAccount(token, sourceAccount);
+    validateRefundMemo(request.getRefundMemo(), request.getRefundMemoType());
 
     String id = generateSepTransactionId();
 
@@ -409,7 +440,7 @@ public class Sep6Service {
     if (request.getQuoteId() != null) {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
-              request.getQuoteId(), sellAsset, buyAsset, request.getAmount());
+              request.getQuoteId(), sellAsset, buyAsset, request.getAmount(), null, fundingMethod);
     } else {
       // TODO(philip): remove this
       // If a quote is not provided, set the fee and out amounts to 0.
@@ -473,6 +504,31 @@ public class Sep6Service {
     return StartWithdrawResponse.builder().id(txn.getId()).build();
   }
 
+  // Validates the refund_memo/refund_memo_type pair the same way Sep31Service does: both must be
+  // specified together, or both omitted. The presence check is done explicitly (with the correct
+  // field names) rather than relying on makeMemo's own message, which assumes a "memo_type" field
+  // that doesn't exist on this endpoint. makeMemo is still used to validate the type/value
+  // combination once both are known to be present.
+  private void validateRefundMemo(String refundMemo, String refundMemoType)
+      throws SepValidationException {
+    if (StringHelper.isEmpty(refundMemo) != StringHelper.isEmpty(refundMemoType)) {
+      throw new SepValidationException(
+          "refund_memo and refund_memo_type must both be specified or both be omitted");
+    }
+    // makeMemo doesn't consistently report malformed values as SepValidationException (some
+    // failures surface as a plain SepException or IllegalArgumentException, both of which the
+    // global exception handler maps to 500 instead of the 400 required for bad request input) —
+    // preserve an existing validation exception as-is, and wrap anything else as one.
+    try {
+      makeMemo(refundMemo, refundMemoType);
+    } catch (SepValidationException e) {
+      throw e;
+    } catch (SepException | IllegalArgumentException e) {
+      throw new SepValidationException(
+          String.format("Invalid refund_memo/refund_memo_type: %s", e.getMessage()), e);
+    }
+  }
+
   public GetTransactionsResponse findTransactions(WebAuthJwt token, GetTransactionsRequest request)
       throws SepException {
     // Pre-validation
@@ -483,7 +539,7 @@ public class Sep6Service {
       throw new SepValidationException("missing request");
     }
     String tokenAccount = Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
-    if (!request.getAccount().equals(tokenAccount)) {
+    if (!StringHelper.isEmpty(request.getAccount()) && !request.getAccount().equals(tokenAccount)) {
       throw new SepNotAuthorizedException("account does not match token");
     }
     if (assetService.getAsset(request.getAssetCode()) == null) {
@@ -533,17 +589,70 @@ public class Sep6Service {
     // the underlying G so that legacy rows predating muxed-aware storage remain
     // reachable by their original creator. The listing endpoint stays strict, so
     // legacy rows are reachable by direct ID only — they are not enumerable.
-    if (txn == null || !webAuthAccountMatches(txn.getWebAuthAccount(), token)) {
-      throw new NotFoundException("transaction not found");
-    }
-    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
-      throw new NotFoundException("account memo does not match token");
-    }
+    txn = requireOwnedTransaction(txn, token);
 
     sep6TransactionQueriedCounter.increment();
     String lang = validateLanguage(languageConfig, request.getLang());
     return new Sep6GetTransactionResponse(
         Sep6TransactionUtils.fromTxn(txn, moreInfoUrlConstructor, lang));
+  }
+
+  /**
+   * Applies a wallet's answer to a {@code pending_transaction_info_update} request, per SEP-6
+   * "PATCH Transaction". On success the transaction returns to {@code pending_anchor} and the
+   * supplied field values are persisted for the business server to read back.
+   *
+   * @param token the requesting SEP-10/SEP-45 token.
+   * @param request the PATCH request, with {@code id} set from the path.
+   * @return the transaction in its new state, in the same shape {@code GET /transaction} returns.
+   * @throws AnchorException on every rejection defined by S6PQ-05..14.
+   */
+  @Transactional(rollbackOn = {AnchorException.class, RuntimeException.class})
+  public Sep6GetTransactionResponse patchTransaction(
+      WebAuthJwt token, Sep6PatchTransactionRequest request) throws AnchorException {
+    if (token == null) {
+      throw new SepNotAuthorizedException("missing token");
+    }
+    if (request == null) {
+      throw new SepValidationException("missing request");
+    }
+
+    Sep6Transaction txn =
+        requireOwnedTransaction(txnStore.findByTransactionId(request.getId()), token);
+
+    if (!Objects.equals(
+        txn.getStatus(), SepTransactionStatus.PENDING_TRANSACTION_INFO_UPDATE.toString())) {
+      infoF("Transaction ({}) does not need update", txn.getId());
+      throw new BadRequestException(
+          String.format("transaction (id=%s) does not need update", txn.getId()));
+    }
+
+    validatePatchTransactionFields(txn, request);
+
+    Map<String, String> fields = txn.getFields();
+    if (fields == null) {
+      fields = new HashMap<>();
+    }
+    fields.putAll(request.getTransaction());
+    txn.setFields(fields);
+    txn.setStatus(SepTransactionStatus.PENDING_ANCHOR.toString());
+    txn.setRequiredInfoUpdates(null);
+    txn.setRequiredInfoMessage(null);
+    txn.setUpdatedAt(Instant.now());
+
+    Sep6Transaction savedTxn = txnStore.save(txn);
+    eventSession.publish(
+        AnchorEvent.builder()
+            .id(UUID.randomUUID().toString())
+            .sep("6")
+            .type(AnchorEvent.Type.TRANSACTION_STATUS_CHANGED)
+            .transaction(TransactionMapper.toGetTransactionResponse(savedTxn, assetService))
+            .build());
+
+    sep6TransactionPatchedCounter.increment();
+    String lang = validateLanguage(languageConfig, null);
+    return new Sep6GetTransactionResponse(
+        Sep6TransactionUtils.fromTxn(savedTxn, moreInfoUrlConstructor, lang));
   }
 
   private InfoResponse buildInfoResponse() {
@@ -614,6 +723,76 @@ public class Sep6Service {
       }
     }
     return response;
+  }
+
+  /**
+   * Confirms a SEP-6 transaction belongs to the requesting token, under the same no-disclosure rule
+   * {@link #findTransaction} enforces: an unknown transaction, one created under another account,
+   * or one created under the same account with a different memo are all indistinguishable 404s.
+   *
+   * @param txn the transaction looked up by id/stellar id/external id, or null if none matched.
+   * @param token the requesting SEP-10/SEP-45 token.
+   * @return the same transaction, for chaining.
+   * @throws NotFoundException if the transaction is null, or doesn't belong to the token's account
+   *     and memo.
+   */
+  private Sep6Transaction requireOwnedTransaction(Sep6Transaction txn, WebAuthJwt token)
+      throws NotFoundException {
+    if (txn == null || !webAuthAccountMatches(txn.getWebAuthAccount(), token)) {
+      throw new NotFoundException("transaction not found");
+    }
+    if (!Objects.equals(txn.getWebAuthAccountMemo(), token.getAccountMemo())) {
+      throw new NotFoundException("transaction not found");
+    }
+    return txn;
+  }
+
+  /**
+   * Validates a SEP-6 PATCH request's supplied fields against the transaction's {@code
+   * required_info_updates}.
+   *
+   * @param txn is the Sep6Transaction already stored in the database.
+   * @param request is the Sep6PatchTransactionRequest request.
+   * @throws BadRequestException if the stored transaction is not expecting any info update.
+   * @throws BadRequestException if the request carries no fields.
+   * @throws BadRequestException if a supplied field is not expected, has a null value, or a
+   *     requested field is missing.
+   */
+  void validatePatchTransactionFields(Sep6Transaction txn, Sep6PatchTransactionRequest request)
+      throws BadRequestException {
+    List<String> expectedFields = txn.getRequiredInfoUpdates();
+    if (expectedFields == null || expectedFields.isEmpty()) {
+      infoF("Transaction ({}) is not expecting any updates", txn.getId());
+      throw new BadRequestException(
+          String.format("Transaction (%s) is not expecting any updates", txn.getId()));
+    }
+
+    Map<String, String> requestFields = request.getTransaction();
+    if (requestFields == null || requestFields.isEmpty()) {
+      infoF("Transaction ({}) patch request is missing fields", txn.getId());
+      throw new BadRequestException("transaction must be specified");
+    }
+
+    for (Map.Entry<String, String> entry : requestFields.entrySet()) {
+      String fieldName = entry.getKey();
+      if (!expectedFields.contains(fieldName)) {
+        infoF("{} is not a expected field", fieldName);
+        throw new BadRequestException(String.format("[%s] is not a expected field", fieldName));
+      }
+      // A JSON null value deserializes to a null map entry -- without this check it would still
+      // count as "supplied" below.
+      if (entry.getValue() == null) {
+        infoF("{} was patched with a null value", fieldName);
+        throw new BadRequestException(String.format("[%s] must not be null", fieldName));
+      }
+    }
+
+    for (String fieldName : expectedFields) {
+      if (!requestFields.containsKey(fieldName)) {
+        infoF("{} is required but was not provided", fieldName);
+        throw new BadRequestException(String.format("[%s] is required", fieldName));
+      }
+    }
   }
 
   /**

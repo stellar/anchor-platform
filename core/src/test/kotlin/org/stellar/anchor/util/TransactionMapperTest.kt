@@ -113,56 +113,65 @@ class TransactionMapperTest {
       }
 
     val actual = GsonUtils.getInstance().toJson(TransactionMapper.toGetTransactionResponse(sepTxn))
-    val expected =
-      GsonUtils.getInstance()
-        .toJson(
-          PlatformTransactionData.builder()
-            .id(sepTxn.id)
-            .sep(PlatformTransactionData.Sep.SEP_31)
-            .status(SepTransactionStatus.COMPLETED)
-            .kind(PlatformTransactionData.Kind.RECEIVE)
-            .amountExpected(Amount("100.0", "USDC"))
-            .amountIn(Amount("100.0", "USDC"))
-            .amountOut(Amount("100.0", "USD"))
-            .feeDetails(FeeDetails("10.0", "USD"))
-            .quoteId(sepTxn.quoteId)
-            .startedAt(sepTxn.startedAt)
-            .updatedAt(sepTxn.updatedAt)
-            .completedAt(sepTxn.completedAt)
-            .userActionRequiredBy(sepTxn.userActionRequiredBy)
-            .transferReceivedAt(sepTxn.transferReceivedAt)
-            .message(sepTxn.requiredInfoMessage)
-            .refunds(
-              Refunds.builder()
-                .amountRefunded(Amount("90.0", "USDC"))
-                .amountFee(Amount("10.0", "USDC"))
-                .payments(
-                  arrayOf(
-                    RefundPayment.builder()
-                      .id("id")
-                      .idType(RefundPayment.IdType.STELLAR)
-                      .amount(Amount("90.0", "USDC"))
-                      .fee(Amount("10.0", "USDC"))
-                      .build()
-                  )
-                )
-                .build()
+    val expectedPlatformTxn =
+      PlatformTransactionData.builder()
+        .id(sepTxn.id)
+        .sep(PlatformTransactionData.Sep.SEP_31)
+        .status(SepTransactionStatus.COMPLETED)
+        .kind(PlatformTransactionData.Kind.RECEIVE)
+        .amountExpected(Amount("100.0", "USDC"))
+        .amountIn(Amount("100.0", "USDC"))
+        .amountOut(Amount("100.0", "USD"))
+        .feeDetails(FeeDetails("10.0", "USD"))
+        .quoteId(sepTxn.quoteId)
+        .startedAt(sepTxn.startedAt)
+        .updatedAt(sepTxn.updatedAt)
+        .completedAt(sepTxn.completedAt)
+        .userActionRequiredBy(sepTxn.userActionRequiredBy)
+        .transferReceivedAt(sepTxn.transferReceivedAt)
+        .message(sepTxn.requiredInfoMessage)
+        .requiredInfoUpdates(listOf("field"))
+        .refunds(
+          Refunds.builder()
+            .amountRefunded(Amount("90.0", "USDC"))
+            .amountFee(Amount("10.0", "USDC"))
+            .payments(
+              arrayOf(
+                RefundPayment.builder()
+                  .id("id")
+                  .idType(RefundPayment.IdType.STELLAR)
+                  .amount(Amount("90.0", "USDC"))
+                  .fee(Amount("10.0", "USDC"))
+                  .build()
+              )
             )
-            .stellarTransactions(listOf(stellarTransaction))
-            .sourceAccount(sepTxn.fromAccount)
-            .destinationAccount(sepTxn.toAccount)
-            .externalTransactionId(sepTxn.externalTransactionId)
-            .memo(sepTxn.stellarMemo)
-            .memoType(sepTxn.stellarMemoType)
-            .refundMemo(sepTxn.stellarMemo)
-            .refundMemoType(sepTxn.stellarMemoType)
-            .clientDomain(sepTxn.clientDomain)
-            .clientName(sepTxn.clientName)
-            .customers(sepTxn.customers)
-            .creator(sepTxn.creator)
-            .instructions(null)
             .build()
         )
+        .stellarTransactions(listOf(stellarTransaction))
+        .sourceAccount(sepTxn.fromAccount)
+        .destinationAccount(sepTxn.toAccount)
+        .externalTransactionId(sepTxn.externalTransactionId)
+        .memo(sepTxn.stellarMemo)
+        .memoType(sepTxn.stellarMemoType)
+        .refundMemo(sepTxn.stellarMemo)
+        .refundMemoType(sepTxn.stellarMemoType)
+        .clientDomain(sepTxn.clientDomain)
+        .clientName(sepTxn.clientName)
+        .customers(sepTxn.customers)
+        .creator(sepTxn.creator)
+        .instructions(null)
+        .build()
+
+    val expectedJsonObject = gson.fromJson(gson.toJson(expectedPlatformTxn), JsonObject::class.java)
+    // PlatformTransactionData's builder has no slot for the SEP-31-only `fields` and
+    // `requiredInfoUpdatesFields` properties (both live on GetTransactionResponse instead), so add
+    // them directly rather than switching this whole builder chain to GetTransactionResponse.
+    expectedJsonObject.add("fields", gson.toJsonTree(sepTxn.fields))
+    expectedJsonObject.add(
+      "requiredInfoUpdatesFields",
+      gson.toJsonTree(sepTxn.requiredInfoUpdates.transaction),
+    )
+    val expected = gson.toJson(expectedJsonObject)
 
     JSONAssert.assertEquals(expected, actual, true)
   }
@@ -432,6 +441,7 @@ class TransactionMapperTest {
             "field" to InstructionField.builder().value("value").description("description").build()
           )
         feeDetails = FeeDetails("10.0", "USD")
+        fields = mapOf("dest" to "123")
       }
 
     val actual =
@@ -467,6 +477,8 @@ class TransactionMapperTest {
         .refundMemoType(sepTxn.refundMemoType)
         .clientDomain(sepTxn.clientDomain)
         .clientName(sepTxn.clientName)
+        .requiredInfoMessage(sepTxn.requiredInfoMessage)
+        .requiredInfoUpdates(sepTxn.requiredInfoUpdates)
         .customers(
           Customers.builder()
             .sender(StellarId(null, sepTxn.webAuthAccount, sepTxn.webAuthAccountMemo))
@@ -481,9 +493,48 @@ class TransactionMapperTest {
 
     // Add the "funding_method" field
     jsonObject.addProperty("fundingMethod", sepTxn.type)
+    // PlatformTransactionData's builder has no slot for `fields` (it lives on
+    // GetTransactionResponse instead), so add it directly rather than switching this whole
+    // builder chain to GetTransactionResponse.
+    jsonObject.add("fields", gson.toJsonTree(sepTxn.fields))
     // Convert back to JSON string if needed
     val expectedJsonString = gson.toJson(jsonObject)
 
     JSONAssert.assertEquals(expectedJsonString, actual, true)
+  }
+
+  @Test
+  fun `test SEP-6 transaction mapping omits fields and required info when unset`() {
+    val sepTxn =
+      PojoSep6Transaction().apply {
+        id = UUID.randomUUID().toString()
+        transactionId = this.id
+        status = "pending_anchor"
+        kind = "deposit"
+        amountExpected = "100.0"
+        amountIn = "100.0"
+        amountInAsset = "USD"
+        amountOut = "100.0"
+        amountOutAsset = "USDC"
+        feeDetails = FeeDetails("10.0", "USD")
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        webAuthAccount = "webAuthAccount"
+        webAuthAccountMemo = "webAuthAccountMemo"
+        requestAssetCode = "USDC"
+        requestAssetIssuer = "issuer"
+        type = "bank_account"
+      }
+
+    val actual =
+      GsonUtils.getInstance()
+        .toJson(TransactionMapper.toGetTransactionResponse(sepTxn, assertService))
+    val actualJsonObject = gson.fromJson(actual, JsonObject::class.java)
+
+    assertEquals(false, actualJsonObject.has("fields"))
+    assertEquals(false, actualJsonObject.has("required_info_message"))
+    assertEquals(false, actualJsonObject.has("required_info_updates"))
   }
 }

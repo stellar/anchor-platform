@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
+import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.api.shared.*;
 
@@ -106,6 +107,16 @@ public class PlatformTransactionData {
 
   @SerializedName("required_info_updates")
   List<String> requiredInfoUpdates;
+
+  /**
+   * Optional per-field metadata for {@link #requiredInfoUpdates}, keyed by field name -- lets a
+   * SEP-31 business server supply the real description (and choices/optional) SEP-31 requires,
+   * instead of one being synthesized from the field name. SEP-6 has no equivalent per-field
+   * metadata concept, so this is only consulted for SEP-31 transactions; a requested field name
+   * with no entry here still falls back to a humanized version of the name.
+   */
+  @SerializedName("required_info_updates_fields")
+  Map<String, AssetInfo.Field> requiredInfoUpdatesFields;
 
   @SerializedName("request_client_ip_address")
   String requestClientIpAddress;

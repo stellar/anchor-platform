@@ -109,7 +109,9 @@ public class JdbcSep24TransactionStore implements Sep24TransactionStore {
               olderThan,
               pageable);
       // Backward compatibility for legacy rows that may have stored account:memo in
-      // web_auth_account and left web_auth_account_memo empty.
+      // web_auth_account and left web_auth_account_memo empty. findTransactionsWithFilters only
+      // matches null-memo rows (see its Javadoc), which is safe here only because these legacy
+      // rows are guaranteed to have webAuthAccountMemo == null.
       if (txns.isEmpty()) {
         txns =
             txnRepo.findTransactionsWithFilters(

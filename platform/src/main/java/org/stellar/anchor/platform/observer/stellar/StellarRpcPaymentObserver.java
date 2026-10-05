@@ -8,7 +8,9 @@ import static org.stellar.anchor.platform.observer.stellar.StellarRpcPaymentObse
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 
+import io.micrometer.core.instrument.Metrics;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -21,6 +23,8 @@ import lombok.Getter;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.LedgerDecodeException;
+import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.asset.AssetService;
@@ -33,6 +37,7 @@ import org.stellar.anchor.ledger.PaymentTransferEvent;
 import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig;
 import org.stellar.anchor.platform.observer.PaymentListener;
+import org.stellar.anchor.platform.service.AnchorMetrics;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
@@ -47,6 +52,7 @@ import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse;
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse.EventInfo;
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse;
 import org.stellar.sdk.scval.Scv;
+import org.stellar.sdk.xdr.Asset;
 import org.stellar.sdk.xdr.SCVal;
 import org.stellar.sdk.xdr.SCValType;
 
@@ -129,15 +135,14 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       lastActivityTime = Instant.now();
       silenceTimeoutCount = 0;
       metricLatestBlockRead.set(response.getLatestLedger());
-      try {
-        if (response.getEvents() != null && !response.getEvents().isEmpty()) {
-          processEvents(response.getEvents());
-        }
-      } finally {
+      String nextCursor = processEvents(response.getEvents(), response.getCursor());
+      if (nextCursor != null) {
         try {
-          saveCursor(response.getCursor());
-          streamBackoffTimer.reset();
-          metricLatestBlockProcessed.set(response.getLatestLedger());
+          saveCursor(nextCursor);
+          if (nextCursor.equals(response.getCursor())) {
+            streamBackoffTimer.reset();
+            metricLatestBlockProcessed.set(response.getLatestLedger());
+          }
         } catch (Exception tex) {
           warnF("Failed to persist RPC cursor. Will retry next tick. ex={}", tex.getMessage());
           setStatus(ObserverStatus.DATABASE_ERROR);
@@ -156,59 +161,79 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  private void processEvents(List<EventInfo> events) {
-    if (events == null || events.isEmpty()) return;
+  String processEvents(List<EventInfo> events, String responseCursor) {
+    if (events == null || events.isEmpty()) return responseCursor;
     debugF("Processing {} 'transfer' events", events.size());
 
-    for (EventInfo event : events) {
+    for (int i = 0; i < events.size(); i++) {
+      EventInfo event = events.get(i);
+      ShouldProcessResult result = shouldProcess(event);
+      if (!result.shouldProcess) {
+        continue;
+      }
       try {
-        ShouldProcessResult result = shouldProcess(event);
-        if (result.shouldProcess) {
-          processTransferEvent(result);
-        }
+        processTransferEvent(result);
+      } catch (IOException | NetworkException ex) {
+        errorF(
+            "Failed to process transfer event of transaction {}. It will be retried. ex={}",
+            event.getTransactionHash(),
+            ex.toString());
+        return i == 0 ? null : events.get(i - 1).getId();
       } catch (Exception ex) {
-        warnF(
-            "Skip event due to unexpected error: {}. ex={}",
-            GsonUtils.getInstance().toJson(event),
+        errorF(
+            "Skipping transfer event of transaction {} that cannot be processed. ex={}",
+            event.getTransactionHash(),
             ex.toString());
       }
     }
+    return responseCursor;
   }
 
-  private void processTransferEvent(ShouldProcessResult result) {
+  void processTransferEvent(ShouldProcessResult result) throws IOException, AnchorException {
     debug("Processing transfer event: {}", GsonUtils.getInstance().toJson(result.event));
+    LedgerTransaction txn;
     try {
-      LedgerTransaction txn =
+      txn =
           LedgerClientHelper.waitForTransactionAvailable(
               stellarRpc, result.event.getTransactionHash());
-      String wantedOpId =
-          String.valueOf(
-              new TOID(
-                      txn.getSequenceNumber().intValue(),
-                      txn.getApplicationOrder(),
-                      result.event.getOperationIndex().intValue() + 1)
-                  .toInt64());
-      LedgerOperation op =
+    } catch (LedgerDecodeException dex) {
+      errorF(
+          "Skipping transfer event of transaction {}: it cannot be decoded. ex={}",
+          result.event.getTransactionHash(),
+          dex.toString());
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+      return;
+    } catch (LedgerException lex) {
+      throw new IOException(
+          "Transaction is not available: " + result.event.getTransactionHash(), lex);
+    }
+    int opIndex = result.event.getOperationIndex().intValue();
+    String wantedOpId =
+        String.valueOf(
+            new TOID(txn.getSequenceNumber().intValue(), txn.getApplicationOrder(), opIndex + 1)
+                .toInt64());
+    LedgerOperation op =
+        txn.getOperations().stream()
+            .filter(o -> wantedOpId.equals(getOperationId(o)))
+            .findFirst()
+            .orElse(null);
+    if (op == null && LedgerClientHelper.isInvokeHostFunctionOperation(txn, opIndex)) {
+      txn = withInvokeHostFunctionOperation(txn, wantedOpId);
+      op =
           txn.getOperations().stream()
               .filter(o -> wantedOpId.equals(getOperationId(o)))
               .findFirst()
               .orElse(null);
-      if (op == null) {
-        errorF(
-            "No creditable operation found for transfer event: txHash={}, operationIndex={}."
-                + " The operation may be a contract sub-invocation with no direct representation"
-                + " in the filtered operation list. Skipping.",
-            result.event.getTransactionHash(),
-            result.event.getOperationIndex());
-        return;
-      }
-      processOperation(txn, op);
-    } catch (Exception ex) {
-      warnF(
-          "Error processing transfer event: {}. ex={}",
-          GsonUtils.getInstance().toJson(result.event),
-          ex.getMessage());
     }
+    if (op == null) {
+      errorF(
+          "No creditable operation found for transfer event: txHash={}, operationIndex={}."
+              + " Skipping.",
+          result.event.getTransactionHash(),
+          result.event.getOperationIndex());
+      return;
+    }
+    processOperation(txn, op, result);
   }
 
   private String getOperationId(LedgerOperation op) {
@@ -228,7 +253,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     String toAddr;
     String eventMemo;
     String sep11Asset;
-    Long amount;
+    BigInteger amount;
   }
 
   private ShouldProcessResult shouldProcess(EventInfo event) {
@@ -256,13 +281,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
       String fromAddr = Scv.fromAddress(from).toString();
       String toAddr = Scv.fromAddress(to).toString();
-      long amount = 0L;
+      BigInteger amount = BigInteger.ZERO;
       String eventMemo = null;
       SCVal scValue = SCVal.fromXdrBase64(event.getValue());
       // Reference:
       // https://github.com/stellar/stellar-protocol/blob/master/core/cap-0067.md#emit-a-map-as-the-data-field-in-the-transfer-and-mint-event-if-muxed-information-is-being-emitted-for-the-destination
       if (scValue.getDiscriminant() == SCValType.SCV_I128) {
-        amount = Scv.fromInt128(scValue).longValue();
+        amount = Scv.fromInt128(scValue);
       } else if (scValue.getDiscriminant() == SCValType.SCV_MAP) {
         var entries = scValue.getMap() == null ? null : scValue.getMap().getSCMap();
         if (entries == null || entries.length < 2) {
@@ -273,7 +298,7 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
         if (amountVal.getDiscriminant() != SCValType.SCV_I128) {
           return builder.build();
         }
-        amount = Scv.fromInt128(amountVal).longValue();
+        amount = Scv.fromInt128(amountVal);
         eventMemo =
             switch (memoVal.getDiscriminant()) {
               case SCV_STRING -> memoVal.getStr().getSCString().toString();
@@ -374,7 +399,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  void processOperation(LedgerTransaction ledgerTxn, LedgerOperation op)
+  void processOperation(
+      LedgerTransaction ledgerTxn, LedgerOperation op, ShouldProcessResult verified)
       throws IOException, AnchorException {
     PaymentTransferEvent event =
         switch (op.getType()) {
@@ -405,12 +431,21 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           case INVOKE_HOST_FUNCTION -> {
             LedgerTransaction.LedgerInvokeHostFunctionOperation invokeOp =
                 op.getInvokeHostFunctionOperation();
-            invokeOp.setAsset(sacToAssetMapper.getAssetFromSac(invokeOp.getContractId()));
+            String emittingContractId = verified.event.getContractId();
+            Asset asset = sacToAssetMapper.getAssetFromSac(emittingContractId);
+            if (asset == null) {
+              warnF(
+                  "Event-emitting contract {} is not a Stellar Asset Contract. Skipping operation {}.",
+                  emittingContractId,
+                  invokeOp.getId());
+              yield null;
+            }
+            invokeOp.setAsset(asset);
             yield PaymentTransferEvent.builder()
-                .from(invokeOp.getFrom())
-                .to(invokeOp.getTo())
+                .from(verified.fromAddr)
+                .to(verified.toAddr)
                 .sep11Asset(AssetHelper.getSep11AssetName(invokeOp.getAsset()))
-                .amount(invokeOp.getAmount())
+                .amount(verified.amount)
                 .txHash(ledgerTxn.getHash())
                 .operationId(invokeOp.getId())
                 .ledgerTransaction(ledgerTxn)
