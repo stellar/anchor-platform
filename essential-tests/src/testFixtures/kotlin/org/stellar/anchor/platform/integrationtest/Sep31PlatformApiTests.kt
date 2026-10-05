@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.integrationtest
 
 import io.ktor.http.Url
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
@@ -65,6 +66,12 @@ class Sep31PlatformApiTests : PlatformApiTests() {
 
     val receiveRequest = gson.fromJson(receiveRequestJson, Sep31PostTransactionRequest::class.java)
     val receiveResponse = sep31Client.postTransaction(receiveRequest)
+
+    // This flow drives the transaction through RPC calls itself (including an error/recovery
+    // path the reference server doesn't know about), so it must opt out of the reference server's
+    // own automatic advancement -- otherwise both race to advance the same transaction. The
+    // creation reaction (request_onchain_funds) still runs: it is what the wait below relies on.
+    runBlocking { anchorReferenceServerClient.skipSep31AutoAdvance(receiveResponse.id) }
 
     val maxAttempts = 60
     for (attempt in 1..maxAttempts) {
