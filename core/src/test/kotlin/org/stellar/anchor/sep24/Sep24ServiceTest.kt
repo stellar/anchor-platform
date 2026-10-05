@@ -720,6 +720,30 @@ internal class Sep24ServiceTest {
   }
 
   @Test
+  fun `test deposit rejects an unknown asset_code as unsupported`() {
+    val request = createTestTransactionRequest()
+    request["asset_code"] = "USDC_NA"
+
+    val ex =
+      assertThrows<SepValidationException> { sep24Service.deposit(createTestWebAuthJwt(), request) }
+
+    assertEquals("invalid operation for asset USDC_NA", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test deposit rejects a non-Stellar asset_code`() {
+    val request = createTestTransactionRequest()
+    request["asset_code"] = "USD"
+    request["asset_issuer"] = ""
+
+    val ex =
+      assertThrows<SepValidationException> { sep24Service.deposit(createTestWebAuthJwt(), request) }
+
+    assertEquals("The asset_code (USD) of the deposit request must be a stellar asset.", ex.message)
+  }
+
+  @Test
   fun `test deposit with bad requests`() {
     assertThrows<SepValidationException> {
       val request = createTestTransactionRequest()
