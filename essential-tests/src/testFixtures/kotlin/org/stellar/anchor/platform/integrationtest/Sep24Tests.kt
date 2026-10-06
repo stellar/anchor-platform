@@ -32,12 +32,14 @@ import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.api.rpc.RpcRequest
 import org.stellar.anchor.api.rpc.RpcResponse
+import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
 import org.stellar.anchor.client.Sep24Client
+import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.platform.*
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.StringHelper.json
@@ -776,6 +778,79 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  /**
+   * A SEP-38 quote of the `sep24` context for [account]. Quotes are single-use, so every test makes
+   * its own. Deposit: USD to USDC. Withdrawal: USDC to USD.
+   */
+  private fun postQuote(account: TestAccount, sellAsset: String, buyAsset: String): String =
+    Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), account.jwt)
+      .postQuote(sellAsset, QUOTE_AMOUNT, buyAsset, Sep38Context.SEP24)
+      .id
+
+  private fun postDepositQuote(account: TestAccount) =
+    postQuote(account, USD, "stellar:USDC:$USDC_GDQO_ISSUER")
+
+  private fun postWithdrawalQuote(account: TestAccount) =
+    postQuote(account, "stellar:USDC:$USDC_GDQO_ISSUER", USD)
+
+  private fun depositRequest(quoteId: String, overrides: Map<String, String> = mapOf()) =
+    mapOf(
+      "asset_code" to "USDC",
+      "asset_issuer" to USDC_GDQO_ISSUER,
+      "source_asset" to USD,
+      "amount" to QUOTE_AMOUNT,
+      "quote_id" to quoteId,
+    ) + overrides
+
+  private fun withdrawalRequest(quoteId: String, overrides: Map<String, String> = mapOf()) =
+    mapOf(
+      "asset_code" to "USDC",
+      "asset_issuer" to USDC_GDQO_ISSUER,
+      "destination_asset" to USD,
+      "amount" to QUOTE_AMOUNT,
+      "quote_id" to quoteId,
+    ) + overrides
+
+  // SEP24IF-08
+  @Test
+  fun `test sep24 deposit with a matching quote is accepted and keeps its quote_id`() {
+    val account = newAccount()
+    val quoteId = postDepositQuote(account)
+
+    val deposit = account.client.deposit(depositRequest(quoteId))
+
+    assertEquals(quoteId, getTransactionRaw(account, deposit.id).string("quote_id"))
+  }
+
+  // SEP24IF-09
+  @Test
+  fun `test sep24 withdrawal with a matching quote is accepted and keeps its quote_id`() {
+    val account = newAccount()
+    val quoteId = postWithdrawalQuote(account)
+
+    val withdrawal = account.client.withdraw(withdrawalRequest(quoteId))
+
+    assertEquals(quoteId, getTransactionRaw(account, withdrawal.id).string("quote_id"))
+  }
+
+  // SEP24IF-10
+  @Test
+  fun `test sep24 deposit and withdrawal reject an unknown quote_id`() {
+    val account = newAccount()
+
+    val deposit =
+      assertThrows<SepValidationException> {
+        account.client.deposit(depositRequest("not-a-real-quote-id"))
+      }
+    assertEquals("Quote not found", errorMessage(deposit))
+
+    val withdrawal =
+      assertThrows<SepValidationException> {
+        account.client.withdraw(withdrawalRequest("not-a-real-quote-id"))
+      }
+    assertEquals("Quote not found", errorMessage(withdrawal))
+  }
+
   // SEP24IF-07: AP never sends a deposit as a claimable balance, so asking for one is accepted
   // (the flag is optional) and the transaction carries no claimable_balance_id.
   @Test
@@ -1009,6 +1084,11 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertEquals("invalid account not a valid account", errorMessage(ex))
   }
 }
+
+/** The sell amount of every quote and the `amount` of every request that uses one. */
+private const val QUOTE_AMOUNT = "5"
+
+private const val USD = "iso4217:USD"
 
 private const val USDC_GDQO_ISSUER = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
 
