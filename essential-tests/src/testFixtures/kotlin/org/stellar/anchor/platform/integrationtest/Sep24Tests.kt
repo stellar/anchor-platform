@@ -776,6 +776,30 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  // SEP24IF-07: AP never sends a deposit as a claimable balance, so asking for one is accepted
+  // (the flag is optional) and the transaction carries no claimable_balance_id.
+  @Test
+  fun `test sep24 deposit asking for a claimable balance gets none`() {
+    val account = newAccount()
+    val deposit =
+      account.client.deposit(
+        mapOf(
+          "asset_code" to "USDC",
+          "asset_issuer" to USDC_GDQO_ISSUER,
+          "amount" to "1",
+          "claimable_balance_supported" to "true",
+        )
+      )
+
+    val txn = getTransactionRaw(account, deposit.id)
+
+    assertEquals("incomplete", txn.string("status"))
+    val claimableBalanceId = txn.get("claimable_balance_id")
+    assertTrue(claimableBalanceId == null || claimableBalanceId.isJsonNull) {
+      "claimable_balance_id must be absent or null, got $claimableBalanceId"
+    }
+  }
+
   @Test
   fun `test sep24 GET transaction returns a pending deposit in the SEP-24 shape`() {
     val account = newAccount()
