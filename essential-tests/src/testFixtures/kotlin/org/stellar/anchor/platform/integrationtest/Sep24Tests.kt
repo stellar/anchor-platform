@@ -959,6 +959,19 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertNotNull(account.client.withdraw(withdrawalRequest(quoteId)).id)
   }
 
+  // SEP24IF-16
+  @Test
+  fun `test sep24 deposit rejects a quote already bound to an earlier transaction`() {
+    val account = newAccount()
+    val quoteId = postDepositQuote(account)
+    assertNotNull(account.client.deposit(depositRequest(quoteId)).id)
+
+    val ex =
+      assertThrows<SepValidationException> { account.client.deposit(depositRequest(quoteId)) }
+
+    assertEquals("quote(id=$quoteId) has already been used", errorMessage(ex))
+  }
+
   // SEP24IF-07: AP never sends a deposit as a claimable balance, so asking for one is accepted
   // (the flag is optional) and the transaction carries no claimable_balance_id.
   @Test
