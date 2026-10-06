@@ -4,6 +4,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import io.ktor.http.Url
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
@@ -11,6 +12,7 @@ import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
@@ -41,16 +43,20 @@ import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.gson
 import org.stellar.anchor.util.Log
+import org.stellar.reference.client.AnchorReferenceServerClient
 import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.anchor.auth
 import org.stellar.walletsdk.horizon.SigningKeyPair
 
+@Order(RUN_AFTER_PLATFORM_API_TESTS)
 class Sep6Tests : IntegrationTestBase(TestConfig()) {
   private val sep6Client = Sep6Client(toml.getString("TRANSFER_SERVER"), token.token)
   private val sep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
   private val platformApiClient =
     PlatformApiClient(AuthHelper.forNone(), config.env["platform.server.url"]!!)
+  private val anchorReferenceServerClient =
+    AnchorReferenceServerClient(Url(config.env["reference.server.url"]!!))
 
   private fun authenticateWithMemo(keyPair: SigningKeyPair, memoId: ULong): String {
     return runBlocking { anchor.auth().authenticate(keyPair, memoId = memoId) }.token
@@ -793,6 +799,79 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
     val noAuthClient = Sep6Client(toml.getString("TRANSFER_SERVER"), null)
     assertThrows<SepNotAuthorizedException> {
       noAuthClient.getTransactions(mapOf("asset_code" to "USDC"))
+    }
+  }
+
+  /**
+   * The owner pages with its own id: proves the id exists and is usable, so a 400 for another
+   * caller can only mean "hidden", never "never created".
+   */
+  private fun assertOwnerCanPage(ownerClient: Sep6Client, pagingId: String) {
+    ownerClient.getTransactions(mapOf("asset_code" to "USDC", "paging_id" to pagingId))
+  }
+
+  private fun assertPagingRejected(client: Sep6Client, pagingId: String) {
+    val ex =
+      assertThrows<SepValidationException> {
+        client.getTransactions(mapOf("asset_code" to "USDC", "paging_id" to pagingId))
+      }
+    Assertions.assertEquals("invalid paging_id field: $pagingId", errorMessage(ex))
+  }
+
+  @Test
+  fun `test sep6 GET transactions rejects a paging_id belonging to a different account`() {
+    val (ownerClient, ownerIds) = createAccountWithDeposits(1)
+    assertOwnerCanPage(ownerClient, ownerIds[0])
+
+    val (strangerClient, _) = createAccountWithDeposits(1)
+
+    assertPagingRejected(strangerClient, ownerIds[0])
+  }
+
+  @Test
+  fun `test sep6 GET transactions rejects a paging_id belonging to a different memo on the same account`() {
+    val sharedKeyPair = SigningKeyPair(KeyPair.random())
+    val memoAClient =
+      Sep6Client(toml.getString("TRANSFER_SERVER"), authenticateWithMemo(sharedKeyPair, 111UL))
+    val memoBClient =
+      Sep6Client(toml.getString("TRANSFER_SERVER"), authenticateWithMemo(sharedKeyPair, 222UL))
+    val memoATxnId =
+      memoAClient
+        .deposit(
+          mapOf(
+            "asset_code" to "USDC",
+            "account" to sharedKeyPair.address,
+            "amount" to "1",
+            "type" to "SWIFT",
+          )
+        )
+        .id!!
+    assertOwnerCanPage(memoAClient, memoATxnId)
+
+    assertPagingRejected(memoBClient, memoATxnId)
+  }
+
+  @Test
+  fun `test sep6 GET transactions rejects a paging_id that does not exist`() {
+    val (client, _) = createAccountWithDeposits(1)
+
+    assertPagingRejected(client, UUID.randomUUID().toString())
+  }
+
+  @Test
+  fun `test sep6 GET transactions pages from the caller's own paging_id`() {
+    val (client, ids) = createAccountWithDeposits(3)
+    val newest = ids[2]
+
+    val pagedIds =
+      client
+        .getTransactions(mapOf("asset_code" to "USDC", "paging_id" to newest))
+        .transactions
+        .map { it.id }
+
+    Assertions.assertEquals(listOf(ids[1], ids[0]), pagedIds) {
+      "paging from the newest of 3 deposits must return exactly the 2 older ones, newest first," +
+        " and not the paging transaction itself ($newest)"
     }
   }
 
@@ -2407,10 +2486,19 @@ class Sep6Tests : IntegrationTestBase(TestConfig()) {
    * (incomplete -> pending_user_transfer_start), then `notify_transaction_on_hold`
    * (pending_user_transfer_start -> on_hold) -- the #2025 CI-proven fixture with
    * `notify_transaction_on_hold` inserted between its two steps.
+   *
+   * The deposit is registered for `skip-auto-advance` first: `Sep6EventProcessor` reacts to the
+   * `pending_user_transfer_start` status event by calling `notify_offchain_funds_received` itself,
+   * and when that call lands after this fixture's own `notify_transaction_on_hold` the deposit
+   * reads `pending_anchor` instead of `on_hold`. The registration can only happen once the deposit
+   * id exists, so a reaction to the creation event that already started may still finish; that one
+   * moves the deposit to `pending_customer_info_update`, a valid source for
+   * `request_offchain_funds`.
    */
   private fun createOnHoldDeposit(): Pair<Sep6Client, String> {
     val (client, ids) = createAccountWithDeposits(1)
     val depositId = ids[0]
+    runBlocking { anchorReferenceServerClient.skipSep6AutoAdvance(depositId) }
     sendRpcBatch(onHoldRpcBatchRequests, depositId)
     return client to depositId
   }

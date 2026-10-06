@@ -1,6 +1,7 @@
 package org.stellar.reference.event.processor
 
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.stellar.anchor.api.callback.GetCustomerRequest
@@ -44,6 +45,17 @@ class Sep6EventProcessor(
     val withdrawRequiredKyc =
       listOf("bank_account_number", "bank_account_type", "bank_number", "bank_branch_number")
 
+    // Lets a test that drives a transaction through RPC calls itself opt that one transaction out
+    // of
+    // automatic advancement, instead of disabling it for every transaction. Populated only via the
+    // test-only `/sep6/transactions/{id}/skip-auto-advance` route (see Sep6TestRoute.kt) -- kept
+    // out of transaction data so this can't be triggered by a real anchor's own message content.
+    private val manualRpcTestTransactions = ConcurrentHashMap.newKeySet<String>()
+
+    fun skipAutoAdvance(transactionId: String) {
+      manualRpcTestTransactions.add(transactionId)
+    }
+
     val usdDepositInstructions =
       mapOf(
         "organization.bank_number" to
@@ -65,6 +77,7 @@ class Sep6EventProcessor(
   }
 
   override suspend fun onTransactionCreated(event: SendEventRequest) {
+    if (optedOutOfAutoAdvance(event)) return
     when (val kind = event.payload.transaction!!.kind) {
       Kind.DEPOSIT,
       Kind.DEPOSIT_EXCHANGE,
@@ -84,6 +97,7 @@ class Sep6EventProcessor(
   }
 
   override suspend fun onTransactionStatusChanged(event: SendEventRequest) {
+    if (optedOutOfAutoAdvance(event)) return
     when (val kind = event.payload.transaction!!.kind) {
       Kind.DEPOSIT,
       Kind.DEPOSIT_EXCHANGE -> onDepositTransactionStatusChanged(event)
@@ -93,6 +107,16 @@ class Sep6EventProcessor(
         log.warn { "Received transaction created event with unsupported kind: $kind" }
       }
     }
+  }
+
+  private fun optedOutOfAutoAdvance(event: SendEventRequest): Boolean {
+    val transaction = event.payload.transaction!!
+    if (!manualRpcTestTransactions.contains(transaction.id)) return false
+    log.info {
+      "Transaction ${transaction.id} opts out of automatic advancement -- skipping reaction to" +
+        " ${event.type} (status ${transaction.status})"
+    }
+    return true
   }
 
   private suspend fun onDepositTransactionStatusChanged(event: SendEventRequest) {

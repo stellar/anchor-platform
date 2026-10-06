@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.integrationtest
 
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
@@ -9,6 +10,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.api.sep.sep24.DepositTransactionResponse
+import org.stellar.anchor.api.sep.sep24.WithdrawTransactionResponse
 import org.stellar.anchor.client.Sep24Client
 
 /**
@@ -27,16 +30,27 @@ class Sep24ClientRequestTests {
   private val fields =
     mapOf("asset_code" to "USDC", "asset_issuer" to "GISSUER", "account" to "GABC")
 
+  /**
+   * The `kind` the mock serves for `GET /transaction`; a test sets it before calling the client.
+   */
+  private var transactionKind = "deposit"
+
   @BeforeEach
   fun startServer() {
     server = MockWebServer()
-    server.enqueue(
-      MockResponse()
-        .setResponseCode(200)
-        .setBody(
-          """{"type":"interactive_customer_info_needed","url":"https://example.com/interactive","id":"txn-1"}"""
-        )
-    )
+    server.dispatcher =
+      object : Dispatcher() {
+        override fun dispatch(request: RecordedRequest): MockResponse =
+          MockResponse()
+            .setResponseCode(200)
+            .setBody(
+              if (request.requestUrl?.encodedPath == "/transaction") {
+                """{"transaction":{"id":"txn-1","kind":"$transactionKind"}}"""
+              } else {
+                """{"type":"interactive_customer_info_needed","url":"https://example.com/interactive","id":"txn-1"}"""
+              }
+            )
+      }
     server.start()
   }
 
@@ -106,6 +120,45 @@ class Sep24ClientRequestTests {
   @Test
   fun `test sep24 client sends no Authorization header on a multipart call without a JWT`() {
     client(null).withdrawMultipart(fields)
+
+    assertNull(recorded().getHeader("Authorization"))
+  }
+
+  @Test
+  fun `test sep24 client getTransaction sends the given query parameters with the JWT`() {
+    // '&', '=', '+' and '#' are the delimiters an unencoded query would let split or truncate it
+    val externalTransactionId = "ext 1/é&x=y+z#f"
+    val query = mapOf("external_transaction_id" to externalTransactionId, "lang" to "en")
+
+    val response = client(jwt).getTransaction(query)
+
+    val request = recorded()
+    assertEquals("GET", request.method)
+    assertEquals("/transaction", request.requestUrl!!.encodedPath)
+    assertEquals(setOf("external_transaction_id", "lang"), request.requestUrl!!.queryParameterNames)
+    assertEquals(
+      externalTransactionId,
+      request.requestUrl!!.queryParameter("external_transaction_id"),
+    )
+    assertEquals("en", request.requestUrl!!.queryParameter("lang"))
+    assertEquals("Bearer $jwt", request.getHeader("Authorization"))
+    assertEquals("txn-1", response.transaction.id)
+    assertTrue(response.transaction is DepositTransactionResponse)
+  }
+
+  @Test
+  fun `test sep24 client getTransaction parses a withdrawal as a WithdrawTransactionResponse`() {
+    transactionKind = "withdrawal"
+
+    val response = client(jwt).getTransaction(mapOf("id" to "txn-1"))
+
+    assertEquals("txn-1", response.transaction.id)
+    assertTrue(response.transaction is WithdrawTransactionResponse)
+  }
+
+  @Test
+  fun `test sep24 client getTransaction sends no Authorization header without a JWT`() {
+    client(null).getTransaction(mapOf("id" to "txn-1"))
 
     assertNull(recorded().getHeader("Authorization"))
   }
