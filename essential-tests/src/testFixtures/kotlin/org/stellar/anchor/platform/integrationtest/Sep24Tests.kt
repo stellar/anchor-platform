@@ -1069,6 +1069,56 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertSep24TransactionSchema(txn, Sep24SchemaCase.WITHDRAWAL_INCOMPLETE)
   }
 
+  /**
+   * An amount as a number at SEP-24's maximum scale of 7, so `50` and `50.0000000` are the same
+   * amount and a failure prints it legibly.
+   */
+  private fun number(value: String): java.math.BigDecimal = java.math.BigDecimal(value).setScale(7)
+
+  private fun JsonObject.numberAt(field: String): java.math.BigDecimal = number(string(field))
+
+  // SEP24IF-25, SEP24IF-26, SEP24IF-27: SEP-24 "Amount Formulas".
+  @Test
+  fun `test sep24 GET transaction keeps the amount formulas for a refunded deposit`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+    sendRpc(SEP24_TWO_REFUND_PAYMENTS_RPC, depositId)
+
+    val txn = getTransactionRaw(account, depositId)
+
+    // The amounts the RPCs sent. SEP-24 deprecates amount_fee in favor of fee_details, and AP only
+    // returns fee_details.
+    assertEquals(number("100"), txn.numberAt("amount_in"))
+    assertEquals(number("46"), txn.numberAt("amount_out"))
+    val fee = txn.getAsJsonObject("fee_details").numberAt("total")
+    assertEquals(number("2"), fee)
+
+    val refunds = txn.getAsJsonObject("refunds")
+    assertEquals(number("50"), refunds.numberAt("amount_refunded"))
+    assertEquals(number("2"), refunds.numberAt("amount_fee"))
+    val payments = refunds.getAsJsonArray("payments").map { it.asJsonObject }
+    assertEquals(setOf(number("30"), number("20")), payments.map { it.numberAt("amount") }.toSet())
+    assertEquals(listOf(number("1"), number("1")), payments.map { it.numberAt("fee") })
+
+    // refunds.amount_refunded = sum(payments[].amount), refunds.amount_fee = sum(payments[].fee)
+    assertEquals(
+      payments.map { it.numberAt("amount") }.reduce { a, b -> a + b },
+      refunds.numberAt("amount_refunded"),
+    )
+    assertEquals(
+      payments.map { it.numberAt("fee") }.reduce { a, b -> a + b },
+      refunds.numberAt("amount_fee"),
+    )
+    // amount_out = amount_in - amount_fee - refunds.amount_refunded - refunds.amount_fee
+    assertEquals(
+      txn.numberAt("amount_in") -
+        fee -
+        refunds.numberAt("amount_refunded") -
+        refunds.numberAt("amount_fee"),
+      txn.numberAt("amount_out"),
+    )
+  }
+
   // SEP24IF-24
   @Test
   fun `test sep24 refuses to expire a deposit whose funds were received`() {
@@ -1448,6 +1498,73 @@ private const val SEP24_ERROR_RPC =
     "params": {
       "transaction_id": "%TX_ID%",
       "message": "%ERROR_MESSAGE%"
+    }
+  }
+]
+"""
+
+/**
+ * A deposit of 100 USD with a fee of 2, paid out as 46 USDC, then refunded in two payments (30 with
+ * a fee of 1, and 20 with a fee of 1): 100 - 2 - 50 - 2 = 46.
+ */
+private const val SEP24_TWO_REFUND_PAYMENTS_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "request_offchain_funds",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "refund fixture: requesting funds",
+      "amount_in": { "amount": "100", "asset": "iso4217:USD" },
+      "amount_out": {
+        "amount": "46",
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      },
+      "fee_details": { "total": "2", "asset": "iso4217:USD" },
+      "amount_expected": { "amount": "100" }
+    }
+  },
+  {
+    "id": "2",
+    "method": "notify_offchain_funds_received",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "refund fixture: funds received",
+      "external_transaction_id": "ext-refund-fixture",
+      "amount_in": { "amount": "100" },
+      "amount_out": { "amount": "46" },
+      "fee_details": { "total": "2", "asset": "iso4217:USD" }
+    }
+  },
+  {
+    "id": "3",
+    "method": "notify_refund_sent",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "refund fixture: first refund",
+      "refund": {
+        "id": "refund-1",
+        "amount": { "amount": "30", "asset": "iso4217:USD" },
+        "amount_fee": { "amount": "1", "asset": "iso4217:USD" }
+      }
+    }
+  },
+  {
+    "id": "4",
+    "method": "notify_refund_sent",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "refund fixture: second refund",
+      "refund": {
+        "id": "refund-2",
+        "amount": { "amount": "20", "asset": "iso4217:USD" },
+        "amount_fee": { "amount": "1", "asset": "iso4217:USD" }
+      }
     }
   }
 ]
