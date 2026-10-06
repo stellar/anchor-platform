@@ -4,6 +4,7 @@ import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.http.*
+import java.util.Base64
 import java.util.stream.Stream
 import kotlin.test.DefaultAsserter
 import kotlin.test.fail
@@ -42,8 +43,10 @@ import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.Log.info
 import org.stellar.reference.client.AnchorReferenceServerClient
+import org.stellar.reference.wallet.RawCallback
 import org.stellar.reference.wallet.WalletServerClient
 import org.stellar.sdk.Asset
+import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.InteractiveFlowResponse
 import org.stellar.walletsdk.anchor.*
 import org.stellar.walletsdk.anchor.TransactionStatus.*
@@ -86,6 +89,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
     runBlocking {
       val keypair = SigningKeyPair.fromSecret(walletSecretKey)
       walletServerClient.clearCallbacks()
+      val testStartedAt = System.currentTimeMillis() / 1000
 
       val token = anchor.auth().authenticate(keypair)
       val response = makeDeposit(asset, amount, token)
@@ -116,6 +120,13 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       val actualCallbacks =
         waitForWalletServerCallbacks(response.id, getExpectedDepositStatus().size)
       assertCallbacks(actualCallbacks, getExpectedDepositStatus())
+
+      // Every callback carries a signature a wallet server can verify with AP's published key
+      assertCallbackSignatures(
+        walletServerClient.getRawTransactionCallbacks("sep24", response.id),
+        getExpectedDepositStatus().size,
+        testStartedAt,
+      )
     }
 
   @Test
@@ -229,6 +240,45 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
         }
       }
     }
+  }
+
+  /**
+   * Verifies each callback the way a wallet server must: with the public `SIGNING_KEY` from the
+   * TOML, over `<t>.<host>.<body>`, where `host` is the authority the callback was sent to and
+   * `body` is the exact bytes received. Nothing here trusts the wallet reference server's own
+   * check.
+   */
+  private fun assertCallbackSignatures(
+    rawCallbacks: List<RawCallback>,
+    expectedCount: Int,
+    notBefore: Long,
+  ) {
+    assertEquals(expectedCount, rawCallbacks.size)
+    val verifier = KeyPair.fromAccountId(toml.getString("SIGNING_KEY"))
+    val notAfter = System.currentTimeMillis() / 1000
+
+    rawCallbacks.forEach { raw ->
+      assertEquals(config.env["wallet.hostname"], raw.host)
+      val (t, signature) = parseSignatureHeader(raw)
+      assertTrue(verifier.verify("$t.${raw.host}.${raw.body}".toByteArray(), signature)) {
+        "callback signature does not verify over $t.${raw.host}.<body>: ${raw.signature}"
+      }
+      assertTrue(t.toLong() in notBefore..notAfter) {
+        "callback timestamp $t outside [$notBefore, $notAfter]"
+      }
+    }
+
+    // The check is not vacuous: one byte more and the same signature no longer verifies.
+    val first = rawCallbacks.first()
+    val (t, signature) = parseSignatureHeader(first)
+    assertFalse(verifier.verify("$t.${first.host}.${first.body} ".toByteArray(), signature))
+  }
+
+  private fun parseSignatureHeader(raw: RawCallback): Pair<String, ByteArray> {
+    val match = Regex("^t=(\\d+), s=([A-Za-z0-9+/]+=*)$").matchEntire(raw.signature ?: "")
+    assertNotNull(match) { "unexpected Signature header: ${raw.signature}" }
+    val (t, s) = match!!.destructured
+    return t to Base64.getDecoder().decode(s)
   }
 
   @ParameterizedTest
