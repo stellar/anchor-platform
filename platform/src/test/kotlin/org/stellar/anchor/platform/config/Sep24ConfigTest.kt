@@ -17,6 +17,7 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.Sep24Config.DepositInfoGeneratorType
+import org.stellar.anchor.config.Sep24Config.Features
 import org.stellar.anchor.platform.config.PropertySep24Config.InteractiveUrlConfig
 import org.stellar.anchor.platform.utils.setupMock
 
@@ -118,5 +119,75 @@ class Sep24ConfigTest {
 
     config.validate(config, errors)
     assertEquals("sep24-more-info-url-jwt-expiration-not-valid", errors.allErrors[0].code)
+  }
+
+  private fun features(accountCreation: Boolean, claimableBalances: Boolean) =
+    Features().apply {
+      this.accountCreation = accountCreation
+      this.claimableBalances = claimableBalances
+    }
+
+  private fun featuresErrors(): List<Pair<String?, String?>> =
+    errors.fieldErrors.filter { it.field == "features" }.map { it.code to it.defaultMessage }
+
+  @Test
+  fun `test claimable balances enabled is rejected`() {
+    config.features = features(accountCreation = false, claimableBalances = true)
+    config.validate(config, errors)
+    assertEquals(
+      listOf(
+        "sep24-features-claimable-balances-invalid" to
+          "sep24.features.claimable_balances: claimable balances are not supported"
+      ),
+      featuresErrors(),
+    )
+  }
+
+  @Test
+  fun `test account creation enabled is rejected`() {
+    config.features = features(accountCreation = true, claimableBalances = false)
+    config.validate(config, errors)
+    assertEquals(
+      listOf(
+        "sep24-features-account-creation-invalid" to
+          "sep24.features.account_creation: account creation is not supported"
+      ),
+      featuresErrors(),
+    )
+  }
+
+  @Test
+  fun `test both features enabled reports both errors`() {
+    config.features = features(accountCreation = true, claimableBalances = true)
+    config.validate(config, errors)
+    assertEquals(
+      listOf(
+        "sep24-features-account-creation-invalid" to
+          "sep24.features.account_creation: account creation is not supported",
+        "sep24-features-claimable-balances-invalid" to
+          "sep24.features.claimable_balances: claimable balances are not supported",
+      ),
+      featuresErrors(),
+    )
+  }
+
+  @Test
+  fun `test both features disabled and null features are accepted`() {
+    config.features = features(accountCreation = false, claimableBalances = false)
+    config.validate(config, errors)
+    assertFalse(errors.hasErrors())
+
+    errors = BindException(config, "config")
+    config.features = null
+    config.validate(config, errors)
+    assertFalse(errors.hasErrors())
+  }
+
+  @Test
+  fun `test disabled sep24 skips the features check`() {
+    config.enabled = false
+    config.features = features(accountCreation = true, claimableBalances = true)
+    config.validate(config, errors)
+    assertFalse(errors.hasErrors())
   }
 }
