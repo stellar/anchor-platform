@@ -996,6 +996,66 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  /**
+   * Sends [rpcJson] for [txId] and returns the responses without asserting success, for a request
+   * the platform is expected to refuse.
+   */
+  private fun sendRpcForResponses(rpcJson: String, txId: String): List<RpcResponse> {
+    val requests: List<RpcRequest> =
+      gson.fromJson(
+        rpcJson.replace("%TX_ID%", txId),
+        object : TypeToken<List<RpcRequest>>() {}.type,
+      )
+    platformApiClient.sendRpcRequest(requests).use { response ->
+      val body = response.body?.string()
+      return gson.fromJson(body, object : TypeToken<List<RpcResponse>>() {}.type)
+    }
+  }
+
+  /**
+   * A fresh deposit held for review: `incomplete` to `pending_user_transfer_start` to `on_hold`.
+   */
+  private fun createOnHoldDeposit(account: TestAccount, message: String): String {
+    val depositId = createDeposit(account)
+    sendRpc(SEP24_ON_HOLD_RPC.replace("%HOLD_MESSAGE%", message), depositId)
+    return depositId
+  }
+
+  // SEP24IF-20, SEP24IF-21
+  @Test
+  fun `test sep24 GET transaction reports on_hold and resumes when funds are received`() {
+    val account = newAccount()
+    val message = "held for review ${UUID.randomUUID()}"
+    val depositId = createOnHoldDeposit(account, message)
+
+    val held = getTransactionRaw(account, depositId)
+
+    assertEquals("on_hold", held.string("status"))
+    assertEquals(message, held.string("message"))
+    assertSep24TransactionSchema(held, Sep24SchemaCase.DEPOSIT_PENDING)
+
+    sendRpc(SEP24_FUNDS_RECEIVED_RPC, depositId)
+
+    assertEquals("pending_anchor", getTransactionRaw(account, depositId).string("status"))
+  }
+
+  // SEP24IF-24
+  @Test
+  fun `test sep24 refuses to expire a deposit whose funds were received`() {
+    val account = newAccount()
+    val depositId = createOnHoldDeposit(account, "held for review ${UUID.randomUUID()}")
+
+    val responses = sendRpcForResponses(SEP24_EXPIRE_RPC, depositId)
+
+    assertEquals(1, responses.size)
+    assertEquals(
+      "RPC method[notify_transaction_expired] is not supported. " +
+        "Status[on_hold], kind[deposit], protocol[24], funds received[true]",
+      responses.single().error?.message,
+    )
+    assertEquals("on_hold", getTransactionRaw(account, depositId).string("status"))
+  }
+
   @Test
   fun `test sep24 GET transaction returns a pending deposit in the SEP-24 shape`() {
     val account = newAccount()
@@ -1285,6 +1345,75 @@ private const val SEP24_PENDING_DEPOSIT_RPC =
       },
       "fee_details": { "total": "5", "asset": "iso4217:USD" },
       "amount_expected": { "amount": "100" }
+    }
+  }
+]
+"""
+
+/**
+ * Holds a fresh SEP-24 deposit for review. `%HOLD_MESSAGE%` is replaced by the test, so the message
+ * read back through `GET /transaction` is one this test chose.
+ */
+private const val SEP24_ON_HOLD_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "request_offchain_funds",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "pending deposit fixture",
+      "amount_in": { "amount": "100", "asset": "iso4217:USD" },
+      "amount_out": {
+        "amount": "95",
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      },
+      "fee_details": { "total": "5", "asset": "iso4217:USD" },
+      "amount_expected": { "amount": "100" }
+    }
+  },
+  {
+    "id": "2",
+    "method": "notify_transaction_on_hold",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "%HOLD_MESSAGE%"
+    }
+  }
+]
+"""
+
+/** The anchor clears the hold: the held deposit's funds are confirmed received. */
+private const val SEP24_FUNDS_RECEIVED_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "notify_offchain_funds_received",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "funds received after review",
+      "external_transaction_id": "ext-on-hold-fixture",
+      "amount_in": { "amount": "100" }
+    }
+  }
+]
+"""
+
+/** `expired` means the funds never arrived, so the platform refuses it once they have. */
+private const val SEP24_EXPIRE_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "notify_transaction_expired",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "abandoned by the user"
     }
   }
 ]
