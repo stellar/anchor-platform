@@ -903,6 +903,62 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertNotNull(account.client.deposit(depositRequest(quoteId)).id)
   }
 
+  // SEP24IF-13, SEP24IF-17
+  @Test
+  fun `test sep24 withdrawal rejects an asset that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postWithdrawalQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.withdraw(
+          withdrawalRequest(quoteId, mapOf("asset_issuer" to USDC_GBBD_ISSUER))
+        )
+      }
+
+    assertEquals(
+      "source asset(stellar:USDC:$USDC_GBBD_ISSUER) does not match quote sell asset(stellar:USDC:$USDC_GDQO_ISSUER)",
+      errorMessage(ex),
+    )
+    // The rejected request did not bind the quote: the same quote is accepted with matching values.
+    assertNotNull(account.client.withdraw(withdrawalRequest(quoteId)).id)
+  }
+
+  // SEP24IF-14, SEP24IF-17
+  @Test
+  fun `test sep24 withdrawal rejects a destination_asset that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postWithdrawalQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.withdraw(
+          withdrawalRequest(quoteId, mapOf("destination_asset" to "iso4217:CAD"))
+        )
+      }
+
+    assertEquals(
+      "destination asset(iso4217:CAD) does not match quote buy asset($USD)",
+      errorMessage(ex),
+    )
+    assertNotNull(account.client.withdraw(withdrawalRequest(quoteId)).id)
+  }
+
+  // SEP24IF-15, SEP24IF-17
+  @Test
+  fun `test sep24 withdrawal rejects an amount that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postWithdrawalQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.withdraw(withdrawalRequest(quoteId, mapOf("amount" to "4")))
+      }
+
+    assertEquals("amount(4) does not match quote sell amount($QUOTE_AMOUNT)", errorMessage(ex))
+    assertNotNull(account.client.withdraw(withdrawalRequest(quoteId)).id)
+  }
+
   // SEP24IF-07: AP never sends a deposit as a claimable balance, so asking for one is accepted
   // (the flag is optional) and the transaction carries no claimable_balance_id.
   @Test
