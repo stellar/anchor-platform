@@ -17,6 +17,7 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation
 import org.junit.jupiter.api.parallel.Execution
@@ -30,6 +31,7 @@ import org.stellar.anchor.api.exception.SepNotFoundException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.api.rpc.RpcRequest
+import org.stellar.anchor.api.rpc.RpcResponse
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
@@ -400,13 +402,7 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertEquals("The \"asset_code\" parameter is missing.", errorMessage(ex))
   }
 
-  private fun JsonObject.string(field: String): String {
-    val element = get(field)
-    assertTrue(element != null && element.isJsonPrimitive && element.asJsonPrimitive.isString) {
-      "expected '$field' to be a string in $this"
-    }
-    return element.asString
-  }
+  private fun JsonObject.string(field: String): String = requireJsonString(this, field)
 
   /** The SEP-24 transaction shape `stellar-anchor-tests` requires, on the raw list item. */
   private fun assertListItem(
@@ -714,6 +710,134 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test sep24 TOML has a valid transfer server URL`() {
+    // No fallback to TRANSFER_SERVER: stellar-anchor-tests accepts that for anchors that omit the
+    // SEP-24 key, but AP's own TOML sets it, so a fallback would hide its removal.
+    val transferServer = toml.getString("TRANSFER_SERVER_SEP0024")
+
+    assertTrue(!transferServer.isNullOrBlank()) {
+      "stellar.toml must carry a non-blank TRANSFER_SERVER_SEP0024"
+    }
+    val uri = URI(transferServer)
+    assertTrue(uri.isAbsolute) {
+      "TRANSFER_SERVER_SEP0024 must be an absolute URL: $transferServer"
+    }
+    val localHttpHosts = setOf("localhost", "host.docker.internal")
+    assertTrue(uri.scheme == "https" || (uri.scheme == "http" && uri.host in localHttpHosts)) {
+      "TRANSFER_SERVER_SEP0024 must use https, or http only on $localHttpHosts: $transferServer"
+    }
+    assertFalse(transferServer.endsWith("/")) {
+      "TRANSFER_SERVER_SEP0024 must not end with '/': $transferServer"
+    }
+  }
+
+  /**
+   * Reads `GET /transaction?id=` as the raw `transaction` object. Gson silently nulls absent fields
+   * and drops unknown ones, so a parsed object cannot back a schema assertion.
+   */
+  private fun getTransactionRaw(account: TestAccount, id: String): JsonObject {
+    val url =
+      "${toml.getString("TRANSFER_SERVER_SEP0024")}/transaction"
+        .toHttpUrl()
+        .newBuilder()
+        .addQueryParameter("id", id)
+        .build()
+    val request =
+      Request.Builder().url(url).header("Authorization", "Bearer ${account.jwt}").get().build()
+    http.newCall(request).execute().use { response ->
+      val body = response.body?.string()
+      assertEquals(200, response.code) {
+        "GET /transaction?id=$id answered ${response.code}: $body"
+      }
+      return JsonParser.parseString(body).asJsonObject.getAsJsonObject("transaction")
+    }
+  }
+
+  /**
+   * Sends [rpcJson] for [txId] and checks every item of the batch answered without an error, so a
+   * rejected setup fails here with the RPC's own message instead of as a puzzling later assertion.
+   */
+  private fun sendRpc(rpcJson: String, txId: String) {
+    val requests: List<RpcRequest> =
+      gson.fromJson(
+        rpcJson.replace("%TX_ID%", txId),
+        object : TypeToken<List<RpcRequest>>() {}.type,
+      )
+    platformApiClient.sendRpcRequest(requests).use { response ->
+      val body = response.body?.string()
+      assertTrue(response.isSuccessful) { "RPC setup failed with HTTP ${response.code}: $body" }
+      val responses: List<RpcResponse> =
+        gson.fromJson(body, object : TypeToken<List<RpcResponse>>() {}.type)
+      responses.forEachIndexed { index, rpcResponse ->
+        assertNull(rpcResponse.error) {
+          "RPC batch item $index failed: ${rpcResponse.error}, body: $body"
+        }
+      }
+    }
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns a pending deposit in the SEP-24 shape`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+    sendRpc(SEP24_PENDING_DEPOSIT_RPC, depositId)
+
+    val txn = getTransactionRaw(account, depositId)
+
+    assertEquals(depositId, txn.string("id"))
+    assertEquals("pending_user_transfer_start", txn.string("status"))
+    assertEquals("100", txn.string("amount_in"))
+    assertEquals("iso4217:USD", txn.string("amount_in_asset"))
+    assertEquals("95", txn.string("amount_out"))
+    assertEquals("stellar:USDC:$USDC_GDQO_ISSUER", txn.string("amount_out_asset"))
+    assertEquals("deposit", txn.string("kind"))
+    assertEquals(account.accountId, txn.string("to"))
+    assertSep24TransactionSchema(txn, Sep24SchemaCase.DEPOSIT_PENDING)
+  }
+
+  @Test
+  fun `test sep24 GET transaction returns a pending_user_transfer_start withdrawal in the SEP-24 shape`() {
+    val account = newAccount()
+    val withdrawalId = createWithdrawal(account)
+    sendRpc(SEP24_PENDING_WITHDRAWAL_RPC, withdrawalId)
+
+    val txn = getTransactionRaw(account, withdrawalId)
+
+    assertEquals(withdrawalId, txn.string("id"))
+    assertEquals("pending_user_transfer_start", txn.string("status"))
+    assertEquals("100", txn.string("amount_in"))
+    assertEquals("stellar:USDC:$USDC_GDQO_ISSUER", txn.string("amount_in_asset"))
+    assertEquals("95", txn.string("amount_out"))
+    assertEquals("iso4217:USD", txn.string("amount_out_asset"))
+    assertEquals("withdrawal", txn.string("kind"))
+    assertEquals(account.accountId, txn.string("from"))
+    val anchorAccount = txn.string("withdraw_anchor_account")
+    assertTrue(runCatching { KeyPair.fromAccountId(anchorAccount) }.isSuccess) {
+      "withdraw_anchor_account must be a valid Stellar account, got $anchorAccount"
+    }
+    assertTrue(txn.string("withdraw_memo").isNotEmpty())
+    assertEquals("id", txn.string("withdraw_memo_type"))
+    assertSep24TransactionSchema(txn, Sep24SchemaCase.WITHDRAWAL_PENDING_USER_TRANSFER_START)
+  }
+
+  @Test
+  fun `test sep24 more_info_url of a deposit is served as HTML`() {
+    val account = newAccount()
+    val moreInfoUrl = getTransactionRaw(account, createDeposit(account)).string("more_info_url")
+    // The query carries the URL's JWT, so failure messages name only the part before it.
+    val shown = moreInfoUrl.substringBefore('?')
+
+    // A plain GET, as a wallet opens it: the URL carries its own token, so no Authorization header.
+    http.newCall(Request.Builder().url(moreInfoUrl).get().build()).execute().use { response ->
+      assertEquals(200, response.code) { "GET $shown answered ${response.code}" }
+      val contentType = response.header("Content-Type")
+      assertTrue(contentType != null && contentType.startsWith("text/html")) {
+        "expected $shown to be served as text/html but got Content-Type: $contentType"
+      }
+    }
+  }
+
+  @Test
   fun `test sep24 GET transaction resolves a transaction by external_transaction_id`() {
     val depositId = sep24Client.deposit(mapOf("asset_code" to "USDC")).id
 
@@ -909,6 +1033,63 @@ private const val SEP24_EXTERNAL_TRANSACTION_ID_FLOW_ACTION_REQUESTS =
       "funds_received_at": "2023-07-04T12:34:56Z",
       "external_transaction_id": "%EXTERNAL_TRANSACTION_ID%",
       "amount_in": { "amount": "100" }
+    }
+  }
+]
+"""
+
+/**
+ * Moves a fresh SEP-24 deposit from `incomplete` to `pending_user_transfer_start`. The asset is the
+ * issuer the test's deposit was created with. Nothing advances it afterwards: the reference server
+ * routes SEP-24 events to a no-op processor.
+ */
+private const val SEP24_PENDING_DEPOSIT_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "request_offchain_funds",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "pending deposit fixture",
+      "amount_in": { "amount": "100", "asset": "iso4217:USD" },
+      "amount_out": {
+        "amount": "95",
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      },
+      "fee_details": { "total": "5", "asset": "iso4217:USD" },
+      "amount_expected": { "amount": "100" }
+    }
+  }
+]
+"""
+
+/**
+ * Moves a fresh SEP-24 withdrawal from `incomplete` to `pending_user_transfer_start`. It sends no
+ * `memo` or `destination_account`: the test profile's SEP-24 deposit info generator is `self`,
+ * which fills them in itself and rejects a request that carries them.
+ */
+private const val SEP24_PENDING_WITHDRAWAL_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "request_onchain_funds",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "pending withdrawal fixture",
+      "amount_in": {
+        "amount": "100",
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      },
+      "amount_out": { "amount": "95", "asset": "iso4217:USD" },
+      "fee_details": {
+        "total": "5",
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      },
+      "amount_expected": { "amount": "100" }
     }
   }
 ]
