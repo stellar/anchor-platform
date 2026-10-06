@@ -851,6 +851,58 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertEquals("Quote not found", errorMessage(withdrawal))
   }
 
+  // SEP24IF-11, SEP24IF-17
+  @Test
+  fun `test sep24 deposit rejects a source_asset that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postDepositQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.deposit(depositRequest(quoteId, mapOf("source_asset" to "iso4217:CAD")))
+      }
+
+    assertEquals(
+      "source asset(iso4217:CAD) does not match quote sell asset($USD)",
+      errorMessage(ex)
+    )
+    // The rejected request did not bind the quote: the same quote is accepted with matching values.
+    assertNotNull(account.client.deposit(depositRequest(quoteId)).id)
+  }
+
+  // SEP24IF-12, SEP24IF-17
+  @Test
+  fun `test sep24 deposit rejects an asset that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postDepositQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.deposit(depositRequest(quoteId, mapOf("asset_issuer" to USDC_GBBD_ISSUER)))
+      }
+
+    assertEquals(
+      "destination asset(stellar:USDC:$USDC_GBBD_ISSUER) does not match quote buy asset(stellar:USDC:$USDC_GDQO_ISSUER)",
+      errorMessage(ex),
+    )
+    assertNotNull(account.client.deposit(depositRequest(quoteId)).id)
+  }
+
+  // SEP24IF-15, SEP24IF-17
+  @Test
+  fun `test sep24 deposit rejects an amount that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postDepositQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.deposit(depositRequest(quoteId, mapOf("amount" to "4")))
+      }
+
+    assertEquals("amount(4) does not match quote sell amount($QUOTE_AMOUNT)", errorMessage(ex))
+    assertNotNull(account.client.deposit(depositRequest(quoteId)).id)
+  }
+
   // SEP24IF-07: AP never sends a deposit as a claimable balance, so asking for one is accepted
   // (the flag is optional) and the transaction carries no claimable_balance_id.
   @Test
