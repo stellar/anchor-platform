@@ -12,7 +12,9 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -149,6 +151,33 @@ class ClientStatusCallbackHandlerTest {
     val signatureToVerify = signer.sign(payloadToVerify.toByteArray())
 
     Assertions.assertArrayEquals(decodedSignature, signatureToVerify)
+  }
+
+  // SEP24IF-28..31: the signature a wallet server verifies is bound to host:port, a fresh timestamp
+  // and the exact body; the test checks it with the public key only, as a wallet server would.
+  @Test
+  fun `test request signature verifies with the public key over host and port`() {
+    val body = """{"transaction":{"id":"txn-1","status":"completed"}}"""
+    val verifier = KeyPair.fromAccountId(signer.accountId)
+    val before = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())
+
+    val request =
+      ClientStatusCallbackHandler.buildHttpRequest(
+        signer,
+        body,
+        "http://wallet.example:8092/callbacks/sep24",
+      )
+
+    val after = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())
+    val header = request.header("Signature")!!
+    val match = Regex("^t=(\\d+), s=([A-Za-z0-9+/]+=*)$").matchEntire(header)
+    assertNotNull(match, "unexpected Signature header shape: $header")
+    val (t, s) = match!!.destructured
+    val signature = Base64.getDecoder().decode(s)
+
+    assertTrue(verifier.verify("$t.wallet.example:8092.$body".toByteArray(), signature))
+    assertFalse(verifier.verify("$t.wallet.example.$body".toByteArray(), signature))
+    assertTrue(t.toLong() in before..after, "t=$t outside [$before, $after]")
   }
 
   @Test
