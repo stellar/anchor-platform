@@ -1,21 +1,51 @@
 package org.stellar.reference.wallet
 
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import java.time.Duration
 import java.time.Instant
 import java.util.*
 import org.stellar.sdk.KeyPair
 
+/** A callback exactly as it arrived: the `Signature` and `Host` headers and the unparsed body. */
+data class RawCallback(val signature: String?, val host: String?, val body: String)
+
 class CallbackService {
   private val callbacks = mutableMapOf<CallbackType, MutableList<JsonObject>>()
+  private val rawCallbacks = mutableMapOf<CallbackType, MutableList<RawCallback>>()
 
   init {
-    CallbackType.entries.forEach { callbacks[it] = mutableListOf() }
+    CallbackType.entries.forEach {
+      callbacks[it] = mutableListOf()
+      rawCallbacks[it] = Collections.synchronizedList(mutableListOf())
+    }
   }
 
-  fun processCallback(receivedCallback: JsonObject, type: String) {
+  /**
+   * Stores a callback the route has already verified. [raw], when given, is kept next to the parsed
+   * object so a test can verify the signature over the bytes that were signed.
+   */
+  fun processCallback(receivedCallback: JsonObject, type: String, raw: RawCallback? = null) {
     val callbackType = CallbackType.fromString(type)
     callbacks[callbackType]?.add(receivedCallback)
+    if (raw != null) rawCallbacks[callbackType]?.add(raw)
+  }
+
+  fun getRawTransactionCallbacks(type: String, txnId: String?): List<RawCallback> {
+    val callbackType = CallbackType.fromString(type)
+    if (callbackType == CallbackType.SEP12) {
+      throw IllegalArgumentException("SEP12 is not a valid transaction type")
+    }
+    val raws = synchronized(rawCallbacks[callbackType]!!) { rawCallbacks[callbackType]!!.toList() }
+    return if (txnId == null) raws
+    else
+      raws.filter {
+        JsonParser.parseString(it.body)
+          .asJsonObject
+          .getAsJsonObject("transaction")
+          ?.get("id")
+          ?.asString == txnId
+      }
   }
 
   fun getTransactionCallbacks(type: String, txnId: String?): List<JsonObject> {
