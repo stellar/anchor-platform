@@ -46,12 +46,22 @@ public interface Sep24TransactionStore {
    *
    * @param accountId The authenticating Stellar account id.
    * @param accountMemo The memo of the authenticating account.
+   * @param assetCode The asset code to match. It wins over {@code request.getAssetCode()}, which
+   *     may still hold the unparsed {@code stellar:CODE[:ISSUER]} form the caller sent.
+   * @param assetIssuer The asset issuer to match, or null to match the code alone. A transaction
+   *     stored with no issuer matches any issuer, because a deposit keeps the issuer exactly as the
+   *     wallet sent it.
    * @param request The query request.
    * @return The list of transaction documents. If not found, return empty list.
    * @throws SepException if error happens
    */
   List<Sep24Transaction> findTransactions(
-      String accountId, String accountMemo, GetTransactionsRequest request) throws SepException;
+      String accountId,
+      String accountMemo,
+      String assetCode,
+      String assetIssuer,
+      GetTransactionsRequest request)
+      throws SepException;
 
   /**
    * Save a transaction.
