@@ -1039,13 +1039,47 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertEquals("pending_anchor", getTransactionRaw(account, depositId).string("status"))
   }
 
+  // SEP24IF-22
+  @Test
+  fun `test sep24 GET transaction reports an error with its message`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+    val message = "bank rejected the transfer ${UUID.randomUUID()}"
+    sendRpc(SEP24_ERROR_RPC.replace("%ERROR_MESSAGE%", message), depositId)
+
+    val txn = getTransactionRaw(account, depositId)
+
+    assertEquals("error", txn.string("status"))
+    assertEquals(message, txn.string("message"))
+    assertSep24TransactionSchema(txn, Sep24SchemaCase.DEPOSIT_INCOMPLETE)
+  }
+
+  // SEP24IF-23
+  @Test
+  fun `test sep24 GET transaction reports an expired withdrawal with its message`() {
+    val account = newAccount()
+    val withdrawalId = createWithdrawal(account)
+    val message = "abandoned by the user ${UUID.randomUUID()}"
+    sendRpc(SEP24_EXPIRE_RPC.replace("%EXPIRE_MESSAGE%", message), withdrawalId)
+
+    val txn = getTransactionRaw(account, withdrawalId)
+
+    assertEquals("expired", txn.string("status"))
+    assertEquals(message, txn.string("message"))
+    assertSep24TransactionSchema(txn, Sep24SchemaCase.WITHDRAWAL_INCOMPLETE)
+  }
+
   // SEP24IF-24
   @Test
   fun `test sep24 refuses to expire a deposit whose funds were received`() {
     val account = newAccount()
     val depositId = createOnHoldDeposit(account, "held for review ${UUID.randomUUID()}")
 
-    val responses = sendRpcForResponses(SEP24_EXPIRE_RPC, depositId)
+    val responses =
+      sendRpcForResponses(
+        SEP24_EXPIRE_RPC.replace("%EXPIRE_MESSAGE%", "abandoned by the user"),
+        depositId,
+      )
 
     assertEquals(1, responses.size)
     assertEquals(
@@ -1403,6 +1437,22 @@ private const val SEP24_FUNDS_RECEIVED_RPC =
 ]
 """
 
+/** The anchor gives up on a transaction that has not moved yet. */
+private const val SEP24_ERROR_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "notify_transaction_error",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "%ERROR_MESSAGE%"
+    }
+  }
+]
+"""
+
 /** `expired` means the funds never arrived, so the platform refuses it once they have. */
 private const val SEP24_EXPIRE_RPC =
   """
@@ -1413,7 +1463,7 @@ private const val SEP24_EXPIRE_RPC =
     "jsonrpc": "2.0",
     "params": {
       "transaction_id": "%TX_ID%",
-      "message": "abandoned by the user"
+      "message": "%EXPIRE_MESSAGE%"
     }
   }
 ]
