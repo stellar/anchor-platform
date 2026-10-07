@@ -4,7 +4,6 @@ import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
-import java.time.Duration
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -162,15 +161,13 @@ class AssetValidationUtilsTest {
   }
 
   @Test
-  fun test_validateFeeDetails_poisonedDetailDoesNotHang() {
-    val fee = fee("1", "1e20000000")
-    val service = feeAssetService()
-    // Hang backstop only: the message and ordering tests above are the deterministic oracle.
-    Assertions.assertTimeoutPreemptively(Duration.ofSeconds(10)) {
-      assertThrows<BadRequestException> {
-        AssetValidationUtils.validateFeeDetails(fee, null, service)
-      }
-    }
+  fun test_validateFeeDetails_wholeListIsValidatedBeforeAnySum() {
+    // The earlier details are valid and sum to 2, which differs from the total (1). The poisoned
+    // detail comes last, so only validating the whole list first reports it instead of the sum.
+    Assertions.assertEquals(
+      "fee_details.details[2].amount is invalid",
+      validationError(fee("1", "1", "1", "1e20000000")),
+    )
   }
 
   @Test
@@ -303,6 +300,23 @@ class AssetValidationUtilsTest {
   }
 
   @Test
+  fun test_validateFeeDetails_poisonedFirstDetailIsReportedEvenWhenLaterDetailsAreValid() {
+    Assertions.assertEquals(
+      "fee_details.details[0].amount is invalid",
+      validationError(fee("1", "1e20000000", "1")),
+    )
+  }
+
+  @Test
+  fun test_validateFeeDetails_totalAndDetailOfExactly64CharactersAreAccepted() {
+    val amount = "1." + "0".repeat(62)
+    Assertions.assertEquals(64, amount.length)
+    Assertions.assertDoesNotThrow {
+      AssetValidationUtils.validateFeeDetails(fee(amount, amount), null, feeAssetService())
+    }
+  }
+
+  @Test
   fun test_validateFeeDetails_totalLongerThan64CharactersIsRejected() {
     Assertions.assertEquals(
       "fee_details.amount is invalid",
@@ -316,14 +330,6 @@ class AssetValidationUtilsTest {
     Assertions.assertEquals(
       "fee_details.details[1].amount is invalid",
       validationError(fee("2", "1", "1." + "0".repeat(63))),
-    )
-  }
-
-  @Test
-  fun test_validateFeeDetails_200000DigitDetailIsRejected() {
-    Assertions.assertEquals(
-      "fee_details.details[0].amount is invalid",
-      validationError(fee("1", "1" + "0".repeat(200_000))),
     )
   }
 }

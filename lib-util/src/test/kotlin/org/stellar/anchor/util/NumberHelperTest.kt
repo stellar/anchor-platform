@@ -68,7 +68,17 @@ class NumberHelperTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["0e-50000000", "0e+50000000", "0.000000000000000000000", "-0e-50000000"])
+  @ValueSource(
+    strings =
+      [
+        "0e-50000000",
+        "0e+50000000",
+        "0.000000000000000000000",
+        "-0e-50000000",
+        "0e-21",
+        "0e+21",
+      ]
+  )
   fun `test zero with an extreme scale is not a reasonable magnitude`(value: String) {
     assertFalse(NumberHelper.hasReasonableMagnitude(BigDecimal(value)))
     assertFalse(NumberHelper.hasProperSignificantDecimals(value, 7))

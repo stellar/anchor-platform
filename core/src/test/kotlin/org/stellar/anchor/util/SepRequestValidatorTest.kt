@@ -4,6 +4,7 @@ import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
+import java.math.BigDecimal
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -243,16 +244,27 @@ class SepRequestValidatorTest {
   fun `test static validateAmount accepts an amount string of exactly 64 characters`() {
     val padded = "1." + "0".repeat(62)
     assertEquals(64, padded.length)
-    SepRequestValidator.validateAmount("", padded, false)
+    val amount = SepRequestValidator.validateAmount("", padded, false)
+    assertEquals(0, amount.compareTo(BigDecimal.ONE))
   }
 
   @Test
-  fun `test static validateAmount rejects a 200000 digit amount string`() {
-    val ex =
-      assertThrows<BadRequestException> {
-        SepRequestValidator.validateAmount("", "1" + "0".repeat(200_000), false)
-      }
-    assertEquals("amount is invalid", ex.message)
+  fun `test static validateAmount applies the length cap before the sign check`() {
+    // 65 characters each: the cap reports 'amount is invalid', not the sign message
+    val zero = "0." + "0".repeat(63)
+    val negative = "-1." + "0".repeat(62)
+    assertEquals(65, zero.length)
+    assertEquals(65, negative.length)
+    assertEquals(
+      "amount is invalid",
+      assertThrows<BadRequestException> { SepRequestValidator.validateAmount("", zero, true) }
+        .message,
+    )
+    assertEquals(
+      "amount is invalid",
+      assertThrows<BadRequestException> { SepRequestValidator.validateAmount("", negative, true) }
+        .message,
+    )
   }
 
   @Test
