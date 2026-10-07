@@ -320,6 +320,48 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
+  fun `test onReceived() ignores a SEP-24 payment whose stored amountExpected is out of range and still processes the next payment`() {
+    val event = createTestTransferEvent()
+    val payment = event.ledgerTransaction.operations[0].paymentOperation
+    xdrMemoText.text = XdrString("my_memo_1")
+    event.ledgerTransaction.memo = xdrMemoText
+
+    // 1e20000000 is far above the payment, so checkAssetAmountSufficient tries to format it
+    val poisoned = JdbcSep24Transaction()
+    poisoned.id = "poisoned"
+    poisoned.kind = "withdrawal"
+    poisoned.amountInAsset = "stellar:" + getSep11AssetName(payment.asset)
+    poisoned.amountExpected = "1e20000000"
+
+    val valid = JdbcSep24Transaction()
+    valid.id = "valid"
+    valid.kind = "withdrawal"
+    valid.amountInAsset = "stellar:" + getSep11AssetName(payment.asset)
+    valid.amountExpected = fromXdrAmount(payment.amount)
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(poisoned) andThen listOf(valid)
+
+    assertDoesNotThrow { paymentListener.onReceived(event) }
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+
+    // the same listener keeps processing: the next payment, with a valid stored amount, is credited
+    assertDoesNotThrow { paymentListener.onReceived(event) }
+    verify(exactly = 1) {
+      platformApiClient.notifyOnchainFundsReceived("valid", any(), any(), any())
+    }
+    verify(exactly = 0) {
+      platformApiClient.notifyOnchainFundsReceived("poisoned", any(), any(), any())
+    }
+  }
+
+  @Test
   fun `test handleSep6Transaction are called properly`() {
     val event = createTestTransferEvent()
     val ledgerTransaction = event.ledgerTransaction
