@@ -121,7 +121,8 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
         waitForWalletServerCallbacks(response.id, getExpectedDepositStatus().size)
       assertCallbacks(actualCallbacks, getExpectedDepositStatus())
 
-      // Every callback carries a signature a wallet server can verify with AP's published key
+      // SEP24IF-33, SEP24IF-34: every callback carries a signature a wallet server can verify with
+      // AP's published key
       assertCallbackSignatures(
         walletServerClient.getRawTransactionCallbacks("sep24", response.id),
         getExpectedDepositStatus().size,

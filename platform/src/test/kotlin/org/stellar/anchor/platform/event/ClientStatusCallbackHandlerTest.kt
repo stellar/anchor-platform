@@ -154,7 +154,8 @@ class ClientStatusCallbackHandlerTest {
     Assertions.assertArrayEquals(decodedSignature, signatureToVerify)
   }
 
-  // SEP24IF-28..31: the signature a wallet server verifies is bound to host:port, a fresh timestamp
+  // SEP24IF-28..31, SEP24IF-35: the signature a wallet server verifies is bound to host:port, a
+  // fresh timestamp
   // and the exact body; the test checks it with the public key only, as a wallet server would.
   @Test
   fun `test request signature verifies with the public key over host and port`() {

@@ -130,6 +130,7 @@ class Sep24ConfigTest {
   private fun featuresErrors(): List<Pair<String?, String?>> =
     errors.fieldErrors.filter { it.field == "features" }.map { it.code to it.defaultMessage }
 
+  // SEP24IF-01
   @Test
   fun `test claimable balances enabled is rejected`() {
     config.features = features(accountCreation = false, claimableBalances = true)
@@ -143,6 +144,7 @@ class Sep24ConfigTest {
     )
   }
 
+  // SEP24IF-02
   @Test
   fun `test account creation enabled is rejected`() {
     config.features = features(accountCreation = true, claimableBalances = false)
@@ -156,6 +158,7 @@ class Sep24ConfigTest {
     )
   }
 
+  // SEP24IF-03
   @Test
   fun `test both features enabled reports both errors`() {
     config.features = features(accountCreation = true, claimableBalances = true)
@@ -171,6 +174,7 @@ class Sep24ConfigTest {
     )
   }
 
+  // SEP24IF-04
   @Test
   fun `test both features disabled and null features are accepted`() {
     config.features = features(accountCreation = false, claimableBalances = false)
@@ -183,6 +187,7 @@ class Sep24ConfigTest {
     assertFalse(errors.hasErrors())
   }
 
+  // SEP24IF-05
   @Test
   fun `test disabled sep24 skips the features check`() {
     config.enabled = false

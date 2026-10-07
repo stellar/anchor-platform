@@ -160,6 +160,7 @@ class Sep24TransactionSchemaTests {
     )
   }
 
+  // SEP24IF-19
   @Test
   fun `rejects a status outside the SEP-24 enum`() {
     assertRejected(
