@@ -258,7 +258,9 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
     val notAfter = System.currentTimeMillis() / 1000
 
     rawCallbacks.forEach { raw ->
-      assertEquals(config.env["wallet.hostname"], raw.host)
+      assertEquals(config.env["wallet.hostname"], raw.host) {
+        "callback Host must be the wallet.hostname the test profile declares"
+      }
       val (t, signature) = parseSignatureHeader(raw)
       assertTrue(verifier.verify("$t.${raw.host}.${raw.body}".toByteArray(), signature)) {
         "callback signature does not verify over $t.${raw.host}.<body>: ${raw.signature}"
@@ -268,10 +270,25 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       }
     }
 
-    // The check is not vacuous: one byte more and the same signature no longer verifies.
-    val first = rawCallbacks.first()
-    val (t, signature) = parseSignatureHeader(first)
-    assertFalse(verifier.verify("$t.${first.host}.${first.body} ".toByteArray(), signature))
+    // The check is not vacuous: change one byte in the middle of any body and its own signature
+    // no longer verifies.
+    rawCallbacks.forEach { raw ->
+      val (t, signature) = parseSignatureHeader(raw)
+      assertFalse(
+        verifier.verify(
+          "$t.${raw.host}.${withMiddleByteChanged(raw.body)}".toByteArray(),
+          signature
+        )
+      ) {
+        "a callback whose body was changed must not verify: ${raw.signature}"
+      }
+    }
+  }
+
+  private fun withMiddleByteChanged(body: String): String {
+    val middle = body.length / 2
+    val replacement = if (body[middle] == 'x') 'y' else 'x'
+    return body.substring(0, middle) + replacement + body.substring(middle + 1)
   }
 
   private fun parseSignatureHeader(raw: RawCallback): Pair<String, ByteArray> {
