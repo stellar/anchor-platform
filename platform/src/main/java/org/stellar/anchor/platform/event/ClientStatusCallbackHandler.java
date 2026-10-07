@@ -10,6 +10,7 @@ import static org.stellar.anchor.util.StringHelper.json;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
@@ -187,7 +188,9 @@ public class ClientStatusCallbackHandler extends EventHandler {
     // Sign the payload using the Anchor private key
     // Base64 encode the signature
     String encodedSignature =
-        new String(Base64.getEncoder().encode(signer.sign(payloadToSign.getBytes())));
+        new String(
+            Base64.getEncoder()
+                .encode(signer.sign(payloadToSign.getBytes(StandardCharsets.UTF_8))));
 
     // Build the X-Stellar-Signature header
     return new Request.Builder()
