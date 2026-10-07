@@ -27,8 +27,10 @@ class CallbackService {
    */
   fun processCallback(receivedCallback: JsonObject, type: String, raw: RawCallback? = null) {
     val callbackType = CallbackType.fromString(type)
-    callbacks[callbackType]?.add(receivedCallback)
+    // The raw record goes first: a reader that polls the parsed list and then reads the raw one
+    // (Sep24End2EndTests) must find the raw record once it has seen the parsed callback.
     if (raw != null) rawCallbacks[callbackType]?.add(raw)
+    callbacks[callbackType]?.add(receivedCallback)
   }
 
   fun getRawTransactionCallbacks(type: String, txnId: String?): List<RawCallback> {
