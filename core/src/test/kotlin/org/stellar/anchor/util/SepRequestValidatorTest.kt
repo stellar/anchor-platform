@@ -213,6 +213,20 @@ class SepRequestValidatorTest {
     SepRequestValidator.validateAmount("", amount, false)
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = ["0e-50000000", "0e+50000000", "0.000000000000000000000", "-0e-50000000"])
+  fun `test static validateAmount rejects zero with an extreme scale`(amount: String) {
+    val ex =
+      assertThrows<BadRequestException> { SepRequestValidator.validateAmount("", amount, true) }
+    assertEquals("amount is invalid", ex.message)
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["0", "0.00", "0.00000000000000000000", "0e+5", "0e-20"])
+  fun `test static validateAmount accepts zero with a bounded scale`(amount: String) {
+    SepRequestValidator.validateAmount("", amount, true)
+  }
+
   @Test
   fun `test static validateAmount rejects amount strings longer than 64 characters`() {
     // Otherwise valid (strips to 1), so only the length cap can reject it.

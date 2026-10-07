@@ -43,6 +43,11 @@ public class NumberHelper {
   }
 
   public static boolean hasReasonableMagnitude(BigDecimal value) {
+    // stripTrailingZeros() collapses every zero to scale 0, which would hide an extreme exponent
+    // such as 0e-50000000 that BigDecimal.add later expands to millions of digits.
+    if (value.signum() == 0) {
+      return Math.abs((long) value.scale()) <= MAX_AMOUNT_MAGNITUDE;
+    }
     BigDecimal stripped = value.stripTrailingZeros();
     long integerDigits = (long) stripped.precision() - (long) stripped.scale();
     return integerDigits <= MAX_AMOUNT_MAGNITUDE && stripped.scale() <= MAX_AMOUNT_MAGNITUDE;
@@ -52,7 +57,7 @@ public class NumberHelper {
     try {
       BigDecimal decimal = new BigDecimal(input);
       BigDecimal stripped = decimal.stripTrailingZeros();
-      if (!hasReasonableMagnitude(stripped)) {
+      if (!hasReasonableMagnitude(decimal)) {
         return false;
       }
       int scale = max(0, stripped.scale());

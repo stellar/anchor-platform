@@ -1,6 +1,8 @@
 package org.stellar.anchor.util
 
+import java.math.BigDecimal
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.NullSource
@@ -63,5 +65,18 @@ class NumberHelperTest {
   )
   fun `test violating significant decimals`(value: String, maxDecimals: Int) {
     assert(!NumberHelper.hasProperSignificantDecimals(value, maxDecimals))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["0e-50000000", "0e+50000000", "0.000000000000000000000", "-0e-50000000"])
+  fun `test zero with an extreme scale is not a reasonable magnitude`(value: String) {
+    assertFalse(NumberHelper.hasReasonableMagnitude(BigDecimal(value)))
+    assertFalse(NumberHelper.hasProperSignificantDecimals(value, 7))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["0", "0.00", "0.00000000000000000000", "0e+5", "0e-20", "0e+20"])
+  fun `test zero with a bounded scale is a reasonable magnitude`(value: String) {
+    assertTrue(NumberHelper.hasReasonableMagnitude(BigDecimal(value)))
   }
 }

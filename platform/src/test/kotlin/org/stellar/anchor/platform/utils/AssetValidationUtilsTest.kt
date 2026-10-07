@@ -284,6 +284,24 @@ class AssetValidationUtilsTest {
     )
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = ["0e-50000000", "0e+50000000"])
+  fun test_validateFeeDetails_zeroDetailWithAnExtremeScaleIsRejectedBeforeTheSum(amount: String) {
+    // total 1 = 0 + 1, so only the guard can reject it; the sum would expand 0e-50000000
+    Assertions.assertEquals(
+      "fee_details.details[0].amount is invalid",
+      validationError(fee("1", amount, "1")),
+    )
+  }
+
+  @Test
+  fun test_validateFeeDetails_zeroTotalWithAnExtremeScaleIsRejected() {
+    Assertions.assertEquals(
+      "fee_details.amount is invalid",
+      validationError(fee("0e-50000000", "0")),
+    )
+  }
+
   @Test
   fun test_validateFeeDetails_totalLongerThan64CharactersIsRejected() {
     Assertions.assertEquals(
