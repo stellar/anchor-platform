@@ -45,6 +45,17 @@ public class AssetValidationUtils {
     }
 
     if (fee.getDetails() != null) {
+      // Every detail must pass the magnitude guard before any of them is summed: BigDecimal.add
+      // expands extreme exponents (e.g. 1e20000000) and would burn CPU and memory on this thread.
+      for (int i = 0; i < fee.getDetails().size(); i++) {
+        FeeDescription detail = fee.getDetails().get(i);
+        if (detail == null) {
+          throw new BadRequestException(String.format("fee_details.details[%d] cannot be null", i));
+        }
+        SepRequestValidator.validateAmount(
+            String.format("fee_details.details[%d].", i), detail.getAmount(), true);
+      }
+
       BigDecimal sum =
           fee.getDetails().stream()
               .map(FeeDescription::getAmount)
