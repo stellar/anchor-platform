@@ -10,6 +10,7 @@ import java.util.*
 import java.util.concurrent.TimeUnit
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okio.Buffer
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -169,14 +170,18 @@ class ClientStatusCallbackHandlerTest {
       )
 
     val after = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())
+    // The wallet server verifies the bytes it receives, so verify over the body the request
+    // carries.
+    val sentBody = Buffer().also { request.body!!.writeTo(it) }.readUtf8()
+    assertEquals(body, sentBody)
     val header = request.header("Signature")!!
     val match = Regex("^t=(\\d+), s=([A-Za-z0-9+/]+=*)$").matchEntire(header)
     assertNotNull(match, "unexpected Signature header shape: $header")
     val (t, s) = match!!.destructured
     val signature = Base64.getDecoder().decode(s)
 
-    assertTrue(verifier.verify("$t.wallet.example:8092.$body".toByteArray(), signature))
-    assertFalse(verifier.verify("$t.wallet.example.$body".toByteArray(), signature))
+    assertTrue(verifier.verify("$t.wallet.example:8092.$sentBody".toByteArray(), signature))
+    assertFalse(verifier.verify("$t.wallet.example.$sentBody".toByteArray(), signature))
     assertTrue(t.toLong() in before..after, "t=$t outside [$before, $after]")
   }
 
