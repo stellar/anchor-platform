@@ -972,6 +972,28 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertEquals("quote(id=$quoteId) has already been used", errorMessage(ex))
   }
 
+  // SEP24IF-06: read from the raw body; the SDK's object would default an absent feature to false.
+  @Test
+  fun `test sep24 info reports the claimable balances and account creation features as false`() {
+    val request =
+      Request.Builder().url("${toml.getString("TRANSFER_SERVER_SEP0024")}/info").get().build()
+
+    http.newCall(request).execute().use { response ->
+      val body = response.body?.string()
+      assertEquals(200, response.code) { "GET /info answered ${response.code}: $body" }
+      val features = JsonParser.parseString(body).asJsonObject.getAsJsonObject("features")
+      listOf("claimable_balances", "account_creation").forEach { key ->
+        val feature = features.get(key)
+        assertTrue(
+          feature != null && feature.isJsonPrimitive && feature.asJsonPrimitive.isBoolean
+        ) {
+          "features.$key must be a JSON boolean, got $feature"
+        }
+        assertFalse(feature.asBoolean) { "features.$key must be false" }
+      }
+    }
+  }
+
   // SEP24IF-07: AP never sends a deposit as a claimable balance, so asking for one is accepted
   // (the flag is optional) and the transaction carries no claimable_balance_id.
   @Test
