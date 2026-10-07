@@ -136,6 +136,8 @@ class AssetValidationUtilsTest {
   @ParameterizedTest
   @ValueSource(strings = ["1e20000000", "1e21", "100000000000000000000.5"])
   fun test_validateFeeDetails_detailAmountWithTooManyIntegerDigits(amount: String) {
+    // The total (1) also differs from the details sum, so the per-detail message winning over the
+    // total-mismatch message is part of what this asserts.
     Assertions.assertEquals(
       "fee_details.details[0].amount is invalid",
       validationError(fee("1", amount)),
@@ -148,15 +150,6 @@ class AssetValidationUtilsTest {
     Assertions.assertEquals(
       "fee_details.details[0].amount is invalid",
       validationError(fee("1", amount)),
-    )
-  }
-
-  @Test
-  fun test_validateFeeDetails_poisonedDetailWinsOverTotalMismatch() {
-    // total (1) differs from the details sum; the per-detail error must be reported, not the sum
-    Assertions.assertEquals(
-      "fee_details.details[0].amount is invalid",
-      validationError(fee("1", "1e20000000")),
     )
   }
 
@@ -185,11 +178,13 @@ class AssetValidationUtilsTest {
     Assertions.assertEquals(expected, validationError(fee("1", "")))
   }
 
-  @Test
-  fun test_validateFeeDetails_nonNumericDetailAmount() {
+  // " " is not empty for StringHelper.isEmpty (no trim), so it fails to parse instead
+  @ParameterizedTest
+  @ValueSource(strings = ["abc", " "])
+  fun test_validateFeeDetails_nonNumericDetailAmount(amount: String) {
     Assertions.assertEquals(
       "fee_details.details[0].amount is invalid",
-      validationError(fee("1", "abc")),
+      validationError(fee("1", amount)),
     )
   }
 

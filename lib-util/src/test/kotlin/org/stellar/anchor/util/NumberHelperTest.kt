@@ -40,6 +40,9 @@ class NumberHelperTest {
         "1.0E+10, 2",
         "1.23E+2, 2",
         "9999999999.99, 2",
+        "0, 2",
+        "0.00, 2",
+        "0.00000000000000000000, 20",
       ]
   )
   fun `test proper significant decimals`(value: String, maxDecimals: Int) {

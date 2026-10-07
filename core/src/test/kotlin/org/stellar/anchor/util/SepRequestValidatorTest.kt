@@ -250,8 +250,9 @@ class SepRequestValidatorTest {
 
   @Test
   fun `test static validateAmount applies the length cap before the sign check`() {
-    // 65 characters each: the cap reports 'amount is invalid', not the sign message
-    val zero = "0." + "0".repeat(63)
+    // 65 characters each: the cap reports 'amount is invalid', not the sign message. The zero is
+    // 65 plain digits (scale 0) so only the cap can reject it: it would otherwise be a valid zero.
+    val zero = "0".repeat(65)
     val negative = "-1." + "0".repeat(62)
     assertEquals(65, zero.length)
     assertEquals(65, negative.length)
