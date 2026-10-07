@@ -44,6 +44,11 @@ public class SepRequestValidator {
       throw new BadRequestException(messagePrefix + "amount cannot be empty");
     }
 
+    // reject before parsing: a long digit string is expensive to parse and to strip
+    if (amount.length() > NumberHelper.MAX_AMOUNT_LENGTH) {
+      throw new BadRequestException(messagePrefix + "amount is invalid");
+    }
+
     BigDecimal sAmount;
     try {
       sAmount = decimal(amount);

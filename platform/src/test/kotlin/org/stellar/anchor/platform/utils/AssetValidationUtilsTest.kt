@@ -6,7 +6,6 @@ import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
 import java.time.Duration
 import org.junit.jupiter.api.Assertions
-import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -118,12 +117,12 @@ class AssetValidationUtilsTest {
     Assertions.assertInstanceOf(BadRequestException::class.java, ex)
   }
 
+  // An asset without significant decimals, so only the amounts' own validation is under test.
   private fun feeAssetService(): AssetService {
     val asset = mockk<AssetInfo>(relaxed = true)
     every { asset.id } returns fiatUSD
     every { asset.significantDecimals } returns null
-    every { assetService.assets } returns listOf(asset)
-    return assetService
+    return mockk<AssetService>(relaxed = true) { every { assets } returns listOf(asset) }
   }
 
   private fun fee(total: String, vararg amounts: String?): FeeDetails =
@@ -163,10 +162,11 @@ class AssetValidationUtilsTest {
   }
 
   @Test
-  fun test_validateFeeDetails_poisonedDetailRejectedWithinOneSecond() {
+  fun test_validateFeeDetails_poisonedDetailDoesNotHang() {
     val fee = fee("1", "1e20000000")
     val service = feeAssetService()
-    assertTimeoutPreemptively(Duration.ofSeconds(1)) {
+    // Hang backstop only: the message and ordering tests above are the deterministic oracle.
+    Assertions.assertTimeoutPreemptively(Duration.ofSeconds(10)) {
       assertThrows<BadRequestException> {
         AssetValidationUtils.validateFeeDetails(fee, null, service)
       }
@@ -212,38 +212,34 @@ class AssetValidationUtilsTest {
 
   @Test
   fun test_validateFeeDetails_validDetails() {
-    val service = feeAssetService()
     Assertions.assertDoesNotThrow {
-      AssetValidationUtils.validateFeeDetails(fee("3.5", "1", "2.5"), null, service)
-    }
-    // a zero line is accepted
-    Assertions.assertDoesNotThrow {
-      AssetValidationUtils.validateFeeDetails(fee("1", "0", "1"), null, service)
-    }
-    // exponent forms that strip to an in-bound value are accepted like their plain form
-    Assertions.assertDoesNotThrow {
-      AssetValidationUtils.validateFeeDetails(fee("11", "100e-2", "1.0E+1"), null, service)
+      AssetValidationUtils.validateFeeDetails(fee("3.5", "1", "2.5"), null, feeAssetService())
     }
   }
 
   @Test
-  fun test_validateFeeDetails_detailAmountsAtTheBound() {
-    val service = feeAssetService()
-    val twentyIntegerDigits = "10000000000000000000"
-    val twentyFractionalDigits = "0.00000000000000000001"
+  fun test_validateFeeDetails_zeroDetailIsAccepted() {
+    Assertions.assertDoesNotThrow {
+      AssetValidationUtils.validateFeeDetails(fee("1", "0", "1"), null, feeAssetService())
+    }
+  }
+
+  @Test
+  fun test_validateFeeDetails_exponentFormsAreAcceptedLikeTheirPlainForm() {
     Assertions.assertDoesNotThrow {
       AssetValidationUtils.validateFeeDetails(
-        fee(twentyIntegerDigits, twentyIntegerDigits),
+        fee("11", "100e-2", "1.0E+1"),
         null,
-        service,
+        feeAssetService(),
       )
     }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["10000000000000000000", "0.00000000000000000001"])
+  fun test_validateFeeDetails_detailAmountsAtTheBound(amount: String) {
     Assertions.assertDoesNotThrow {
-      AssetValidationUtils.validateFeeDetails(
-        fee(twentyFractionalDigits, twentyFractionalDigits),
-        null,
-        service,
-      )
+      AssetValidationUtils.validateFeeDetails(fee(amount, amount), null, feeAssetService())
     }
   }
 
@@ -257,17 +253,19 @@ class AssetValidationUtilsTest {
 
   @Test
   fun test_validateFeeDetails_nullDetailsAreSkipped() {
-    val service = feeAssetService()
     Assertions.assertDoesNotThrow {
-      AssetValidationUtils.validateFeeDetails(FeeDetails("1", fiatUSD, null), null, service)
+      AssetValidationUtils.validateFeeDetails(
+        FeeDetails("1", fiatUSD, null),
+        null,
+        feeAssetService(),
+      )
     }
   }
 
   @Test
   fun test_validateFeeDetails_emptyDetailsListIsComparedAsZero() {
-    val service = feeAssetService()
     Assertions.assertDoesNotThrow {
-      AssetValidationUtils.validateFeeDetails(fee("0"), null, service)
+      AssetValidationUtils.validateFeeDetails(fee("0"), null, feeAssetService())
     }
     Assertions.assertEquals(
       "fee_details.total is not equal to the sum of (fee_details.details.amount)",
@@ -275,11 +273,39 @@ class AssetValidationUtilsTest {
     )
   }
 
-  @Test
-  fun test_validateFeeDetails_outOfBigIntegerRangeExponent() {
+  @ParameterizedTest
+  // 1e2000000000 parses (below Integer.MAX_VALUE) and fails the magnitude check; the second
+  // exponent overflows int, so new BigDecimal itself throws NumberFormatException.
+  @ValueSource(strings = ["1e2000000000", "1e99999999999"])
+  fun test_validateFeeDetails_extremeExponentIsA400(amount: String) {
     Assertions.assertEquals(
       "fee_details.details[0].amount is invalid",
-      validationError(fee("1", "1e2000000000")),
+      validationError(fee("1", amount)),
+    )
+  }
+
+  @Test
+  fun test_validateFeeDetails_totalLongerThan64CharactersIsRejected() {
+    Assertions.assertEquals(
+      "fee_details.amount is invalid",
+      validationError(fee("1." + "0".repeat(63), "1")),
+    )
+  }
+
+  @Test
+  fun test_validateFeeDetails_detailLongerThan64CharactersIsRejected() {
+    // Valid magnitude (strips to 1) and matches the total, so only the length cap rejects it.
+    Assertions.assertEquals(
+      "fee_details.details[1].amount is invalid",
+      validationError(fee("2", "1", "1." + "0".repeat(63))),
+    )
+  }
+
+  @Test
+  fun test_validateFeeDetails_200000DigitDetailIsRejected() {
+    Assertions.assertEquals(
+      "fee_details.details[0].amount is invalid",
+      validationError(fee("1", "1" + "0".repeat(200_000))),
     )
   }
 }

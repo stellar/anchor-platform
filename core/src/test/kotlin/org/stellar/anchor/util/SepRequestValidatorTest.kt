@@ -214,6 +214,34 @@ class SepRequestValidatorTest {
   }
 
   @Test
+  fun `test static validateAmount rejects amount strings longer than 64 characters`() {
+    // Otherwise valid (strips to 1), so only the length cap can reject it.
+    val padded = "1." + "0".repeat(63)
+    assertEquals(65, padded.length)
+    val ex =
+      assertThrows<BadRequestException> {
+        SepRequestValidator.validateAmount("fee_details.", padded, false)
+      }
+    assertEquals("fee_details.amount is invalid", ex.message)
+  }
+
+  @Test
+  fun `test static validateAmount accepts an amount string of exactly 64 characters`() {
+    val padded = "1." + "0".repeat(62)
+    assertEquals(64, padded.length)
+    SepRequestValidator.validateAmount("", padded, false)
+  }
+
+  @Test
+  fun `test static validateAmount rejects a 200000 digit amount string`() {
+    val ex =
+      assertThrows<BadRequestException> {
+        SepRequestValidator.validateAmount("", "1" + "0".repeat(200_000), false)
+      }
+    assertEquals("amount is invalid", ex.message)
+  }
+
+  @Test
   fun `test validateDestinationAccount allows destination matching token account`() {
     val token = TestHelper.createWebAuthJwt()
     requestValidator.validateDestinationAccount(token, token.account)

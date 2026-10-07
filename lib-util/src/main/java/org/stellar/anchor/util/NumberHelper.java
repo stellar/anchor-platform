@@ -13,6 +13,10 @@ public class NumberHelper {
   // is generous enough to represent any valid Stellar amount while preventing OOM from inputs with
   // extreme exponents that would exhaust memory when expanded.
   public static final int MAX_AMOUNT_MAGNITUDE = 20;
+  // A valid amount is at most 42 characters (sign, 20 integer digits, '.', 20 fractional digits).
+  // The cap leaves room for trailing zeros and exponent forms, and stops long digit strings, whose
+  // parsing and stripTrailingZeros() cost grows quadratically, before they are parsed.
+  public static final int MAX_AMOUNT_LENGTH = 64;
 
   public static boolean isPositiveNumber(String str) {
     if (str == null) {
