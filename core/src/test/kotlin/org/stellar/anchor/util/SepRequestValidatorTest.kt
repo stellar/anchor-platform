@@ -145,6 +145,60 @@ class SepRequestValidatorTest {
     }
   }
 
+  private fun amountError(amount: String?, min: Long? = null, max: Long? = null): String? =
+    assertThrows<SepValidationException> {
+        requestValidator.validateAmount(amount!!, TEST_ASSET, 2, min, max)
+      }
+      .message
+
+  @Test
+  fun `test validateAmount rejects an empty amount without echoing it`() {
+    assertEquals("invalid amount for asset USDC", amountError(""))
+  }
+
+  @Test
+  fun `test validateAmount rejects an amount longer than 64 characters without echoing it`() {
+    // 65 characters that parse to 1, so only the length can reject it
+    val padded = "0".repeat(64) + "1"
+    assertEquals(65, padded.length)
+    assertEquals("invalid amount for asset USDC", amountError(padded))
+  }
+
+  @Test
+  fun `test validateAmount accepts an amount of exactly 64 characters`() {
+    val padded = "0".repeat(63) + "1"
+    assertEquals(64, padded.length)
+    requestValidator.validateAmount(padded, TEST_ASSET, 2, null, null)
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      ["abc", " ", "1,5", "1e20000000", "1E+21", "100000000000000000000", "1e-21", "1e999999999999"]
+  )
+  fun `test validateAmount rejects a non numeric or out of magnitude amount`(amount: String) {
+    // "100000000000000000000" has 21 integer digits; "1e999999999999" overflows the exponent
+    assertEquals("invalid amount $amount for asset USDC", amountError(amount))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["1", "10", "99999999999999999999", "1.5", "1e2"])
+  fun `test validateAmount accepts a valid amount when there is no min or max`(amount: String) {
+    requestValidator.validateAmount(amount, TEST_ASSET, 2, null, null)
+  }
+
+  @Test
+  fun `test validateAmount still applies the scale sign and bounds checks to a bounded amount`() {
+    assertEquals(
+      "invalid amount 1.001 for asset USDC, significant decimals is 2",
+      amountError("1.001"),
+    )
+    assertEquals("invalid amount 0 for asset USDC", amountError("0"))
+    assertEquals("invalid amount -1 for asset USDC", amountError("-1"))
+    assertEquals("invalid amount 5 for asset USDC", amountError("5", min = 10))
+    assertEquals("invalid amount 500 for asset USDC", amountError("500", max = 100))
+  }
+
   @ValueSource(strings = ["bank_account", "cash"])
   @ParameterizedTest
   fun `test validateTypes`(type: String) {
