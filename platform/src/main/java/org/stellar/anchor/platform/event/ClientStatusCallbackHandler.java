@@ -104,7 +104,20 @@ public class ClientStatusCallbackHandler extends EventHandler {
     }
 
     KeyPair signer = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
-    Request request = buildHttpRequest(signer, event);
+    Request request;
+    try {
+      request = buildHttpRequest(signer, event);
+    } catch (ArithmeticException ex) {
+      // A stored amount outside the supported range cannot be turned into a payload. Retrying
+      // would never succeed and an escaped exception would restart the consumer on the same event,
+      // so the event is acknowledged and skipped.
+      errorF(
+          "Skipping event id={} type={}: its payload cannot be built: {}",
+          event.getId(),
+          event.getType(),
+          ex.getMessage());
+      return true;
+    }
 
     if (request != null) {
       try (Response response = httpClient.newCall(request).execute()) {
