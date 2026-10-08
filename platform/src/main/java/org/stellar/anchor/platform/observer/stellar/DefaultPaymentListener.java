@@ -437,11 +437,24 @@ public class DefaultPaymentListener implements PaymentListener {
     }
 
     if (ledgerTransaction.getMemo().getDiscriminant() == MemoType.MEMO_TEXT) {
-      if (ledgerTransaction.getMemo().getText().getBytes().length == 0) {
+      byte[] memoBytes = ledgerTransaction.getMemo().getText().getBytes();
+      if (memoBytes.length == 0) {
         debugF(
             "Transaction {} with an empty text memo. This indicates a potential bug from stellar network events.",
             ledgerTransaction.getHash());
         return false;
+      }
+      // PostgreSQL rejects a NUL in a text parameter, and no stored memo can contain one, so such a
+      // payment can never match a transaction. Skip it before it reaches a transaction store query.
+      for (byte b : memoBytes) {
+        if (b == 0) {
+          warnF(
+              "Skipping payment: the text memo contains a NUL byte. txHash={}, opId={}",
+              ledgerTransaction.getHash(),
+              ledgerPayment.getId());
+          Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+          return false;
+        }
       }
     }
 

@@ -24,6 +24,8 @@ import org.stellar.anchor.platform.service.AnchorMetrics
 import org.stellar.anchor.util.AssetHelper.fromXdrAmount
 import org.stellar.anchor.util.AssetHelper.getSep11AssetName
 import org.stellar.anchor.util.Log
+import org.stellar.sdk.MuxedAccount
+import org.stellar.sdk.StrKey
 import org.stellar.sdk.TOID
 import org.stellar.sdk.xdr.Asset
 import org.stellar.sdk.xdr.AssetType.ASSET_TYPE_POOL_SHARE
@@ -360,6 +362,78 @@ class DefaultPaymentListenerTest {
     assertEquals("my_memo_1", slotMemo.captured)
     assertEquals("GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364", slotAccount.captured)
     assertEquals("pending_user_transfer_start", slotStatus.captured)
+  }
+
+  @Test
+  fun `test validate() rejects a text memo containing a NUL byte and counts the skip`() {
+    val event = createTestTransferEvent()
+    xdrMemoText.text = XdrString("ab\u0000c")
+    event.ledgerTransaction.memo = xdrMemoText
+    val payment = event.ledgerTransaction.operations[0].paymentOperation
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      assertFalse(paymentListener.validate(event.ledgerTransaction, payment, event))
+      assertEquals(
+        1.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).count(),
+      )
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test onReceived() does not query any transaction store for a text memo containing a NUL byte`() {
+    val event = createTestTransferEvent()
+    xdrMemoText.text = XdrString("ab\u0000c")
+    event.ledgerTransaction.memo = xdrMemoText
+
+    assertDoesNotThrow { paymentListener.onReceived(event) }
+
+    verify { sep31TransactionStore wasNot Called }
+    verify { sep24TransactionStore wasNot Called }
+    verify { sep6TransactionStore wasNot Called }
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+  }
+
+  @Test
+  fun `test onReceived() rejects a NUL text memo on a contract-to-muxed payment before any routing`() {
+    val event = createTestTransferEvent()
+    xdrMemoText.text = XdrString("ab\u0000c")
+    event.ledgerTransaction.memo = xdrMemoText
+    val payment = event.ledgerTransaction.operations[0].paymentOperation
+    payment.from = StrKey.encodeContract(ByteArray(32))
+    payment.to =
+      MuxedAccount(
+          "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+          BigInteger.valueOf(42)
+        )
+        .address
+
+    assertDoesNotThrow { paymentListener.onReceived(event) }
+
+    verify { sep31TransactionStore wasNot Called }
+    verify { sep24TransactionStore wasNot Called }
+    verify { sep6TransactionStore wasNot Called }
+  }
+
+  @Test
+  fun `test onReceived() still queries the SEP-31 store for an ordinary text memo`() {
+    val event = createTestTransferEvent()
+    xdrMemoText.text = XdrString("ordinary_memo")
+    event.ledgerTransaction.memo = xdrMemoText
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 1) {
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
+        "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+        "ordinary_memo",
+        "pending_sender",
+      )
+    }
   }
 
   private val ledgerSequence = 1234567
