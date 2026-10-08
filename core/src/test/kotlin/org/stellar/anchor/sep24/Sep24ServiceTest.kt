@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.MoreInfoUrlConstructor
 import org.stellar.anchor.TestConstants.Companion.TEST_ACCOUNT
@@ -304,6 +305,59 @@ internal class Sep24ServiceTest {
     )
     assertEquals(withdrawQuote.id, slotTxn.captured.quoteId)
     assertEquals(withdrawQuote.buyAsset, slotTxn.captured.amountOutAsset)
+  }
+
+  private fun withdrawAmountError(amount: String): String? =
+    assertThrows<SepValidationException> {
+        val request = createTestTransactionRequest()
+        request["amount"] = amount
+        sep24Service.withdraw(createTestWebAuthJwt(), request)
+      }
+      .message
+
+  private fun depositAmountError(amount: String): String? =
+    assertThrows<SepValidationException> {
+        val request = createTestTransactionRequest()
+        request["amount"] = amount
+        sep24Service.deposit(createTestWebAuthJwt(), request)
+      }
+      .message
+
+  // The asset's limits are min 1 and max 10000, so each of these is also outside a limit: the
+  // expected message proves the amount validator runs before the limits are compared.
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "abc, amount is invalid",
+        "1e20000000, amount is invalid",
+        "100000000000000000000, amount is invalid",
+        "-5, amount should be non-negative",
+      ]
+  )
+  fun `test withdraw and deposit reject an invalid amount before comparing the limits`(
+    amount: String,
+    expected: String,
+  ) {
+    assertEquals(expected, withdrawAmountError(amount))
+    assertEquals(expected, depositAmountError(amount))
+  }
+
+  @Test
+  fun `test withdraw and deposit reject an amount longer than 64 characters`() {
+    // 65 characters that parse to 1, which is inside the limits: only the length rejects it
+    val padded = "0".repeat(64) + "1"
+    assertEquals(65, padded.length)
+    assertEquals("amount is invalid", withdrawAmountError(padded))
+    assertEquals("amount is invalid", depositAmountError(padded))
+  }
+
+  @Test
+  fun `test withdraw and deposit still compare a valid amount with the limits`() {
+    assertEquals("amount is less than asset's minimum limit: 0", withdrawAmountError("0"))
+    assertEquals("amount is less than asset's minimum limit: 0", depositAmountError("0"))
+    assertEquals("amount exceeds asset's maximum limit: 10001", withdrawAmountError("10001"))
+    assertEquals("amount exceeds asset's maximum limit: 10001", depositAmountError("10001"))
   }
 
   @Test
