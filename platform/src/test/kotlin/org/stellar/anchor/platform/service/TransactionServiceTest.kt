@@ -714,6 +714,18 @@ class TransactionServiceTest {
   }
 
   @Test
+  fun test_patchTransaction_sep31AcceptsAStoredAmountOfExactlyTheSupportedLength() {
+    // 1000 characters that parse to 1 (leading zeros, precision 1): the longest accepted length
+    val thousand = "0".repeat(999) + "1"
+    assertEquals(1000, thousand.length)
+    stubOnly("31", sep31WithStoredAmounts("10", "9", thousand))
+
+    transactionService.patchTransactions(patchStatusOnly())
+
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+  }
+
+  @Test
   fun test_patchTransaction_sep31QuoteMathIsUnchangedForValidStoredAmounts() {
     stubOnly("31", sep31WithStoredAmounts("10", "9", "1"))
     transactionService.patchTransactions(patchStatusOnly())
