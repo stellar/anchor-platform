@@ -42,10 +42,6 @@ public class MathHelper {
     return amount.setScale(decimals, RoundingMode.HALF_DOWN).stripTrailingZeros().toPlainString();
   }
 
-  public static String formatAmount(BigDecimal amount) {
-    return formatAmount(amount, 4);
-  }
-
   public static BigDecimal sum(AssetInfo assetInfo, String... values) {
     return Arrays.stream(values)
         .map(value -> decimal(value, assetInfo))

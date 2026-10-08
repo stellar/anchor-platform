@@ -69,4 +69,11 @@ class MathHelperTest {
       Locale.setDefault(previous)
     }
   }
+
+  @Test
+  fun `test formatAmount has no overload without an explicit scale`() {
+    val overloads = MathHelper::class.java.methods.filter { it.name == "formatAmount" }
+    assertTrue(overloads.isNotEmpty())
+    assertTrue(overloads.all { it.parameterCount == 2 })
+  }
 }
