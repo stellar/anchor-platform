@@ -5,6 +5,7 @@ package org.stellar.anchor.sep31
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
+import io.mockk.mockk
 import java.time.Instant
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -120,5 +121,23 @@ class Sep31RefundsTest {
     // build the SEP-31 Sep31Refunds object
     val gotSep31Refunds = Sep31Refunds.of(mockPlatformApiRefunds, sep31TransactionStore)
     assertEquals(wantSep31Refunds, gotSep31Refunds)
+  }
+
+  private fun nativeAsset() =
+    mockk<org.stellar.anchor.api.asset.AssetInfo> { every { significantDecimals } returns 7 }
+
+  @Test
+  fun `recalculateAmounts persists amounts at the asset precision`() {
+    val payment = PojoSep31RefundPayment()
+    payment.id = "A"
+    payment.amount = "10.1234567"
+    payment.fee = "0.0000001"
+    val refunds = PojoSep31Refunds()
+    refunds.refundPayments = listOf(payment)
+
+    refunds.recalculateAmounts(nativeAsset())
+
+    assertEquals("10.1234568", refunds.amountRefunded)
+    assertEquals("0.0000001", refunds.amountFee)
   }
 }

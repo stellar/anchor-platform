@@ -2,7 +2,6 @@ package org.stellar.anchor.util;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.text.DecimalFormat;
 import java.util.Arrays;
 import org.stellar.anchor.api.asset.AssetInfo;
 
@@ -38,14 +37,9 @@ public class MathHelper {
   }
 
   public static String formatAmount(BigDecimal amount, Integer decimals) {
-    BigDecimal newAmount = amount.setScale(decimals, RoundingMode.HALF_DOWN);
-
-    DecimalFormat df = new DecimalFormat();
-    df.setMaximumFractionDigits(decimals);
-    df.setMinimumFractionDigits(0);
-    df.setGroupingUsed(false);
-
-    return df.format(newAmount);
+    // toPlainString, unlike DecimalFormat, does not follow the JVM default locale: a comma
+    // separator would make the persisted amount unreadable by new BigDecimal(String).
+    return amount.setScale(decimals, RoundingMode.HALF_DOWN).stripTrailingZeros().toPlainString();
   }
 
   public static String formatAmount(BigDecimal amount) {

@@ -33,7 +33,8 @@ public interface Sep24Refunds extends SepRefunds {
     setAmountFee(amountFee);
     setAmountRefunded(
         formatAmount(
-            sum(assetInfo, amountFee, calculateAmount(assetInfo, Sep24RefundPayment::getAmount))));
+            sum(assetInfo, amountFee, calculateAmount(assetInfo, Sep24RefundPayment::getAmount)),
+            assetInfo.getSignificantDecimals()));
   }
 
   private String calculateAmount(AssetInfo assetInfo, Function<Sep24RefundPayment, String> func) {
@@ -41,7 +42,8 @@ public interface Sep24Refunds extends SepRefunds {
         getRefundPayments().stream()
             .map(func)
             .map(amount -> decimal(amount, assetInfo))
-            .reduce(BigDecimal.ZERO, BigDecimal::add));
+            .reduce(BigDecimal.ZERO, BigDecimal::add),
+        assetInfo.getSignificantDecimals());
   }
 
   static Sep24Refunds of(Refunds platformApiRefunds, Sep24TransactionStore factory) {

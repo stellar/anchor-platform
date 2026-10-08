@@ -33,7 +33,8 @@ public interface Sep31Refunds {
     setAmountFee(amountFee);
     setAmountRefunded(
         formatAmount(
-            sum(assetInfo, amountFee, calculateAmount(assetInfo, RefundPayment::getAmount))));
+            sum(assetInfo, amountFee, calculateAmount(assetInfo, RefundPayment::getAmount)),
+            assetInfo.getSignificantDecimals()));
   }
 
   private String calculateAmount(AssetInfo assetInfo, Function<RefundPayment, String> func) {
@@ -41,7 +42,8 @@ public interface Sep31Refunds {
         getRefundPayments().stream()
             .map(func)
             .map(amount -> decimal(amount, assetInfo))
-            .reduce(BigDecimal.ZERO, BigDecimal::add));
+            .reduce(BigDecimal.ZERO, BigDecimal::add),
+        assetInfo.getSignificantDecimals());
   }
 
   /**
