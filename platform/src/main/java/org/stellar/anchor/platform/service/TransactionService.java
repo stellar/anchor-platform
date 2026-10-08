@@ -45,6 +45,8 @@ import org.stellar.anchor.api.platform.TransactionsSeps;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.api.shared.Amount;
 import org.stellar.anchor.api.shared.FeeDetails;
+import org.stellar.anchor.api.shared.RefundPayment;
+import org.stellar.anchor.api.shared.Refunds;
 import org.stellar.anchor.api.shared.SepDepositInfo;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.event.EventService;
@@ -352,10 +354,33 @@ public class TransactionService {
    * Applies the RPC amount rules to the amounts a PATCH persists without further checks, before
    * anything is mutated. The stored values are later scaled, summed and formatted.
    */
-  private void validatePatchAmounts(PlatformTransactionData patch, JdbcSepTransaction txn)
+  void validatePatchAmounts(PlatformTransactionData patch, JdbcSepTransaction txn)
       throws BadRequestException {
     if (patch.getFeeDetails() != null) {
       AssetValidationUtils.validateFeeDetails(patch.getFeeDetails(), txn, assetService);
+    }
+
+    // PATCH only stores SEP-24 and SEP-31 refunds
+    Refunds refunds = patch.getRefunds();
+    if (refunds != null && ("24".equals(txn.getProtocol()) || "31".equals(txn.getProtocol()))) {
+      validateRefundAmount("refunds.amount_refunded.", refunds.getAmountRefunded());
+      validateRefundAmount("refunds.amount_fee.", refunds.getAmountFee());
+      if (refunds.getPayments() != null) {
+        for (int i = 0; i < refunds.getPayments().length; i++) {
+          RefundPayment payment = refunds.getPayments()[i];
+          if (payment == null) continue;
+          validateRefundAmount(
+              String.format("refunds.payments[%d].amount.", i), payment.getAmount());
+          validateRefundAmount(String.format("refunds.payments[%d].fee.", i), payment.getFee());
+        }
+      }
+    }
+  }
+
+  private static void validateRefundAmount(String prefix, Amount amount)
+      throws BadRequestException {
+    if (amount != null) {
+      SepRequestValidator.validateAmount(prefix, amount.getAmount(), true);
     }
   }
 

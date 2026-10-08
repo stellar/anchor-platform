@@ -443,6 +443,209 @@ class TransactionServiceTest {
     }
   }
 
+  private fun refundsWith(
+    amountRefunded: String = "1",
+    amountFee: String = "0.1",
+    firstAmount: String = "0.6",
+    firstFee: String = "0.1",
+    secondAmount: String = "0.4",
+    secondFee: String = "0",
+  ): Refunds {
+    fun payment(id: String, amount: String, fee: String) =
+      RefundPayment.builder()
+        .id(id)
+        .idType(RefundPayment.IdType.EXTERNAL)
+        .amount(Amount(amount, patchFeeAsset))
+        .fee(Amount(fee, patchFeeAsset))
+        .build()
+    return Refunds.builder()
+      .amountRefunded(Amount(amountRefunded, patchFeeAsset))
+      .amountFee(Amount(amountFee, patchFeeAsset))
+      .payments(
+        arrayOf(
+          payment("1", firstAmount, firstFee),
+          payment("2", secondAmount, secondFee),
+        )
+      )
+      .build()
+  }
+
+  private fun patchWithRefunds(status: SepTransactionStatus, refunds: Refunds) =
+    PatchTransactionsRequest.builder()
+      .records(
+        listOf(
+          PatchTransactionRequest(
+            PlatformTransactionData().apply {
+              id = "testTxId"
+              this.status = status
+              this.refunds = refunds
+            }
+          )
+        )
+      )
+      .build()
+
+  private fun stubRefundFactories() {
+    every { sep24TransactionStore.newRefunds() } returns JdbcSep24Refunds()
+    every { sep24TransactionStore.newRefundPayment() } answers { JdbcSep24RefundPayment() }
+    every { sep31TransactionStore.newRefunds() } returns JdbcSep31Refunds()
+    every { sep31TransactionStore.newRefundPayment() } answers { JdbcSep31RefundPayment() }
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "24, amountRefunded, refunds.amount_refunded.amount is invalid",
+        "24, amountFee, refunds.amount_fee.amount is invalid",
+        "24, firstAmount, refunds.payments[0].amount.amount is invalid",
+        "24, firstFee, refunds.payments[0].fee.amount is invalid",
+        "24, secondAmount, refunds.payments[1].amount.amount is invalid",
+        "24, secondFee, refunds.payments[1].fee.amount is invalid",
+        "31, amountRefunded, refunds.amount_refunded.amount is invalid",
+        "31, amountFee, refunds.amount_fee.amount is invalid",
+        "31, firstAmount, refunds.payments[0].amount.amount is invalid",
+        "31, firstFee, refunds.payments[0].fee.amount is invalid",
+        "31, secondAmount, refunds.payments[1].amount.amount is invalid",
+        "31, secondFee, refunds.payments[1].fee.amount is invalid",
+      ]
+  )
+  fun test_patchTransaction_rejectsAnOutOfRangeRefundAmountAndDoesNotSave(
+    protocol: String,
+    field: String,
+    expected: String,
+  ) {
+    stubRefundFactories()
+    val tx = transactionFor(protocol)
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly(protocol, tx)
+    val poison = "1e20000000"
+    val refunds =
+      when (field) {
+        "amountRefunded" -> refundsWith(amountRefunded = poison)
+        "amountFee" -> refundsWith(amountFee = poison)
+        "firstAmount" -> refundsWith(firstAmount = poison)
+        "firstFee" -> refundsWith(firstFee = poison)
+        "secondAmount" -> refundsWith(secondAmount = poison)
+        else -> refundsWith(secondFee = poison)
+      }
+
+    val ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithRefunds(SepTransactionStatus.PENDING_ANCHOR, refunds)
+        )
+      }
+
+    assertEquals(expected, ex.message)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "-1, refunds.payments[0].amount.amount should be non-negative",
+        "abc, refunds.payments[0].amount.amount is invalid",
+        "100000000000000000000, refunds.payments[0].amount.amount is invalid",
+      ]
+  )
+  fun test_patchTransaction_rejectsNegativeAndMalformedRefundAmounts(
+    amount: String,
+    expected: String,
+  ) {
+    stubRefundFactories()
+    val tx = JdbcSep24Transaction().apply { kind = "withdrawal" }
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly("24", tx)
+
+    val ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithRefunds(
+            SepTransactionStatus.PENDING_ANCHOR,
+            refundsWith(firstAmount = amount),
+          )
+        )
+      }
+
+    assertEquals(expected, ex.message)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["24", "31"])
+  fun test_patchTransaction_acceptsTheRefundsOfTheE2eFixtureAndStoresThem(protocol: String) {
+    stubRefundFactories()
+    val tx = transactionFor(protocol)
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly(protocol, tx)
+
+    transactionService.patchTransactions(
+      patchWithRefunds(SepTransactionStatus.PENDING_ANCHOR, refundsWith())
+    )
+
+    if (protocol == "24") {
+      verify(exactly = 1) { sep24TransactionStore.save(any()) }
+      assertEquals("1", (tx as JdbcSep24Transaction).refunds.amountRefunded)
+      assertEquals("0.1", tx.refunds.amountFee)
+      assertEquals(2, tx.refunds.refundPayments.size)
+      assertEquals("0", tx.refunds.refundPayments[1].fee)
+    } else {
+      verify(exactly = 1) { sep31TransactionStore.save(any()) }
+      assertEquals("1", (tx as JdbcSep31Transaction).refunds.amountRefunded)
+      assertEquals("0.1", tx.refunds.amountFee)
+      assertEquals(2, tx.refunds.refundPayments.size)
+      assertEquals("0", tx.refunds.refundPayments[1].fee)
+    }
+  }
+
+  @Test
+  fun test_patchTransaction_doesNotValidateTheRefundsOfASep6Transaction() {
+    // PATCH ignores SEP-6 refunds, so nothing out of range is stored
+    val tx = JdbcSep6Transaction().apply { kind = "deposit" }
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly("6", tx)
+
+    assertDoesNotThrow {
+      transactionService.patchTransactions(
+        patchWithRefunds(
+          SepTransactionStatus.PENDING_USR_TRANSFER_START,
+          refundsWith(amountRefunded = "1e20000000"),
+        )
+      )
+    }
+    verify(exactly = 1) { sep6TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun test_validatePatchAmounts_skipsNullRefundParts() {
+    val tx = JdbcSep24Transaction()
+    val nullAmounts =
+      Refunds.builder()
+        .amountRefunded(null)
+        .amountFee(null)
+        .payments(
+          arrayOf(
+            null,
+            RefundPayment.builder().id("1").amount(null).fee(null).build(),
+          )
+        )
+        .build()
+    val noPayments = Refunds.builder().payments(null).build()
+
+    listOf(nullAmounts, noPayments).forEach { refunds ->
+      assertDoesNotThrow {
+        transactionService.validatePatchAmounts(
+          PlatformTransactionData().apply { this.refunds = refunds },
+          tx,
+        )
+      }
+    }
+    assertDoesNotThrow { transactionService.validatePatchAmounts(PlatformTransactionData(), tx) }
+  }
+
   @Test
   fun test_patchTransaction_sep24DepositPendingUserTransferStart() {
     val txId = "testTxId"
