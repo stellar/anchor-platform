@@ -17,6 +17,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.apiclient.PlatformApiClient;
@@ -196,6 +198,8 @@ public class DefaultPaymentListener implements PaymentListener {
       }
     } catch (IOException ioex) {
       throw ioex;
+    } catch (DataAccessException | TransactionException dbex) {
+      throw lookupFailed("31", ledgerTransaction, dbex);
     } catch (Exception ex) {
       errorEx(ex);
       Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
@@ -256,6 +260,8 @@ public class DefaultPaymentListener implements PaymentListener {
       }
     } catch (IOException ioex) {
       throw ioex;
+    } catch (DataAccessException | TransactionException dbex) {
+      throw lookupFailed("24", ledgerTransaction, dbex);
     } catch (Exception ex) {
       errorEx(ex);
       Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
@@ -300,10 +306,28 @@ public class DefaultPaymentListener implements PaymentListener {
       }
     } catch (IOException ioex) {
       throw ioex;
+    } catch (DataAccessException | TransactionException dbex) {
+      throw lookupFailed("6", ledgerTransaction, dbex);
     } catch (Exception ex) {
       errorEx(ex);
       Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
     }
+  }
+
+  /**
+   * A lookup that fails on the database must not advance the observer cursor, or the payment is
+   * never processed again. Rethrowing as an IOException reuses the retry path of a failed Platform
+   * API notification.
+   */
+  private IOException lookupFailed(
+      String sep, LedgerTransaction ledgerTransaction, RuntimeException cause) {
+    errorF(
+        "SEP-{} transaction lookup failed on the database. The payment will be retried. txHash={}",
+        sep,
+        ledgerTransaction.getHash());
+    Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_LOOKUP_FAILED.toString(), "sep", sep)
+        .increment();
+    return new IOException("SEP-" + sep + " transaction lookup failed on the database", cause);
   }
 
   void handleSep31Transaction(
