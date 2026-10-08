@@ -274,6 +274,7 @@ public class TransactionService {
       throw new BadRequestException(
           String.format("transaction(id=%s) not found", patch.getTransaction().getId()));
 
+    validatePatchAmounts(patch.getTransaction(), txn);
     updateSepTransaction(patch.getTransaction(), txn);
     switch (txn.getProtocol()) {
       case "6":
@@ -345,6 +346,17 @@ public class TransactionService {
     }
 
     return PlatformTransactionHelper.toGetTransactionResponse(txn, assetService);
+  }
+
+  /**
+   * Applies the RPC amount rules to the amounts a PATCH persists without further checks, before
+   * anything is mutated. The stored values are later scaled, summed and formatted.
+   */
+  private void validatePatchAmounts(PlatformTransactionData patch, JdbcSepTransaction txn)
+      throws BadRequestException {
+    if (patch.getFeeDetails() != null) {
+      AssetValidationUtils.validateFeeDetails(patch.getFeeDetails(), txn, assetService);
+    }
   }
 
   @Deprecated

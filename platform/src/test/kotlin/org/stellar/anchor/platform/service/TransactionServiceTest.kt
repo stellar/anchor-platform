@@ -3,6 +3,7 @@ package org.stellar.anchor.platform.service
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
+import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -268,6 +269,178 @@ class TransactionServiceTest {
   )
   fun test_validateIfStatusIsSupported(sepTxnStatus: SepTransactionStatus) {
     assertDoesNotThrow { transactionService.validateIfStatusIsSupported(sepTxnStatus.status) }
+  }
+
+  private val patchFeeAsset =
+    "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+
+  // An asset without significant decimals, so only the fee amounts themselves are under test.
+  private fun supportPatchFeeAsset() {
+    val asset = mockk<AssetInfo>(relaxed = true)
+    every { asset.id } returns patchFeeAsset
+    every { asset.significantDecimals } returns null
+    every { assetService.assets } returns listOf(asset)
+  }
+
+  private fun stubOnly(protocol: String, tx: JdbcSepTransaction) {
+    every { sep6TransactionStore.findByTransactionId(any()) } returns
+      (if (protocol == "6") tx as JdbcSep6Transaction else null)
+    every { sep24TransactionStore.findByTransactionId(any()) } returns
+      (if (protocol == "24") tx as JdbcSep24Transaction else null)
+    every { sep31TransactionStore.findByTransactionId(any()) } returns
+      (if (protocol == "31") tx as JdbcSep31Transaction else null)
+  }
+
+  private fun patchWithFeeDetails(status: SepTransactionStatus, fee: FeeDetails) =
+    PatchTransactionsRequest.builder()
+      .records(
+        listOf(
+          PatchTransactionRequest(
+            PlatformTransactionData().apply {
+              id = "testTxId"
+              this.status = status
+              feeDetails = fee
+            }
+          )
+        )
+      )
+      .build()
+
+  private fun transactionFor(protocol: String): JdbcSepTransaction =
+    when (protocol) {
+      "6" -> JdbcSep6Transaction().apply { kind = "deposit" }
+      "24" -> JdbcSep24Transaction().apply { kind = "deposit" }
+      else -> JdbcSep31Transaction()
+    }
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "6, 1e20000000, fee_details.amount is invalid",
+        "24, 1e20000000, fee_details.amount is invalid",
+        "31, 1e20000000, fee_details.amount is invalid",
+        "6, -1, fee_details.amount should be non-negative",
+        "24, abc, fee_details.amount is invalid",
+        "31, 100000000000000000000, fee_details.amount is invalid",
+      ]
+  )
+  fun test_patchTransaction_rejectsAnInvalidFeeDetailsTotalAndDoesNotSave(
+    protocol: String,
+    total: String,
+    expected: String,
+  ) {
+    supportPatchFeeAsset()
+    val tx = transactionFor(protocol)
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly(protocol, tx)
+
+    val ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithFeeDetails(
+            SepTransactionStatus.PENDING_ANCHOR,
+            FeeDetails(total, patchFeeAsset),
+          )
+        )
+      }
+
+    assertEquals(expected, ex.message)
+    verify(exactly = 0) { sep6TransactionStore.save(any()) }
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun test_patchTransaction_sep31ValidatesFeeDetailsBeforeTheQuoteMath() {
+    supportPatchFeeAsset()
+    // same asset and all amounts present: validateQuoteAndAmounts would add amount_out and the fee
+    // total, so only validating first reports the fee total instead of expanding it
+    val tx = JdbcSep31Transaction()
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    tx.amountIn = "10"
+    tx.amountInAsset = patchFeeAsset
+    tx.amountOut = "9"
+    tx.amountOutAsset = patchFeeAsset
+    stubOnly("31", tx)
+
+    val ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithFeeDetails(
+            SepTransactionStatus.PENDING_RECEIVER,
+            FeeDetails("1e20000000", patchFeeAsset),
+          )
+        )
+      }
+
+    assertEquals("fee_details.amount is invalid", ex.message)
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun test_patchTransaction_appliesTheRpcRulesToFeeDetails() {
+    supportPatchFeeAsset()
+    val tx = JdbcSep24Transaction().apply { kind = "deposit" }
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly("24", tx)
+
+    // total must equal the sum of the details
+    var ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithFeeDetails(
+            SepTransactionStatus.PENDING_ANCHOR,
+            FeeDetails("2", patchFeeAsset, listOf(FeeDescription("svc", "1"))),
+          )
+        )
+      }
+    assertEquals(
+      "fee_details.total is not equal to the sum of (fee_details.details.amount)",
+      ex.message,
+    )
+
+    // the fee asset must be the one already stored on the transaction (checked before the sum)
+    tx.amountFeeAsset = "stellar:SRT:GISSUER"
+    ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithFeeDetails(SepTransactionStatus.PENDING_ANCHOR, FeeDetails("1", patchFeeAsset))
+        )
+      }
+    assertEquals(
+      "fee_details.asset is different from expected database asset (stellar:SRT:GISSUER)",
+      ex.message,
+    )
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["6", "24", "31"])
+  fun test_patchTransaction_acceptsValidFeeDetails(protocol: String) {
+    supportPatchFeeAsset()
+    val tx = transactionFor(protocol)
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly(protocol, tx)
+
+    transactionService.patchTransactions(
+      patchWithFeeDetails(
+        SepTransactionStatus.PENDING_ANCHOR,
+        FeeDetails(
+          "1",
+          patchFeeAsset,
+          listOf(FeeDescription("svc", "0.4"), FeeDescription("tax", "0.6"))
+        ),
+      )
+    )
+
+    assertEquals("1", tx.feeDetails.total)
+    assertEquals(patchFeeAsset, tx.feeDetails.asset)
+    when (protocol) {
+      "6" -> verify(exactly = 1) { sep6TransactionStore.save(any()) }
+      "24" -> verify(exactly = 1) { sep24TransactionStore.save(any()) }
+      else -> verify(exactly = 1) { sep31TransactionStore.save(any()) }
+    }
   }
 
   @Test
