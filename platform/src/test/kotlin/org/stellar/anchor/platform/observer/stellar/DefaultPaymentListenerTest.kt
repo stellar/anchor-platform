@@ -436,6 +436,18 @@ class DefaultPaymentListenerTest {
     }
   }
 
+  /** Runs [block] with a fresh meter registry attached and returns that registry. */
+  private fun withMetrics(block: () -> Unit): SimpleMeterRegistry {
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      block()
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+    return registry
+  }
+
   private val ledgerSequence = 1234567
   private val applicationOrder = 1
   private val testTOID = TOID(ledgerSequence, applicationOrder, 1)
@@ -667,7 +679,12 @@ class DefaultPaymentListenerTest {
       )
     } throws RuntimeException("Something went wrong")
 
-    paymentListener.onReceived(event)
+    val registry = withMetrics { paymentListener.onReceived(event) }
+
+    assertEquals(
+      1.0,
+      registry.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).count(),
+    )
 
     verify(exactly = 1) {
       sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
@@ -704,7 +721,12 @@ class DefaultPaymentListenerTest {
       )
     } throws RuntimeException("Something went wrong")
 
-    paymentListener.onReceived(event)
+    val registry = withMetrics { paymentListener.onReceived(event) }
+
+    assertEquals(
+      1.0,
+      registry.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).count(),
+    )
 
     verify(exactly = 1) {
       sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
@@ -744,7 +766,12 @@ class DefaultPaymentListenerTest {
       )
     } throws RuntimeException("Something went wrong")
 
-    paymentListener.onReceived(event)
+    val registry = withMetrics { paymentListener.onReceived(event) }
+
+    assertEquals(
+      1.0,
+      registry.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).count(),
+    )
 
     verify(exactly = 1) {
       sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
@@ -761,6 +788,37 @@ class DefaultPaymentListenerTest {
         any(),
       )
     }
+  }
+
+  @Test
+  fun `test if the Sep31 lookup throws a non-database error, the Sep24 and Sep6 lookups still run`() {
+    val event = createTestTransferEvent()
+    xdrMemoText.text = XdrString("my_memo_3")
+    event.ledgerTransaction.memo = xdrMemoText
+
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } throws
+      IllegalArgumentException("bad data")
+
+    val registry = withMetrics { paymentListener.onReceived(event) }
+
+    verify(exactly = 1) {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+        "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+        "my_memo_3",
+        "pending_user_transfer_start",
+      )
+    }
+    verify(exactly = 1) {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+        "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+        "my_memo_3",
+        "pending_user_transfer_start",
+      )
+    }
+    assertEquals(
+      1.0,
+      registry.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).count(),
+    )
   }
 
   @Test

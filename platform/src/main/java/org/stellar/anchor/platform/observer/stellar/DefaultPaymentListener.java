@@ -198,6 +198,7 @@ public class DefaultPaymentListener implements PaymentListener {
       throw ioex;
     } catch (Exception ex) {
       errorEx(ex);
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
     }
 
     // For SEP-24 and SEP-6, we need to check the memo and the destination account.
@@ -257,6 +258,7 @@ public class DefaultPaymentListener implements PaymentListener {
       throw ioex;
     } catch (Exception ex) {
       errorEx(ex);
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
     }
 
     try {
@@ -300,6 +302,7 @@ public class DefaultPaymentListener implements PaymentListener {
       throw ioex;
     } catch (Exception ex) {
       errorEx(ex);
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
     }
   }
 
