@@ -8,7 +8,7 @@ data class SendEventRequest(
   val id: String,
   val type: String,
   val timestamp: String,
-  val payload: SendEventRequestPayload
+  val payload: SendEventRequestPayload?
 )
 
 data class SendEventRequestPayload(

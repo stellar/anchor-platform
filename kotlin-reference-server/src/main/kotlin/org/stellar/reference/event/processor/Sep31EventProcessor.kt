@@ -37,8 +37,8 @@ class Sep31EventProcessor(
   }
 
   override suspend fun onTransactionCreated(event: SendEventRequest) {
-    log.info { "Transaction ${event.payload.transaction!!.id} is created" }
-    val txId = event.payload.transaction!!.id
+    log.info { "Transaction ${event.payload?.transaction!!.id} is created" }
+    val txId = event.payload?.transaction!!.id
 
     val (memo, memoType) =
       if (
@@ -66,7 +66,7 @@ class Sep31EventProcessor(
   }
 
   override suspend fun onTransactionStatusChanged(event: SendEventRequest) {
-    val transaction = event.payload.transaction!!
+    val transaction = event.payload?.transaction!!
     if (manualRpcTestTransactions.contains(transaction.id)) {
       log.info {
         "Transaction ${transaction.id} opts out of automatic advancement -- skipping reaction to" +
@@ -104,7 +104,7 @@ class Sep31EventProcessor(
   }
 
   override suspend fun onCustomerUpdated(event: SendEventRequest) {
-    val updatedCustomerId = event.payload.customer?.id ?: return
+    val updatedCustomerId = event.payload?.customer?.id ?: return
     fetchAllPendingCustomerInfoUpdateTransactions(TransactionsSeps.SEP_31)
       .filter { it.customers?.receiver?.id == updatedCustomerId }
       .forEach { notifyCustomerUpdated(it) }
@@ -171,18 +171,19 @@ class Sep31EventProcessor(
   }
 
   private fun requestKyc(event: SendEventRequest) {
-    val customer = event.payload.transaction!!.customers.receiver
-    val missingFields = verifyKyc(event.payload.transaction)
+    val transaction = event.payload?.transaction!!
+    val customer = transaction.customers.receiver
+    val missingFields = verifyKyc(transaction)
     runBlocking {
       if (missingFields.isNotEmpty()) {
         customerService.requestAdditionalFieldsForTransaction(
-          event.payload.transaction.id,
+          transaction.id,
           missingFields,
         )
         sepHelper.rpcAction(
           RpcMethod.NOTIFY_CUSTOMER_INFO_UPDATED.toString(),
           NotifyCustomerInfoUpdatedRequest(
-            transactionId = event.payload.transaction.id,
+            transactionId = transaction.id,
             message = "Please update your info",
             customerId = customer.id,
             customerType = "sep31-receiver",

@@ -11,8 +11,8 @@ class AnchorEventProcessor(
   private val noOpEventProcessor: NoOpEventProcessor,
 ) {
   suspend fun handleEvent(event: SendEventRequest) {
-    val processor = getProcessor(event)
     try {
+      val processor = getProcessor(event)
       when (event.type) {
         AnchorEvent.Type.TRANSACTION_CREATED.type -> {
           log.info { "Received transaction created event" }
@@ -43,7 +43,7 @@ class AnchorEventProcessor(
   }
 
   private fun getProcessor(event: SendEventRequest): SepAnchorEventProcessor =
-    when (event.payload.transaction?.sep) {
+    when (event.payload?.transaction?.sep) {
       PlatformTransactionData.Sep.SEP_6 -> sep6EventProcessor
       PlatformTransactionData.Sep.SEP_31 -> sep31EventProcessor
       else -> noOpEventProcessor

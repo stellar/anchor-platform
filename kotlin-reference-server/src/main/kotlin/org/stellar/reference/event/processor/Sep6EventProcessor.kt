@@ -65,14 +65,14 @@ class Sep6EventProcessor(
   }
 
   override suspend fun onTransactionCreated(event: SendEventRequest) {
-    when (val kind = event.payload.transaction!!.kind) {
+    when (val kind = event.payload?.transaction!!.kind) {
       Kind.DEPOSIT,
       Kind.DEPOSIT_EXCHANGE,
       Kind.WITHDRAWAL,
       Kind.WITHDRAWAL_EXCHANGE -> {
         requestKyc(event)
         try {
-          requestCustomerFunds(event.payload.transaction)
+          requestCustomerFunds(event.payload?.transaction!!)
         } catch (e: Exception) {
           log.error(e) { "Error requesting customer funds" }
         }
@@ -84,7 +84,7 @@ class Sep6EventProcessor(
   }
 
   override suspend fun onTransactionStatusChanged(event: SendEventRequest) {
-    when (val kind = event.payload.transaction!!.kind) {
+    when (val kind = event.payload?.transaction!!.kind) {
       Kind.DEPOSIT,
       Kind.DEPOSIT_EXCHANGE -> onDepositTransactionStatusChanged(event)
       Kind.WITHDRAWAL,
@@ -96,7 +96,7 @@ class Sep6EventProcessor(
   }
 
   private suspend fun onDepositTransactionStatusChanged(event: SendEventRequest) {
-    val transaction = event.payload.transaction!!
+    val transaction = event.payload?.transaction!!
     when (val status = transaction.status) {
       PENDING_ANCHOR -> {
         val customer = transaction.customers.sender
@@ -168,7 +168,7 @@ class Sep6EventProcessor(
   }
 
   private suspend fun onWithdrawTransactionStatusChanged(event: SendEventRequest) {
-    val transaction = event.payload.transaction!!
+    val transaction = event.payload?.transaction!!
     when (val status = transaction.status) {
       PENDING_ANCHOR -> {
         val customer = transaction.customers.sender
@@ -235,7 +235,7 @@ class Sep6EventProcessor(
   }
 
   override suspend fun onCustomerUpdated(event: SendEventRequest) {
-    val updatedCustomerId = event.payload.customer?.id ?: return
+    val updatedCustomerId = event.payload?.customer?.id ?: return
     fetchAllPendingCustomerInfoUpdateTransactions()
       .filter { isCustomerForTransaction(it.id, updatedCustomerId) }
       .forEach { requestCustomerFunds(it) }
@@ -465,14 +465,14 @@ class Sep6EventProcessor(
   }
 
   private fun requestKyc(event: SendEventRequest) {
-    val kind = event.payload.transaction!!.kind
-    val customer = event.payload.transaction.customers.sender
-    val missingFields =
-      verifyKyc(event.payload.transaction.id, customer.account, customer.memo, kind)
+    val transaction = event.payload?.transaction!!
+    val kind = transaction.kind
+    val customer = transaction.customers.sender
+    val missingFields = verifyKyc(transaction.id, customer.account, customer.memo, kind)
     runBlocking {
       if (missingFields.isNotEmpty()) {
         customerService.requestAdditionalFieldsForTransaction(
-          event.payload.transaction.id,
+          transaction.id,
           missingFields,
         )
         val memoType = if (customer.memo != null) "id" else null
@@ -491,7 +491,7 @@ class Sep6EventProcessor(
             customerService
               .upsertCustomer(
                 PutCustomerRequest.builder()
-                  .transactionId(event.payload.transaction.id)
+                  .transactionId(transaction.id)
                   .account(customer.account)
                   .memo(customer.memo)
                   .memoType(memoType)
@@ -502,7 +502,7 @@ class Sep6EventProcessor(
         sepHelper.rpcAction(
           RpcMethod.NOTIFY_CUSTOMER_INFO_UPDATED.toString(),
           NotifyCustomerInfoUpdatedRequest(
-            transactionId = event.payload.transaction.id,
+            transactionId = transaction.id,
             message = "Please update your info",
             customerId = existingCustomerId,
             customerType = "sep6",
