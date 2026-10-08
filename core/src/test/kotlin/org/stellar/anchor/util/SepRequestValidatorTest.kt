@@ -147,9 +147,14 @@ class SepRequestValidatorTest {
 
   private fun amountError(amount: String?, min: Long? = null, max: Long? = null): String? =
     assertThrows<SepValidationException> {
-        requestValidator.validateAmount(amount!!, TEST_ASSET, 2, min, max)
+        requestValidator.validateAmount(amount, TEST_ASSET, 2, min, max)
       }
       .message
+
+  @Test
+  fun `test validateAmount rejects a null amount without echoing it`() {
+    assertEquals("invalid amount for asset USDC", amountError(null))
+  }
 
   @Test
   fun `test validateAmount rejects an empty amount without echoing it`() {
