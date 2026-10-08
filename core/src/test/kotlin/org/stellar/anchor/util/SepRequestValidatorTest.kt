@@ -287,10 +287,47 @@ class SepRequestValidatorTest {
     SepRequestValidator.validateAmount("", amount, true)
   }
 
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        // 58 digits that strip to 1: padded with trailing zeros, 62 characters
+        "1000000000000000000000000000000000000000000000000000000000e-57",
+        // precision 41: the 41st digit is a trailing zero
+        "1.0000000000000000000000000000000000000000",
+      ]
+  )
+  fun `test static validateAmount rejects an amount padded beyond 40 digits of precision`(
+    amount: String
+  ) {
+    val ex =
+      assertThrows<BadRequestException> { SepRequestValidator.validateAmount("", amount, false) }
+    assertEquals("amount is invalid", ex.message)
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        // precision 40: 20 integer and 20 fractional digits
+        "99999999999999999999.99999999999999999999",
+        "10000000000000000000.00000000000000000000",
+        // precision 40 padded with trailing zeros
+        "1.000000000000000000000000000000000000000",
+        // the usual shape
+        "1.0000000",
+      ]
+  )
+  fun `test static validateAmount accepts an amount of up to 40 digits of precision`(
+    amount: String
+  ) {
+    SepRequestValidator.validateAmount("", amount, false)
+  }
+
   @Test
   fun `test static validateAmount rejects amount strings longer than 64 characters`() {
-    // Otherwise valid (strips to 1), so only the length cap can reject it.
-    val padded = "1." + "0".repeat(63)
+    // Otherwise valid (parses to 1, precision 1), so only the length cap can reject it.
+    val padded = "0".repeat(64) + "1"
     assertEquals(65, padded.length)
     val ex =
       assertThrows<BadRequestException> {
@@ -301,7 +338,7 @@ class SepRequestValidatorTest {
 
   @Test
   fun `test static validateAmount accepts an amount string of exactly 64 characters`() {
-    val padded = "1." + "0".repeat(62)
+    val padded = "0".repeat(63) + "1"
     assertEquals(64, padded.length)
     val amount = SepRequestValidator.validateAmount("", padded, false)
     assertEquals(0, amount.compareTo(BigDecimal.ONE))
@@ -312,7 +349,7 @@ class SepRequestValidatorTest {
     // 65 characters each: the cap reports 'amount is invalid', not the sign message. The zero is
     // 65 plain digits (scale 0) so only the cap can reject it: it would otherwise be a valid zero.
     val zero = "0".repeat(65)
-    val negative = "-1." + "0".repeat(62)
+    val negative = "-" + "0".repeat(63) + "1"
     assertEquals(65, zero.length)
     assertEquals(65, negative.length)
     assertEquals(

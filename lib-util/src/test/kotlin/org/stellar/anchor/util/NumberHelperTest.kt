@@ -88,6 +88,35 @@ class NumberHelperTest {
   }
 
   @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "1000000000000000000000000000000000000000000000000000000000e-57",
+        "1.0000000000000000000000000000000000000000",
+      ]
+  )
+  fun `test a value padded beyond 40 digits of precision is not a reasonable magnitude`(
+    value: String
+  ) {
+    assertFalse(NumberHelper.hasReasonableMagnitude(BigDecimal(value)))
+    assertFalse(NumberHelper.hasProperSignificantDecimals(value, 7))
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "99999999999999999999.99999999999999999999",
+        "1.000000000000000000000000000000000000000",
+        "1.0000000",
+        "100.000000",
+      ]
+  )
+  fun `test a value of up to 40 digits of precision is a reasonable magnitude`(value: String) {
+    assertTrue(NumberHelper.hasReasonableMagnitude(BigDecimal(value)))
+  }
+
+  @ParameterizedTest
   @ValueSource(strings = ["0", "0.00", "0.00000000000000000000", "0e+5", "0e-20", "0e+20"])
   fun `test zero with a bounded scale is a reasonable magnitude`(value: String) {
     assertTrue(NumberHelper.hasReasonableMagnitude(BigDecimal(value)))

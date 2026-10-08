@@ -304,7 +304,7 @@ class AssetValidationUtilsTest {
 
   @Test
   fun test_validateFeeDetails_totalAndDetailOfExactly64CharactersAreAccepted() {
-    val amount = "1." + "0".repeat(62)
+    val amount = "0".repeat(63) + "1"
     Assertions.assertEquals(64, amount.length)
     Assertions.assertDoesNotThrow {
       AssetValidationUtils.validateFeeDetails(fee(amount, amount), null, feeAssetService())
@@ -315,7 +315,7 @@ class AssetValidationUtilsTest {
   fun test_validateFeeDetails_totalLongerThan64CharactersIsRejected() {
     Assertions.assertEquals(
       "fee_details.amount is invalid",
-      validationError(fee("1." + "0".repeat(63), "1")),
+      validationError(fee("0".repeat(64) + "1", "1")),
     )
   }
 
@@ -324,7 +324,7 @@ class AssetValidationUtilsTest {
     // Valid magnitude (strips to 1) and matches the total, so only the length cap rejects it.
     Assertions.assertEquals(
       "fee_details.details[1].amount is invalid",
-      validationError(fee("2", "1", "1." + "0".repeat(63))),
+      validationError(fee("2", "1", "0".repeat(64) + "1")),
     )
   }
 }
