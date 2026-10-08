@@ -139,6 +139,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
   void fetchEvents() {
     if (Instant.now().isBefore(retryNotBefore)) {
+      // Waiting out a held event is not silence from the stream.
+      lastActivityTime = Instant.now();
       return;
     }
     String cursor = (this.cursor != null) ? this.cursor : loadStellarRpcCursor();
@@ -175,7 +177,10 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   String processEvents(List<EventInfo> events, String responseCursor) {
-    if (events == null || events.isEmpty()) return responseCursor;
+    if (events == null || events.isEmpty()) {
+      clearHold();
+      return responseCursor;
+    }
     debugF("Processing {} 'transfer' events", events.size());
 
     for (int i = 0; i < events.size(); i++) {
@@ -201,9 +206,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             ex.toString());
       }
     }
+    clearHold();
+    return responseCursor;
+  }
+
+  private void clearHold() {
     retryNotBefore = Instant.EPOCH;
     holdBackoffSeconds = HOLD_BACKOFF_INITIAL_SECONDS;
-    return responseCursor;
   }
 
   void processTransferEvent(ShouldProcessResult result) throws IOException, AnchorException {

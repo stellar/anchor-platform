@@ -1273,6 +1273,7 @@ class DefaultPaymentListenerTest {
       assertThrows(IOException::class.java) { paymentListener.onReceived(event) }
 
       verify(exactly = 1) { Log.errorEx(cause) }
+      verify(exactly = 1) { Log.errorEx("The probe lookup failed too.", any()) }
     } finally {
       unmockkStatic(Log::class)
     }
