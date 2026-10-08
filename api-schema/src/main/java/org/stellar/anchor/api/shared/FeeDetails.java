@@ -3,8 +3,10 @@ package org.stellar.anchor.api.shared;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -41,12 +43,15 @@ public class FeeDetails {
     this.details.add(feeDetail);
   }
 
-  private String formatAmount(BigDecimal amount) {
-    int decimals = 4;
-    BigDecimal newAmount = amount.setScale(decimals, RoundingMode.HALF_DOWN);
+  // Stellar amounts carry at most 7 decimals (stroops); a lower scale would drop part of a fee.
+  private static final int MAX_DECIMALS = 7;
 
-    DecimalFormat df = new DecimalFormat();
-    df.setMaximumFractionDigits(decimals);
+  private String formatAmount(BigDecimal amount) {
+    BigDecimal newAmount = amount.setScale(MAX_DECIMALS, RoundingMode.HALF_DOWN);
+
+    // the symbols are fixed so that the result does not depend on the JVM default locale
+    DecimalFormat df = new DecimalFormat("0.00", DecimalFormatSymbols.getInstance(Locale.ROOT));
+    df.setMaximumFractionDigits(MAX_DECIMALS);
     df.setMinimumFractionDigits(2);
     df.setGroupingUsed(false);
 
