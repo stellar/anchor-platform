@@ -232,7 +232,8 @@ public class NotifyRefundPendingHandler
                     sep6RefundPayments.stream()
                         .map(RefundPayment::getFee)
                         .map(amount -> decimal(amount.getAmount(), assetInfo))
-                        .reduce(BigDecimal.ZERO, BigDecimal::add)),
+                        .reduce(BigDecimal.ZERO, BigDecimal::add),
+                    assetInfo.getSignificantDecimals()),
                 requestRefund.getAmountFee().getAsset()));
 
         // Calculate the total refunded amount by summing together amounts from all refund payments.
@@ -246,7 +247,9 @@ public class NotifyRefundPendingHandler
                             sep6RefundPayments.stream()
                                 .map(RefundPayment::getAmount)
                                 .map(amount -> decimal(amount.getAmount(), assetInfo))
-                                .reduce(BigDecimal.ZERO, BigDecimal::add)))),
+                                .reduce(BigDecimal.ZERO, BigDecimal::add),
+                            assetInfo.getSignificantDecimals())),
+                    assetInfo.getSignificantDecimals()),
                 requestRefund.getAmount().getAsset()));
 
         txn6.setRefunds(refunds);
