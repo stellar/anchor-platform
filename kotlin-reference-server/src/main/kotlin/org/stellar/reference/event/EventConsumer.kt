@@ -1,5 +1,6 @@
 package org.stellar.reference.event
 
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import org.stellar.reference.data.SendEventRequest
@@ -17,7 +18,14 @@ class EventConsumer(
       // instead of busy-polling channel.isEmpty in a tight loop and pinning a whole CPU core.
       val event = channel.receiveCatching().getOrNull() ?: break
       log.info { "Processing event ${event.id} of type ${event.type}" }
-      processor.handleEvent(event)
+      try {
+        processor.handleEvent(event)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        // One bad event must never stop the only consumer: every later event would hang.
+        log.error(e) { "Error handling event ${event.id} of type ${event.type}" }
+      }
     }
     return this
   }
