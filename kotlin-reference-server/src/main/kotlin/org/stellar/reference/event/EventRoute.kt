@@ -1,12 +1,15 @@
 package org.stellar.reference.event
 
 import com.google.gson.Gson
+import com.google.gson.JsonParseException
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import java.time.Instant
+import java.time.format.DateTimeParseException
 import org.apache.hc.core5.http.HttpStatus
 import org.stellar.anchor.api.callback.SendEventResponse
 import org.stellar.anchor.util.GsonUtils
@@ -20,9 +23,15 @@ fun Route.event(eventService: EventService, enableTestEndpoints: Boolean) {
     route("/event") {
       // The `POST /event` endpoint of the Callback API to receive an event.
       post {
-        val receivedEventJson = call.receive<String>()
-        val receivedEvent = gson.fromJson(receivedEventJson, SendEventRequest::class.java)
-        eventService.processEvent(receivedEvent)
+        val receivedEvent = parseEvent(gson, call.receive<String>())
+        if (receivedEvent.error != null) {
+          call.respond(
+            HttpStatusCode.BadRequest,
+            gson.toJson(SendEventResponse(HttpStatus.SC_BAD_REQUEST, receivedEvent.error)),
+          )
+          return@post
+        }
+        eventService.processEvent(receivedEvent.event!!)
         call.respond(gson.toJson(SendEventResponse(HttpStatus.SC_OK, "event processed")))
       }
     }
@@ -53,4 +62,35 @@ fun Route.event(eventService: EventService, enableTestEndpoints: Boolean) {
       }
     }
   }
+}
+
+private class ParsedEvent(val event: SendEventRequest?, val error: String?)
+
+// Gson builds the object through reflection and ignores Kotlin's non-null types, so a missing
+// field arrives as null. Reject it here instead of letting it crash the event consumer later.
+@Suppress("SENSELESS_COMPARISON")
+private fun parseEvent(gson: Gson, json: String): ParsedEvent {
+  val event =
+    try {
+      gson.fromJson(json, SendEventRequest::class.java)
+    } catch (e: JsonParseException) {
+      null
+    } ?: return ParsedEvent(null, "Invalid event: malformed JSON")
+
+  val missing =
+    when {
+      event.id == null -> "id"
+      event.type == null -> "type"
+      event.timestamp == null -> "timestamp"
+      event.payload == null -> "payload"
+      else -> null
+    }
+  if (missing != null) return ParsedEvent(null, "Invalid event: $missing is required")
+
+  try {
+    Instant.parse(event.timestamp)
+  } catch (e: DateTimeParseException) {
+    return ParsedEvent(null, "Invalid event: timestamp must be an ISO-8601 instant")
+  }
+  return ParsedEvent(event, null)
 }
