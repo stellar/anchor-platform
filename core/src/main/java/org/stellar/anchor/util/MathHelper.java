@@ -13,6 +13,9 @@ public class MathHelper {
   // than the request rule: computed values such as division results carry up to 34 digits.
   public static final int MAX_ARITHMETIC_DIGITS = 100;
   public static final int MAX_ARITHMETIC_LENGTH = 1000;
+  // The widest valid value (100 integer and 100 fractional digits) has 200 digits. Reading the raw
+  // precision is far cheaper than stripTrailingZeros(), which divides once per trailing zero.
+  public static final int MAX_ARITHMETIC_PRECISION = 200;
   private static final String OUT_OF_RANGE = "amount exceeds the supported range";
 
   public static BigDecimal decimal(String value) {
@@ -77,6 +80,11 @@ public class MathHelper {
   public static boolean isWithinArithmeticRange(BigDecimal value) {
     if (value.signum() == 0) {
       return Math.abs((long) value.scale()) <= MAX_ARITHMETIC_DIGITS;
+    }
+    // check the raw digit count first: a value padded with trailing zeros strips to a small number
+    // but costs one division per zero to strip
+    if (value.precision() > MAX_ARITHMETIC_PRECISION) {
+      return false;
     }
     BigDecimal stripped = value.stripTrailingZeros();
     long integerDigits = (long) stripped.precision() - (long) stripped.scale();

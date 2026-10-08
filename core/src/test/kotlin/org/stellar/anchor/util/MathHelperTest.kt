@@ -125,9 +125,9 @@ class MathHelperTest {
 
   @Test
   fun `test the string length limit is 1000 characters`() {
-    // strips to 1, so only the length can reject the second one
-    val thousand = "1." + "0".repeat(998)
-    val thousandOne = "1." + "0".repeat(999)
+    // leading zeros keep the precision at 1, so only the length can reject the second one
+    val thousand = "0".repeat(999) + "1"
+    val thousandOne = "0".repeat(1000) + "1"
     assertEquals(1000, thousand.length)
     assertEquals(1001, thousandOne.length)
     assertEquals(BigDecimal("1.0000000"), MathHelper.decimal(thousand, 7))
@@ -135,6 +135,35 @@ class MathHelperTest {
       rangeMessage,
       assertThrows<ArithmeticException> { MathHelper.decimal(thousandOne, 7) }.message,
     )
+  }
+
+  @Test
+  fun `test a value padded with trailing zeros is rejected by its raw precision`() {
+    // strips to 1 and is 999 characters long, so the length limit does not catch it; its
+    // precision is 994, and reading it costs far less than stripping it
+    val padded = "1" + "0".repeat(993) + "e-993"
+    assertEquals(999, padded.length)
+    assertEquals(994, BigDecimal(padded).precision())
+    assertEquals(
+      rangeMessage,
+      assertThrows<ArithmeticException> { MathHelper.decimal(padded, 7) }.message,
+    )
+    assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal(padded)))
+    assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal("1" + "0".repeat(200) + "e-200")))
+  }
+
+  @Test
+  fun `test precision 200 is the widest accepted value and a canonical amount is untouched`() {
+    val widest = "9".repeat(100) + "." + "9".repeat(100)
+    assertEquals(200, BigDecimal(widest).precision())
+    assertTrue(MathHelper.isWithinArithmeticRange(BigDecimal(widest)))
+    // one digit more is rejected
+    assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal("9" + widest)))
+    // a short amount with trailing zeros, the usual shape, keeps working
+    assertTrue(MathHelper.isWithinArithmeticRange(BigDecimal("1.0000000")))
+    assertEquals(BigDecimal("1.0000000"), MathHelper.decimal("1.0000000", 7))
+    // zero is bounded by its scale, never by its precision
+    assertTrue(MathHelper.isWithinArithmeticRange(BigDecimal("0.00000000000000000000")))
   }
 
   @Test

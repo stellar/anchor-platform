@@ -704,8 +704,8 @@ class TransactionServiceTest {
 
   @Test
   fun test_patchTransaction_sep31RejectsAStoredAmountLongerThanTheSupportedLength() {
-    // 1001 characters that strip to 1: only the length can reject it, without parsing it
-    stubOnly("31", sep31WithStoredAmounts("10", "9", "1." + "0".repeat(999)))
+    // 1001 characters that parse to 1 (leading zeros): only the length can reject it
+    stubOnly("31", sep31WithStoredAmounts("10", "9", "0".repeat(1000) + "1"))
 
     val ex =
       assertThrows<BadRequestException> { transactionService.patchTransactions(patchStatusOnly()) }
