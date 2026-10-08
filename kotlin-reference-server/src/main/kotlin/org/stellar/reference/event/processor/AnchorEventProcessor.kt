@@ -1,5 +1,6 @@
 package org.stellar.reference.event.processor
 
+import io.github.oshai.kotlinlogging.KLogger
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.platform.PlatformTransactionData
 import org.stellar.reference.data.SendEventRequest
@@ -9,6 +10,7 @@ class AnchorEventProcessor(
   private val sep6EventProcessor: Sep6EventProcessor,
   private val sep31EventProcessor: Sep31EventProcessor,
   private val noOpEventProcessor: NoOpEventProcessor,
+  private val logger: KLogger = log,
 ) {
   suspend fun handleEvent(event: SendEventRequest) {
     try {
@@ -38,7 +40,7 @@ class AnchorEventProcessor(
         }
       }
     } catch (e: Exception) {
-      log.error(e) { "Error processing event: $event" }
+      logger.error(e) { "Error processing event: $event" }
     }
   }
 

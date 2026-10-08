@@ -1,5 +1,6 @@
 package org.stellar.reference.event
 
+import io.github.oshai.kotlinlogging.KLogger
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -11,20 +12,21 @@ import org.stellar.reference.log
 class EventConsumer(
   private val channel: Channel<SendEventRequest>,
   private val processor: AnchorEventProcessor,
+  private val logger: KLogger = log,
 ) {
   suspend fun start(): EventConsumer {
     while (true) {
       // receiveCatching() suspends until an event is available or the channel is closed,
       // instead of busy-polling channel.isEmpty in a tight loop and pinning a whole CPU core.
       val event = channel.receiveCatching().getOrNull() ?: break
-      log.info { "Processing event ${event.id} of type ${event.type}" }
+      logger.info { "Processing event ${event.id} of type ${event.type}" }
       try {
         processor.handleEvent(event)
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
         // One bad event must never stop the only consumer: every later event would hang.
-        log.error(e) { "Error handling event ${event.id} of type ${event.type}" }
+        logger.error(e) { "Error handling event ${event.id} of type ${event.type}" }
       }
     }
     return this

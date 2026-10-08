@@ -1,9 +1,11 @@
 package org.stellar.reference.event.processor
 
+import io.github.oshai.kotlinlogging.KLogger
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
@@ -15,7 +17,8 @@ import org.stellar.reference.data.SendEventRequestPayload
 class AnchorEventProcessorTest {
   private val sep6: Sep6EventProcessor = mockk(relaxed = true)
   private val sep31: Sep31EventProcessor = mockk(relaxed = true)
-  private val processor = AnchorEventProcessor(sep6, sep31, NoOpEventProcessor())
+  private val logger: KLogger = mockk(relaxed = true)
+  private val processor = AnchorEventProcessor(sep6, sep31, NoOpEventProcessor(), logger)
 
   private fun event(type: String, payload: SendEventRequestPayload?) =
     SendEventRequest("evt-1", type, "2024-01-01T00:00:00Z", payload)
@@ -44,8 +47,13 @@ class AnchorEventProcessorTest {
     every { broken.payload } throws IllegalStateException("boom")
     every { broken.type } returns "transaction_created"
     every { broken.toString() } returns "broken-event"
+    val messages = mutableListOf<() -> Any?>()
+    every { logger.error(any<IllegalStateException>(), capture(messages)) } returns Unit
 
     runBlocking { processor.handleEvent(broken) }
+
+    assertEquals(1, messages.size)
+    assertEquals("Error processing event: broken-event", messages.single()())
   }
 
   @Test
