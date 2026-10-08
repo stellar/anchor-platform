@@ -409,9 +409,23 @@ class DefaultPaymentListenerTest {
           BigInteger.valueOf(42)
         )
         .address
+    // The database rejects a NUL in a text parameter.
+    every {
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), "ab\u0000c", any())
+    } throws DataIntegrityViolationException("invalid byte sequence")
 
     val registry = withMetrics { assertDoesNotThrow { paymentListener.onReceived(event) } }
 
+    verify(exactly = 0) {
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), "ab\u0000c", any())
+    }
+    verify(exactly = 1) {
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
+        "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+        "42",
+        "pending_sender",
+      )
+    }
     verify(exactly = 1) {
       sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
         "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
@@ -1230,6 +1244,32 @@ class DefaultPaymentListenerTest {
     assertLookupHeld(event, cause, "31")
 
     verify(exactly = 2) {
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
+        any(),
+        DefaultPaymentListener.LOOKUP_PROBE_MEMO,
+        any(),
+      )
+    }
+  }
+
+  @Test
+  fun `test onReceived() holds a connection failure on the retry without a second probe`() {
+    val event = createEventWithTextMemo("my_memo_5")
+    val cause = CannotGetJdbcConnectionException("pool exhausted", SQLException("timeout"))
+    every {
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), "my_memo_5", any())
+    } throws QueryTimeoutException("timeout") andThenThrows cause
+    every {
+      sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
+        any(),
+        DefaultPaymentListener.LOOKUP_PROBE_MEMO,
+        any(),
+      )
+    } returns emptyList()
+
+    assertLookupHeld(event, cause, "31")
+
+    verify(exactly = 1) {
       sep31TransactionStore.findAllByToAccountAndMemoAndStatus(
         any(),
         DefaultPaymentListener.LOOKUP_PROBE_MEMO,

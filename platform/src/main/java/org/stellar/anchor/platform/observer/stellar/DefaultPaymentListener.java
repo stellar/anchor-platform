@@ -169,15 +169,20 @@ public class DefaultPaymentListener implements PaymentListener {
 
     try {
       String memo = xdrMemoToString(ledgerTransaction.getMemo());
+      // PostgreSQL rejects a NUL in a text parameter, so a text memo holding one can never match.
+      // Only a contract-to-muxed payment gets here with such a memo (validate rejects the rest),
+      // and the muxed-id lookup below still applies to it.
       List<JdbcSep31Transaction> sep31Txns =
-          lookup(
-              "31",
-              ledgerTransaction,
-              ledgerPayment,
-              sep31TransactionStore::findAllByToAccountAndMemoAndStatus,
-              ledgerPayment.getTo(),
-              memo,
-              SepTransactionStatus.PENDING_SENDER.toString());
+          memo != null && memo.indexOf('\0') >= 0
+              ? List.of()
+              : lookup(
+                  "31",
+                  ledgerTransaction,
+                  ledgerPayment,
+                  sep31TransactionStore::findAllByToAccountAndMemoAndStatus,
+                  ledgerPayment.getTo(),
+                  memo,
+                  SepTransactionStatus.PENDING_SENDER.toString());
       if (sep31Txns.isEmpty() && ledgerPayment.getTo().startsWith("M")) {
         MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
         sep31Txns =
@@ -388,7 +393,7 @@ public class DefaultPaymentListener implements PaymentListener {
       try {
         return lookup.find(account, memo, status);
       } catch (DataAccessException | TransactionException secondFailure) {
-        if (databaseIsFailing(lookup, account, status)) {
+        if (isConnectionFailure(secondFailure) || databaseIsFailing(lookup, account, status)) {
           throw holdPayment(sep, ledgerTransaction, secondFailure);
         }
         errorF(
@@ -566,8 +571,10 @@ public class DefaultPaymentListener implements PaymentListener {
       return false;
     }
 
+    byte[] textMemoBytes = null;
     if (ledgerTransaction.getMemo().getDiscriminant() == MemoType.MEMO_TEXT) {
       byte[] memoBytes = ledgerTransaction.getMemo().getText().getBytes();
+      textMemoBytes = memoBytes;
       if (memoBytes.length == 0) {
         debugF(
             "Transaction {} with an empty text memo. This indicates a potential bug from stellar network events.",
@@ -613,13 +620,11 @@ public class DefaultPaymentListener implements PaymentListener {
     }
 
     // PostgreSQL rejects a NUL in a text parameter, and no stored memo can contain one, so a
-    // payment
-    // whose routing uses the text memo can never match a transaction. Skip it before it reaches a
-    // transaction store query. A contract-to-muxed payment is routed by the muxed id and never by
-    // the text memo, so it is not skipped.
-    if (ledgerTransaction.getMemo().getDiscriminant() == MemoType.MEMO_TEXT
-        && !isContractToMuxed(ledgerPayment)) {
-      for (byte b : ledgerTransaction.getMemo().getText().getBytes()) {
+    // payment whose routing uses the text memo can never match a transaction. Skip it before it
+    // reaches a transaction store query. A contract-to-muxed payment is routed by the muxed id and
+    // never by the text memo, so it is not skipped.
+    if (textMemoBytes != null && !isContractToMuxed(ledgerPayment)) {
+      for (byte b : textMemoBytes) {
         if (b == 0) {
           warnF(
               "Skipping payment: the text memo contains a NUL byte. txHash={}, opId={}",

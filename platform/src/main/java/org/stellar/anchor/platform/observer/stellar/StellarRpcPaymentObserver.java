@@ -127,9 +127,14 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
   ScheduledFuture<?> task;
 
-  /** The first and the longest wait, in seconds, before retrying after an event was held. */
+  /** The first wait, in seconds, before retrying after an event was held. */
   static final long HOLD_BACKOFF_INITIAL_SECONDS = 1;
 
+  /**
+   * The cap on the wait, in seconds. Fixed rather than taken from the event backoff settings on
+   * purpose: those can be configured above the silence timeout, and a held event must stay retried
+   * often enough for the observer to recover soon after the database is back.
+   */
   static final long HOLD_BACKOFF_MAX_SECONDS = 30;
 
   /** Earliest time the next fetch may run, so a held event is not retried on every tick. */
