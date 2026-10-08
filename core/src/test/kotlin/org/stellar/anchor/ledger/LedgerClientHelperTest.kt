@@ -421,6 +421,238 @@ internal class LedgerClientHelperTest {
     assertNull(ledgerOperation)
   }
 
+  private val txSource = KeyPair.random().accountId
+  private val opSource = KeyPair.random().accountId
+
+  private fun ed25519Source(accountId: String): MuxedAccount =
+    MuxedAccount.builder()
+      .discriminant(KEY_TYPE_ED25519)
+      .ed25519(Uint256.fromXdrByteArray(org.stellar.sdk.StrKey.decodeEd25519PublicKey(accountId)))
+      .build()
+
+  private fun muxedSource(accountId: String, id: Long): MuxedAccount =
+    MuxedAccount.builder()
+      .discriminant(CryptoKeyType.KEY_TYPE_MUXED_ED25519)
+      .med25519(
+        MuxedAccount.MuxedAccountMed25519.builder()
+          .id(Uint64(XdrUnsignedHyperInteger(id)))
+          .ed25519(
+            Uint256.fromXdrByteArray(org.stellar.sdk.StrKey.decodeEd25519PublicKey(accountId))
+          )
+          .build()
+      )
+      .build()
+
+  private fun paymentOp(source: MuxedAccount?): Operation =
+    GsonUtils.getInstance().fromJson(testPaymentOpJson, Operation::class.java).also {
+      it.sourceAccount = source
+    }
+
+  private fun pathReceiveOp(source: MuxedAccount?): Operation =
+    GsonUtils.getInstance().fromJson(testPathPaymentOpJson, Operation::class.java).also {
+      it.sourceAccount = source
+    }
+
+  private fun pathSendOp(source: MuxedAccount?): Operation =
+    GsonUtils.getInstance()
+      .fromJson(testMuxedPathPaymentStrictSendOpJson, Operation::class.java)
+      .also { it.sourceAccount = source }
+
+  private fun convertOp(op: Operation, opResult: OperationResult? = null) =
+    LedgerClientHelper.convert(txSource, 1708638L, 5, 1, op, opResult)
+
+  @Test
+  fun `test convert() payment with operation source account uses the operation source`() {
+    val ledgerOperation = convertOp(paymentOp(ed25519Source(opSource)))
+
+    assertEquals(opSource, ledgerOperation.paymentOperation.from)
+    assertEquals(opSource, ledgerOperation.paymentOperation.sourceAccount)
+  }
+
+  @Test
+  fun `test convert() path payment strict receive with operation source account uses the operation source`() {
+    val ledgerOperation = convertOp(pathReceiveOp(ed25519Source(opSource)))
+
+    assertEquals(opSource, ledgerOperation.pathPaymentOperation.from)
+    assertEquals(opSource, ledgerOperation.pathPaymentOperation.sourceAccount)
+  }
+
+  @Test
+  fun `test convert() path payment strict send with operation source account uses the operation source`() {
+    val ledgerOperation =
+      convertOp(pathSendOp(ed25519Source(opSource)), buildStrictSendSuccessResult(1230L))
+
+    assertEquals(opSource, ledgerOperation.pathPaymentOperation.from)
+    assertEquals(opSource, ledgerOperation.pathPaymentOperation.sourceAccount)
+  }
+
+  @Test
+  fun `test convert() without operation source account falls back to the transaction source`() {
+    val payment = convertOp(paymentOp(null))
+    val receive = convertOp(pathReceiveOp(null))
+    val send = convertOp(pathSendOp(null), buildStrictSendSuccessResult(1230L))
+
+    assertEquals(txSource, payment.paymentOperation.from)
+    assertEquals(txSource, payment.paymentOperation.sourceAccount)
+    assertEquals(txSource, receive.pathPaymentOperation.from)
+    assertEquals(txSource, receive.pathPaymentOperation.sourceAccount)
+    assertEquals(txSource, send.pathPaymentOperation.from)
+    assertEquals(txSource, send.pathPaymentOperation.sourceAccount)
+  }
+
+  @Test
+  fun `test convert() payment with operation source equal to the transaction source`() {
+    val ledgerOperation = convertOp(paymentOp(ed25519Source(txSource)))
+
+    assertEquals(txSource, ledgerOperation.paymentOperation.from)
+    assertEquals(txSource, ledgerOperation.paymentOperation.sourceAccount)
+  }
+
+  @Test
+  fun `test convert() payment with muxed operation source records the base G-address`() {
+    val ledgerOperation = convertOp(paymentOp(muxedSource(opSource, 1234L)))
+
+    assertEquals(opSource, ledgerOperation.paymentOperation.from)
+    assertEquals(opSource, ledgerOperation.paymentOperation.sourceAccount)
+  }
+
+  @Test
+  fun `test convert() path payments with muxed operation source record the base G-address`() {
+    val receive = convertOp(pathReceiveOp(muxedSource(opSource, 1234L)))
+    val send =
+      convertOp(pathSendOp(muxedSource(opSource, 1234L)), buildStrictSendSuccessResult(1230L))
+
+    assertEquals(opSource, receive.pathPaymentOperation.from)
+    assertEquals(opSource, receive.pathPaymentOperation.sourceAccount)
+    assertEquals(opSource, send.pathPaymentOperation.from)
+    assertEquals(opSource, send.pathPaymentOperation.sourceAccount)
+  }
+
+  @Test
+  fun `test convert() invoke host function uses the operation source and keeps the transfer from`() {
+    val fromAccount = KeyPair.random().accountId
+    val operation =
+      buildInvokeHostFunctionOperation(
+        "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+        "transfer",
+        fromAccount,
+        KeyPair.random().accountId,
+        500L,
+      )
+    operation.sourceAccount = ed25519Source(opSource)
+
+    val ledgerOperation = convertOp(operation)
+
+    assertEquals(opSource, ledgerOperation.invokeHostFunctionOperation.sourceAccount)
+    assertEquals(fromAccount, ledgerOperation.invokeHostFunctionOperation.from)
+  }
+
+  @Test
+  fun `test convert() invoke host function without operation source uses the transaction source`() {
+    val operation =
+      buildInvokeHostFunctionOperation(
+        "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+        "transfer",
+        KeyPair.random().accountId,
+        KeyPair.random().accountId,
+        500L,
+      )
+
+    val ledgerOperation = convertOp(operation)
+
+    assertEquals(txSource, ledgerOperation.invokeHostFunctionOperation.sourceAccount)
+  }
+
+  @Test
+  fun `test getLedgerOperations attributes each payment to its own operation source`() {
+    val otherSource = KeyPair.random().accountId
+    val parseResult =
+      LedgerClientHelper.ParseResult(
+        arrayOf(
+          paymentOp(ed25519Source(opSource)),
+          paymentOp(null),
+          paymentOp(muxedSource(otherSource, 7L)),
+        ),
+        txSource,
+        null,
+      )
+
+    val ops = LedgerClientHelper.getLedgerOperations(5, 1708638L, parseResult, null)
+
+    assertEquals(opSource, ops[0].paymentOperation.from)
+    assertEquals(txSource, ops[1].paymentOperation.from)
+    assertEquals(otherSource, ops[2].paymentOperation.from)
+  }
+
+  @Test
+  fun `test channel account payment parsed from a V1 envelope is attributed to the operation source`() {
+    val txnEnv =
+      TransactionEnvelope.builder()
+        .discriminant(ENVELOPE_TYPE_TX)
+        .v1(
+          TransactionV1Envelope.builder()
+            .tx(
+              Transaction.builder()
+                .sourceAccount(ed25519Source(txSource))
+                .memo(Memo.builder().discriminant(MemoType.MEMO_NONE).build())
+                .operations(arrayOf(paymentOp(ed25519Source(opSource))))
+                .build()
+            )
+            .build()
+        )
+        .build()
+
+    val parseResult = LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, "hash")
+    val ops = LedgerClientHelper.getLedgerOperations(5, 1708638L, parseResult, null)
+
+    assertEquals(txSource, parseResult.sourceAccount())
+    assertEquals(1, ops.size)
+    assertEquals(opSource, ops[0].paymentOperation.from)
+  }
+
+  @Test
+  fun `test channel account payment inside a fee bump is attributed to the inner operation source`() {
+    val feeBumpSource = KeyPair.random().accountId
+    val innerTx =
+      Transaction.builder()
+        .sourceAccount(ed25519Source(txSource))
+        .memo(Memo.builder().discriminant(MemoType.MEMO_NONE).build())
+        .operations(arrayOf(paymentOp(ed25519Source(opSource))))
+        .build()
+    val txnEnv =
+      TransactionEnvelope.builder()
+        .discriminant(ENVELOPE_TYPE_TX_FEE_BUMP)
+        .feeBump(
+          FeeBumpTransactionEnvelope.builder()
+            .tx(
+              FeeBumpTransaction.builder()
+                .feeSource(ed25519Source(feeBumpSource))
+                .innerTx(
+                  FeeBumpTransaction.FeeBumpTransactionInnerTx.builder()
+                    .discriminant(ENVELOPE_TYPE_TX)
+                    .v1(TransactionV1Envelope.builder().tx(innerTx).build())
+                    .build()
+                )
+                .build()
+            )
+            .build()
+        )
+        .build()
+
+    val parseResult = LedgerClientHelper.parseOperationAndSourceAccountAndMemo(txnEnv, "hash")
+    val ops = LedgerClientHelper.getLedgerOperations(5, 1708638L, parseResult, null)
+
+    assertEquals(opSource, ops[0].paymentOperation.from)
+  }
+
+  @Test
+  fun `test convert() with unhandled type and an operation source still returns null`() {
+    val operation = GsonUtils.getInstance().fromJson(testUnhandledOpJson, Operation::class.java)
+    operation.sourceAccount = ed25519Source(opSource)
+
+    assertNull(convertOp(operation))
+  }
+
   private fun envelopeXdrOf(operation: org.stellar.sdk.operations.Operation): String {
     val source = KeyPair.random()
     return org.stellar.sdk

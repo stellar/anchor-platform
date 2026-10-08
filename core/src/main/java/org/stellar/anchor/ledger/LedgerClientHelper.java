@@ -25,7 +25,8 @@ public class LedgerClientHelper {
   /**
    * Convert a Stellar operation to a LedgerOperation.
    *
-   * @param sourceAccount the source account.
+   * @param txSourceAccount the transaction-level source account, used when the operation does not
+   *     set its own source account.
    * @param sequenceNumber the sequence number of the transaction
    * @param applicationOrder the application order of the transaction
    * @param opIndex the operation index of the transaction
@@ -34,7 +35,7 @@ public class LedgerClientHelper {
    * @throws LedgerException if the operation is null or malformed
    */
   static LedgerOperation convert(
-      String sourceAccount,
+      String txSourceAccount,
       Long sequenceNumber,
       Integer applicationOrder,
       int opIndex,
@@ -50,6 +51,7 @@ public class LedgerClientHelper {
     }
     String operationId =
         String.valueOf(new TOID(sequenceNumber.intValue(), applicationOrder, opIndex).toInt64());
+    String sourceAccount = resolveSourceAccount(op, txSourceAccount);
     return switch (op.getBody().getDiscriminant()) {
       case PAYMENT -> {
         PaymentOp payment = op.getBody().getPaymentOp();
@@ -201,6 +203,28 @@ public class LedgerClientHelper {
             .build();
       }
       default -> null;
+    };
+  }
+
+  /**
+   * Resolve the account a payment is debited from. An operation may override the transaction-level
+   * source account (e.g. channel accounts); when it does not, the transaction source applies. A
+   * muxed operation source is reduced to its base G-address.
+   *
+   * @param op the operation
+   * @param txSourceAccount the transaction-level source account
+   * @return the operation-level source account if set, otherwise the transaction source account
+   */
+  private static String resolveSourceAccount(Operation op, String txSourceAccount) {
+    org.stellar.sdk.xdr.MuxedAccount opSource = op.getSourceAccount();
+    if (opSource == null) {
+      return txSourceAccount;
+    }
+    return switch (opSource.getDiscriminant()) {
+      case KEY_TYPE_ED25519 -> StrKey.encodeEd25519PublicKey(opSource.getEd25519().getUint256());
+      case KEY_TYPE_MUXED_ED25519 ->
+          StrKey.encodeEd25519PublicKey(opSource.getMed25519().getEd25519().getUint256());
+      default -> txSourceAccount;
     };
   }
 
