@@ -646,6 +646,86 @@ class TransactionServiceTest {
     assertDoesNotThrow { transactionService.validatePatchAmounts(PlatformTransactionData(), tx) }
   }
 
+  private fun sep31WithStoredAmounts(
+    amountIn: String,
+    amountOut: String,
+    feeTotal: String,
+  ): JdbcSep31Transaction {
+    val tx = JdbcSep31Transaction()
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    tx.amountIn = amountIn
+    tx.amountInAsset = patchFeeAsset
+    tx.amountOut = amountOut
+    tx.amountOutAsset = patchFeeAsset
+    tx.feeDetails = FeeDetails(feeTotal, patchFeeAsset)
+    return tx
+  }
+
+  // A PATCH that sends no amounts re-runs the quote math on the values already stored, which is
+  // how a row written before the PATCH validation can still reach it.
+  private fun patchStatusOnly() =
+    PatchTransactionsRequest.builder()
+      .records(
+        listOf(
+          PatchTransactionRequest(
+            PlatformTransactionData().apply {
+              id = "testTxId"
+              status = SepTransactionStatus.PENDING_RECEIVER
+            }
+          )
+        )
+      )
+      .build()
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "10, 9, 1e20000000",
+        "1e20000000, 9, 1",
+        "10, 1e20000000, 1",
+        "10, 9, 0e-50000000",
+        "10, 9, 1e-21000000",
+      ]
+  )
+  fun test_patchTransaction_sep31RejectsAStoredAmountOutsideTheSupportedRangeBeforeTheQuoteMath(
+    amountIn: String,
+    amountOut: String,
+    feeTotal: String,
+  ) {
+    stubOnly("31", sep31WithStoredAmounts(amountIn, amountOut, feeTotal))
+
+    val ex =
+      assertThrows<BadRequestException> { transactionService.patchTransactions(patchStatusOnly()) }
+
+    assertEquals("fee_details.total is invalid", ex.message)
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun test_patchTransaction_sep31RejectsAStoredAmountLongerThanTheSupportedLength() {
+    // 1001 characters that strip to 1: only the length can reject it, without parsing it
+    stubOnly("31", sep31WithStoredAmounts("10", "9", "1." + "0".repeat(999)))
+
+    val ex =
+      assertThrows<BadRequestException> { transactionService.patchTransactions(patchStatusOnly()) }
+
+    assertEquals("fee_details.total is invalid", ex.message)
+  }
+
+  @Test
+  fun test_patchTransaction_sep31QuoteMathIsUnchangedForValidStoredAmounts() {
+    stubOnly("31", sep31WithStoredAmounts("10", "9", "1"))
+    transactionService.patchTransactions(patchStatusOnly())
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+
+    stubOnly("31", sep31WithStoredAmounts("10", "9", "2"))
+    val ex =
+      assertThrows<BadRequestException> { transactionService.patchTransactions(patchStatusOnly()) }
+    assertEquals("amount_in != amount_out + fee_details.total", ex.message)
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+  }
+
   @Test
   fun test_patchTransaction_sep24DepositPendingUserTransferStart() {
     val txId = "testTxId"
