@@ -30,6 +30,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_QUOTE_ID
 import org.stellar.anchor.TestConstants.Companion.TEST_TRANSACTION_ID_0
 import org.stellar.anchor.TestConstants.Companion.TEST_TRANSACTION_ID_1
 import org.stellar.anchor.TestHelper
+import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.exception.*
 import org.stellar.anchor.api.sep.sep24.GetTransactionRequest
 import org.stellar.anchor.api.sep.sep24.GetTransactionsRequest
@@ -341,6 +342,43 @@ internal class Sep24ServiceTest {
   ) {
     assertEquals(expected, withdrawAmountError(amount))
     assertEquals(expected, depositAmountError(amount))
+  }
+
+  // The test assets all have min 1 and max 10000. Clearing them shows the amount validation does
+  // not depend on a limit being configured.
+  private fun clearSep24Limits() {
+    val asset = assetService.getAsset(TEST_ASSET, TEST_ASSET_ISSUER_ACCOUNT_ID) as StellarAssetInfo
+    listOf(asset.sep24.deposit, asset.sep24.withdraw).forEach {
+      it.minAmount = null
+      it.maxAmount = null
+    }
+  }
+
+  @Test
+  fun `test withdraw and deposit reject a negative amount even when the asset has no limits`() {
+    clearSep24Limits()
+    assertEquals("amount should be non-negative", withdrawAmountError("-5"))
+    assertEquals("amount should be non-negative", depositAmountError("-5"))
+    assertEquals("amount is invalid", withdrawAmountError("1e20000000"))
+    assertEquals("amount is invalid", depositAmountError("1e20000000"))
+  }
+
+  @Test
+  fun `test withdraw and deposit accept an empty amount as an absent one`() {
+    clearSep24Limits()
+    val slotTxn = slot<Sep24Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+
+    val withdrawRequest = createTestTransactionRequest()
+    withdrawRequest["amount"] = ""
+    sep24Service.withdraw(createTestWebAuthJwt(), withdrawRequest)
+    assertEquals("", slotTxn.captured.amountExpected)
+
+    val depositRequest = createTestTransactionRequest()
+    depositRequest["amount"] = ""
+    sep24Service.deposit(createTestWebAuthJwt(), depositRequest)
+    assertEquals("", slotTxn.captured.amountExpected)
+    verify(exactly = 2) { txnStore.save(any()) }
   }
 
   @Test
