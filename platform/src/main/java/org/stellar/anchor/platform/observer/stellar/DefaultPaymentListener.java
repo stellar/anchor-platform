@@ -18,6 +18,8 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
@@ -40,8 +42,9 @@ import org.stellar.sdk.xdr.OperationType;
 
 public class DefaultPaymentListener implements PaymentListener {
   /**
-   * A memo no transaction can carry. A lookup that fails is repeated with it to tell a failing
-   * database (the probe fails too) from a failure caused by the payment's own input.
+   * A fixed memo that is not expected to match any stored transaction. A lookup that fails is
+   * repeated with it to tell a failing database (the probe fails too) from a failure caused by the
+   * payment's own input. The probe result is discarded, so a match would be harmless.
    */
   static final String LOOKUP_PROBE_MEMO = "anchor-platform-db-probe";
 
@@ -226,8 +229,7 @@ public class DefaultPaymentListener implements PaymentListener {
     // In this case, the memo is the muxed-id of the muxed account.
     Memo memo;
     String toAccount;
-    if (accountType(ledgerPayment.getFrom()) == Contract
-        && accountType(ledgerPayment.getTo()) == Muxed) {
+    if (isContractToMuxed(ledgerPayment)) {
       MuxedAccount muxedAccount = new MuxedAccount(ledgerPayment.getTo());
       toAccount = muxedAccount.getAccountId();
       memo = Memo.id(Objects.requireNonNull(muxedAccount.getMuxedId()));
@@ -364,7 +366,9 @@ public class DefaultPaymentListener implements PaymentListener {
    * retry path of a failed Platform API notification. A failure caused by this payment's own input
    * would stall the observer forever, so the lookup is repeated with a fixed memo to tell the two
    * apart: if that probe fails, the database is failing and the payment is held; if it succeeds and
-   * the original lookup fails again, the payment is skipped.
+   * the original lookup fails again, the probe runs once more, and only when that also succeeds is
+   * the payment skipped. A failure to get a connection cannot come from the payment's input, so it
+   * holds without a probe.
    */
   private <T> List<T> lookup(
       String sep,
@@ -378,21 +382,15 @@ public class DefaultPaymentListener implements PaymentListener {
     try {
       return lookup.find(account, memo, status);
     } catch (DataAccessException | TransactionException firstFailure) {
-      try {
-        lookup.find(account, LOOKUP_PROBE_MEMO, status);
-      } catch (Exception probeFailure) {
-        errorF(
-            "SEP-{} transaction lookup failed on the database. The payment will be retried. txHash={}",
-            sep,
-            ledgerTransaction.getHash());
-        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_LOOKUP_FAILED.toString(), "sep", sep)
-            .increment();
-        throw new IOException(
-            "SEP-" + sep + " transaction lookup failed on the database", firstFailure);
+      if (isConnectionFailure(firstFailure) || databaseIsFailing(lookup, account, status)) {
+        throw holdPayment(sep, ledgerTransaction, firstFailure);
       }
       try {
         return lookup.find(account, memo, status);
       } catch (DataAccessException | TransactionException secondFailure) {
+        if (databaseIsFailing(lookup, account, status)) {
+          throw holdPayment(sep, ledgerTransaction, secondFailure);
+        }
         errorF(
             "SEP-{} transaction lookup failed for this payment only; skipping it. txHash={}, opId={}, toAccount={}",
             sep,
@@ -404,6 +402,35 @@ public class DefaultPaymentListener implements PaymentListener {
         throw new LookupSkippedException(secondFailure);
       }
     }
+  }
+
+  private static boolean isConnectionFailure(RuntimeException ex) {
+    return ex instanceof CannotGetJdbcConnectionException
+        || ex instanceof CannotCreateTransactionException;
+  }
+
+  /** Repeats the lookup with the probe memo; true when that fails too. */
+  private <T> boolean databaseIsFailing(
+      TransactionLookup<T> lookup, String account, String status) {
+    try {
+      lookup.find(account, LOOKUP_PROBE_MEMO, status);
+      return false;
+    } catch (Exception probeFailure) {
+      errorEx("The probe lookup failed too.", probeFailure);
+      return true;
+    }
+  }
+
+  private IOException holdPayment(
+      String sep, LedgerTransaction ledgerTransaction, RuntimeException cause) {
+    errorF(
+        "SEP-{} transaction lookup failed on the database. The payment will be retried. txHash={}",
+        sep,
+        ledgerTransaction.getHash());
+    errorEx(cause);
+    Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_LOOKUP_FAILED.toString(), "sep", sep)
+        .increment();
+    return new IOException("SEP-" + sep + " transaction lookup failed on the database", cause);
   }
 
   void handleSep31Transaction(
@@ -547,18 +574,6 @@ public class DefaultPaymentListener implements PaymentListener {
             ledgerTransaction.getHash());
         return false;
       }
-      // PostgreSQL rejects a NUL in a text parameter, and no stored memo can contain one, so such a
-      // payment can never match a transaction. Skip it before it reaches a transaction store query.
-      for (byte b : memoBytes) {
-        if (b == 0) {
-          warnF(
-              "Skipping payment: the text memo contains a NUL byte. txHash={}, opId={}",
-              ledgerTransaction.getHash(),
-              ledgerPayment.getId());
-          Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
-          return false;
-        }
-      }
     }
 
     if (ledgerPayment.getType() == OperationType.INVOKE_HOST_FUNCTION) {
@@ -596,7 +611,31 @@ public class DefaultPaymentListener implements PaymentListener {
           GsonUtils.getInstance().toJson(ledgerPayment.getAsset()));
       return false;
     }
+
+    // PostgreSQL rejects a NUL in a text parameter, and no stored memo can contain one, so a
+    // payment
+    // whose routing uses the text memo can never match a transaction. Skip it before it reaches a
+    // transaction store query. A contract-to-muxed payment is routed by the muxed id and never by
+    // the text memo, so it is not skipped.
+    if (ledgerTransaction.getMemo().getDiscriminant() == MemoType.MEMO_TEXT
+        && !isContractToMuxed(ledgerPayment)) {
+      for (byte b : ledgerTransaction.getMemo().getText().getBytes()) {
+        if (b == 0) {
+          warnF(
+              "Skipping payment: the text memo contains a NUL byte. txHash={}, opId={}",
+              ledgerTransaction.getHash(),
+              ledgerPayment.getId());
+          Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+          return false;
+        }
+      }
+    }
     return true;
+  }
+
+  private static boolean isContractToMuxed(LedgerPayment ledgerPayment) {
+    return accountType(ledgerPayment.getFrom()) == Contract
+        && accountType(ledgerPayment.getTo()) == Muxed;
   }
 
   boolean checkAssetAmountSufficient(

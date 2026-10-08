@@ -146,6 +146,37 @@ class StellarRpcPaymentObserverTest {
   }
 
   @Test
+  fun `fetchEvents waits before retrying after an event was held`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+
+    assertNull(observer.processEvents(listOf(e1), "END"))
+    observer.fetchEvents()
+
+    verify(exactly = 0) { sorobanServer.getEvents(any()) }
+  }
+
+  @Test
+  fun `the wait after a held event doubles up to the cap and resets after a clean batch`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+
+    repeat(10) { observer.processEvents(listOf(e1), "END") }
+    assertEquals(StellarRpcPaymentObserver.HOLD_BACKOFF_MAX_SECONDS, observer.holdBackoffSeconds)
+
+    every { observer.processTransferEvent(any()) } returns Unit
+    assertEquals("END", observer.processEvents(listOf(e1), "END"))
+
+    assertEquals(
+      StellarRpcPaymentObserver.HOLD_BACKOFF_INITIAL_SECONDS,
+      observer.holdBackoffSeconds
+    )
+    assertFalse(observer.retryNotBefore.isAfter(java.time.Instant.now()))
+  }
+
+  @Test
   fun `processEvents keeps the current cursor when the first event fails transiently`() {
     val e1 = eventWithId("e1")
     processAll()

@@ -127,7 +127,20 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
   ScheduledFuture<?> task;
 
+  /** The first and the longest wait, in seconds, before retrying after an event was held. */
+  static final long HOLD_BACKOFF_INITIAL_SECONDS = 1;
+
+  static final long HOLD_BACKOFF_MAX_SECONDS = 30;
+
+  /** Earliest time the next fetch may run, so a held event is not retried on every tick. */
+  Instant retryNotBefore = Instant.EPOCH;
+
+  long holdBackoffSeconds = HOLD_BACKOFF_INITIAL_SECONDS;
+
   void fetchEvents() {
+    if (Instant.now().isBefore(retryNotBefore)) {
+      return;
+    }
     String cursor = (this.cursor != null) ? this.cursor : loadStellarRpcCursor();
 
     try {
@@ -178,6 +191,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             "Failed to process transfer event of transaction {}. It will be retried. ex={}",
             event.getTransactionHash(),
             ex.toString());
+        retryNotBefore = Instant.now().plusSeconds(holdBackoffSeconds);
+        holdBackoffSeconds = Math.min(holdBackoffSeconds * 2, HOLD_BACKOFF_MAX_SECONDS);
         return i == 0 ? null : events.get(i - 1).getId();
       } catch (Exception ex) {
         errorF(
@@ -186,6 +201,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             ex.toString());
       }
     }
+    retryNotBefore = Instant.EPOCH;
+    holdBackoffSeconds = HOLD_BACKOFF_INITIAL_SECONDS;
     return responseCursor;
   }
 
