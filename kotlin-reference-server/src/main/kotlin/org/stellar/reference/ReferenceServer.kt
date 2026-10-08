@@ -1,5 +1,6 @@
 package org.stellar.reference
 
+import io.github.oshai.kotlinlogging.KLogger
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -8,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import org.stellar.reference.di.ConfigContainer
 import org.stellar.reference.di.EventConsumerContainer
 import org.stellar.reference.di.ReferenceServerContainer
+import org.stellar.reference.event.EventConsumer
 
 val log = KotlinLogging.logger {}
 lateinit var eventConsumingExecutor: ExecutorService
@@ -20,14 +22,24 @@ fun startServer(envMap: Map<String, String>?, wait: Boolean) {
   // read config
   ConfigContainer.init(envMap)
   eventConsumingExecutor = DaemonExecutors.newFixedThreadPool(1)
-  eventConsumingExecutor.submit {
-    log.info { "Starting event consumer" }
-    runBlocking { EventConsumerContainer.eventConsumer.start() }
-  }
+  eventConsumingExecutor.submit { runEventConsumer(EventConsumerContainer.eventConsumer) }
 
   // start server
   log.info { "Starting Kotlin reference server" }
   ReferenceServerContainer.startServer(wait)
+}
+
+// The Future returned by ExecutorService.submit is never read, so an exception thrown by the
+// consumer would vanish silently. Log it here so a dead consumer is visible to operators.
+internal fun runEventConsumer(consumer: EventConsumer, logger: KLogger = log) {
+  logger.info { "Starting event consumer" }
+  try {
+    runBlocking { consumer.start() }
+    logger.info { "Event consumer stopped" }
+  } catch (t: Throwable) {
+    logger.error(t) { "Event consumer stopped unexpectedly" }
+    throw t
+  }
 }
 
 fun stopServer() {
