@@ -517,6 +517,15 @@ internal class LedgerClientHelperTest {
   }
 
   @Test
+  fun `test convert() with muxed operation source does not throw for any payment type`() {
+    val muxed = muxedSource(opSource, 1234L)
+
+    assertDoesNotThrow { convertOp(paymentOp(muxed)) }
+    assertDoesNotThrow { convertOp(pathReceiveOp(muxed)) }
+    assertDoesNotThrow { convertOp(pathSendOp(muxed), buildStrictSendSuccessResult(1230L)) }
+  }
+
+  @Test
   fun `test convert() path payments with muxed operation source record the base G-address`() {
     val receive = convertOp(pathReceiveOp(muxedSource(opSource, 1234L)))
     val send =
@@ -643,6 +652,7 @@ internal class LedgerClientHelperTest {
     val ops = LedgerClientHelper.getLedgerOperations(5, 1708638L, parseResult, null)
 
     assertEquals(opSource, ops[0].paymentOperation.from)
+    assertEquals(opSource, ops[0].paymentOperation.sourceAccount)
   }
 
   @Test
