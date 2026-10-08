@@ -860,6 +860,14 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
+  fun `test the lookup failed counter keeps the metric name operators alert on`() {
+    assertEquals(
+      "payment_observer.lookup_failed",
+      AnchorMetrics.PAYMENT_OBSERVER_LOOKUP_FAILED.toString(),
+    )
+  }
+
+  @Test
   fun `test onReceived() holds the payment when the Sep31 lookup throws a QueryTimeoutException`() {
     val event = createEventWithTextMemo("my_memo_5")
     val cause = QueryTimeoutException("timeout")
