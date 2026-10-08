@@ -216,4 +216,55 @@ class RefundPrecisionTest {
     assertEquals("5.1234568", txn.refunds.amountRefunded)
     assertEquals("0.0000001", txn.refunds.amountFee)
   }
+
+  @Test
+  fun `sep6 deposit refund with a fee persists the exact fee and total at full precision`() {
+    val txn = sep6Txn(DEPOSIT.kind, "12.3456789")
+
+    pendingHandler.handle(pendingRequest("12.3456788", "0.0000001"))
+    assertEquals("0.0000001", txn.refunds.amountFee.amount)
+    assertEquals("12.3456789", txn.refunds.amountRefunded.amount)
+
+    sentHandler.handle(sentRequest())
+    assertEquals(REFUNDED.toString(), txn.status)
+  }
+
+  @Test
+  fun `sep6 withdrawal refund with a fee persists the exact fee and total at full precision`() {
+    val txn = sep6Txn(WITHDRAWAL.kind, "12.3456789")
+
+    sentHandler.handle(sentRequest("12.3456788", "0.0000001"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertEquals("0.0000001", txn.refunds.amountFee.amount)
+    assertEquals("12.3456789", txn.refunds.amountRefunded.amount)
+  }
+
+  @Test
+  fun `refund_sent with a refund above amount_in at the asset precision is rejected`() {
+    val txn = sep24Txn(WITHDRAWAL.kind, "12.3456789")
+
+    val ex = assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("12.3456790")) }
+
+    assertEquals("Refund amount exceeds amount_in", ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
+  @Test
+  fun `sep31 refund with a fee persists the exact fee and total and reaches refunded`() {
+    val txn = JdbcSep31Transaction()
+    txn.status = PENDING_RECEIVER.toString()
+    txn.amountIn = "10.1234567"
+    txn.amountInAsset = NATIVE
+    txn.amountFee = "0"
+    txn.amountFeeAsset = NATIVE
+    every { txn31Store.findByTransactionId(TX_ID) } returns txn
+
+    sentHandler.handle(sentRequest("10.1234566", "0.0000001"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertEquals("0.0000001", txn.refunds.amountFee)
+    assertEquals("10.1234567", txn.refunds.amountRefunded)
+  }
 }
