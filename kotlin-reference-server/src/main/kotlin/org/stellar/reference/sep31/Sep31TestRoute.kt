@@ -14,7 +14,9 @@ import org.stellar.reference.ClientException
 import org.stellar.reference.data.ErrorResponse
 import org.stellar.reference.data.Success
 import org.stellar.reference.di.AUTH_CONFIG_ENDPOINT
+import org.stellar.reference.event.processor.MAX_AUTO_ADVANCE_OPT_OUTS
 import org.stellar.reference.event.processor.Sep31EventProcessor
+import org.stellar.reference.event.processor.isTransactionUuid
 import org.stellar.reference.service.sep31.ReceiveService
 
 private val log = KotlinLogging.logger {}
@@ -57,7 +59,16 @@ fun Route.testSep31(receiveService: ReceiveService) {
           call.parameters["transactionId"]
             ?: throw ClientException("Missing transactionId parameter")
 
-        Sep31EventProcessor.skipAutoAdvance(transactionId)
+        if (!isTransactionUuid(transactionId)) {
+          throw ClientException("Invalid transactionId: must be a UUID")
+        }
+        if (!Sep31EventProcessor.skipAutoAdvance(transactionId)) {
+          log.warn {
+            "Rejected skip-auto-advance: opt-out limit of $MAX_AUTO_ADVANCE_OPT_OUTS reached"
+          }
+          call.respond(HttpStatusCode.TooManyRequests, ErrorResponse("Opt-out limit reached"))
+          return@post
+        }
 
         call.respond(Success(transactionId))
       } catch (e: ClientException) {
