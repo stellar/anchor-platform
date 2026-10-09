@@ -53,6 +53,7 @@ lateinit var savedTxn: Sep31GetTransactionResponse
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Execution(SAME_THREAD)
+@Order(RUN_AFTER_PLATFORM_API_TESTS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class Sep31Tests : IntegrationTestBase(TestConfig()) {
   private val sep12Client: Sep12Client = Sep12Client(toml.getString("KYC_SERVER"), this.token.token)

@@ -22,6 +22,7 @@ import org.stellar.reference.event.event
 import org.stellar.reference.plugins.RequestExceptionHandlerPlugin
 import org.stellar.reference.plugins.RequestLoggerPlugin
 import org.stellar.reference.plugins.testSep31
+import org.stellar.reference.plugins.testSep6
 import org.stellar.reference.sep24.sep24
 import org.stellar.reference.sep24.testSep24
 
@@ -72,6 +73,7 @@ object ReferenceServerContainer {
         config.sep24.interactiveJwtKey
       )
       testSep31(ServiceContainer.receiveService)
+      testSep6()
     }
     if (config.appSettings.isTest) {
       testCustomer(ServiceContainer.customerService)
