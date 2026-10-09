@@ -8,8 +8,10 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -62,7 +64,7 @@ class EventServiceTest {
       assertEquals(0, service.getEvents(null).size)
       assertNull(service.getLatestEvent())
       // the rendezvous send returns once the drain received the event; the counter follows
-      while (delivered.get() < cap + 5) Thread.sleep(1)
+      withTimeout(5_000) { while (delivered.get() < cap + 5) delay(1) }
       assertEquals(cap + 5, delivered.get())
     }
 
