@@ -1,12 +1,20 @@
 package org.stellar.anchor.util
 
+import io.mockk.every
+import io.mockk.mockk
+import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.ValueSource
+import org.stellar.anchor.api.asset.AssetInfo
 
 class MathHelperTest {
   @ParameterizedTest
@@ -32,5 +40,158 @@ class MathHelperTest {
       "Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.",
       ex.message
     )
+  }
+
+  private val rangeMessage = "amount exceeds the supported range"
+
+  private fun asset7(): AssetInfo {
+    val asset = mockk<AssetInfo>()
+    every { asset.significantDecimals } returns 7
+    return asset
+  }
+
+  private val hundredIntegerDigits = "1" + "0".repeat(99)
+  private val hundredOneIntegerDigits = "1" + "0".repeat(100)
+  private val scaleOneHundred = "0." + "0".repeat(99) + "1"
+  private val scaleOneHundredOne = "0." + "0".repeat(100) + "1"
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "1e20000000",
+        "1e-20000000",
+        "0e-50000000",
+        "0e+50000000",
+        "-1e20000000",
+        "1e101",
+        "0e-101",
+        "0e+101",
+      ]
+  )
+  fun `test decimal with scale rejects out of range values`(value: String) {
+    assertEquals(
+      rangeMessage,
+      assertThrows<ArithmeticException> { MathHelper.decimal(value, 7) }.message,
+    )
+  }
+
+  @Test
+  fun `test decimal with asset rejects out of range values`() {
+    assertEquals(
+      rangeMessage,
+      assertThrows<ArithmeticException> { MathHelper.decimal("1e20000000", asset7()) }.message,
+    )
+  }
+
+  @Test
+  fun `test sum rejects an out of range value anywhere in the list`() {
+    assertEquals(
+      rangeMessage,
+      assertThrows<ArithmeticException> { MathHelper.sum(asset7(), "1", "1e20000000", "2") }
+        .message,
+    )
+  }
+
+  @Test
+  fun `test formatAmount rejects out of range values`() {
+    assertEquals(
+      rangeMessage,
+      assertThrows<ArithmeticException> { MathHelper.formatAmount(BigDecimal("1e20000000"), 7) }
+        .message,
+    )
+    assertEquals(
+      rangeMessage,
+      assertThrows<ArithmeticException> { MathHelper.formatAmount(BigDecimal("0e-50000000")) }
+        .message,
+    )
+  }
+
+  @Test
+  fun `test values at the range boundary are accepted and 101 digits are rejected`() {
+    assertEquals(
+      BigDecimal(hundredIntegerDigits).setScale(7),
+      MathHelper.decimal(hundredIntegerDigits, 7),
+    )
+    assertEquals(
+      BigDecimal(scaleOneHundred).setScale(100),
+      MathHelper.decimal(scaleOneHundred, 100),
+    )
+    assertEquals(BigDecimal("0").setScale(7), MathHelper.decimal("0e-100", 7))
+    assertEquals(BigDecimal("0").setScale(7), MathHelper.decimal("0e+100", 7))
+    assertThrows<ArithmeticException> { MathHelper.decimal(hundredOneIntegerDigits, 7) }
+    assertThrows<ArithmeticException> { MathHelper.decimal(scaleOneHundredOne, 7) }
+  }
+
+  @Test
+  fun `test the string length limit is 1000 characters`() {
+    // leading zeros keep the precision at 1, so only the length can reject the second one
+    val thousand = "0".repeat(999) + "1"
+    val thousandOne = "0".repeat(1000) + "1"
+    assertEquals(1000, thousand.length)
+    assertEquals(1001, thousandOne.length)
+    assertEquals(BigDecimal("1.0000000"), MathHelper.decimal(thousand, 7))
+    assertEquals(
+      rangeMessage,
+      assertThrows<ArithmeticException> { MathHelper.decimal(thousandOne, 7) }.message,
+    )
+  }
+
+  @Test
+  fun `test a value padded with trailing zeros is rejected by its raw precision`() {
+    // strips to 1 and is 999 characters long, so the length limit does not catch it; its
+    // precision is 994, and reading it costs far less than stripping it
+    val padded = "1" + "0".repeat(993) + "e-993"
+    assertEquals(999, padded.length)
+    assertEquals(994, BigDecimal(padded).precision())
+    assertEquals(
+      rangeMessage,
+      assertThrows<ArithmeticException> { MathHelper.decimal(padded, 7) }.message,
+    )
+    assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal(padded)))
+    assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal("1" + "0".repeat(200) + "e-200")))
+  }
+
+  @Test
+  fun `test precision 200 is the widest accepted value and a canonical amount is untouched`() {
+    val widest = "9".repeat(100) + "." + "9".repeat(100)
+    assertEquals(200, BigDecimal(widest).precision())
+    assertTrue(MathHelper.isWithinArithmeticRange(BigDecimal(widest)))
+    // one digit more is rejected
+    assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal("9" + widest)))
+    // a short amount with trailing zeros, the usual shape, keeps working
+    assertTrue(MathHelper.isWithinArithmeticRange(BigDecimal("1.0000000")))
+    assertEquals(BigDecimal("1.0000000"), MathHelper.decimal("1.0000000", 7))
+    // zero is bounded by its scale, never by its precision
+    assertTrue(MathHelper.isWithinArithmeticRange(BigDecimal("0.00000000000000000000")))
+  }
+
+  @Test
+  fun `test in range values return what they returned before`() {
+    assertEquals(BigDecimal("1.5000000"), MathHelper.decimal("1.5", 7))
+    assertEquals(BigDecimal("0.0000000"), MathHelper.decimal("0", 7))
+    assertEquals(BigDecimal("500.0000000"), MathHelper.decimal("5e2", asset7()))
+    assertEquals(BigDecimal("3.5000000"), MathHelper.sum(asset7(), "1", "2.5"))
+    // integers only: DecimalFormat uses the default locale for the decimal separator
+    assertEquals("15", MathHelper.formatAmount(BigDecimal("15"), 4))
+    assertEquals("100", MathHelper.formatAmount(BigDecimal("1e2")))
+    assertNull(MathHelper.decimal(null as String?, 7))
+  }
+
+  @Test
+  fun `test decimal without a scale is unchanged`() {
+    assertDoesNotThrow { MathHelper.decimal("1e20000000") }
+    assertNull(MathHelper.decimal(null as String?))
+  }
+
+  @Test
+  fun `test isWithinArithmeticRange`() {
+    assertTrue(MathHelper.isWithinArithmeticRange(BigDecimal(hundredIntegerDigits)))
+    assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal(hundredOneIntegerDigits)))
+    assertTrue(MathHelper.isWithinArithmeticRange(BigDecimal(scaleOneHundred)))
+    assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal(scaleOneHundredOne)))
+    assertTrue(MathHelper.isWithinArithmeticRange(BigDecimal("0e-100")))
+    assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal("0e-101")))
+    assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal("0e+101")))
   }
 }

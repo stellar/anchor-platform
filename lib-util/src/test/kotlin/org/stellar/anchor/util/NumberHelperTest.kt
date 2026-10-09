@@ -1,6 +1,8 @@
 package org.stellar.anchor.util
 
+import java.math.BigDecimal
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.NullSource
@@ -38,6 +40,9 @@ class NumberHelperTest {
         "1.0E+10, 2",
         "1.23E+2, 2",
         "9999999999.99, 2",
+        "0, 2",
+        "0.00, 2",
+        "0.00000000000000000000, 20",
       ]
   )
   fun `test proper significant decimals`(value: String, maxDecimals: Int) {
@@ -63,5 +68,57 @@ class NumberHelperTest {
   )
   fun `test violating significant decimals`(value: String, maxDecimals: Int) {
     assert(!NumberHelper.hasProperSignificantDecimals(value, maxDecimals))
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "0e-50000000",
+        "0e+50000000",
+        "0.000000000000000000000",
+        "-0e-50000000",
+        "0e-21",
+        "0e+21",
+      ]
+  )
+  fun `test zero with an extreme scale is not a reasonable magnitude`(value: String) {
+    assertFalse(NumberHelper.hasReasonableMagnitude(BigDecimal(value)))
+    assertFalse(NumberHelper.hasProperSignificantDecimals(value, 7))
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "1000000000000000000000000000000000000000000000000000000000e-57",
+        "1.0000000000000000000000000000000000000000",
+      ]
+  )
+  fun `test a value padded beyond 40 digits of precision is not a reasonable magnitude`(
+    value: String
+  ) {
+    assertFalse(NumberHelper.hasReasonableMagnitude(BigDecimal(value)))
+    assertFalse(NumberHelper.hasProperSignificantDecimals(value, 7))
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "99999999999999999999.99999999999999999999",
+        "1.000000000000000000000000000000000000000",
+        "1.0000000",
+        "100.000000",
+      ]
+  )
+  fun `test a value of up to 40 digits of precision is a reasonable magnitude`(value: String) {
+    assertTrue(NumberHelper.hasReasonableMagnitude(BigDecimal(value)))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["0", "0.00", "0.00000000000000000000", "0e+5", "0e-20", "0e+20"])
+  fun `test zero with a bounded scale is a reasonable magnitude`(value: String) {
+    assertTrue(NumberHelper.hasReasonableMagnitude(BigDecimal(value)))
   }
 }

@@ -13,6 +13,14 @@ public class NumberHelper {
   // is generous enough to represent any valid Stellar amount while preventing OOM from inputs with
   // extreme exponents that would exhaust memory when expanded.
   public static final int MAX_AMOUNT_MAGNITUDE = 20;
+  // A valid amount is at most 42 characters (sign, 20 integer digits, '.', 20 fractional digits).
+  // The cap leaves room for trailing zeros and exponent forms, and stops long digit strings, whose
+  // parsing and stripTrailingZeros() cost grows quadratically, before they are parsed.
+  public static final int MAX_AMOUNT_LENGTH = 64;
+  // 20 integer and 20 fractional digits is the widest valid amount, so more digits than that can
+  // only be trailing zeros. Rejecting them by the raw precision keeps a stored amount as cheap to
+  // read as its canonical form, and avoids stripTrailingZeros() dividing once per padded zero.
+  public static final int MAX_AMOUNT_PRECISION = 2 * MAX_AMOUNT_MAGNITUDE;
 
   public static boolean isPositiveNumber(String str) {
     if (str == null) {
@@ -39,6 +47,14 @@ public class NumberHelper {
   }
 
   public static boolean hasReasonableMagnitude(BigDecimal value) {
+    // stripTrailingZeros() collapses every zero to scale 0, which would hide an extreme exponent
+    // such as 0e-50000000 that BigDecimal.add later expands to millions of digits.
+    if (value.signum() == 0) {
+      return Math.abs((long) value.scale()) <= MAX_AMOUNT_MAGNITUDE;
+    }
+    if (value.precision() > MAX_AMOUNT_PRECISION) {
+      return false;
+    }
     BigDecimal stripped = value.stripTrailingZeros();
     long integerDigits = (long) stripped.precision() - (long) stripped.scale();
     return integerDigits <= MAX_AMOUNT_MAGNITUDE && stripped.scale() <= MAX_AMOUNT_MAGNITUDE;
@@ -48,7 +64,7 @@ public class NumberHelper {
     try {
       BigDecimal decimal = new BigDecimal(input);
       BigDecimal stripped = decimal.stripTrailingZeros();
-      if (!hasReasonableMagnitude(stripped)) {
+      if (!hasReasonableMagnitude(decimal)) {
         return false;
       }
       int scale = max(0, stripped.scale());

@@ -44,6 +44,11 @@ public class SepRequestValidator {
       throw new BadRequestException(messagePrefix + "amount cannot be empty");
     }
 
+    // reject before parsing: a long digit string is expensive to parse and to strip
+    if (amount.length() > NumberHelper.MAX_AMOUNT_LENGTH) {
+      throw new BadRequestException(messagePrefix + "amount is invalid");
+    }
+
     BigDecimal sAmount;
     try {
       sAmount = decimal(amount);
@@ -186,7 +191,22 @@ public class SepRequestValidator {
   public void validateAmount(
       String requestAmount, String assetCode, int scale, Long minAmount, Long maxAmount)
       throws SepValidationException {
-    BigDecimal amount = new BigDecimal(requestAmount);
+    // reject before parsing, and without echoing the string: a long digit string is expensive
+    if (StringHelper.isEmpty(requestAmount)
+        || requestAmount.length() > NumberHelper.MAX_AMOUNT_LENGTH) {
+      throw new SepValidationException(String.format("invalid amount for asset %s", assetCode));
+    }
+    BigDecimal amount;
+    try {
+      amount = new BigDecimal(requestAmount);
+    } catch (NumberFormatException e) {
+      throw new SepValidationException(
+          String.format("invalid amount %s for asset %s", requestAmount, assetCode));
+    }
+    if (!NumberHelper.hasReasonableMagnitude(amount)) {
+      throw new SepValidationException(
+          String.format("invalid amount %s for asset %s", requestAmount, assetCode));
+    }
     if (amount.scale() > scale) {
       throw new SepValidationException(
           String.format(

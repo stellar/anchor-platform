@@ -31,6 +31,8 @@ import org.stellar.anchor.api.sep.sep24.TransactionResponse
 import org.stellar.anchor.api.sep.sep6.Sep6TransactionResponse
 import org.stellar.anchor.api.shared.Amount
 import org.stellar.anchor.api.shared.FeeDetails
+import org.stellar.anchor.api.shared.RefundPayment
+import org.stellar.anchor.api.shared.Refunds
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.client.ClientConfig.CallbackUrls
 import org.stellar.anchor.client.CustodialClient
@@ -301,6 +303,77 @@ class ClientStatusCallbackHandlerTest {
     assertEquals("client.com", sep24Txn.clientDomain)
     assertEquals("quote-id", sep24Txn.quoteId)
     assertEquals("message", sep24Txn.message)
+  }
+
+  private fun sep24WithdrawalWithRefund(id: String, refundAmount: String): AnchorEvent =
+    AnchorEvent().apply {
+      transaction =
+        GetTransactionResponse().apply {
+          this.id = id
+          sep = SEP_24
+          kind = Kind.WITHDRAWAL
+          status = COMPLETED
+          clientName = "circle"
+          refunds =
+            Refunds.builder()
+              .amountRefunded(Amount(refundAmount, "USD"))
+              .amountFee(Amount("0", "USD"))
+              .payments(
+                arrayOf(
+                  RefundPayment.builder()
+                    .id("refund-$id")
+                    .idType(RefundPayment.IdType.EXTERNAL)
+                    .amount(Amount(refundAmount, "USD"))
+                    .fee(Amount("0", "USD"))
+                    .build()
+                )
+              )
+              .build()
+        }
+    }
+
+  @Test
+  fun `handleEvent should skip an event whose refund amount is out of range and still deliver the next one`() {
+    val assetInfo = mockk<AssetInfo>()
+    every { assetInfo.significantDecimals } returns 7
+    every { assetService.getAsset(any(), any()) } returns assetInfo
+
+    val server = MockWebServer()
+    server.start()
+    try {
+      server.enqueue(MockResponse().setResponseCode(200))
+      val client =
+        CustodialClient.builder()
+          .name("circle")
+          .signingKeys(setOf("GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"))
+          .callbackUrls(
+            CallbackUrls.builder().sep24(server.url("/callback/sep24").toString()).build()
+          )
+          .allowAnyDestination(false)
+          .destinationAccounts(emptySet())
+          .build()
+      val serverHandler =
+        ClientStatusCallbackHandler(
+          secretConfig,
+          client,
+          assetService,
+          sep6MoreInfoUrlConstructor,
+          sep24MoreInfoUrlConstructor
+        )
+
+      // the poisoned event is acknowledged (true) and nothing is sent
+      assertEquals(
+        true,
+        serverHandler.handleEvent(sep24WithdrawalWithRefund("poisoned", "1e20000000"))
+      )
+      assertEquals(0, server.requestCount)
+
+      // the next, valid event in the same queue is delivered normally
+      assertEquals(true, serverHandler.handleEvent(sep24WithdrawalWithRefund("valid", "1")))
+      assertEquals(1, server.requestCount)
+    } finally {
+      server.shutdown()
+    }
   }
 
   @Test
