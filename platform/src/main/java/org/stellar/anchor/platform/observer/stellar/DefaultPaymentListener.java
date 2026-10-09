@@ -5,7 +5,6 @@ import static org.stellar.anchor.util.AssetHelper.getSep11AssetName;
 import static org.stellar.anchor.util.Log.*;
 import static org.stellar.anchor.util.Log.warnF;
 import static org.stellar.anchor.util.MathHelper.decimal;
-import static org.stellar.anchor.util.MathHelper.formatAmount;
 import static org.stellar.anchor.util.MemoHelper.*;
 import static org.stellar.anchor.util.SepHelper.AccountType.*;
 import static org.stellar.anchor.util.SepHelper.accountType;
@@ -518,8 +517,8 @@ public class DefaultPaymentListener implements PaymentListener {
           sepTransaction.getProtocol(),
           sepTransaction.getId(),
           ledgerTransaction.getHash(),
-          formatAmount(expectedAmount),
-          formatAmount(gotAmount));
+          expectedAmount.toPlainString(),
+          gotAmount.toPlainString());
       Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_INSUFFICIENT.toString()).increment();
       return false;
     }
