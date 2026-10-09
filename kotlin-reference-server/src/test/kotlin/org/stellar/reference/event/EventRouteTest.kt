@@ -108,4 +108,19 @@ class EventRouteTest {
     assertEquals("""{"code":200,"message":"event processed"}""", response.bodyAsText())
     assertEquals(1, service.getEvents(null).size)
   }
+
+  @Test
+  fun `retains at most 32 events when 33 bodies of exactly 1 MiB are posted`() =
+    routeTest { service ->
+      repeat(33) {
+        val response =
+          client.post("/event") {
+            contentType(ContentType.Application.Json)
+            setBody(bodyOfSize(maxBody))
+          }
+        assertEquals(HttpStatusCode.OK, response.status)
+      }
+
+      assertEquals(32, service.getEvents(null).size)
+    }
 }

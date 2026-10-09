@@ -22,6 +22,8 @@ import org.stellar.reference.data.SendEventRequestPayload
 
 class EventServiceTest {
   private val cap = 10_000
+  private val byteCap = 33_554_432
+  private val oneMiB = 1_048_576
 
   private fun event(
     id: String,
@@ -142,6 +144,38 @@ class EventServiceTest {
       }
 
       assertEquals(cap, service.getEvents(null).size)
+    }
+
+  @Test
+  fun `keeps the newest 32 events when 40 events of 1 MiB are accepted`() =
+    withService(retainEvents = true) { service, _ ->
+      repeat(40) { service.processEvent(event("e$it"), oneMiB) }
+
+      val events = service.getEvents(null)
+      assertEquals(32, events.size)
+      assertEquals("e8", events.first().id)
+      assertEquals("e39", events.last().id)
+    }
+
+  @Test
+  fun `evicts nothing when retained bodies total exactly 32 MiB`() =
+    withService(retainEvents = true) { service, _ ->
+      repeat(32) { service.processEvent(event("e$it"), oneMiB) }
+
+      assertEquals(32, service.getEvents(null).size)
+      assertEquals("e0", service.getEvents(null).first().id)
+    }
+
+  @Test
+  fun `evicts the oldest as soon as retained bodies pass 32 MiB`() =
+    withService(retainEvents = true) { service, _ ->
+      repeat(32) { service.processEvent(event("e$it"), oneMiB) }
+      service.processEvent(event("e32"), 1)
+
+      val events = service.getEvents(null)
+      assertEquals(32, events.size)
+      assertEquals("e1", events.first().id)
+      assertEquals("e32", events.last().id)
     }
 
   @Test

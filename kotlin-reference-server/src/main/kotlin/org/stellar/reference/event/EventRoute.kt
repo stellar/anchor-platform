@@ -35,7 +35,7 @@ fun Route.event(eventService: EventService, enableTestEndpoints: Boolean) {
         }
         val receivedEventJson = String(bodyBytes, Charsets.UTF_8)
         val receivedEvent = gson.fromJson(receivedEventJson, SendEventRequest::class.java)
-        eventService.processEvent(receivedEvent)
+        eventService.processEvent(receivedEvent, bodyBytes.size)
         call.respond(gson.toJson(SendEventResponse(HttpStatus.SC_OK, "event processed")))
       }
     }
