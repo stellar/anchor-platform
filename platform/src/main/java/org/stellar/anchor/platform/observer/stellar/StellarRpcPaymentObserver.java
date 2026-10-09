@@ -127,7 +127,27 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
   ScheduledFuture<?> task;
 
+  /** The first wait, in seconds, before retrying after an event was held. */
+  static final long HOLD_BACKOFF_INITIAL_SECONDS = 1;
+
+  /**
+   * The cap on the wait, in seconds. Fixed rather than taken from the event backoff settings on
+   * purpose: those can be configured above the silence timeout, and a held event must stay retried
+   * often enough for the observer to recover soon after the database is back.
+   */
+  static final long HOLD_BACKOFF_MAX_SECONDS = 30;
+
+  /** Earliest time the next fetch may run, so a held event is not retried on every tick. */
+  Instant retryNotBefore = Instant.EPOCH;
+
+  long holdBackoffSeconds = HOLD_BACKOFF_INITIAL_SECONDS;
+
   void fetchEvents() {
+    if (Instant.now().isBefore(retryNotBefore)) {
+      // Waiting out a held event is not silence from the stream.
+      lastActivityTime = Instant.now();
+      return;
+    }
     String cursor = (this.cursor != null) ? this.cursor : loadStellarRpcCursor();
 
     try {
@@ -162,7 +182,10 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   String processEvents(List<EventInfo> events, String responseCursor) {
-    if (events == null || events.isEmpty()) return responseCursor;
+    if (events == null || events.isEmpty()) {
+      clearHold();
+      return responseCursor;
+    }
     debugF("Processing {} 'transfer' events", events.size());
 
     for (int i = 0; i < events.size(); i++) {
@@ -178,6 +201,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             "Failed to process transfer event of transaction {}. It will be retried. ex={}",
             event.getTransactionHash(),
             ex.toString());
+        retryNotBefore = Instant.now().plusSeconds(holdBackoffSeconds);
+        holdBackoffSeconds = Math.min(holdBackoffSeconds * 2, HOLD_BACKOFF_MAX_SECONDS);
         return i == 0 ? null : events.get(i - 1).getId();
       } catch (Exception ex) {
         errorF(
@@ -186,7 +211,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             ex.toString());
       }
     }
+    clearHold();
     return responseCursor;
+  }
+
+  private void clearHold() {
+    retryNotBefore = Instant.EPOCH;
+    holdBackoffSeconds = HOLD_BACKOFF_INITIAL_SECONDS;
   }
 
   void processTransferEvent(ShouldProcessResult result) throws IOException, AnchorException {

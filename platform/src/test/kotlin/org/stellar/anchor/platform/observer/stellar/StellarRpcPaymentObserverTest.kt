@@ -146,6 +146,100 @@ class StellarRpcPaymentObserverTest {
   }
 
   @Test
+  fun `fetchEvents waits before retrying after an event was held`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+
+    assertNull(observer.processEvents(listOf(e1), "END"))
+    observer.fetchEvents()
+
+    verify(exactly = 0) { sorobanServer.getEvents(any()) }
+  }
+
+  @Test
+  fun `the wait after a held event doubles from 1 second to a 30 second cap`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+
+    val waits = mutableListOf<Long>()
+    repeat(6) {
+      observer.processEvents(listOf(e1), "END")
+      waits.add(observer.holdBackoffSeconds)
+    }
+
+    assertEquals(listOf(2L, 4L, 8L, 16L, 30L, 30L), waits)
+  }
+
+  @Test
+  fun `the first held event delays the next fetch by 1 second`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+
+    val before = java.time.Instant.now()
+    observer.processEvents(listOf(e1), "END")
+    val after = java.time.Instant.now()
+
+    assertFalse(observer.retryNotBefore.isBefore(before.plusSeconds(1)))
+    assertFalse(observer.retryNotBefore.isAfter(after.plusSeconds(1)))
+  }
+
+  @Test
+  fun `a network error on an event also delays the next fetch`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws NetworkException(503, "unavailable")
+
+    observer.processEvents(listOf(e1), "END")
+
+    assertEquals(2L, observer.holdBackoffSeconds)
+    assertTrue(observer.retryNotBefore.isAfter(java.time.Instant.now()))
+  }
+
+  @Test
+  fun `a clean batch resets the wait to 1 second`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+    repeat(3) { observer.processEvents(listOf(e1), "END") }
+
+    every { observer.processTransferEvent(any()) } returns Unit
+    assertEquals("END", observer.processEvents(listOf(e1), "END"))
+
+    assertEquals(1L, observer.holdBackoffSeconds)
+    assertFalse(observer.retryNotBefore.isAfter(java.time.Instant.now()))
+  }
+
+  @Test
+  fun `an empty batch resets the wait to 1 second`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+    repeat(3) { observer.processEvents(listOf(e1), "END") }
+
+    assertEquals("END", observer.processEvents(emptyList(), "END"))
+
+    assertEquals(1L, observer.holdBackoffSeconds)
+    assertFalse(observer.retryNotBefore.isAfter(java.time.Instant.now()))
+  }
+
+  @Test
+  fun `waiting out a held event is not counted as silence`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+    observer.processEvents(listOf(e1), "END")
+    val stale = java.time.Instant.now().minusSeconds(3600)
+    observer.lastActivityTime = stale
+
+    observer.fetchEvents()
+
+    assertTrue(observer.lastActivityTime.isAfter(stale))
+  }
+
+  @Test
   fun `processEvents keeps the current cursor when the first event fails transiently`() {
     val e1 = eventWithId("e1")
     processAll()
