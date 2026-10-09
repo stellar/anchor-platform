@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.stellar.anchor.api.exception.SepException;
@@ -69,7 +70,9 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
 
     if (request.getPagingId() != null) {
       Sep6Transaction txn = transactionRepo.findOneByTransactionId(request.getPagingId());
-      if (txn != null) {
+      // A cursor the caller's own listing could not return is rejected exactly like a missing one,
+      // so the response never reveals whether another caller's transaction id exists.
+      if (txn != null && isVisibleTo(txn, accountId, accountMemo)) {
         olderThan = txn.getStartedAt();
       } else {
         throw new SepValidationException(
@@ -109,6 +112,17 @@ public class JdbcSep6TransactionStore implements Sep6TransactionStore {
               pageable);
       return new ArrayList<>(txns);
     }
+  }
+
+  /**
+   * Whether the caller's own listing could return {@code txn}: the same account (the muxed address
+   * when the caller has one) and the same memo, where no memo on both sides counts as equal.
+   * Mirrors {@link JdbcSep6TransactionRepo#findTransactionsWithFilters} and {@link
+   * JdbcSep6TransactionRepo#findTransactionsWithMemoAndFilters}.
+   */
+  private static boolean isVisibleTo(Sep6Transaction txn, String accountId, String accountMemo) {
+    return accountId.equals(txn.getWebAuthAccount())
+        && Objects.equals(accountMemo, txn.getWebAuthAccountMemo());
   }
 
   @Override
