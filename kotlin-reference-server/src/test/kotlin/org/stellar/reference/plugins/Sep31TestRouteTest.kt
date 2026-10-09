@@ -3,6 +3,7 @@ package org.stellar.reference.plugins
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -16,8 +17,13 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import java.util.Date
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.stellar.reference.di.AUTH_CONFIG_ENDPOINT
+import org.stellar.reference.event.processor.MAX_AUTO_ADVANCE_OPT_OUTS
+import org.stellar.reference.event.processor.Sep31EventProcessor
 import org.stellar.reference.service.sep31.ReceiveService
 
 class Sep31TestRouteTest {
@@ -77,4 +83,61 @@ class Sep31TestRouteTest {
     assertEquals(HttpStatusCode.OK, response.status)
     coVerify(timeout = 5_000) { receiveService.processReceive(transactionId) }
   }
+
+  private suspend fun ApplicationTestBuilder.skip(id: String) =
+    client.post("/sep31/transactions/$id/skip-auto-advance")
+
+  private fun uuid(i: Int) = "00000000-0000-4000-8000-%012x".format(i)
+
+  @BeforeEach fun resetOptOuts() = Sep31EventProcessor.clearAutoAdvanceOptOuts()
+
+  @Test
+  fun `skip-auto-advance registers a canonical uuid`() = routeTest {
+    val response = skip(transactionId)
+
+    assertEquals(HttpStatusCode.OK, response.status)
+    assertTrue(response.bodyAsText().contains("\"sessionId\":\"$transactionId\""))
+    assertTrue(Sep31EventProcessor.isSkippingAutoAdvance(transactionId))
+  }
+
+  @Test
+  fun `skip-auto-advance accepts an uppercase uuid`() = routeTest {
+    val id = transactionId.uppercase()
+
+    assertEquals(HttpStatusCode.OK, skip(id).status)
+    assertTrue(Sep31EventProcessor.isSkippingAutoAdvance(id))
+  }
+
+  @Test
+  fun `skip-auto-advance rejects ids that are not uuids`() = routeTest {
+    for (id in listOf("txn-1", "A".repeat(3800), "1-1-1-1-1", "${transactionId}0", "%41%41")) {
+      val response = skip(id)
+
+      assertEquals(HttpStatusCode.BadRequest, response.status, id)
+      assertTrue(response.bodyAsText().contains("Invalid transactionId: must be a UUID"))
+      assertFalse(Sep31EventProcessor.isSkippingAutoAdvance(id), id)
+    }
+  }
+
+  @Test
+  fun `skip-auto-advance answers 429 for a new id once the set is full`() = routeTest {
+    repeat(MAX_AUTO_ADVANCE_OPT_OUTS) { assertTrue(Sep31EventProcessor.skipAutoAdvance(uuid(it))) }
+
+    val response = skip(transactionId)
+
+    assertEquals(HttpStatusCode.TooManyRequests, response.status)
+    assertTrue(response.bodyAsText().contains("Opt-out limit reached"))
+    assertFalse(Sep31EventProcessor.isSkippingAutoAdvance(transactionId))
+  }
+
+  @Test
+  fun `skip-auto-advance accepts the last free slot and an already registered id when full`() =
+    routeTest {
+      repeat(MAX_AUTO_ADVANCE_OPT_OUTS - 1) { Sep31EventProcessor.skipAutoAdvance(uuid(it)) }
+
+      assertEquals(HttpStatusCode.OK, skip(transactionId).status)
+      assertEquals(HttpStatusCode.OK, skip(transactionId).status)
+      assertEquals(HttpStatusCode.OK, skip(uuid(0)).status)
+      assertEquals(HttpStatusCode.TooManyRequests, skip(uuid(MAX_AUTO_ADVANCE_OPT_OUTS)).status)
+    }
 }

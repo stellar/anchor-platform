@@ -1,6 +1,5 @@
 package org.stellar.reference.event.processor
 
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.runBlocking
 import org.stellar.anchor.api.callback.GetCustomerRequest
 import org.stellar.anchor.api.platform.*
@@ -25,11 +24,16 @@ class Sep31EventProcessor(
     // automatic advancement, instead of disabling it for every transaction. Populated only via the
     // test-only `/sep31/transactions/{id}/skip-auto-advance` route (see Sep31TestRoute.kt) -- kept
     // out of transaction data so this can't be triggered by a real anchor's own message content.
-    private val manualRpcTestTransactions = ConcurrentHashMap.newKeySet<String>()
+    private val manualRpcTestTransactions = AutoAdvanceOptOuts()
 
-    fun skipAutoAdvance(transactionId: String) {
-      manualRpcTestTransactions.add(transactionId)
-    }
+    /** Returns false, registering nothing, when the opt-out set is full. */
+    fun skipAutoAdvance(transactionId: String): Boolean =
+      manualRpcTestTransactions.register(transactionId)
+
+    internal fun isSkippingAutoAdvance(transactionId: String) =
+      manualRpcTestTransactions.contains(transactionId)
+
+    internal fun clearAutoAdvanceOptOuts() = manualRpcTestTransactions.clear()
   }
 
   override suspend fun onQuoteCreated(event: SendEventRequest) {
