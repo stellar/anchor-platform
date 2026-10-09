@@ -31,7 +31,7 @@ class EventService {
     if (txnId != null) {
       // filter events with txnId
       return receivedEvents.filter {
-        it.type != AnchorEvent.Type.QUOTE_CREATED.type && it.payload.transaction?.id == txnId
+        it.type != AnchorEvent.Type.QUOTE_CREATED.type && it.payload?.transaction?.id == txnId
       }
     }
     // return all events
