@@ -32,12 +32,14 @@ import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.PatchTransactionsRequest
 import org.stellar.anchor.api.rpc.RpcRequest
 import org.stellar.anchor.api.rpc.RpcResponse
+import org.stellar.anchor.api.sep.sep38.Sep38Context
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.auth.AuthHelper
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
 import org.stellar.anchor.client.Sep24Client
+import org.stellar.anchor.client.Sep38Client
 import org.stellar.anchor.platform.*
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.StringHelper.json
@@ -776,6 +778,390 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     }
   }
 
+  /**
+   * A SEP-38 quote of the `sep24` context for [account]. Quotes are single-use, so every test makes
+   * its own. Deposit: USD to USDC. Withdrawal: USDC to USD.
+   */
+  private fun postQuote(account: TestAccount, sellAsset: String, buyAsset: String): String =
+    Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), account.jwt)
+      .postQuote(sellAsset, QUOTE_AMOUNT, buyAsset, Sep38Context.SEP24)
+      .id
+
+  private fun postDepositQuote(account: TestAccount) =
+    postQuote(account, USD, "stellar:USDC:$USDC_GDQO_ISSUER")
+
+  private fun postWithdrawalQuote(account: TestAccount) =
+    postQuote(account, "stellar:USDC:$USDC_GDQO_ISSUER", USD)
+
+  private fun depositRequest(quoteId: String, overrides: Map<String, String> = mapOf()) =
+    mapOf(
+      "asset_code" to "USDC",
+      "asset_issuer" to USDC_GDQO_ISSUER,
+      "source_asset" to USD,
+      "amount" to QUOTE_AMOUNT,
+      "quote_id" to quoteId,
+    ) + overrides
+
+  private fun withdrawalRequest(quoteId: String, overrides: Map<String, String> = mapOf()) =
+    mapOf(
+      "asset_code" to "USDC",
+      "asset_issuer" to USDC_GDQO_ISSUER,
+      "destination_asset" to USD,
+      "amount" to QUOTE_AMOUNT,
+      "quote_id" to quoteId,
+    ) + overrides
+
+  // SEP24IF-08
+  @Test
+  fun `test sep24 deposit with a matching quote is accepted and keeps its quote_id`() {
+    val account = newAccount()
+    val quoteId = postDepositQuote(account)
+
+    val deposit = account.client.deposit(depositRequest(quoteId))
+
+    assertEquals(quoteId, getTransactionRaw(account, deposit.id).string("quote_id"))
+  }
+
+  // SEP24IF-09
+  @Test
+  fun `test sep24 withdrawal with a matching quote is accepted and keeps its quote_id`() {
+    val account = newAccount()
+    val quoteId = postWithdrawalQuote(account)
+
+    val withdrawal = account.client.withdraw(withdrawalRequest(quoteId))
+
+    assertEquals(quoteId, getTransactionRaw(account, withdrawal.id).string("quote_id"))
+  }
+
+  // SEP24IF-10
+  @Test
+  fun `test sep24 deposit and withdrawal reject an unknown quote_id`() {
+    val account = newAccount()
+
+    val deposit =
+      assertThrows<SepValidationException> {
+        account.client.deposit(depositRequest("not-a-real-quote-id"))
+      }
+    assertEquals("Quote not found", errorMessage(deposit))
+
+    val withdrawal =
+      assertThrows<SepValidationException> {
+        account.client.withdraw(withdrawalRequest("not-a-real-quote-id"))
+      }
+    assertEquals("Quote not found", errorMessage(withdrawal))
+  }
+
+  // SEP24IF-11, SEP24IF-17
+  @Test
+  fun `test sep24 deposit rejects a source_asset that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postDepositQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.deposit(depositRequest(quoteId, mapOf("source_asset" to "iso4217:CAD")))
+      }
+
+    assertEquals(
+      "source asset(iso4217:CAD) does not match quote sell asset($USD)",
+      errorMessage(ex)
+    )
+    // The rejected request did not bind the quote: the same quote is accepted with matching values.
+    assertNotNull(account.client.deposit(depositRequest(quoteId)).id)
+  }
+
+  // SEP24IF-12, SEP24IF-17
+  @Test
+  fun `test sep24 deposit rejects an asset that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postDepositQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.deposit(depositRequest(quoteId, mapOf("asset_issuer" to USDC_GBBD_ISSUER)))
+      }
+
+    assertEquals(
+      "destination asset(stellar:USDC:$USDC_GBBD_ISSUER) does not match quote buy asset(stellar:USDC:$USDC_GDQO_ISSUER)",
+      errorMessage(ex),
+    )
+    assertNotNull(account.client.deposit(depositRequest(quoteId)).id)
+  }
+
+  // SEP24IF-15, SEP24IF-17
+  @Test
+  fun `test sep24 deposit rejects an amount that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postDepositQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.deposit(depositRequest(quoteId, mapOf("amount" to "4")))
+      }
+
+    assertEquals("amount(4) does not match quote sell amount($QUOTE_AMOUNT)", errorMessage(ex))
+    assertNotNull(account.client.deposit(depositRequest(quoteId)).id)
+  }
+
+  // SEP24IF-13, SEP24IF-17
+  @Test
+  fun `test sep24 withdrawal rejects an asset that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postWithdrawalQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.withdraw(
+          withdrawalRequest(quoteId, mapOf("asset_issuer" to USDC_GBBD_ISSUER))
+        )
+      }
+
+    assertEquals(
+      "source asset(stellar:USDC:$USDC_GBBD_ISSUER) does not match quote sell asset(stellar:USDC:$USDC_GDQO_ISSUER)",
+      errorMessage(ex),
+    )
+    // The rejected request did not bind the quote: the same quote is accepted with matching values.
+    assertNotNull(account.client.withdraw(withdrawalRequest(quoteId)).id)
+  }
+
+  // SEP24IF-14, SEP24IF-17
+  @Test
+  fun `test sep24 withdrawal rejects a destination_asset that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postWithdrawalQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.withdraw(
+          withdrawalRequest(quoteId, mapOf("destination_asset" to "iso4217:CAD"))
+        )
+      }
+
+    assertEquals(
+      "destination asset(iso4217:CAD) does not match quote buy asset($USD)",
+      errorMessage(ex),
+    )
+    assertNotNull(account.client.withdraw(withdrawalRequest(quoteId)).id)
+  }
+
+  // SEP24IF-15, SEP24IF-17
+  @Test
+  fun `test sep24 withdrawal rejects an amount that conflicts with its quote`() {
+    val account = newAccount()
+    val quoteId = postWithdrawalQuote(account)
+
+    val ex =
+      assertThrows<SepValidationException> {
+        account.client.withdraw(withdrawalRequest(quoteId, mapOf("amount" to "4")))
+      }
+
+    assertEquals("amount(4) does not match quote sell amount($QUOTE_AMOUNT)", errorMessage(ex))
+    assertNotNull(account.client.withdraw(withdrawalRequest(quoteId)).id)
+  }
+
+  // SEP24IF-16
+  @Test
+  fun `test sep24 deposit rejects a quote already bound to an earlier transaction`() {
+    val account = newAccount()
+    val quoteId = postDepositQuote(account)
+    assertNotNull(account.client.deposit(depositRequest(quoteId)).id)
+
+    val ex =
+      assertThrows<SepValidationException> { account.client.deposit(depositRequest(quoteId)) }
+
+    assertEquals("quote(id=$quoteId) has already been used", errorMessage(ex))
+  }
+
+  // SEP24IF-06: read from the raw body; the SDK's object would default an absent feature to false.
+  @Test
+  fun `test sep24 info reports the claimable balances and account creation features as false`() {
+    val request =
+      Request.Builder().url("${toml.getString("TRANSFER_SERVER_SEP0024")}/info").get().build()
+
+    http.newCall(request).execute().use { response ->
+      val body = response.body?.string()
+      assertEquals(200, response.code) { "GET /info answered ${response.code}: $body" }
+      val features = JsonParser.parseString(body).asJsonObject.getAsJsonObject("features")
+      listOf("claimable_balances", "account_creation").forEach { key ->
+        val feature = features.get(key)
+        assertTrue(
+          feature != null && feature.isJsonPrimitive && feature.asJsonPrimitive.isBoolean
+        ) {
+          "features.$key must be a JSON boolean, got $feature"
+        }
+        assertFalse(feature.asBoolean) { "features.$key must be false" }
+      }
+    }
+  }
+
+  // SEP24IF-07: AP never sends a deposit as a claimable balance, so asking for one is accepted
+  // (the flag is optional) and the transaction carries no claimable_balance_id.
+  @Test
+  fun `test sep24 deposit asking for a claimable balance gets none`() {
+    val account = newAccount()
+    val deposit =
+      account.client.deposit(
+        mapOf(
+          "asset_code" to "USDC",
+          "asset_issuer" to USDC_GDQO_ISSUER,
+          "amount" to "1",
+          "claimable_balance_supported" to "true",
+        )
+      )
+
+    val txn = getTransactionRaw(account, deposit.id)
+
+    assertEquals("incomplete", txn.string("status"))
+    val claimableBalanceId = txn.get("claimable_balance_id")
+    assertTrue(claimableBalanceId == null || claimableBalanceId.isJsonNull) {
+      "claimable_balance_id must be absent or null, got $claimableBalanceId"
+    }
+  }
+
+  /**
+   * Sends [rpcJson] for [txId] and returns the responses without asserting success, for a request
+   * the platform is expected to refuse.
+   */
+  private fun sendRpcForResponses(rpcJson: String, txId: String): List<RpcResponse> {
+    val requests: List<RpcRequest> =
+      gson.fromJson(
+        rpcJson.replace("%TX_ID%", txId),
+        object : TypeToken<List<RpcRequest>>() {}.type,
+      )
+    platformApiClient.sendRpcRequest(requests).use { response ->
+      val body = response.body?.string()
+      return gson.fromJson(body, object : TypeToken<List<RpcResponse>>() {}.type)
+    }
+  }
+
+  /**
+   * A fresh deposit held for review: `incomplete` to `pending_user_transfer_start` to `on_hold`.
+   */
+  private fun createOnHoldDeposit(account: TestAccount, message: String): String {
+    val depositId = createDeposit(account)
+    sendRpc(SEP24_ON_HOLD_RPC.replace("%HOLD_MESSAGE%", message), depositId)
+    return depositId
+  }
+
+  // SEP24IF-20, SEP24IF-21
+  @Test
+  fun `test sep24 GET transaction reports on_hold and resumes when funds are received`() {
+    val account = newAccount()
+    val message = "held for review ${UUID.randomUUID()}"
+    val depositId = createOnHoldDeposit(account, message)
+
+    val held = getTransactionRaw(account, depositId)
+
+    assertEquals("on_hold", held.string("status"))
+    assertEquals(message, held.string("message"))
+    assertSep24TransactionSchema(held, Sep24SchemaCase.DEPOSIT_PENDING)
+
+    sendRpc(SEP24_FUNDS_RECEIVED_RPC, depositId)
+
+    assertEquals("pending_anchor", getTransactionRaw(account, depositId).string("status"))
+  }
+
+  // SEP24IF-22
+  @Test
+  fun `test sep24 GET transaction reports an error with its message`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+    val message = "bank rejected the transfer ${UUID.randomUUID()}"
+    sendRpc(SEP24_ERROR_RPC.replace("%ERROR_MESSAGE%", message), depositId)
+
+    val txn = getTransactionRaw(account, depositId)
+
+    assertEquals("error", txn.string("status"))
+    assertEquals(message, txn.string("message"))
+    assertSep24TransactionSchema(txn, Sep24SchemaCase.DEPOSIT_INCOMPLETE)
+  }
+
+  // SEP24IF-23
+  @Test
+  fun `test sep24 GET transaction reports an expired withdrawal with its message`() {
+    val account = newAccount()
+    val withdrawalId = createWithdrawal(account)
+    val message = "abandoned by the user ${UUID.randomUUID()}"
+    sendRpc(SEP24_EXPIRE_RPC.replace("%EXPIRE_MESSAGE%", message), withdrawalId)
+
+    val txn = getTransactionRaw(account, withdrawalId)
+
+    assertEquals("expired", txn.string("status"))
+    assertEquals(message, txn.string("message"))
+    assertSep24TransactionSchema(txn, Sep24SchemaCase.WITHDRAWAL_INCOMPLETE)
+  }
+
+  /**
+   * An amount as a number at SEP-24's maximum scale of 7, so `50` and `50.0000000` are the same
+   * amount and a failure prints it legibly.
+   */
+  private fun number(value: String): java.math.BigDecimal = java.math.BigDecimal(value).setScale(7)
+
+  private fun JsonObject.numberAt(field: String): java.math.BigDecimal = number(string(field))
+
+  // SEP24IF-25, SEP24IF-26, SEP24IF-27: SEP-24 "Amount Formulas".
+  @Test
+  fun `test sep24 GET transaction keeps the amount formulas for a refunded deposit`() {
+    val account = newAccount()
+    val depositId = createDeposit(account)
+    sendRpc(SEP24_TWO_REFUND_PAYMENTS_RPC, depositId)
+
+    val txn = getTransactionRaw(account, depositId)
+
+    // The amounts the RPCs sent. SEP-24 deprecates amount_fee in favor of fee_details, and AP only
+    // returns fee_details.
+    assertEquals(number("100"), txn.numberAt("amount_in"))
+    assertEquals(number("46"), txn.numberAt("amount_out"))
+    val fee = txn.getAsJsonObject("fee_details").numberAt("total")
+    assertEquals(number("2"), fee)
+
+    val refunds = txn.getAsJsonObject("refunds")
+    assertEquals(number("50"), refunds.numberAt("amount_refunded"))
+    assertEquals(number("2"), refunds.numberAt("amount_fee"))
+    val payments = refunds.getAsJsonArray("payments").map { it.asJsonObject }
+    assertEquals(setOf(number("30"), number("20")), payments.map { it.numberAt("amount") }.toSet())
+    assertEquals(listOf(number("1"), number("1")), payments.map { it.numberAt("fee") })
+
+    // refunds.amount_refunded = sum(payments[].amount), refunds.amount_fee = sum(payments[].fee)
+    assertEquals(
+      payments.map { it.numberAt("amount") }.reduce { a, b -> a + b },
+      refunds.numberAt("amount_refunded"),
+    )
+    assertEquals(
+      payments.map { it.numberAt("fee") }.reduce { a, b -> a + b },
+      refunds.numberAt("amount_fee"),
+    )
+    // amount_out = amount_in - amount_fee - refunds.amount_refunded - refunds.amount_fee
+    assertEquals(
+      txn.numberAt("amount_in") -
+        fee -
+        refunds.numberAt("amount_refunded") -
+        refunds.numberAt("amount_fee"),
+      txn.numberAt("amount_out"),
+    )
+  }
+
+  // SEP24IF-24
+  @Test
+  fun `test sep24 refuses to expire a deposit whose funds were received`() {
+    val account = newAccount()
+    val depositId = createOnHoldDeposit(account, "held for review ${UUID.randomUUID()}")
+
+    val responses =
+      sendRpcForResponses(
+        SEP24_EXPIRE_RPC.replace("%EXPIRE_MESSAGE%", "abandoned by the user"),
+        depositId,
+      )
+
+    assertEquals(1, responses.size)
+    assertEquals(
+      "RPC method[notify_transaction_expired] is not supported. " +
+        "Status[on_hold], kind[deposit], protocol[24], funds received[true]",
+      responses.single().error?.message,
+    )
+    assertEquals("on_hold", getTransactionRaw(account, depositId).string("status"))
+  }
+
   @Test
   fun `test sep24 GET transaction returns a pending deposit in the SEP-24 shape`() {
     val account = newAccount()
@@ -986,6 +1372,11 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   }
 }
 
+/** The sell amount of every quote and the `amount` of every request that uses one. */
+private const val QUOTE_AMOUNT = "5"
+
+private const val USD = "iso4217:USD"
+
 private const val USDC_GDQO_ISSUER = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
 
 /** The second USDC issuer configured with SEP-24 enabled. */
@@ -1060,6 +1451,158 @@ private const val SEP24_PENDING_DEPOSIT_RPC =
       },
       "fee_details": { "total": "5", "asset": "iso4217:USD" },
       "amount_expected": { "amount": "100" }
+    }
+  }
+]
+"""
+
+/**
+ * Holds a fresh SEP-24 deposit for review. `%HOLD_MESSAGE%` is replaced by the test, so the message
+ * read back through `GET /transaction` is one this test chose.
+ */
+private const val SEP24_ON_HOLD_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "request_offchain_funds",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "pending deposit fixture",
+      "amount_in": { "amount": "100", "asset": "iso4217:USD" },
+      "amount_out": {
+        "amount": "95",
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      },
+      "fee_details": { "total": "5", "asset": "iso4217:USD" },
+      "amount_expected": { "amount": "100" }
+    }
+  },
+  {
+    "id": "2",
+    "method": "notify_transaction_on_hold",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "%HOLD_MESSAGE%"
+    }
+  }
+]
+"""
+
+/** The anchor clears the hold: the held deposit's funds are confirmed received. */
+private const val SEP24_FUNDS_RECEIVED_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "notify_offchain_funds_received",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "funds received after review",
+      "external_transaction_id": "ext-on-hold-fixture",
+      "amount_in": { "amount": "100" }
+    }
+  }
+]
+"""
+
+/** The anchor gives up on a transaction that has not moved yet. */
+private const val SEP24_ERROR_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "notify_transaction_error",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "%ERROR_MESSAGE%"
+    }
+  }
+]
+"""
+
+/**
+ * A deposit of 100 USD with a fee of 2, paid out as 46 USDC, then refunded in two payments (30 with
+ * a fee of 1, and 20 with a fee of 1): 100 - 2 - 50 - 2 = 46.
+ */
+private const val SEP24_TWO_REFUND_PAYMENTS_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "request_offchain_funds",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "refund fixture: requesting funds",
+      "amount_in": { "amount": "100", "asset": "iso4217:USD" },
+      "amount_out": {
+        "amount": "46",
+        "asset": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      },
+      "fee_details": { "total": "2", "asset": "iso4217:USD" },
+      "amount_expected": { "amount": "100" }
+    }
+  },
+  {
+    "id": "2",
+    "method": "notify_offchain_funds_received",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "refund fixture: funds received",
+      "external_transaction_id": "ext-refund-fixture",
+      "amount_in": { "amount": "100" },
+      "amount_out": { "amount": "46" },
+      "fee_details": { "total": "2", "asset": "iso4217:USD" }
+    }
+  },
+  {
+    "id": "3",
+    "method": "notify_refund_sent",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "refund fixture: first refund",
+      "refund": {
+        "id": "refund-1",
+        "amount": { "amount": "30", "asset": "iso4217:USD" },
+        "amount_fee": { "amount": "1", "asset": "iso4217:USD" }
+      }
+    }
+  },
+  {
+    "id": "4",
+    "method": "notify_refund_sent",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "refund fixture: second refund",
+      "refund": {
+        "id": "refund-2",
+        "amount": { "amount": "20", "asset": "iso4217:USD" },
+        "amount_fee": { "amount": "1", "asset": "iso4217:USD" }
+      }
+    }
+  }
+]
+"""
+
+/** `expired` means the funds never arrived, so the platform refuses it once they have. */
+private const val SEP24_EXPIRE_RPC =
+  """
+[
+  {
+    "id": "1",
+    "method": "notify_transaction_expired",
+    "jsonrpc": "2.0",
+    "params": {
+      "transaction_id": "%TX_ID%",
+      "message": "%EXPIRE_MESSAGE%"
     }
   }
 ]

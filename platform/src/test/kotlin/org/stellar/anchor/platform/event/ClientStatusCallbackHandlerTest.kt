@@ -6,13 +6,18 @@ import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
+import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.*
 import java.util.concurrent.TimeUnit
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okio.Buffer
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -149,6 +154,38 @@ class ClientStatusCallbackHandlerTest {
     val signatureToVerify = signer.sign(payloadToVerify.toByteArray())
 
     Assertions.assertArrayEquals(decodedSignature, signatureToVerify)
+  }
+
+  // SEP24IF-28..31, SEP24IF-35: the signature a wallet server verifies is bound to host:port, a
+  // fresh timestamp
+  // and the exact body; the test checks it with the public key only, as a wallet server would.
+  @Test
+  fun `test request signature verifies with the public key over host and port`() {
+    val body = """{"transaction":{"id":"txn-1","status":"completed"}}"""
+    val verifier = KeyPair.fromAccountId(signer.accountId)
+    val before = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())
+
+    val request =
+      ClientStatusCallbackHandler.buildHttpRequest(
+        signer,
+        body,
+        "http://wallet.example:8092/callbacks/sep24",
+      )
+
+    val after = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())
+    // The wallet server verifies the bytes it receives, so verify over the body the request
+    // carries.
+    val sentBody = Buffer().also { request.body!!.writeTo(it) }.readUtf8()
+    assertEquals(body, sentBody)
+    val header = request.header("Signature")!!
+    val match = Regex("^t=(\\d+), s=([A-Za-z0-9+/]+=*)$").matchEntire(header)
+    assertNotNull(match, "unexpected Signature header shape: $header")
+    val (t, s) = match!!.destructured
+    val signature = Base64.getDecoder().decode(s)
+
+    assertTrue(verifier.verify("$t.wallet.example:8092.$sentBody".toByteArray(), signature))
+    assertFalse(verifier.verify("$t.wallet.example.$sentBody".toByteArray(), signature))
+    assertTrue(t.toLong() in before..after, "t=$t outside [$before, $after]")
   }
 
   @Test
@@ -839,6 +876,74 @@ class ClientStatusCallbackHandlerTest {
       "Receiver routing number",
       sep31Txn.requiredInfoUpdates.transaction["receiver_routing_number"]!!.description,
     )
+  }
+
+  // The wallet server verifies the signature over the UTF-8 bytes of the body it receives. A JVM
+  // whose default charset is not UTF-8 (java 17 with no LANG set, as in a bare container) used to
+  // sign different bytes for any non-ASCII character. Gradle forces UTF-8 on the test JVM, so the
+  // signing runs in a child JVM started with an ASCII default.
+  @Test
+  fun `test request signature is computed over UTF-8 bytes whatever the default charset`() {
+    val keyPair = KeyPair.random()
+    val java = File(System.getProperty("java.home"), "bin/java").path
+    val process =
+      ProcessBuilder(
+          java,
+          "-Dfile.encoding=US-ASCII",
+          "-Dsun.jnu.encoding=US-ASCII",
+          "-cp",
+          System.getProperty("java.class.path"),
+          CallbackSigningProbe::class.java.name,
+          String(keyPair.secretSeed),
+        )
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().readText()
+    assertTrue(process.waitFor(60, TimeUnit.SECONDS)) { "probe JVM did not finish: $output" }
+    assertEquals(0, process.exitValue()) { "probe JVM failed: $output" }
+
+    val lines = output.lines().associate { it.substringBefore("=") to it.substringAfter("=") }
+    val header = lines["SIGNATURE"]!!
+    val match = Regex("^t=(\\d+), s=([A-Za-z0-9+/]+=*)$").matchEntire(header)
+    assertNotNull(match, "unexpected Signature header: $header")
+    val (t, s) = match!!.destructured
+
+    // The body carries the UTF-8 bytes of the payload, and the signature covers the same bytes.
+    assertEquals(hex(NON_ASCII_PAYLOAD.toByteArray(StandardCharsets.UTF_8)), lines["BODY_HEX"])
+    val signedText = "$t.wallet.example:8092.$NON_ASCII_PAYLOAD"
+    val verifier = KeyPair.fromAccountId(keyPair.accountId)
+    assertTrue(
+      verifier.verify(signedText.toByteArray(StandardCharsets.UTF_8), Base64.getDecoder().decode(s))
+    ) {
+      "the signature must verify over the UTF-8 bytes of the signed text"
+    }
+  }
+
+  private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
+}
+
+/**
+ * A payload with a character outside ASCII, written with an escape so no source encoding matters.
+ */
+const val NON_ASCII_PAYLOAD = "{\"message\":\"pagamento n\u00e3o confirmado\"}"
+
+/**
+ * Runs in a child JVM: signs [NON_ASCII_PAYLOAD] with the production code and prints the header and
+ * the request body's bytes, so the parent can check them under a non-UTF-8 default charset.
+ */
+object CallbackSigningProbe {
+  @JvmStatic
+  fun main(args: Array<String>) {
+    val signer = KeyPair.fromSecretSeed(args[0])
+    val request =
+      ClientStatusCallbackHandler.buildHttpRequest(
+        signer,
+        NON_ASCII_PAYLOAD,
+        "http://wallet.example:8092/callbacks/sep24",
+      )
+    val body = okio.Buffer().also { request.body!!.writeTo(it) }.readByteArray()
+    println("SIGNATURE=" + request.header("Signature"))
+    println("BODY_HEX=" + body.joinToString("") { "%02x".format(it) })
   }
 }
 

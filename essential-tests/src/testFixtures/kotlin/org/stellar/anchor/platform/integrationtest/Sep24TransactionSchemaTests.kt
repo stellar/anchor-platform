@@ -160,9 +160,14 @@ class Sep24TransactionSchemaTests {
     )
   }
 
+  // SEP24IF-19
   @Test
   fun `rejects a status outside the SEP-24 enum`() {
-    assertRejected(pendingDeposit().with("status", "\"on_hold\""), DEPOSIT_PENDING, "status")
+    assertRejected(
+      pendingDeposit().with("status", "\"pending_customer_info_update\""),
+      DEPOSIT_PENDING,
+      "status",
+    )
   }
 
   @Test
@@ -305,7 +310,7 @@ class Sep24TransactionSchemaTests {
   }
 
   @Test
-  fun `accepts each of the 15 SEP-24 statuses`() {
+  fun `accepts each of the 15 statuses stellar-anchor-tests lists`() {
     listOf(
         "incomplete",
         "pending_anchor",
@@ -329,6 +334,16 @@ class Sep24TransactionSchemaTests {
           DEPOSIT_PENDING,
         )
       }
+  }
+
+  // SEP24IF-18: SEP-24 lists 16 statuses; stellar-anchor-tests' schema predates `on_hold`.
+  @Test
+  fun `accepts on_hold, which SEP-24 lists`() {
+    assertSep24TransactionSchema(pendingDeposit().with("status", "\"on_hold\""), DEPOSIT_PENDING)
+    assertSep24TransactionSchema(
+      pendingWithdrawal().with("status", "\"on_hold\""),
+      WITHDRAWAL_PENDING_USER_TRANSFER_START,
+    )
   }
 
   // S24CV-18: the more_info_url query carries a JWT, so no failure message may print it.

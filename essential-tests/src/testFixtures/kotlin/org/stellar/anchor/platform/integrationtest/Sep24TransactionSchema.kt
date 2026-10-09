@@ -37,6 +37,7 @@ private val SEP24_STATUSES =
     "pending_user",
     "pending_user_transfer_start",
     "pending_user_transfer_complete",
+    "on_hold",
     "completed",
     "refunded",
     "expired",
