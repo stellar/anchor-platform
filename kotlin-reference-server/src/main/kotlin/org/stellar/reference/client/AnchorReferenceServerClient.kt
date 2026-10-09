@@ -99,4 +99,25 @@ class AnchorReferenceServerClient(val endpoint: Url) {
       )
     }
   }
+
+  // Test-only: opts a SEP-6 transaction out of Sep6EventProcessor's automatic advancement, for a
+  // test that drives it through RPC calls itself instead (see Sep6TestRoute.kt). Same contract as
+  // skipSep31AutoAdvance: a non-2xx response fails loudly instead of degrading into the race.
+  suspend fun skipSep6AutoAdvance(transactionId: String) {
+    val response =
+      client.post {
+        url {
+          this.protocol = endpoint.protocol
+          host = endpoint.host
+          port = endpoint.port
+          encodedPath = "/sep6/transactions/$transactionId/skip-auto-advance"
+        }
+      }
+    if (!response.status.isSuccess()) {
+      throw IllegalStateException(
+        "Failed to register transaction($transactionId) to skip auto-advance: " +
+          "${response.status}"
+      )
+    }
+  }
 }
