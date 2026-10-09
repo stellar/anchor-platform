@@ -9,6 +9,7 @@ import io.ktor.http.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.sep.sep12.Sep12PutCustomerResponse
@@ -18,6 +19,7 @@ import org.stellar.sdk.KeyPair
 import org.stellar.walletsdk.anchor.auth
 import org.stellar.walletsdk.horizon.SigningKeyPair
 
+@Order(RUN_AFTER_PLATFORM_API_TESTS)
 open class Sep12Tests : IntegrationTestBase(TestConfig()) {
   init {
     runBlocking {

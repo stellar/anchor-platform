@@ -4,6 +4,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.Executors
 import kotlin.test.assertEquals
+import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.exception.SepException
@@ -26,6 +27,7 @@ import org.stellar.anchor.platform.printResponse
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.KeyPair
 
+@Order(RUN_AFTER_PLATFORM_API_TESTS)
 class Sep38Tests : IntegrationTestBase(TestConfig()) {
   private val sep38Client: Sep38Client =
     Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), this.token.token)
