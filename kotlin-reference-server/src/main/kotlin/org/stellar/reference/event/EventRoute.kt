@@ -7,11 +7,14 @@ import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.utils.io.core.readBytes
 import org.apache.hc.core5.http.HttpStatus
 import org.stellar.anchor.api.callback.SendEventResponse
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.reference.data.SendEventRequest
 import org.stellar.reference.di.AUTH_CONFIG_ENDPOINT
+
+const val MAX_EVENT_BODY_BYTES = 1_048_576
 
 fun Route.event(eventService: EventService, enableTestEndpoints: Boolean) {
   val gson: Gson = GsonUtils.getInstance()
@@ -20,7 +23,17 @@ fun Route.event(eventService: EventService, enableTestEndpoints: Boolean) {
     route("/event") {
       // The `POST /event` endpoint of the Callback API to receive an event.
       post {
-        val receivedEventJson = call.receive<String>()
+        // Read at most MAX_EVENT_BODY_BYTES + 1 bytes: enough to tell that the body is too
+        // large, without buffering an attacker-sized body (a chunked body has no Content-Length).
+        val bodyBytes = call.receiveChannel().readRemaining(MAX_EVENT_BODY_BYTES + 1L).readBytes()
+        if (bodyBytes.size > MAX_EVENT_BODY_BYTES) {
+          call.respond(
+            HttpStatusCode.PayloadTooLarge,
+            "Event body exceeds $MAX_EVENT_BODY_BYTES bytes"
+          )
+          return@post
+        }
+        val receivedEventJson = String(bodyBytes, Charsets.UTF_8)
         val receivedEvent = gson.fromJson(receivedEventJson, SendEventRequest::class.java)
         eventService.processEvent(receivedEvent)
         call.respond(gson.toJson(SendEventResponse(HttpStatus.SC_OK, "event processed")))
