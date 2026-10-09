@@ -310,8 +310,8 @@ public class Sep24Service {
     }
 
     if (assetService.getAsset(assetCode, assetIssuer) == null) {
-      infoF("The asset_code of the deposit request must be set.");
-      throw new SepValidationException("The asset_code of the deposit request must be set");
+      infoF("invalid operation for asset {}", assetCode);
+      throw new SepValidationException(String.format("invalid operation for asset %s", assetCode));
     }
 
     if (!(assetService.getAsset(assetCode, assetIssuer) instanceof StellarAssetInfo asset)) {
@@ -430,6 +430,11 @@ public class Sep24Service {
       throw new SepNotAuthorizedException("missing token");
     }
 
+    if (txReq == null) {
+      info("missing request object");
+      throw new SepValidationException("missing request object");
+    }
+
     String assetCode = txReq.getAssetCode();
     String assetIssuer = null;
 
@@ -452,7 +457,8 @@ public class Sep24Service {
     }
     String tokenAccount = Objects.requireNonNullElse(token.getMuxedAccount(), token.getAccount());
     List<Sep24Transaction> txns =
-        txnStore.findTransactions(tokenAccount, token.getAccountMemo(), txReq);
+        txnStore.findTransactions(
+            tokenAccount, token.getAccountMemo(), assetCode, assetIssuer, txReq);
     GetTransactionsResponse result = new GetTransactionsResponse();
     List<TransactionResponse> list = new ArrayList<>();
     debugF("found {} transactions", txns.size());

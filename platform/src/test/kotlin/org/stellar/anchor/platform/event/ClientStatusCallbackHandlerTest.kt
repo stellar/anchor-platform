@@ -6,13 +6,18 @@ import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
+import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.*
 import java.util.concurrent.TimeUnit
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okio.Buffer
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -31,6 +36,8 @@ import org.stellar.anchor.api.sep.sep24.TransactionResponse
 import org.stellar.anchor.api.sep.sep6.Sep6TransactionResponse
 import org.stellar.anchor.api.shared.Amount
 import org.stellar.anchor.api.shared.FeeDetails
+import org.stellar.anchor.api.shared.RefundPayment
+import org.stellar.anchor.api.shared.Refunds
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.client.ClientConfig.CallbackUrls
 import org.stellar.anchor.client.CustodialClient
@@ -147,6 +154,38 @@ class ClientStatusCallbackHandlerTest {
     val signatureToVerify = signer.sign(payloadToVerify.toByteArray())
 
     Assertions.assertArrayEquals(decodedSignature, signatureToVerify)
+  }
+
+  // SEP24IF-28..31, SEP24IF-35: the signature a wallet server verifies is bound to host:port, a
+  // fresh timestamp
+  // and the exact body; the test checks it with the public key only, as a wallet server would.
+  @Test
+  fun `test request signature verifies with the public key over host and port`() {
+    val body = """{"transaction":{"id":"txn-1","status":"completed"}}"""
+    val verifier = KeyPair.fromAccountId(signer.accountId)
+    val before = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())
+
+    val request =
+      ClientStatusCallbackHandler.buildHttpRequest(
+        signer,
+        body,
+        "http://wallet.example:8092/callbacks/sep24",
+      )
+
+    val after = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())
+    // The wallet server verifies the bytes it receives, so verify over the body the request
+    // carries.
+    val sentBody = Buffer().also { request.body!!.writeTo(it) }.readUtf8()
+    assertEquals(body, sentBody)
+    val header = request.header("Signature")!!
+    val match = Regex("^t=(\\d+), s=([A-Za-z0-9+/]+=*)$").matchEntire(header)
+    assertNotNull(match, "unexpected Signature header shape: $header")
+    val (t, s) = match!!.destructured
+    val signature = Base64.getDecoder().decode(s)
+
+    assertTrue(verifier.verify("$t.wallet.example:8092.$sentBody".toByteArray(), signature))
+    assertFalse(verifier.verify("$t.wallet.example.$sentBody".toByteArray(), signature))
+    assertTrue(t.toLong() in before..after, "t=$t outside [$before, $after]")
   }
 
   @Test
@@ -301,6 +340,89 @@ class ClientStatusCallbackHandlerTest {
     assertEquals("client.com", sep24Txn.clientDomain)
     assertEquals("quote-id", sep24Txn.quoteId)
     assertEquals("message", sep24Txn.message)
+  }
+
+  @Test
+  fun `fromSep24Txn restores the request asset from the expected amount asset`() {
+    fun txnWithExpectedAsset(asset: String) =
+      GetTransactionResponse.builder()
+        .id("sep24-id")
+        .sep(SEP_24)
+        .kind(Kind.WITHDRAWAL)
+        .status(COMPLETED)
+        .amountExpected(Amount("10", asset))
+        .build()
+
+    val issued = ClientStatusCallbackHandler.fromSep24Txn(txnWithExpectedAsset(USDC_ID))
+    assertEquals("USDC", issued.requestAssetCode)
+    assertEquals(USDC_ISSUER, issued.requestAssetIssuer)
+
+    val native = ClientStatusCallbackHandler.fromSep24Txn(txnWithExpectedAsset("stellar:native"))
+    assertEquals("native", native.requestAssetCode)
+    Assertions.assertNull(native.requestAssetIssuer)
+
+    val fiat = ClientStatusCallbackHandler.fromSep24Txn(txnWithExpectedAsset("iso4217:USD"))
+    Assertions.assertNull(fiat.requestAssetCode)
+    Assertions.assertNull(fiat.requestAssetIssuer)
+  }
+
+  @Test
+  fun `buildHttpRequest delivers a SEP-24 callback for a completed withdrawal with refund payments`() {
+    // Resolves an asset exactly as the real service does: a known code and issuer, otherwise null.
+    val usdc = mockk<AssetInfo>(relaxed = true)
+    every { usdc.significantDecimals } returns 7
+    every { assetService.getAsset(any(), any()) } answers
+      {
+        if (firstArg<String?>() == "USDC" && secondArg<String?>() == USDC_ISSUER) usdc else null
+      }
+    val refundedEvent = AnchorEvent()
+    refundedEvent.transaction =
+      GetTransactionResponse.builder()
+        .id("sep24-id")
+        .sep(SEP_24)
+        .kind(Kind.WITHDRAWAL)
+        .status(COMPLETED)
+        .startedAt(java.time.Instant.now())
+        .amountExpected(Amount("1", USDC_ID))
+        .amountIn(Amount("1", USDC_ID))
+        .amountOut(Amount("1", "iso4217:USD"))
+        .refunds(
+          Refunds.builder()
+            .amountRefunded(Amount("1", USDC_ID))
+            .amountFee(Amount("0.1", USDC_ID))
+            .payments(
+              arrayOf(
+                RefundPayment.builder()
+                  .id("1")
+                  .idType(RefundPayment.IdType.STELLAR)
+                  .amount(Amount("0.6", USDC_ID))
+                  .fee(Amount("0.1", USDC_ID))
+                  .build(),
+                RefundPayment.builder()
+                  .id("2")
+                  .idType(RefundPayment.IdType.STELLAR)
+                  .amount(Amount("0.4", USDC_ID))
+                  .fee(Amount("0", USDC_ID))
+                  .build(),
+              )
+            )
+            .build()
+        )
+        .build()
+
+    val request = handler.buildHttpRequest(signer, refundedEvent)
+
+    assertNotNull(request)
+    val body = okio.Buffer().also { request!!.body!!.writeTo(it) }.readUtf8()
+    val transaction = JsonParser.parseString(body).asJsonObject.getAsJsonObject("transaction")
+    assertEquals("sep24-id", transaction.get("id").asString)
+    assertEquals(true, transaction.get("refunded").asBoolean)
+    val refunds = transaction.getAsJsonObject("refunds")
+    assertEquals(
+      0,
+      java.math.BigDecimal("1").compareTo(refunds.get("amount_refunded").asBigDecimal)
+    )
+    assertEquals(2, refunds.getAsJsonArray("payments").size())
   }
 
   @Test
@@ -755,4 +877,75 @@ class ClientStatusCallbackHandlerTest {
       sep31Txn.requiredInfoUpdates.transaction["receiver_routing_number"]!!.description,
     )
   }
+
+  // The wallet server verifies the signature over the UTF-8 bytes of the body it receives. A JVM
+  // whose default charset is not UTF-8 (java 17 with no LANG set, as in a bare container) used to
+  // sign different bytes for any non-ASCII character. Gradle forces UTF-8 on the test JVM, so the
+  // signing runs in a child JVM started with an ASCII default.
+  @Test
+  fun `test request signature is computed over UTF-8 bytes whatever the default charset`() {
+    val keyPair = KeyPair.random()
+    val java = File(System.getProperty("java.home"), "bin/java").path
+    val process =
+      ProcessBuilder(
+          java,
+          "-Dfile.encoding=US-ASCII",
+          "-Dsun.jnu.encoding=US-ASCII",
+          "-cp",
+          System.getProperty("java.class.path"),
+          CallbackSigningProbe::class.java.name,
+          String(keyPair.secretSeed),
+        )
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().readText()
+    assertTrue(process.waitFor(60, TimeUnit.SECONDS)) { "probe JVM did not finish: $output" }
+    assertEquals(0, process.exitValue()) { "probe JVM failed: $output" }
+
+    val lines = output.lines().associate { it.substringBefore("=") to it.substringAfter("=") }
+    val header = lines["SIGNATURE"]!!
+    val match = Regex("^t=(\\d+), s=([A-Za-z0-9+/]+=*)$").matchEntire(header)
+    assertNotNull(match, "unexpected Signature header: $header")
+    val (t, s) = match!!.destructured
+
+    // The body carries the UTF-8 bytes of the payload, and the signature covers the same bytes.
+    assertEquals(hex(NON_ASCII_PAYLOAD.toByteArray(StandardCharsets.UTF_8)), lines["BODY_HEX"])
+    val signedText = "$t.wallet.example:8092.$NON_ASCII_PAYLOAD"
+    val verifier = KeyPair.fromAccountId(keyPair.accountId)
+    assertTrue(
+      verifier.verify(signedText.toByteArray(StandardCharsets.UTF_8), Base64.getDecoder().decode(s))
+    ) {
+      "the signature must verify over the UTF-8 bytes of the signed text"
+    }
+  }
+
+  private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
 }
+
+/**
+ * A payload with a character outside ASCII, written with an escape so no source encoding matters.
+ */
+const val NON_ASCII_PAYLOAD = "{\"message\":\"pagamento n\u00e3o confirmado\"}"
+
+/**
+ * Runs in a child JVM: signs [NON_ASCII_PAYLOAD] with the production code and prints the header and
+ * the request body's bytes, so the parent can check them under a non-UTF-8 default charset.
+ */
+object CallbackSigningProbe {
+  @JvmStatic
+  fun main(args: Array<String>) {
+    val signer = KeyPair.fromSecretSeed(args[0])
+    val request =
+      ClientStatusCallbackHandler.buildHttpRequest(
+        signer,
+        NON_ASCII_PAYLOAD,
+        "http://wallet.example:8092/callbacks/sep24",
+      )
+    val body = okio.Buffer().also { request.body!!.writeTo(it) }.readByteArray()
+    println("SIGNATURE=" + request.header("Signature"))
+    println("BODY_HEX=" + body.joinToString("") { "%02x".format(it) })
+  }
+}
+
+private const val USDC_ISSUER = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+private const val USDC_ID = "stellar:USDC:$USDC_ISSUER"
