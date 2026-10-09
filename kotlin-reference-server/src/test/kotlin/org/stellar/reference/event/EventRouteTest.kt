@@ -138,6 +138,39 @@ class EventRouteTest {
   }
 
   @Test
+  fun `timestamp outside LocalDateTime range returns 400`() = routeTest {
+    val response = post(body(id, type, """"timestamp":"+1000000000-12-31T23:59:59Z"""", payload))
+
+    assertEquals(HttpStatusCode.BadRequest, response.status)
+    assertEquals(
+      """{"code":400,"message":"Invalid event: timestamp must be an ISO-8601 instant"}""",
+      response.bodyAsText(),
+    )
+    coVerify(exactly = 0) { eventService.processEvent(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        """"payload":{"transaction":{"id":"t","started_at":"garbage"}}""",
+        """"payload":{"transaction":{"id":"t","started_at":{}}}""",
+        """"payload":{"transaction":{"id":"t","transfer_received_at":"x"}}""",
+        """"payload":{"quote":{"id":"q","expires_at":"garbage"}}""",
+      ]
+  )
+  fun `invalid nested Instant field returns 400 malformed JSON`(payloadField: String) = routeTest {
+    val response = post(body(id, type, timestamp, payloadField))
+
+    assertEquals(HttpStatusCode.BadRequest, response.status)
+    assertEquals(
+      """{"code":400,"message":"Invalid event: malformed JSON"}""",
+      response.bodyAsText(),
+    )
+    coVerify(exactly = 0) { eventService.processEvent(any()) }
+  }
+
+  @Test
   fun `empty body returns 400`() = routeTest {
     val response = post("")
 

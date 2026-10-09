@@ -1,15 +1,16 @@
 package org.stellar.reference.event
 
 import com.google.gson.Gson
-import com.google.gson.JsonParseException
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import java.time.DateTimeException
 import java.time.Instant
-import java.time.format.DateTimeParseException
+import java.time.LocalDateTime
+import java.time.ZoneId
 import org.apache.hc.core5.http.HttpStatus
 import org.stellar.anchor.api.callback.SendEventResponse
 import org.stellar.anchor.util.GsonUtils
@@ -73,7 +74,9 @@ private fun parseEvent(gson: Gson, json: String): ParsedEvent {
   val event =
     try {
       gson.fromJson(json, SendEventRequest::class.java)
-    } catch (e: JsonParseException) {
+    } catch (e: RuntimeException) {
+      // GsonUtils' converters (e.g. InstantConverter) throw DateTimeParseException and similar
+      // instead of JsonParseException, so any failure here means the body is malformed.
       null
     } ?: return ParsedEvent(null, "Invalid event: malformed JSON")
 
@@ -88,8 +91,10 @@ private fun parseEvent(gson: Gson, json: String): ParsedEvent {
   if (missing != null) return ParsedEvent(null, "Invalid event: $missing is required")
 
   try {
-    Instant.parse(event.timestamp)
-  } catch (e: DateTimeParseException) {
+    // EventService converts the timestamp the same way; validating the same conversion keeps
+    // values inside Instant's range but outside LocalDateTime's from failing later with a 500.
+    LocalDateTime.ofInstant(Instant.parse(event.timestamp), ZoneId.systemDefault())
+  } catch (e: DateTimeException) {
     return ParsedEvent(null, "Invalid event: timestamp must be an ISO-8601 instant")
   }
   return ParsedEvent(event, null)
