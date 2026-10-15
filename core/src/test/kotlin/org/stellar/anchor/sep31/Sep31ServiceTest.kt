@@ -37,6 +37,8 @@ import org.stellar.anchor.api.shared.StellarId
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.JwtService
+import org.stellar.anchor.client.ClientService
+import org.stellar.anchor.client.CustodialClient
 import org.stellar.anchor.config.*
 import org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_RECEIVE
 import org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_SEND
@@ -227,6 +229,7 @@ class Sep31ServiceTest {
   @MockK(relaxed = true) lateinit var rateIntegration: RateIntegration
   @MockK(relaxed = true) lateinit var customerIntegration: CustomerIntegration
   @MockK(relaxed = true) lateinit var customerIdOwnerStore: Sep31CustomerIdOwnerStore
+  @MockK(relaxed = true) lateinit var clientService: ClientService
   @MockK(relaxed = true) lateinit var eventService: EventService
   @MockK(relaxed = true) lateinit var eventSession: Session
 
@@ -267,6 +270,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
 
     request = gson.fromJson(requestJson, Sep31PostTransactionRequest::class.java)
@@ -966,6 +970,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
     every { rateIntegration.getRate(any()) } returns
       GetRateResponse(
@@ -1011,6 +1016,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
     every { rateIntegration.getRate(any()) } returns
       GetRateResponse(
@@ -1157,6 +1163,39 @@ class Sep31ServiceTest {
         null,
         true,
       )
+    }
+  }
+
+  @Test
+  fun `test postTransaction claims and verifies a custodial client under the client name for every signing key`() {
+    useQuotesNotSupportedAssetService()
+    val secondSigningKey = "GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"
+    every { clientService.getClientConfigByName("vibrant") } returns
+      CustodialClient.builder()
+        .name("vibrant")
+        .signingKeys(setOf(TestHelper.TEST_ACCOUNT, secondSigningKey))
+        .build()
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    for (account in listOf(TestHelper.TEST_ACCOUNT, secondSigningKey)) {
+      val jwtToken = TestHelper.createWebAuthJwt(account = account)
+      jwtToken.clientName = "vibrant"
+      assertDoesNotThrow {
+        sep31Service.postTransaction(
+          jwtToken,
+          ownershipTestRequest(senderId = "generic-sender", receiverId = "shared-receiver-id"),
+        )
+      }
+    }
+
+    verify(exactly = 2) {
+      customerIdOwnerStore.verifyOrClaim("shared-receiver-id", "vibrant", null, true)
+    }
+    verify(exactly = 0) {
+      customerIdOwnerStore.verifyOrClaim(any(), match { it.startsWith("vibrant:") }, any(), any())
     }
   }
 
@@ -1815,6 +1854,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
 
     val senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"
@@ -1937,6 +1977,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
 
     val sep12 = infoOnlyService.info.receive["USDC"]!!.sep12
@@ -1989,6 +2030,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
 
     val fields = infoOnlyService.info.receive["USDC"]!!.fields

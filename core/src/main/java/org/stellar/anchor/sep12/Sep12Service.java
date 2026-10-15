@@ -24,8 +24,10 @@ import org.stellar.anchor.api.sep.sep12.*;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.auth.WebAuthJwt;
+import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep31.CustomerOwnershipReconciliation;
+import org.stellar.anchor.sep31.OwnerKeyResolver;
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.MemoHelper;
@@ -42,17 +44,20 @@ public class Sep12Service {
   private final PlatformApiClient platformApiClient;
   private final EventService.Session eventSession;
   private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
+  private final OwnerKeyResolver ownerKeyResolver;
 
   public Sep12Service(
       CustomerIntegration customerIntegration,
       PlatformApiClient platformApiClient,
       EventService eventService,
-      Sep31CustomerIdOwnerStore customerIdOwnerStore) {
+      Sep31CustomerIdOwnerStore customerIdOwnerStore,
+      ClientService clientService) {
     this.customerIntegration = customerIntegration;
     this.platformApiClient = platformApiClient;
     this.eventSession =
         eventService.createSession(this.getClass().getName(), EventService.EventQueue.TRANSACTION);
     this.customerIdOwnerStore = customerIdOwnerStore;
+    this.ownerKeyResolver = new OwnerKeyResolver(clientService);
 
     Log.info("Sep12Service initialized.");
   }
@@ -136,9 +141,10 @@ public class Sep12Service {
           && existing.getId() != null
           && customerIdOwnerStore.isClaimed(existing.getId())
           && !customerIdOwnerStore.verify(
-              existing.getId(), token.getOwnerKey(), token.getOwnerMemo())
+              existing.getId(), ownerKeyResolver.ownerKey(token), token.getOwnerMemo())
           && !CustomerOwnershipReconciliation.tryReconcile(
               customerIdOwnerStore,
+              ownerKeyResolver,
               customerIntegration,
               existing.getId(),
               token,
@@ -155,7 +161,7 @@ public class Sep12Service {
 
     if (isNewCustomer) {
       String ownerMemo = token.getOwnerMemo();
-      String claimant = token.getOwnerKey();
+      String claimant = ownerKeyResolver.ownerKey(token);
 
       if (!customerIdOwnerStore.isClaimed(updatedCustomer.getId())) {
         GetCustomerResponse callbackCustomer;
@@ -184,6 +190,7 @@ public class Sep12Service {
       if (!owned
           && !CustomerOwnershipReconciliation.tryReconcile(
               customerIdOwnerStore,
+              ownerKeyResolver,
               customerIntegration,
               updatedCustomer.getId(),
               token,
@@ -302,11 +309,12 @@ public class Sep12Service {
       if (customerIdOwnerStore.isClaimed(requestBase.getId())) {
         if (!customerIdOwnerStore.verify(
                 requestBase.getId(),
-                token.getOwnerKey(),
+                ownerKeyResolver.ownerKey(token),
                 token.getOwnerMemo(),
                 isSep31TransactionLookup)
             && !CustomerOwnershipReconciliation.tryReconcile(
                 customerIdOwnerStore,
+                ownerKeyResolver,
                 customerIntegration,
                 requestBase.getId(),
                 token,

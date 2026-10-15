@@ -53,6 +53,7 @@ import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.WebAuthJwt;
+import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.event.EventService;
@@ -78,6 +79,7 @@ public class Sep31Service {
   final ExchangeAmountsCalculator exchangeAmountsCalculator;
   private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
   private final CustomerIntegration customerIntegration;
+  private final OwnerKeyResolver ownerKeyResolver;
 
   public Sep31Service(
       LanguageConfig languageConfig,
@@ -90,7 +92,8 @@ public class Sep31Service {
       Clock clock,
       ExchangeAmountsCalculator exchangeAmountsCalculator,
       Sep31CustomerIdOwnerStore customerIdOwnerStore,
-      CustomerIntegration customerIntegration) {
+      CustomerIntegration customerIntegration,
+      ClientService clientService) {
     debug("sep31Config:", sep31Config);
     this.languageConfig = languageConfig;
     this.sep31Config = sep31Config;
@@ -102,6 +105,7 @@ public class Sep31Service {
     this.exchangeAmountsCalculator = exchangeAmountsCalculator;
     this.customerIdOwnerStore = customerIdOwnerStore;
     this.customerIntegration = customerIntegration;
+    this.ownerKeyResolver = new OwnerKeyResolver(clientService);
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.infoResponse = sep31InfoResponseFromAssetInfoList(assetService.getAssets());
     Log.info("Sep31Service initialized.");
@@ -194,7 +198,7 @@ public class Sep31Service {
             .memo(webAuthJwt.getAccountMemo())
             .build();
 
-    String ownerAccount = webAuthJwt.getOwnerKey();
+    String ownerAccount = ownerKeyResolver.ownerKey(webAuthJwt);
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
     Sep31Info.Sep12Info sep12Config = assetInfo.getSep31().getSep12();
@@ -370,7 +374,12 @@ public class Sep31Service {
 
     if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo, true)
         && !CustomerOwnershipReconciliation.tryReconcile(
-            customerIdOwnerStore, customerIntegration, customerId, webAuthJwt, customerType)) {
+            customerIdOwnerStore,
+            ownerKeyResolver,
+            customerIntegration,
+            customerId,
+            webAuthJwt,
+            customerType)) {
       throw new SepNotAuthorizedException(
           "sender_id/receiver_id does not belong to the authenticated client");
     }
