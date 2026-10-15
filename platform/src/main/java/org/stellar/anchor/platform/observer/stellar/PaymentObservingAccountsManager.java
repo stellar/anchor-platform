@@ -184,8 +184,16 @@ public class PaymentObservingAccountsManager {
 
       Duration idleTime = Duration.between(Instant.now(), acct.lastObserved).abs();
       if (idleTime.compareTo(maxIdleTime) > 0) {
-        allAccounts.remove(acct.account);
-        persistDelete(acct.account);
+        // upsert and lookupAndUpdate replace the entry, so the conditional remove fails (by object
+        // identity) when the account was re-armed after the snapshot was taken.
+        if (allAccounts.remove(acct.account, acct)) {
+          persistDelete(acct.account);
+        } else {
+          Log.debug(
+              String.format(
+                  "Skip evicting observing account %s: it changed since the snapshot",
+                  acct.account));
+        }
       }
     }
   }
