@@ -17,11 +17,8 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.stream.Stream;
 import lombok.Builder;
 import lombok.Getter;
-import org.stellar.anchor.api.asset.AssetInfo;
-import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.LedgerDecodeException;
 import org.stellar.anchor.api.exception.LedgerException;
@@ -40,7 +37,6 @@ import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.service.AnchorMetrics;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.GsonUtils;
-import org.stellar.anchor.util.Log;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.SorobanServer;
 import org.stellar.sdk.TOID;
@@ -374,48 +370,16 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   GetEventsRequest buildEventRequest(String cursor) throws IOException {
-    List<String> uniqueDistributionAccounts =
-        assetService.getStellarAssets().stream()
-            .filter(asset -> asset.getSchema() == AssetInfo.Schema.STELLAR)
-            .map(StellarAssetInfo::getDistributionAccount)
-            .distinct()
-            .toList();
-
+    // Subscribe to every transfer event and let shouldProcess match by the observe list. The
+    // observe list changes at runtime (request_onchain_funds arms a destination that is not a
+    // distribution account), so a filter built from it would miss payments and exceed the
+    // five-filter limit of getEvents.
     List<EventFilter> filters =
-        uniqueDistributionAccounts.stream()
-            .flatMap(
-                distributionAccount -> {
-                  try {
-                    return Stream.of(
-                        // Filter for transfers from the distribution account
-                        EventFilter.builder()
-                            .type(EventFilterType.CONTRACT)
-                            .topic(
-                                List.of(
-                                    Scv.toSymbol("transfer").toXdrBase64(),
-                                    Scv.toAddress(distributionAccount).toXdrBase64(),
-                                    "*",
-                                    "*"))
-                            .build(),
-                        // Filter for transfers to the distribution account
-                        EventFilter.builder()
-                            .type(EventFilterType.CONTRACT)
-                            .topic(
-                                List.of(
-                                    Scv.toSymbol("transfer").toXdrBase64(),
-                                    "*",
-                                    Scv.toAddress(distributionAccount).toXdrBase64(),
-                                    "*"))
-                            .build());
-                  } catch (IOException e) {
-                    Log.errorF(
-                        "Skipping asset due to invalid distribution account: {}. Error: {}",
-                        distributionAccount,
-                        e.getMessage());
-                    return Stream.empty();
-                  }
-                })
-            .toList();
+        List.of(
+            EventFilter.builder()
+                .type(EventFilterType.CONTRACT)
+                .topic(List.of(Scv.toSymbol("transfer").toXdrBase64(), "*", "*", "*"))
+                .build());
 
     if (isEmpty(cursor)) {
       long latestLedger = getLatestLedger();

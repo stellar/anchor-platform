@@ -33,6 +33,7 @@ import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.Obse
 import org.stellar.sdk.Address
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.MuxedAccount
 import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.TOID
 import org.stellar.sdk.exception.NetworkException
@@ -707,43 +708,144 @@ class StellarRpcPaymentObserverTest {
     assertDoesNotThrow { observer.checkStatus() }
   }
 
-  @Test
-  fun `test buildEventRequest`() {
-    val account1 = KeyPair.random().accountId
-    val account2 = KeyPair.random().accountId
-    // Mock the behavior of getStellarAssets()
-    every { assetService.stellarAssets } returns
+  private fun distributionAssets(count: Int) =
+    List(count) { StellarAssetInfo().apply { distributionAccount = KeyPair.random().accountId } }
+
+  private fun transferEvent(
+    from: String,
+    to: String,
+    toSCVal: SCVal = Scv.toAddress(to),
+    value: SCVal = Scv.toInt128(BigInteger.valueOf(100)),
+  ): GetEventsResponse.EventInfo {
+    val event = mockk<GetEventsResponse.EventInfo>(relaxed = true)
+    every { event.topic } returns
       listOf(
-        StellarAssetInfo().apply { distributionAccount = account1 },
-        StellarAssetInfo().apply { distributionAccount = account2 },
+        Scv.toSymbol("transfer").toXdrBase64(),
+        Scv.toAddress(from).toXdrBase64(),
+        toSCVal.toXdrBase64(),
+        Scv.toString("native").toXdrBase64(),
       )
+    every { event.value } returns value.toXdrBase64()
+    every { event.contractId } returns "contractId"
+    return event
+  }
 
-    // Call the method under test
-    val request = observer.buildEventRequest(null)
+  @Test
+  fun `buildEventRequest sends one transfer wildcard filter whatever the number of distribution accounts`() {
+    for (count in listOf(0, 1, 3)) {
+      every { assetService.stellarAssets } returns distributionAssets(count)
 
-    // Verify the result
-    assertEquals(4, request.filters.size)
-    val filterList = request.filters.stream().toList()
-    assertEquals(EventFilterType.CONTRACT, filterList[0].type)
-    assertEquals(EventFilterType.CONTRACT, filterList[1].type)
-    assertEquals(EventFilterType.CONTRACT, filterList[2].type)
-    assertEquals(EventFilterType.CONTRACT, filterList[3].type)
-    assertEquals(
-      Scv.toAddress(account1).toXdrBase64(),
-      filterList[0].topics.toList()[0].toList()[1],
-    )
-    assertEquals(
-      Scv.toAddress(account1).toXdrBase64(),
-      filterList[1].topics.toList()[0].toList()[2],
-    )
-    assertEquals(
-      Scv.toAddress(account2).toXdrBase64(),
-      filterList[2].topics.toList()[0].toList()[1],
-    )
-    assertEquals(
-      Scv.toAddress(account2).toXdrBase64(),
-      filterList[3].topics.toList()[0].toList()[2],
-    )
+      val request = observer.buildEventRequest(null)
+
+      assertEquals(1, request.filters.size)
+      val filter = request.filters.first()
+      assertEquals(EventFilterType.CONTRACT, filter.type)
+      assertEquals(
+        listOf(Scv.toSymbol("transfer").toXdrBase64(), "*", "*", "*"),
+        filter.topics.single().toList(),
+      )
+    }
+  }
+
+  @Test
+  fun `buildEventRequest does not depend on the observe list`() {
+    every { assetService.stellarAssets } returns distributionAssets(2)
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+    val before = observer.buildEventRequest(null)
+
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns true
+    every { paymentObservingAccountsManager.accounts } returns
+      listOf(
+        PaymentObservingAccountsManager.ObservingAccount(
+          KeyPair.random().accountId,
+          java.time.Instant.now(),
+          PaymentObservingAccountsManager.AccountType.TRANSIENT,
+        )
+      )
+    val after = observer.buildEventRequest(null)
+
+    assertEquals(before.filters, after.filters)
+  }
+
+  @Test
+  fun `buildEventRequest keeps startLedger without a cursor and pagination with one`() {
+    every { assetService.stellarAssets } returns distributionAssets(1)
+
+    val first = observer.buildEventRequest(null)
+    assertEquals(5L, first.startLedger)
+    assertNull(first.pagination)
+
+    val next = observer.buildEventRequest("CUR")
+    assertNull(next.startLedger)
+    assertEquals("CUR", next.pagination.cursor)
+    assertEquals(100L, next.pagination.limit)
+  }
+
+  @Test
+  fun `processEvents hands an event to an armed non-distribution recipient to processTransferEvent`() {
+    val armed = KeyPair.random().accountId
+    val event = transferEvent(KeyPair.random().accountId, armed)
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+    every { paymentObservingAccountsManager.lookupAndUpdate(armed) } returns true
+    every { observer.processTransferEvent(any()) } answers {}
+
+    assertEquals("END", observer.processEvents(listOf(event), "END"))
+
+    verify(exactly = 1) {
+      observer.processTransferEvent(match { it.event === event && it.toAddr == armed })
+    }
+  }
+
+  @Test
+  fun `processEvents hands an event to a muxed recipient whose base account is observed`() {
+    val base = KeyPair.random().accountId
+    val memo =
+      SCVal.builder()
+        .discriminant(SCValType.SCV_MAP)
+        .map(
+          SCMap(
+            arrayOf(
+              SCMapEntry(Scv.toSymbol("amount"), Scv.toInt128(BigInteger.valueOf(100))),
+              SCMapEntry(Scv.toSymbol("to_muxed_id"), Scv.toUint64(BigInteger.valueOf(42))),
+            )
+          )
+        )
+        .build()
+    val event = transferEvent(KeyPair.random().accountId, base, value = memo)
+    val muxed = MuxedAccount(base, BigInteger.valueOf(42)).address
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+    every { paymentObservingAccountsManager.lookupAndUpdate(muxed) } returns true
+    every { observer.processTransferEvent(any()) } answers {}
+
+    observer.processEvents(listOf(event), "END")
+
+    verify(exactly = 1) {
+      observer.processTransferEvent(match { it.event === event && it.toAddr == muxed })
+    }
+  }
+
+  @Test
+  fun `processEvents skips an event with no observed account without fetching its transaction`() {
+    val event = transferEvent(KeyPair.random().accountId, KeyPair.random().accountId)
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+
+    assertEquals("END", observer.processEvents(listOf(event), "END"))
+
+    verify(exactly = 0) { observer.processTransferEvent(any()) }
+    verify(exactly = 0) { stellarRpc.getTransaction(any()) }
+  }
+
+  @Test
+  fun `processEvents hands an event involving a distribution account to processTransferEvent`() {
+    val distribution = KeyPair.random().accountId
+    val event = transferEvent(distribution, KeyPair.random().accountId)
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+    every { paymentObservingAccountsManager.lookupAndUpdate(distribution) } returns true
+    every { observer.processTransferEvent(any()) } answers {}
+
+    observer.processEvents(listOf(event), "END")
+
+    verify(exactly = 1) { observer.processTransferEvent(match { it.event === event }) }
   }
 
   @Test
