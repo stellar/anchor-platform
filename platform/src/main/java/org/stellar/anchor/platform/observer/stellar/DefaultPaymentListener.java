@@ -15,15 +15,18 @@ import io.micrometer.core.instrument.Metrics;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.TransactionException;
+import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.apiclient.PlatformApiClient;
+import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerInvokeHostFunctionOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPayment;
@@ -54,6 +57,7 @@ public class DefaultPaymentListener implements PaymentListener {
   final JdbcSep6TransactionStore sep6TransactionStore;
   private final PlatformApiClient platformApiClient;
   private final RpcConfig rpcConfig;
+  private final AssetService assetService;
 
   public DefaultPaymentListener(
       PaymentObservingAccountsManager paymentObservingAccountsManager,
@@ -61,13 +65,15 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSep24TransactionStore sep24TransactionStore,
       JdbcSep6TransactionStore sep6TransactionStore,
       PlatformApiClient platformApiClient,
-      RpcConfig rpcConfig) {
+      RpcConfig rpcConfig,
+      AssetService assetService) {
     this.paymentObservingAccountsManager = paymentObservingAccountsManager;
     this.sep31TransactionStore = sep31TransactionStore;
     this.sep24TransactionStore = sep24TransactionStore;
     this.sep6TransactionStore = sep6TransactionStore;
     this.platformApiClient = platformApiClient;
     this.rpcConfig = rpcConfig;
+    this.assetService = assetService;
   }
 
   @Override
@@ -448,10 +454,14 @@ public class DefaultPaymentListener implements PaymentListener {
       return;
     }
 
+    String receivedAmount = amountToNotify(ledgerTransaction, ledgerPayment, sepTransaction);
+    if (receivedAmount == null) {
+      return;
+    }
     platformApiClient.notifyOnchainFundsReceived(
         sepTransaction.getId(),
         ledgerTransaction.getHash(),
-        AssetHelper.fromXdrAmount(ledgerPayment.getAmount()),
+        receivedAmount,
         rpcConfig.getCustomMessages().getIncomingPaymentReceived());
 
     // Update metrics
@@ -486,10 +496,14 @@ public class DefaultPaymentListener implements PaymentListener {
           ledgerTransaction.getHash(),
           rpcConfig.getCustomMessages().getOutgoingPaymentSent());
     } else if (WITHDRAWAL.getKind().equals(sep24Txn.getKind())) {
+      String receivedAmount = amountToNotify(ledgerTransaction, ledgerPayment, sepTransaction);
+      if (receivedAmount == null) {
+        return;
+      }
       platformApiClient.notifyOnchainFundsReceived(
           sepTransaction.getId(),
           ledgerTransaction.getHash(),
-          AssetHelper.fromXdrAmount(ledgerPayment.getAmount()),
+          receivedAmount,
           rpcConfig.getCustomMessages().getIncomingPaymentReceived());
     } else {
       throw new IllegalStateException(
@@ -531,10 +545,14 @@ public class DefaultPaymentListener implements PaymentListener {
           rpcConfig.getCustomMessages().getOutgoingPaymentSent());
     } else if (WITHDRAWAL.getKind().equals(sep6Txn.getKind())
         || WITHDRAWAL_EXCHANGE.getKind().equals(sep6Txn.getKind())) {
+      String receivedAmount = amountToNotify(ledgerTransaction, ledgerPayment, sepTransaction);
+      if (receivedAmount == null) {
+        return;
+      }
       platformApiClient.notifyOnchainFundsReceived(
           sepTransaction.getId(),
           ledgerTransaction.getHash(),
-          AssetHelper.fromXdrAmount(ledgerPayment.getAmount()),
+          receivedAmount,
           rpcConfig.getCustomMessages().getIncomingPaymentReceived());
     } else {
       throw new IllegalStateException(
@@ -551,6 +569,61 @@ public class DefaultPaymentListener implements PaymentListener {
             "asset",
             getSep11AssetName(ledgerPayment.getAsset()))
         .increment(ledgerPayment.getAmount().doubleValue());
+  }
+
+  /**
+   * Returns the on-chain amount cut down to the transaction's amount-in asset precision, which is
+   * what the Platform API accepts: it refuses any amount more precise than {@code
+   * significant_decimals}, and the rejection would otherwise be swallowed as a handled payment. The
+   * amount is rounded down, so the anchor never credits more than it received. The same lookup rule
+   * as {@link org.stellar.anchor.platform.utils.AssetValidationUtils#valiateAssetDecimals} applies:
+   * the asset must match exactly one configured asset with a precision, otherwise the on-chain
+   * amount is returned as is.
+   *
+   * @return the amount to notify, or null when it rounds down to zero and there is nothing to
+   *     credit.
+   */
+  String amountToNotify(
+      LedgerTransaction ledgerTransaction,
+      LedgerPayment ledgerPayment,
+      JdbcSepTransaction sepTransaction) {
+    String onChainAmount = AssetHelper.fromXdrAmount(ledgerPayment.getAmount());
+    List<AssetInfo> assets =
+        assetService.getAssets().stream()
+            .filter(asset -> asset.getId().equals(sepTransaction.getAmountInAsset()))
+            .toList();
+    if (assets.size() != 1 || assets.get(0).getSignificantDecimals() == null) {
+      return onChainAmount;
+    }
+
+    BigDecimal truncated =
+        new BigDecimal(onChainAmount)
+            .setScale(assets.get(0).getSignificantDecimals(), RoundingMode.DOWN);
+    if (truncated.signum() == 0) {
+      errorF(
+          "Skipping payment: the amount truncates to zero at the asset precision. "
+              + "txHash={}, opId={}, asset={}, onChainAmount={}",
+          ledgerTransaction.getHash(),
+          ledgerPayment.getId(),
+          sepTransaction.getAmountInAsset(),
+          onChainAmount);
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+      return null;
+    }
+
+    String notifiedAmount = truncated.toPlainString();
+    if (truncated.compareTo(new BigDecimal(onChainAmount)) != 0) {
+      warnF(
+          "Payment amount truncated to the asset precision. "
+              + "txHash={}, opId={}, asset={}, onChainAmount={}, notifiedAmount={}",
+          ledgerTransaction.getHash(),
+          ledgerPayment.getId(),
+          sepTransaction.getAmountInAsset(),
+          onChainAmount,
+          notifiedAmount);
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_TRUNCATED.toString()).increment();
+    }
+    return notifiedAmount;
   }
 
   boolean validate(

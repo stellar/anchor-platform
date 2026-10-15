@@ -1,5 +1,8 @@
 package org.stellar.anchor.ledger
 
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import java.math.BigInteger
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Assertions.*
@@ -909,6 +912,30 @@ internal class LedgerClientHelperTest {
     assertEquals("GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H", result.sourceAccount())
     assertEquals(memo, result.memo())
     assertEquals(operations, result.operations())
+  }
+
+  @Test
+  fun `test waitForTransactionAvailable returns the transaction once the client stops answering null`() {
+    val transaction = LedgerTransaction.builder().hash("txHash").build()
+    val ledgerClient = mockk<LedgerClient>()
+    every { ledgerClient.getTransaction("txHash") } returnsMany listOf(null, transaction)
+
+    val result = LedgerClientHelper.waitForTransactionAvailable(ledgerClient, "txHash", 30, 5)
+
+    assertEquals(transaction, result)
+    verify(exactly = 2) { ledgerClient.getTransaction("txHash") }
+  }
+
+  @Test
+  fun `test waitForTransactionAvailable propagates a LedgerException from the client instead of polling on`() {
+    val ledgerClient = mockk<LedgerClient>()
+    every { ledgerClient.getTransaction("txHash") } throws LedgerException("blocked")
+
+    assertThrows(LedgerException::class.java) {
+      LedgerClientHelper.waitForTransactionAvailable(ledgerClient, "txHash", 30, 5)
+    }
+
+    verify(exactly = 1) { ledgerClient.getTransaction("txHash") }
   }
 }
 

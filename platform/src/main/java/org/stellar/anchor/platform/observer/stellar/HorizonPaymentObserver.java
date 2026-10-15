@@ -199,8 +199,9 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
 
   void processOperation(OperationResponse operationResponse) {
     try {
-      PaymentTransferEvent transferEvent = toPaymentTransferEvent(operationResponse);
-      if (transferEvent != null) {
+      // The cursor moves only after every event of the operation was handled, so an IOException on
+      // any of them holds it and the whole operation is delivered again.
+      for (PaymentTransferEvent transferEvent : toPaymentTransferEvents(operationResponse)) {
         infoF("Processing payment transfer event: {}", transferEvent);
         handleEvent(transferEvent);
       }
@@ -250,7 +251,7 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
             .amount(AssetHelper.toXdrAmount(paymentOp.getAmount()).toBigInteger())
             .operationId(String.valueOf(operation.getId()))
             .txHash(paymentOp.getTransactionHash())
-            .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
+            .ledgerTransaction(requireLedgerTransaction(operation.getTransactionHash()))
             .build();
       } else {
         return null;
@@ -265,36 +266,60 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
             .sep11Asset(AssetHelper.getSep11AssetName(pathPaymentOp.getAsset().toXdr()))
             .operationId(String.valueOf(operation.getId()))
             .txHash(pathPaymentOp.getTransactionHash())
-            .ledgerTransaction(horizon.getTransaction(operation.getTransactionHash()))
+            .ledgerTransaction(requireLedgerTransaction(operation.getTransactionHash()))
             .build();
       } else {
         return null;
       }
     } else if (operation instanceof InvokeHostFunctionOperationResponse invokeOp) {
-      List<AssetContractBalanceChange> balanceChanges = invokeOp.getAssetBalanceChanges();
-      if (balanceChanges == null) {
-        return null;
+      List<PaymentTransferEvent> events = toContractTransferEvents(invokeOp);
+      return events.isEmpty() ? null : events.get(0);
+    }
+    return null;
+  }
+
+  /**
+   * Converts an operation into the payment transfer events it carries. A contract operation holds
+   * one event per qualifying balance change, as the RPC observer emits; any other operation holds
+   * at most one.
+   */
+  List<PaymentTransferEvent> toPaymentTransferEvents(OperationResponse operation)
+      throws LedgerException {
+    if (operation instanceof InvokeHostFunctionOperationResponse invokeOp) {
+      return toContractTransferEvents(invokeOp);
+    }
+    PaymentTransferEvent event = toPaymentTransferEvent(operation);
+    return event == null ? List.of() : List.of(event);
+  }
+
+  private List<PaymentTransferEvent> toContractTransferEvents(
+      InvokeHostFunctionOperationResponse invokeOp) throws LedgerException {
+    List<AssetContractBalanceChange> balanceChanges = invokeOp.getAssetBalanceChanges();
+    if (balanceChanges == null) {
+      return List.of();
+    }
+    List<PaymentTransferEvent> events = new ArrayList<>();
+    LedgerTransaction ledgerTransaction = null;
+    for (AssetContractBalanceChange assetBalanceChange : balanceChanges) {
+      if (!"transfer".equals(assetBalanceChange.getType())
+          || isEmpty(assetBalanceChange.getFrom())
+          || isEmpty(assetBalanceChange.getTo())) {
+        continue;
       }
-      for (AssetContractBalanceChange assetBalanceChange : balanceChanges) {
-        if (!"transfer".equals(assetBalanceChange.getType())
-            || isEmpty(assetBalanceChange.getFrom())
-            || isEmpty(assetBalanceChange.getTo())) {
-          continue;
-        }
-        String lookupToAccount = assetBalanceChange.getTo();
-        if (lookupToAccount.startsWith("M")) {
-          lookupToAccount = new MuxedAccount(lookupToAccount).getAccountId();
-        }
-        if (paymentObservingAccountsManager.lookupAndUpdate(assetBalanceChange.getFrom())
-            || paymentObservingAccountsManager.lookupAndUpdate(lookupToAccount)) {
-          String operationId = String.valueOf(invokeOp.getId());
-          LedgerTransaction ledgerTransaction =
-              horizon.getTransaction(operation.getTransactionHash());
-          if (ledgerTransaction == null) {
-            throw new LedgerException(
-                "Transaction is not yet available: " + operation.getTransactionHash());
-          }
-          return PaymentTransferEvent.builder()
+      String lookupToAccount = assetBalanceChange.getTo();
+      if (lookupToAccount.startsWith("M")) {
+        lookupToAccount = new MuxedAccount(lookupToAccount).getAccountId();
+      }
+      if (!paymentObservingAccountsManager.lookupAndUpdate(assetBalanceChange.getFrom())
+          && !paymentObservingAccountsManager.lookupAndUpdate(lookupToAccount)) {
+        continue;
+      }
+      String operationId = String.valueOf(invokeOp.getId());
+      if (ledgerTransaction == null) {
+        ledgerTransaction = requireLedgerTransaction(invokeOp.getTransactionHash());
+      }
+      events.add(
+          PaymentTransferEvent.builder()
               .from(assetBalanceChange.getFrom())
               .to(toMuxedAddress(assetBalanceChange))
               .sep11Asset(AssetHelper.getSep11AssetName(assetBalanceChange.getAsset().toXdr()))
@@ -302,12 +327,22 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
               .txHash(invokeOp.getTransactionHash())
               .operationId(operationId)
               .ledgerTransaction(withInvokeHostFunctionOperation(ledgerTransaction, operationId))
-              .build();
-        }
-      }
-      return null;
+              .build());
     }
-    return null;
+    return events;
+  }
+
+  /**
+   * Fetches the ledger transaction of an operation seen on the stream. It exists, so a missing one
+   * means the queried Horizon replica is behind: throw so the cursor is held and the operation is
+   * delivered again, instead of handing the listener an event it would skip as handled.
+   */
+  private LedgerTransaction requireLedgerTransaction(String txHash) throws LedgerException {
+    LedgerTransaction ledgerTransaction = horizon.getTransaction(txHash);
+    if (ledgerTransaction == null) {
+      throw new LedgerException("Transaction is not yet available: " + txHash);
+    }
+    return ledgerTransaction;
   }
 
   static String toMuxedAddress(AssetContractBalanceChange assetBalanceChange) {

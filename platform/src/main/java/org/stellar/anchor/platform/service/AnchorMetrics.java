@@ -12,6 +12,7 @@ public enum AnchorMetrics {
   PAYMENT_OBSERVER_AMBIGUOUS_ROUTING("payment_observer.ambiguous_routing"),
   PAYMENT_OBSERVER_AMOUNT_ASSET_MISMATCH("payment_observer.amount_asset_mismatch"),
   PAYMENT_OBSERVER_AMOUNT_INSUFFICIENT("payment_observer.amount_insufficient"),
+  PAYMENT_OBSERVER_AMOUNT_TRUNCATED("payment_observer.amount_truncated"),
   PAYMENT_OBSERVER_EVENT_SKIPPED("payment_observer.event_skipped"),
   PAYMENT_OBSERVER_LOOKUP_FAILED("payment_observer.lookup_failed"),
   LOGGER("logger"),
