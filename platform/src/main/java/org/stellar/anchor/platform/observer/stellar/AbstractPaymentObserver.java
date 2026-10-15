@@ -94,8 +94,9 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
   /** Start the payment observer. */
   public void start() {
     infoF("Starting the payment observer");
-    startInternal();
 
+    // The watchers are scheduled first so that a failed start is retried by the status watcher
+    // instead of leaving the observer without a supervisor.
     infoF("Starting the observer silence watcher");
     silenceWatcher.scheduleAtFixedRate(
         this::checkSilence, 1, config.getSilenceCheckInterval(), TimeUnit.SECONDS);
@@ -103,7 +104,16 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     infoF("Starting the status watcher");
     statusWatcher.scheduleWithFixedDelay(this::checkStatus, 1, 1, TimeUnit.SECONDS);
 
-    setStatus(RUNNING);
+    try {
+      startInternal();
+      setStatus(RUNNING);
+    } catch (TransactionException tex) {
+      errorEx("Error starting the payment observer.", tex);
+      setStatus(DATABASE_ERROR);
+    } catch (RuntimeException rex) {
+      errorEx("Error starting the payment observer.", rex);
+      setStatus(STREAM_ERROR);
+    }
   }
 
   /** Gracefully shutdown the payment observer. */
