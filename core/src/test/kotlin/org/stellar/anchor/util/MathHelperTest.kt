@@ -3,6 +3,7 @@ package org.stellar.anchor.util
 import io.mockk.every
 import io.mockk.mockk
 import java.math.BigDecimal
+import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -102,7 +103,7 @@ class MathHelperTest {
     )
     assertEquals(
       rangeMessage,
-      assertThrows<ArithmeticException> { MathHelper.formatAmount(BigDecimal("0e-50000000")) }
+      assertThrows<ArithmeticException> { MathHelper.formatAmount(BigDecimal("0e-50000000"), 7) }
         .message,
     )
   }
@@ -172,9 +173,8 @@ class MathHelperTest {
     assertEquals(BigDecimal("0.0000000"), MathHelper.decimal("0", 7))
     assertEquals(BigDecimal("500.0000000"), MathHelper.decimal("5e2", asset7()))
     assertEquals(BigDecimal("3.5000000"), MathHelper.sum(asset7(), "1", "2.5"))
-    // integers only: DecimalFormat uses the default locale for the decimal separator
     assertEquals("15", MathHelper.formatAmount(BigDecimal("15"), 4))
-    assertEquals("100", MathHelper.formatAmount(BigDecimal("1e2")))
+    assertEquals("100", MathHelper.formatAmount(BigDecimal("1e2"), 4))
     assertNull(MathHelper.decimal(null as String?, 7))
   }
 
@@ -193,5 +193,45 @@ class MathHelperTest {
     assertTrue(MathHelper.isWithinArithmeticRange(BigDecimal("0e-100")))
     assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal("0e-101")))
     assertFalse(MathHelper.isWithinArithmeticRange(BigDecimal("0e+101")))
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "12.3456789,7,12.3456789",
+        "12.34564,7,12.34564",
+        "12.3456,7,12.3456",
+        "10.0000000,7,10",
+        "0.0000000,7,0",
+        "10.005,2,10",
+        "10.006,2,10.01",
+        "1000000.5,7,1000000.5"
+      ]
+  )
+  fun `test formatAmount keeps the requested scale without trailing zeros or grouping`(
+    value: String,
+    scale: Int,
+    expected: String
+  ) {
+    assertEquals(expected, MathHelper.formatAmount(BigDecimal(value), scale))
+  }
+
+  @Test
+  fun `test formatAmount ignores the JVM default locale`() {
+    val previous = Locale.getDefault()
+    try {
+      Locale.setDefault(Locale("pt", "BR"))
+      assertEquals("12.3456789", MathHelper.formatAmount(BigDecimal("12.3456789"), 7))
+    } finally {
+      Locale.setDefault(previous)
+    }
+  }
+
+  @Test
+  fun `test formatAmount has no overload without an explicit scale`() {
+    val overloads = MathHelper::class.java.methods.filter { it.name == "formatAmount" }
+    assertTrue(overloads.isNotEmpty())
+    assertTrue(overloads.all { it.parameterCount == 2 })
   }
 }
