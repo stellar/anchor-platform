@@ -288,7 +288,11 @@ internal class Sep10ServiceTest {
 
   /** Builds a challenge for [clientKeyPair]'s account, signed by the given [signers] instead. */
   @Synchronized
-  fun createTestChallengeSignedBy(homeDomain: String, signers: List<KeyPair>): String {
+  fun createTestChallengeSignedBy(
+    homeDomain: String,
+    signers: List<KeyPair>,
+    clientDomain: String = "",
+  ): String {
     val now = System.currentTimeMillis() / 1000L
     val serverSigner = KeyPair.fromSecretSeed(TEST_SIGNING_SEED)
     val memo = MemoId(TEST_MEMO.toLong())
@@ -301,12 +305,164 @@ internal class Sep10ServiceTest {
           homeDomain,
           TEST_WEB_AUTH_DOMAIN,
           TimeBounds(now, now + 900),
-          "",
-          "",
+          clientDomain,
+          if (clientDomain.isEmpty()) "" else clientDomainKeyPair.accountId,
           memo,
         )
     signers.forEach { txn.sign(it) }
     return txn.toEnvelopeXdrBase64()
+  }
+
+  private fun mockAccount(signers: List<TestSigner>, mediumThreshold: Int) {
+    val accountResponse =
+      mockk<LedgerClient.Account> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { this@mockk.signers } returns signers.map { it.toSigner() }
+        every { thresholds.medium } returns mediumThreshold
+      }
+    every { ledgerClient.getAccount(any()) } returns accountResponse
+  }
+
+  private fun signer(key: KeyPair, weight: Int) =
+    TestSigner(key.accountId, "SIGNER_KEY_TYPE_ED25519", weight, "")
+
+  private fun validate(xdr: String): Sep10Jwt {
+    val vr = ValidationRequest()
+    vr.transaction = xdr
+    return jwtService.decode(sep10Service.validateChallenge(vr).token, Sep10Jwt::class.java)
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = [0, 1])
+  fun `test validate challenge rejects a challenge signed only by the client_domain key`(
+    mediumThreshold: Int
+  ) {
+    mockAccount(listOf(signer(clientKeyPair, 1)), mediumThreshold)
+    val xdr =
+      createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(clientDomainKeyPair), TEST_CLIENT_DOMAIN)
+
+    assertThrows<InvalidSep10ChallengeException> { validate(xdr) }
+    verify(exactly = 0) { nonceManager.claim(any(), any(), any()) }
+  }
+
+  @Test
+  fun `test validate challenge rejects a challenge signed only by the server`() {
+    mockAccount(listOf(signer(clientKeyPair, 1)), 0)
+
+    assertThrows<InvalidSep10ChallengeException> {
+      validate(createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf()))
+    }
+  }
+
+  @Test
+  fun `test validate challenge rejects a client_domain key that is a weight-0 account signer`() {
+    mockAccount(listOf(signer(clientKeyPair, 1), signer(clientDomainKeyPair, 0)), 0)
+    val xdr =
+      createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(clientDomainKeyPair), TEST_CLIENT_DOMAIN)
+
+    assertThrows<InvalidSep10ChallengeException> { validate(xdr) }
+  }
+
+  @Test
+  fun `test validate challenge rejects a verified signer set whose total weight is zero`() {
+    val ex =
+      assertThrows<InvalidSep10ChallengeException> {
+        sep10Service.validateVerifiedSignersWeight(
+          setOf(clientKeyPair.accountId),
+          setOf(Sep10Challenge.Signer(clientKeyPair.accountId, 0)),
+          null,
+          clientKeyPair.accountId,
+        )
+      }
+    assertTrue(ex.message!!.contains(clientKeyPair.accountId))
+
+    assertThrows<InvalidSep10ChallengeException> {
+      sep10Service.validateVerifiedSignersWeight(
+        setOf(),
+        setOf(Sep10Challenge.Signer(clientKeyPair.accountId, 1)),
+        null,
+        clientKeyPair.accountId,
+      )
+    }
+  }
+
+  @Test
+  fun `test validate challenge accepts a verified signer set with weight exactly 1`() {
+    assertDoesNotThrow {
+      sep10Service.validateVerifiedSignersWeight(
+        setOf(clientKeyPair.accountId),
+        setOf(
+          Sep10Challenge.Signer(clientKeyPair.accountId, 1),
+          Sep10Challenge.Signer(KeyPair.random().accountId, 0),
+        ),
+        null,
+        clientKeyPair.accountId,
+      )
+    }
+  }
+
+  @Test
+  fun `test validate challenge counts a duplicated key once at its highest weight and sums mixed weights`() {
+    val other = KeyPair.random().accountId
+    assertDoesNotThrow {
+      sep10Service.validateVerifiedSignersWeight(
+        setOf(clientKeyPair.accountId),
+        setOf(
+          Sep10Challenge.Signer(clientKeyPair.accountId, 0),
+          Sep10Challenge.Signer(clientKeyPair.accountId, 1),
+        ),
+        null,
+        clientKeyPair.accountId,
+      )
+      sep10Service.validateVerifiedSignersWeight(
+        setOf(clientKeyPair.accountId, other),
+        setOf(
+          Sep10Challenge.Signer(clientKeyPair.accountId, 0),
+          Sep10Challenge.Signer(other, 1),
+        ),
+        null,
+        clientKeyPair.accountId,
+      )
+    }
+  }
+
+  @Test
+  fun `test validate challenge succeeds with the master key at weight 1 and medium threshold 0`() {
+    mockAccount(listOf(signer(clientKeyPair, 1)), 0)
+
+    val token = validate(createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(clientKeyPair)))
+
+    assertTrue(token.sub.startsWith(clientKeyPair.accountId))
+  }
+
+  @Test
+  fun `test validate challenge succeeds with client_domain signed by a weight-1 signer and the client_domain key`() {
+    mockAccount(listOf(signer(clientKeyPair, 1)), 0)
+    val xdr =
+      createTestChallengeSignedBy(
+        TEST_HOME_DOMAIN,
+        listOf(clientKeyPair, clientDomainKeyPair),
+        TEST_CLIENT_DOMAIN,
+      )
+
+    assertEquals(TEST_CLIENT_DOMAIN, validate(xdr).clientDomain)
+  }
+
+  @Test
+  fun `test validate challenge rejects nonexistent account signed by server and client_domain and a stranger`() {
+    every { ledgerClient.getAccount(any()) } answers
+      {
+        throw AccountNotFoundException(clientKeyPair.accountId)
+      }
+    val xdr =
+      createTestChallengeSignedBy(
+        TEST_HOME_DOMAIN,
+        listOf(clientDomainKeyPair, KeyPair.random()),
+        TEST_CLIENT_DOMAIN,
+      )
+
+    assertThrows<InvalidSep10ChallengeException> { validate(xdr) }
   }
 
   @Test
