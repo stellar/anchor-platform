@@ -56,7 +56,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
   final ExponentialBackoffTimer databaseBackoffTimer = new ExponentialBackoffTimer(1, 20);
 
   int silenceTimeoutCount = 0;
-  ObserverStatus status = RUNNING;
+  volatile ObserverStatus status = RUNNING;
   Instant lastActivityTime;
   AtomicLong metricLatestBlockRead = new AtomicLong(0);
   AtomicLong metricLatestBlockProcessed = new AtomicLong(0);
@@ -103,7 +103,16 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     infoF("Starting the status watcher");
     statusWatcher.scheduleWithFixedDelay(this::checkStatus, 1, 1, TimeUnit.SECONDS);
 
-    setStatus(RUNNING);
+    // startInternal() may already have started work that reports an error status; only an
+    // observer that is still STARTING is promoted, so an error is never overwritten.
+    promoteIfStarting();
+  }
+
+  /** Atomically moves a STARTING observer to RUNNING; any other status is left as it is. */
+  synchronized void promoteIfStarting() {
+    if (status == STARTING) {
+      setStatus(RUNNING);
+    }
   }
 
   /** Gracefully shutdown the payment observer. */
@@ -206,7 +215,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     return this.status;
   }
 
-  void setStatus(ObserverStatus status) {
+  synchronized void setStatus(ObserverStatus status) {
     if (this.status != status) {
       if (this.status.isSettable(status)) {
         infoF("Setting status to {}", status);
@@ -438,6 +447,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
 
     // Build the state transition
     static {
+      addStateTransition(STARTING, RUNNING, DATABASE_ERROR, STREAM_ERROR, NEEDS_SHUTDOWN, SHUTDOWN);
       addStateTransition(
           RUNNING,
           DATABASE_ERROR,

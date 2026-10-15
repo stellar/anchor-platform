@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
@@ -57,6 +58,8 @@ class StellarRpcObserverIndexDomainTest {
     paymentObservingAccountsManager = mockk(relaxed = true)
     cursorStore = LocalCursorStore()
     assetService = mockk(relaxed = true)
+    every { assetService.stellarAssets } returns
+      listOf(StellarAssetInfo().apply { distributionAccount = KeyPair.random().accountId })
     listener = CaptureListener()
 
     observer =
