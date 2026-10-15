@@ -67,6 +67,9 @@ internal class Sep24ServiceTest {
       """
        {
         "id": "test-deposit-quote-id",
+        "creatorAccountId": "$TEST_ACCOUNT",
+        "creatorMemo": "$TEST_MEMO",
+        "creatorMemoType": "id",
         "expires_at": "2021-04-30T07:42:23",
         "total_price": "5.42",
         "price": "5.00",
@@ -85,6 +88,9 @@ internal class Sep24ServiceTest {
       """
       {
         "id": "test-withdraw-quote-id",
+        "creatorAccountId": "$TEST_ACCOUNT",
+        "creatorMemo": "$TEST_MEMO",
+        "creatorMemoType": "id",
         "expires_at": "2021-04-30T07:42:23",
         "total_price": "0.542",
         "price": "0.5",
@@ -104,6 +110,9 @@ internal class Sep24ServiceTest {
       """
       {
         "id": "$id",
+        "creatorAccountId": "$TEST_ACCOUNT",
+        "creatorMemo": "$TEST_MEMO",
+        "creatorMemoType": "id",
         "expires_at": "2099-04-30T07:42:23",
         "total_price": "0.542",
         "price": "0.5",
@@ -123,6 +132,9 @@ internal class Sep24ServiceTest {
       """
       {
         "id": "$id",
+        "creatorAccountId": "$TEST_ACCOUNT",
+        "creatorMemo": "$TEST_MEMO",
+        "creatorMemoType": "id",
         "expires_at": "2099-04-30T07:42:23",
         "total_price": "5.42",
         "price": "5.00",
@@ -1349,5 +1361,88 @@ internal class Sep24ServiceTest {
       )
     jwt.claim("asset", "stellar:${TEST_ASSET}:${TEST_ASSET_ISSUER_ACCOUNT_ID}")
     return jwt
+  }
+
+  // --- quote ownership: the request's own token must be the quote's creator (SEP38OW) ---
+
+  /** A request for the other identity's own account, so it reaches the quote check. */
+  private fun otherIdentityRequest(quoteId: String) =
+    createTestTransactionRequest(quoteId).apply { this["account"] = TestHelper.TEST_ACCOUNT }
+
+  private fun otherIdentityJwt(): WebAuthJwt =
+    TestHelper.createWebAuthJwt(
+        TestHelper.TEST_ACCOUNT,
+        null,
+        TEST_HOME_DOMAIN,
+        TEST_CLIENT_DOMAIN,
+      )
+      .apply { clientName = TEST_CLIENT_NAME }
+
+  @Test
+  fun `test withdraw rejects a quote created by another identity and saves nothing`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns withdrawQuote
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.withdraw(otherIdentityJwt(), otherIdentityRequest(withdrawQuote.id))
+      }
+    assertEquals("Quote not found", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { sep38QuoteStore.bindToTransaction(any(), any()) }
+  }
+
+  @Test
+  fun `test deposit rejects a quote created by another identity and saves nothing`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns depositQuote
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.deposit(otherIdentityJwt(), otherIdentityRequest(depositQuote.id))
+      }
+    assertEquals("Quote not found", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { sep38QuoteStore.bindToTransaction(any(), any()) }
+  }
+
+  @Test
+  fun `test deposit rejects the same account under another memo`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns depositQuote
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.deposit(createTestWebAuthJwt(), createTestTransactionRequest(depositQuote.id))
+      }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test deposit with an expired quote of its own is rejected with the expiry message`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      depositQuote.apply { expiresAt = Instant.parse("2020-01-01T00:00:00Z") }
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.deposit(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(depositQuote.id),
+        )
+      }
+    assertEquals(
+      "quote(id=test-deposit-quote-id) has expired at 2020-01-01T00:00:00Z",
+      ex.message,
+    )
+  }
+
+  @Test
+  fun `test withdraw with an expired quote of its own is rejected with the expiry message`() {
+    every { sep38QuoteStore.findByQuoteId(any()) } returns
+      withdrawQuote.apply { expiresAt = Instant.parse("2020-01-01T00:00:00Z") }
+    val ex =
+      assertThrows<BadRequestException> {
+        sep24Service.withdraw(
+          createTestWebAuthJwtWithMemo(),
+          createTestTransactionRequest(withdrawQuote.id),
+        )
+      }
+    assertEquals(
+      "quote(id=test-withdraw-quote-id) has expired at 2020-01-01T00:00:00Z",
+      ex.message,
+    )
   }
 }

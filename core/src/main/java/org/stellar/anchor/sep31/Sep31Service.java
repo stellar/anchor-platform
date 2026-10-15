@@ -57,6 +57,7 @@ import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.sep38.Sep38Quote;
+import org.stellar.anchor.sep38.Sep38QuoteOwnership;
 import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.util.ExchangeAmountsCalculator;
 import org.stellar.anchor.util.Log;
@@ -715,7 +716,7 @@ public class Sep31Service {
     }
 
     Sep38Quote quote = sep38QuoteStore.findByQuoteId(request.getQuoteId());
-    if (quote == null) {
+    if (quote == null || !Sep38QuoteOwnership.isCreatedBy(quote, Context.get().getWebAuthJwt())) {
       infoF("Quote ({}) was not found", request.getQuoteId());
       throw new BadRequestException(
           String.format("quote(id=%s) was not found.", request.getQuoteId()));

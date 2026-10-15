@@ -31,8 +31,6 @@ public class Sep38Controller {
     this.sep38Service = sep38Service;
   }
 
-  // TODO: add integration tests
-
   @CrossOrigin(origins = "*")
   @RequestMapping(
       value = "/info",

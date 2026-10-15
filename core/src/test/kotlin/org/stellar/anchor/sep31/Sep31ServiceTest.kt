@@ -7,6 +7,7 @@ import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import org.junit.jupiter.api.Assertions.*
@@ -792,6 +793,7 @@ class Sep31ServiceTest {
     val expiredQuote = PojoSep38Quote()
     expiredQuote.sellAmount = "100"
     expiredQuote.sellAsset = stellarUSDC
+    expiredQuote.creatorAccountId = TestHelper.TEST_ACCOUNT
     expiredQuote.expiresAt = Instant.parse("2000-01-01T00:00:00Z")
     expiredQuote.fee = FeeDetails("2", stellarUSDC)
     postTxRequest.amount = "100"
@@ -804,6 +806,7 @@ class Sep31ServiceTest {
     // quote and tx amounts don't match
     val quoteId = "de762cda-a193-4961-861e-57b31fed6eb3"
     val quote = PojoSep38Quote()
+    quote.creatorAccountId = TestHelper.TEST_ACCOUNT
     quote.sellAmount = "100.1"
     postTxRequest.amount = "100"
     postTxRequest.quoteId = quoteId
@@ -849,6 +852,9 @@ class Sep31ServiceTest {
     val tomorrow = Instant.now().plus(1, ChronoUnit.DAYS)
     quote.expiresAt = tomorrow
     quote.id = "my_quote_id"
+    quote.creatorAccountId = TestHelper.TEST_ACCOUNT
+    quote.creatorMemo = TestHelper.TEST_MEMO
+    quote.creatorMemoType = "id"
     quote.sellAsset = stellarUSDC
     quote.sellAmount = "100"
     quote.buyAsset = stellarJPYC
@@ -1674,6 +1680,9 @@ class Sep31ServiceTest {
     val tomorrow = Instant.now().plus(1, ChronoUnit.DAYS)
     val boundQuote =
       PojoSep38Quote().apply {
+        creatorAccountId = TestHelper.TEST_ACCOUNT
+        creatorMemo = TestHelper.TEST_MEMO
+        creatorMemoType = "id"
         id = "bound-quote-id"
         sellAsset = stellarUSDC
         sellAmount = "100"
@@ -1712,6 +1721,9 @@ class Sep31ServiceTest {
     val quoteId = "race-quote-id"
     val freshQuote =
       PojoSep38Quote().apply {
+        creatorAccountId = TestHelper.TEST_ACCOUNT
+        creatorMemo = TestHelper.TEST_MEMO
+        creatorMemoType = "id"
         id = quoteId
         sellAsset = stellarUSDC
         sellAmount = "100"
@@ -2228,5 +2240,137 @@ class Sep31ServiceTest {
     Context.get().webAuthJwt = jwtToken
 
     assertNull(sep31Service.getClientName())
+  }
+
+  // --- quote ownership: the quote must have been created by the request's own identity (SEP38OW)
+  // ---
+
+  private fun quoteStepRequest(quoteId: String): Sep31PostTransactionRequest {
+    val postTxRequest = Sep31PostTransactionRequest()
+    postTxRequest.assetCode = "USDC"
+    postTxRequest.amount = "100"
+    postTxRequest.lang = "en"
+    postTxRequest.fundingMethod = "SEPA"
+    postTxRequest.fields =
+      Sep31TxnFields(
+        hashMapOf(
+          "receiver_account_number" to "1",
+          "type" to "1",
+          "receiver_routing_number" to "SWIFT",
+        )
+      )
+    postTxRequest.quoteId = quoteId
+    return postTxRequest
+  }
+
+  /** A quote created by the identity of `TestHelper.createWebAuthJwt()` (no memo). */
+  private fun ownedQuote(id: String) =
+    PojoSep38Quote().apply {
+      this.id = id
+      creatorAccountId = TestHelper.TEST_ACCOUNT
+      sellAmount = "100"
+      sellAsset = stellarUSDC
+      expiresAt = Instant.now().plus(1, ChronoUnit.DAYS)
+      fee = FeeDetails("2", stellarUSDC)
+    }
+
+  private fun otherIdentityJwt() =
+    TestHelper.createWebAuthJwt(
+      account = "GAEIMQ7O3YDFOCF6SFWG3FNJLUWWLOLXBIGS7S2RIQ4CYQMOIGVOFVFK"
+    )
+
+  @Test
+  fun `test POST transaction rejects a quote created by another identity and saves nothing`() {
+    every { quoteStore.findByQuoteId("q1") } returns ownedQuote("q1")
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(otherIdentityJwt(), quoteStepRequest("q1"))
+      }
+
+    assertEquals("quote(id=q1) was not found.", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { exchangeAmountsCalculator.bindQuoteToTransaction(any(), any()) }
+  }
+
+  @Test
+  fun `test POST transaction rejects the same account under another memo`() {
+    every { quoteStore.findByQuoteId("q1") } returns ownedQuote("q1")
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(
+          TestHelper.createWebAuthJwt(accountMemo = "999"),
+          quoteStepRequest("q1"),
+        )
+      }
+
+    assertEquals("quote(id=q1) was not found.", ex.message)
+  }
+
+  @Test
+  fun `test a non-owner gets the not found message for a used quote`() {
+    every { quoteStore.findByQuoteId("q1") } returns
+      ownedQuote("q1").apply { transactionId = "existing-txn-id" }
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(otherIdentityJwt(), quoteStepRequest("q1"))
+      }
+
+    assertEquals("quote(id=q1) was not found.", ex.message)
+  }
+
+  @Test
+  fun `test a non-owner gets the not found message for an expired quote`() {
+    every { quoteStore.findByQuoteId("q1") } returns
+      ownedQuote("q1").apply { expiresAt = Instant.parse("2000-01-01T00:00:00Z") }
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(otherIdentityJwt(), quoteStepRequest("q1"))
+      }
+
+    assertEquals("quote(id=q1) was not found.", ex.message)
+  }
+
+  @Test
+  fun `test the owner of a used quote still gets the already used message`() {
+    every { quoteStore.findByQuoteId("q1") } returns
+      ownedQuote("q1").apply { transactionId = "existing-txn-id" }
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(TestHelper.createWebAuthJwt(), quoteStepRequest("q1"))
+      }
+
+    assertEquals("quote(id=q1) has already been used", ex.message)
+  }
+
+  @Test
+  fun `test a quote whose expires_at equals the clock instant is expired`() {
+    val now = Instant.parse("2030-01-01T00:00:00Z")
+    val serviceAtNow =
+      Sep31Service(
+        languageConfig,
+        sep31Config,
+        txnStore,
+        quoteStore,
+        assetService,
+        rateIntegration,
+        eventService,
+        Clock.fixed(now, ZoneOffset.UTC),
+        exchangeAmountsCalculator,
+        customerIdOwnerStore,
+        customerIntegration,
+      )
+    every { quoteStore.findByQuoteId("q1") } returns ownedQuote("q1").apply { expiresAt = now }
+
+    val ex =
+      assertThrows<BadRequestException> {
+        serviceAtNow.postTransaction(TestHelper.createWebAuthJwt(), quoteStepRequest("q1"))
+      }
+
+    assertEquals("quote(id=q1) has expired at 2030-01-01T00:00:00Z", ex.message)
   }
 }
