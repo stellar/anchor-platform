@@ -20,7 +20,7 @@ import org.stellar.sdk.SorobanServer
 
 object ServiceContainer {
   private val config = ConfigContainer.getInstance().config
-  val eventService = EventService()
+  val eventService = EventService(config.appSettings.isTest)
   val rpc = SorobanServer(config.appSettings.rpcEndpoint)
   val paymentClient =
     PaymentClient(rpc, KeyPair.fromSecretSeed(config.appSettings.paymentSigningSeed))
