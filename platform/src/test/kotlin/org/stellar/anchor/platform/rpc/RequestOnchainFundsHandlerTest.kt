@@ -49,6 +49,7 @@ import org.stellar.anchor.sep31.Sep31TransactionStore
 import org.stellar.anchor.sep6.Sep6Transaction
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.MemoHelper
 import org.stellar.anchor.util.SepRequestValidator
 
 class RequestOnchainFundsHandlerTest {
@@ -1999,5 +2000,111 @@ class RequestOnchainFundsHandlerTest {
 
     val ex = assertThrows<BadRequestException> { handler.handle(request) }
     assertTrue(ex.message!!.contains("memo_in_use"))
+  }
+
+  private fun noneGeneratorRequest(memo: String) =
+    RequestOnchainFundsRequest.builder()
+      .transactionId(TX_ID)
+      .amountIn(AmountAssetRequest("1", STELLAR_USDC))
+      .amountOut(AmountAssetRequest("0.9", FIAT_USD))
+      .feeDetails(FeeDetails("0.1", STELLAR_USDC))
+      .memo(memo)
+      .destinationAccount(DESTINATION_ACCOUNT)
+      .build()
+
+  @CsvSource(
+    "007,7",
+    "+7,7",
+    "0,0",
+    "12345,12345",
+    "18446744073709551615,18446744073709551615",
+  )
+  @ParameterizedTest
+  fun test_handle_sep6_noneGenerator_storesCanonicalIdMemo(input: String, expected: String) {
+    val txn6 = JdbcSep6Transaction()
+    txn6.status = INCOMPLETE.toString()
+    txn6.kind = WITHDRAWAL.kind
+    txn6.requestAssetCode = STELLAR_USDC_CODE
+    txn6.requestAssetIssuer = STELLAR_USDC_ISSUER
+    val captured = slot<JdbcSep6Transaction>()
+
+    every { txn6Store.findByTransactionId(TX_ID) } returns txn6
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn6Store.save(capture(captured)) } returns null
+    every { metricsService.counter(AnchorMetrics.PLATFORM_RPC_TRANSACTION, "SEP", "sep6") } returns
+      sepTransactionCounter
+
+    handler.handle(noneGeneratorRequest(input))
+
+    assertEquals(expected, captured.captured.memo)
+    assertEquals(ID_MEMO_TYPE, captured.captured.memoType)
+    assertEquals(
+      MemoHelper.memoAsString(MemoHelper.makeMemo(captured.captured.memo, ID_MEMO_TYPE)),
+      captured.captured.memo,
+    )
+  }
+
+  @CsvSource(
+    "007,7",
+    "+7,7",
+    "0,0",
+    "12345,12345",
+    "18446744073709551615,18446744073709551615",
+  )
+  @ParameterizedTest
+  fun test_handle_sep24_noneGenerator_storesCanonicalIdMemo(input: String, expected: String) {
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = INCOMPLETE.toString()
+    txn24.kind = WITHDRAWAL.kind
+    txn24.requestAssetCode = STELLAR_USDC_CODE
+    txn24.requestAssetIssuer = STELLAR_USDC_ISSUER
+    val captured = slot<JdbcSep24Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn24Store.save(capture(captured)) } returns null
+    every { metricsService.counter(AnchorMetrics.PLATFORM_RPC_TRANSACTION, "SEP", "sep24") } returns
+      sepTransactionCounter
+
+    handler.handle(noneGeneratorRequest(input))
+
+    assertEquals(expected, captured.captured.memo)
+    assertEquals(ID_MEMO_TYPE, captured.captured.memoType)
+    assertEquals(
+      MemoHelper.memoAsString(MemoHelper.makeMemo(captured.captured.memo, ID_MEMO_TYPE)),
+      captured.captured.memo,
+    )
+  }
+
+  @CsvSource(
+    "007,7",
+    "+7,7",
+    "0,0",
+    "12345,12345",
+    "18446744073709551615,18446744073709551615",
+  )
+  @ParameterizedTest
+  fun test_handle_sep31_noneGenerator_storesCanonicalIdMemo(input: String, expected: String) {
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_RECEIVER.toString()
+    val captured = slot<JdbcSep31Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(TX_ID) } returns txn31
+    every { txn31Store.save(capture(captured)) } returns null
+    every { metricsService.counter(AnchorMetrics.PLATFORM_RPC_TRANSACTION, "SEP", "sep31") } returns
+      sepTransactionCounter
+
+    handler.handle(noneGeneratorRequest(input))
+
+    assertEquals(expected, captured.captured.stellarMemo)
+    assertEquals(ID_MEMO_TYPE, captured.captured.stellarMemoType)
+    assertEquals(
+      MemoHelper.memoAsString(MemoHelper.makeMemo(captured.captured.stellarMemo, ID_MEMO_TYPE)),
+      captured.captured.stellarMemo,
+    )
   }
 }

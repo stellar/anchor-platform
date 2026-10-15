@@ -12,7 +12,10 @@ import static org.stellar.anchor.util.BeanHelper.updateField;
 import static org.stellar.anchor.util.MathHelper.decimal;
 import static org.stellar.anchor.util.MathHelper.equalsAsDecimals;
 import static org.stellar.anchor.util.MemoHelper.makeMemo;
+import static org.stellar.anchor.util.MemoHelper.memoAsString;
+import static org.stellar.anchor.util.MemoHelper.memoType;
 import static org.stellar.anchor.util.MetricConstants.*;
+import static org.stellar.anchor.util.SepHelper.memoTypeString;
 
 import com.google.common.collect.ImmutableSet;
 import io.micrometer.core.instrument.Counter;
@@ -450,8 +453,18 @@ public class TransactionService {
         Memo memo = makeMemo(patch.getMemo(), patch.getMemoType());
 
         if (memo != null) {
-          txnUpdated = updateField(patch, sep24Txn, "memo", txnUpdated);
-          txnUpdated = updateField(patch, sep24Txn, "memoType", txnUpdated);
+          // Store the rendering the payment observer looks up (hash memos arrive in base64 but
+          // are matched in hex), not the caller's raw string.
+          String canonicalMemo = memoAsString(memo);
+          String canonicalMemoType = memoTypeString(memoType(memo));
+          if (!Objects.equals(canonicalMemo, sep24Txn.getMemo())) {
+            sep24Txn.setMemo(canonicalMemo);
+            txnUpdated = true;
+          }
+          if (!Objects.equals(canonicalMemoType, sep24Txn.getMemoType())) {
+            sep24Txn.setMemoType(canonicalMemoType);
+            txnUpdated = true;
+          }
         }
 
         // add a memo for the transaction if the transaction is ready for user to send funds
