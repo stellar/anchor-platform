@@ -357,6 +357,155 @@ internal class Sep10ServiceTest {
     assertDoesNotThrow { sep10Service.validateChallenge(vr) }
   }
 
+  private fun mockClientAccount(mockSigners: List<LedgerClient.Signer>, mediumThreshold: Int) {
+    val accountResponse =
+      mockk<LedgerClient.Account> {
+        every { accountId } returns clientKeyPair.accountId
+        every { sequenceNumber } returns 1
+        every { signers } returns mockSigners
+        every { thresholds.medium } returns mediumThreshold
+      }
+    every { ledgerClient.getAccount(any()) } returns accountResponse
+  }
+
+  @Test
+  fun `test validate challenge rejects a revoked weight-0 master key when the medium threshold is 0`() {
+    val addedSigner = KeyPair.random()
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(clientKeyPair))
+    mockClientAccount(
+      listOf(
+        TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 0, "").toSigner(),
+        TestSigner(addedSigner.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner(),
+      ),
+      0,
+    )
+
+    val ex = assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
+
+    assertEquals(
+      "Transaction not signed by any client signer.",
+      ex.message,
+    )
+  }
+
+  @Test
+  fun `test validate challenge rejects an account whose signers all have weight 0`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(clientKeyPair))
+    mockClientAccount(
+      listOf(TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 0, "").toSigner()),
+      0,
+    )
+
+    val ex = assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
+
+    assertEquals(
+      "No verifiable signers provided, at least one G... address must be provided.",
+      ex.message,
+    )
+  }
+
+  @Test
+  fun `test validate challenge rejects a challenge signed by both a weight-0 key and a weight-1 signer`() {
+    val addedSigner = KeyPair.random()
+    val vr = ValidationRequest()
+    vr.transaction =
+      createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(clientKeyPair, addedSigner))
+    mockClientAccount(
+      listOf(
+        TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 0, "").toSigner(),
+        TestSigner(addedSigner.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner(),
+      ),
+      0,
+    )
+
+    val ex = assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
+
+    assertEquals(
+      "Transaction has unrecognized signatures.",
+      ex.message,
+    )
+  }
+
+  @Test
+  fun `test validate challenge rejects a weight-0 key when the medium threshold is 1`() {
+    val addedSigner = KeyPair.random()
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(clientKeyPair))
+    mockClientAccount(
+      listOf(
+        TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 0, "").toSigner(),
+        TestSigner(addedSigner.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner(),
+      ),
+      1,
+    )
+
+    val ex = assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
+
+    assertEquals(
+      "Transaction not signed by any client signer.",
+      ex.message,
+    )
+  }
+
+  @Test
+  fun `test fetchSigners keeps only ED25519 signers with weight greater than 0`() {
+    val zeroWeight = KeyPair.random()
+    val weightOne = KeyPair.random()
+    val weightFive = KeyPair.random()
+    val nonEd25519 = KeyPair.random()
+    val account =
+      mockk<LedgerClient.Account> {
+        every { signers } returns
+          listOf(
+            TestSigner(zeroWeight.accountId, "SIGNER_KEY_TYPE_ED25519", 0, "").toSigner(),
+            TestSigner(weightOne.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner(),
+            TestSigner(weightFive.accountId, "SIGNER_KEY_TYPE_ED25519", 5, "").toSigner(),
+            TestSigner(nonEd25519.accountId, "SIGNER_KEY_TYPE_HASH_X", 5, "").toSigner(),
+          )
+      }
+
+    val result = sep10Service.fetchSigners(account)
+
+    assertEquals(
+      mapOf(weightOne.accountId to 1, weightFive.accountId to 5),
+      result.associate { it.key to it.weight },
+    )
+  }
+
+  @Test
+  fun `test validate challenge succeeds for a default account with master weight 1 and medium threshold 0`() {
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(clientKeyPair))
+    mockClientAccount(
+      listOf(TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner()),
+      0,
+    )
+
+    val response = sep10Service.validateChallenge(vr)
+    val jwt = jwtService.decode(response.token, Sep10Jwt::class.java)
+    assertEquals("${clientKeyPair.accountId}:$TEST_MEMO", jwt.sub)
+  }
+
+  @Test
+  fun `test validate challenge succeeds with a weight-1 signer when the master key has weight 0 and the medium threshold is 0`() {
+    val addedSigner = KeyPair.random()
+    val vr = ValidationRequest()
+    vr.transaction = createTestChallengeSignedBy(TEST_HOME_DOMAIN, listOf(addedSigner))
+    mockClientAccount(
+      listOf(
+        TestSigner(clientKeyPair.accountId, "SIGNER_KEY_TYPE_ED25519", 0, "").toSigner(),
+        TestSigner(addedSigner.accountId, "SIGNER_KEY_TYPE_ED25519", 1, "").toSigner(),
+      ),
+      0,
+    )
+
+    val response = sep10Service.validateChallenge(vr)
+    val jwt = jwtService.decode(response.token, Sep10Jwt::class.java)
+    assertEquals("${clientKeyPair.accountId}:$TEST_MEMO", jwt.sub)
+  }
+
   /** Builds a normal challenge, then adds one extra, illegitimate signature. */
   @Synchronized
   fun createTestChallengeWithExtraSignature(homeDomain: String): String {

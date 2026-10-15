@@ -441,9 +441,11 @@ public class Sep10Service implements ISep10Service {
   }
 
   Set<Sep10Challenge.Signer> fetchSigners(LedgerClient.Account account) {
-    // Find the signers of the client account.
+    // Find the signers of the client account. A signer with weight 0 (e.g. a revoked master key)
+    // carries no authority and must not satisfy a medium threshold of 0.
     return account.getSigners().stream()
         .filter(as -> as.getType().equals(SIGNER_KEY_TYPE_ED25519.name()))
+        .filter(as -> as.getWeight() > 0)
         .map(as -> new Sep10Challenge.Signer(as.getKey(), as.getWeight().intValue()))
         .collect(Collectors.toSet());
   }
