@@ -174,8 +174,10 @@ public class Sep24Service {
     // Validate sourceAccount
     requestValidator.validateDestinationAccount(token, sourceAccount);
 
+    // client_domain is not a SEP-24 parameter: only the SEP-10 verified value may reach the request
     if (token.getClientDomain() != null)
       withdrawRequest.put("client_domain", token.getClientDomain());
+    else withdrawRequest.remove("client_domain");
 
     Memo memo = makeMemo(withdrawRequest.get("memo"), withdrawRequest.get("memo_type"));
     Memo refundMemo =
@@ -335,8 +337,10 @@ public class Sep24Service {
 
     requestValidator.validateDestinationAccount(token, destinationAccount);
 
+    // client_domain is not a SEP-24 parameter: only the SEP-10 verified value may reach the request
     if (token.getClientDomain() != null)
       depositRequest.put("client_domain", token.getClientDomain());
+    else depositRequest.remove("client_domain");
 
     String txnId = generateSepTransactionId();
     Sep24TransactionBuilder builder =

@@ -1277,6 +1277,69 @@ internal class Sep24ServiceTest {
       .apply { clientName = TEST_CLIENT_NAME }
   }
 
+  private fun createTestWebAuthJwtWithoutClientDomain(): WebAuthJwt {
+    return TestHelper.createWebAuthJwt(TEST_ACCOUNT, null, TEST_HOME_DOMAIN).apply {
+      clientDomain = null
+      clientName = TEST_CLIENT_NAME
+    }
+  }
+
+  @Test
+  fun `test deposit drops a body client_domain when the token has none`() {
+    every { txnStore.save(any()) } returns null
+    val requestSlot = slot<Map<String, String>>()
+    every { interactiveUrlConstructor.construct(any(), capture(requestSlot), any(), any()) } returns
+      "${TEST_SEP24_INTERACTIVE_URL}?lang=en"
+    val request = createTestTransactionRequest()
+    request["client_domain"] = "lobstr.co"
+
+    sep24Service.deposit(createTestWebAuthJwtWithoutClientDomain(), request)
+
+    assertFalse(requestSlot.captured.containsKey("client_domain"))
+  }
+
+  @Test
+  fun `test withdraw drops a body client_domain when the token has none`() {
+    every { txnStore.save(any()) } returns null
+    val requestSlot = slot<Map<String, String>>()
+    every { interactiveUrlConstructor.construct(any(), capture(requestSlot), any(), any()) } returns
+      "${TEST_SEP24_INTERACTIVE_URL}?lang=en"
+    val request = createTestTransactionRequest()
+    request["client_domain"] = "lobstr.co"
+
+    sep24Service.withdraw(createTestWebAuthJwtWithoutClientDomain(), request)
+
+    assertFalse(requestSlot.captured.containsKey("client_domain"))
+  }
+
+  @Test
+  fun `test deposit uses the token client_domain over a body client_domain`() {
+    every { txnStore.save(any()) } returns null
+    val requestSlot = slot<Map<String, String>>()
+    every { interactiveUrlConstructor.construct(any(), capture(requestSlot), any(), any()) } returns
+      "${TEST_SEP24_INTERACTIVE_URL}?lang=en"
+    val request = createTestTransactionRequest()
+    request["client_domain"] = "lobstr.co"
+
+    sep24Service.deposit(createTestWebAuthJwt(), request)
+
+    assertEquals(TEST_CLIENT_DOMAIN, requestSlot.captured["client_domain"])
+  }
+
+  @Test
+  fun `test withdraw uses the token client_domain over a body client_domain`() {
+    every { txnStore.save(any()) } returns null
+    val requestSlot = slot<Map<String, String>>()
+    every { interactiveUrlConstructor.construct(any(), capture(requestSlot), any(), any()) } returns
+      "${TEST_SEP24_INTERACTIVE_URL}?lang=en"
+    val request = createTestTransactionRequest()
+    request["client_domain"] = "lobstr.co"
+
+    sep24Service.withdraw(createTestWebAuthJwt(), request)
+
+    assertEquals(TEST_CLIENT_DOMAIN, requestSlot.captured["client_domain"])
+  }
+
   @Test
   fun `test withdraw rejects already-bound quote`() {
     every { sep38QuoteStore.findByQuoteId(any()) } returns

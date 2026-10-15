@@ -129,8 +129,184 @@ class SimpleInteractiveUrlConstructorTest {
     assertEquals("some-wallet", claims["client_name"] as String)
   }
 
+  private fun newConstructor() =
+    SimpleInteractiveUrlConstructor(
+      assetService,
+      clientService,
+      sep24Config,
+      customerIntegration,
+      jwtService,
+      customerIdOwnerStore,
+    )
+
+  @Test
+  fun `data client_domain is absent when the transaction has no verified client_domain even if the request carries one`() {
+    txn.clientDomain = null
+    request["client_domain"] = "lobstr.co"
+
+    val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
+
+    val data = jwt.claims()["data"] as Map<String, String>
+    assertFalse(data.containsKey("client_domain"))
+    assertNull(jwt.claims()["client_domain"])
+  }
+
+  @Test
+  fun `data client_domain is the transaction client_domain, not the request value`() {
+    txn.clientDomain = "wallet.example"
+    request["client_domain"] = "lobstr.co"
+
+    val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
+
+    val data = jwt.claims()["data"] as Map<String, String>
+    assertEquals("wallet.example", data["client_domain"])
+    assertEquals("wallet.example", jwt.claims()["client_domain"])
+  }
+
+  @Test
+  fun `data client_domain is the transaction client_domain when the request carries none`() {
+    txn.clientDomain = "wallet.example"
+    request.remove("client_domain")
+
+    val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
+
+    val data = jwt.claims()["data"] as Map<String, String>
+    assertEquals("wallet.example", data["client_domain"])
+  }
+
+  private fun givenCaller(clientName: String?) {
+    every { webAuthJwt.account }.returns("test_account")
+    every { webAuthJwt.ownerAccount }.returns("test_account")
+    every { webAuthJwt.ownerMemo }.returns(null)
+    every { webAuthJwt.clientName }.returns(clientName)
+    every { webAuthJwt.ownerKey }.returns("${clientName ?: "none"}:test_account")
+  }
+
+  @Test
+  fun `a customer_id claimed by another owner is refused and no interactive url is returned`() {
+    givenCaller(null)
+    every { customerIdOwnerStore.isClaimed("123") }.returns(true)
+    every { customerIdOwnerStore.verify("123", any(), any()) }.returns(false)
+
+    val ex =
+      assertThrows(SepNotAuthorizedException::class.java) {
+        newConstructor().construct(txn, request, testAsset, webAuthJwt)
+      }
+
+    assertEquals("customer id already claimed by another client", ex.message)
+  }
+
+  @Test
+  fun `a customer_id claimed by the caller is signed unchanged`() {
+    givenCaller("vibrant")
+    every { customerIdOwnerStore.isClaimed("123") }.returns(true)
+    every { customerIdOwnerStore.verify("123", "vibrant:test_account", null) }.returns(true)
+
+    val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
+
+    assertEquals("123", (jwt.claims()["data"] as Map<String, String>)["customer_id"])
+  }
+
+  @Test
+  fun `a customer_id claimed by a memo-bearing caller is verified with the owner memo`() {
+    givenCaller("vibrant")
+    every { webAuthJwt.ownerMemo }.returns("42")
+    every { customerIdOwnerStore.isClaimed("123") }.returns(true)
+    every { customerIdOwnerStore.verify("123", "vibrant:test_account", "42") }.returns(true)
+    every { customerIdOwnerStore.verify("123", "vibrant:test_account", null) }.returns(false)
+
+    val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
+
+    assertEquals("123", (jwt.claims()["data"] as Map<String, String>)["customer_id"])
+  }
+
+  @Test
+  fun `an empty request client_domain is not signed when the transaction has none`() {
+    txn.clientDomain = null
+    request["client_domain"] = ""
+
+    val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
+
+    assertFalse((jwt.claims()["data"] as Map<String, String>).containsKey("client_domain"))
+  }
+
+  @Test
+  fun `an unclaimed customer_id is signed unchanged without an ownership verification`() {
+    givenCaller("vibrant")
+    every { customerIdOwnerStore.isClaimed("123") }.returns(false)
+
+    val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
+
+    assertEquals("123", (jwt.claims()["data"] as Map<String, String>)["customer_id"])
+    verify(exactly = 0) { customerIdOwnerStore.verify(any(), any(), any()) }
+  }
+
+  @Test
+  fun `a claimed customer_id with a legacy owner key is signed when the business server confirms it`() {
+    givenCaller("vibrant")
+    every { customerIdOwnerStore.isClaimed("123") }.returns(true)
+    every { customerIdOwnerStore.verify("123", any(), any()) }.returns(false)
+    every { customerIntegration.getCustomer(any()) }
+      .returns(GetCustomerResponse.builder().id("123").build())
+    every { customerIdOwnerStore.getCreatorMemo("123") }.returns(null)
+    every { customerIdOwnerStore.reconcileLegacyKey("123", "vibrant", null, any(), null) }
+      .returns(true)
+
+    val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
+
+    assertEquals("123", (jwt.claims()["data"] as Map<String, String>)["customer_id"])
+  }
+
+  @Test
+  fun `a claimed customer_id whose legacy owner cannot be confirmed is refused`() {
+    givenCaller("vibrant")
+    every { customerIdOwnerStore.isClaimed("123") }.returns(true)
+    every { customerIdOwnerStore.verify("123", any(), any()) }.returns(false)
+    every { customerIntegration.getCustomer(any()) }
+      .returns(GetCustomerResponse.builder().id("999").build())
+
+    assertThrows(SepNotAuthorizedException::class.java) {
+      newConstructor().construct(txn, request, testAsset, webAuthJwt)
+    }
+  }
+
+  @Test
+  fun `an empty customer_id triggers no ownership lookup and is not signed`() {
+    givenCaller("vibrant")
+    request["customer_id"] = ""
+
+    val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
+
+    assertFalse((jwt.claims()["data"] as Map<String, String>).containsKey("customer_id"))
+    verify(exactly = 0) { customerIdOwnerStore.isClaimed(any()) }
+  }
+
+  @Test
+  fun `an absent customer_id triggers no ownership lookup and is not signed`() {
+    givenCaller("vibrant")
+    request.remove("customer_id")
+
+    val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
+
+    assertFalse((jwt.claims()["data"] as Map<String, String>).containsKey("customer_id"))
+    verify(exactly = 0) { customerIdOwnerStore.isClaimed(any()) }
+  }
+
+  @Test
+  fun `a failure of the ownership store while verifying a claimed customer_id is not swallowed`() {
+    givenCaller("vibrant")
+    every { customerIdOwnerStore.isClaimed("123") }.returns(true)
+    every { customerIdOwnerStore.verify("123", any(), any()) }
+      .throws(IllegalStateException("store down"))
+
+    assertThrows(IllegalStateException::class.java) {
+      newConstructor().construct(txn, request, testAsset, webAuthJwt)
+    }
+  }
+
   @Test
   fun `when kycFieldsForwarding is enabled, the customerIntegration should receive the kyc fields`() {
+    request.remove("customer_id")
     val customerIntegration: CustomerIntegration = mockk()
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     val capturedPutCustomerRequest = slot<PutCustomerRequest>()
@@ -184,6 +360,7 @@ class SimpleInteractiveUrlConstructorTest {
 
   @Test
   fun `when kycFieldsForwarding is enabled, the forwarded customer id is claimed for the caller`() {
+    request.remove("customer_id")
     val customerIntegration: CustomerIntegration = mockk()
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
@@ -217,6 +394,7 @@ class SimpleInteractiveUrlConstructorTest {
 
   @Test
   fun `when the forwarded id is genuinely new, the callback confirms it before claiming it`() {
+    request.remove("customer_id")
     val customerIntegration: CustomerIntegration = mockk()
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
@@ -253,6 +431,7 @@ class SimpleInteractiveUrlConstructorTest {
 
   @Test
   fun `when the forwarded customer id is already claimed by another client, construct throws`() {
+    request.remove("customer_id")
     val customerIntegration: CustomerIntegration = mockk()
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
@@ -283,6 +462,7 @@ class SimpleInteractiveUrlConstructorTest {
 
   @Test
   fun `when the pre-check callback lookup fails with a server error, construct aborts without writing`() {
+    request.remove("customer_id")
     val customerIntegration: CustomerIntegration = mockk()
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.getCustomer(any()) } throws RuntimeException("callback unavailable")
@@ -310,6 +490,7 @@ class SimpleInteractiveUrlConstructorTest {
 
   @Test
   fun `when the business server resolves the KYC fields to a different unclaimed customer, construct throws instead of claiming it`() {
+    request.remove("customer_id")
     val customerIntegration: CustomerIntegration = mockk()
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
@@ -342,6 +523,7 @@ class SimpleInteractiveUrlConstructorTest {
 
   @Test
   fun `when the jwt carries a client_name claim, the forwarded id is claimed under that client name`() {
+    request.remove("customer_id")
     val customerIntegration: CustomerIntegration = mockk()
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
@@ -375,6 +557,7 @@ class SimpleInteractiveUrlConstructorTest {
 
   @Test
   fun `when the forwarded id is a legacy wallet-only key, the callback confirms it and it is reconciled`() {
+    request.remove("customer_id")
     val customerIntegration: CustomerIntegration = mockk()
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
@@ -422,6 +605,7 @@ class SimpleInteractiveUrlConstructorTest {
 
   @Test
   fun `when a custodial client authenticates with a muxed account and the jwt carries no client_name, ownership uses the muxed owner account rather than a re-resolved client name`() {
+    request.remove("customer_id")
     val customerIntegration: CustomerIntegration = mockk()
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     every { customerIntegration.putCustomer(any()) } returns
@@ -463,6 +647,7 @@ class SimpleInteractiveUrlConstructorTest {
 
   @Test
   fun `when a custodial client authenticates with a muxed account, the forwarded customer callback receives the muxed owner memo, not the account memo`() {
+    request.remove("customer_id")
     val customerIntegration: CustomerIntegration = mockk()
     val customerIdOwnerStore: Sep31CustomerIdOwnerStore = mockk()
     val putRequestSlot = slot<PutCustomerRequest>()
