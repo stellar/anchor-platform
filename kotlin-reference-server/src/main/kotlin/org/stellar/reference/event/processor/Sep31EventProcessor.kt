@@ -30,6 +30,9 @@ class Sep31EventProcessor(
     fun skipAutoAdvance(transactionId: String) {
       manualRpcTestTransactions.add(transactionId)
     }
+
+    internal fun isSkippingAutoAdvance(transactionId: String) =
+      manualRpcTestTransactions.contains(transactionId)
   }
 
   override suspend fun onQuoteCreated(event: SendEventRequest) {
