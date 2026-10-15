@@ -1104,6 +1104,156 @@ class RequestOnchainFundsHandlerTest {
     verify(exactly = 0) { sepTransactionCounter.increment() }
   }
 
+  @CsvSource(value = ["withdrawal", "withdrawal-exchange"])
+  @ParameterizedTest
+  fun test_handle_sep6_transferReceived_pendingCustomerInfoUpdate_rejected(kind: String) {
+    val request = RequestOnchainFundsRequest.builder().transactionId(TX_ID).build()
+    val receivedAt = Instant.now()
+    val txn6 = JdbcSep6Transaction()
+    txn6.status = PENDING_CUSTOMER_INFO_UPDATE.toString()
+    txn6.kind = kind
+    txn6.transferReceivedAt = receivedAt
+    txn6.memo = TEXT_MEMO
+    txn6.memoType = TEXT_MEMO_TYPE
+    txn6.amountIn = "1"
+    txn6.amountExpected = "1"
+
+    every { txn6Store.findByTransactionId(TX_ID) } returns txn6
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { metricsService.counter(AnchorMetrics.PLATFORM_RPC_TRANSACTION, "SEP", "sep6") } returns
+      sepTransactionCounter
+
+    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
+    assertEquals(
+      "RPC method[request_onchain_funds] is not supported. Status[pending_customer_info_update], kind[$kind], protocol[6], funds received[true]",
+      ex.message,
+    )
+
+    assertEquals(PENDING_CUSTOMER_INFO_UPDATE.toString(), txn6.status)
+    assertEquals(TEXT_MEMO, txn6.memo)
+    assertEquals(TEXT_MEMO_TYPE, txn6.memoType)
+    assertEquals("1", txn6.amountIn)
+    assertEquals("1", txn6.amountExpected)
+    assertEquals(receivedAt, txn6.transferReceivedAt)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @CsvSource(
+    value =
+      [
+        "withdrawal,pending_customer_info_update",
+        "withdrawal-exchange,pending_customer_info_update",
+        "withdrawal,pending_anchor",
+        "withdrawal-exchange,pending_anchor",
+        "withdrawal,incomplete",
+        "withdrawal-exchange,incomplete",
+      ]
+  )
+  @ParameterizedTest
+  fun test_handle_sep6_notReceived_supportedStatuses_accepted(kind: String, status: String) {
+    val sep6DepositInfoGenerator: Sep6DepositInfoSelfGenerator = mockk()
+    this.handler =
+      RequestOnchainFundsHandler(
+        txn6Store,
+        txn24Store,
+        txn31Store,
+        requestValidator,
+        assetService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+        sep31DepositInfoGenerator,
+        paymentObservingAccountsManager,
+        eventService,
+        metricsService,
+        sepRequestValidator,
+      )
+
+    val request =
+      RequestOnchainFundsRequest.builder()
+        .transactionId(TX_ID)
+        .amountIn(AmountAssetRequest("1", STELLAR_USDC))
+        .amountOut(AmountAssetRequest("0.9", FIAT_USD))
+        .feeDetails(FeeDetails("0.1", STELLAR_USDC))
+        .amountExpected(AmountRequest("1"))
+        .build()
+    val txn6 = JdbcSep6Transaction()
+    txn6.status = status
+    txn6.kind = kind
+    txn6.requestAssetCode = STELLAR_USDC_CODE
+    txn6.requestAssetIssuer = STELLAR_USDC_ISSUER
+    val sep6TxnCapture = slot<JdbcSep6Transaction>()
+    val depositInfo = SepDepositInfo(DESTINATION_ACCOUNT_2, ID_MEMO)
+
+    every { txn6Store.findByTransactionId(TX_ID) } returns txn6
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn6Store.save(capture(sep6TxnCapture)) } returns null
+    every { sep6DepositInfoGenerator.generate(ofType(Sep6Transaction::class)) } returns depositInfo
+    every { eventSession.publish(any()) } just Runs
+    every { metricsService.counter(AnchorMetrics.PLATFORM_RPC_TRANSACTION, "SEP", "sep6") } returns
+      sepTransactionCounter
+
+    handler.handle(request)
+
+    verify(exactly = 1) { txn6Store.save(any()) }
+    assertEquals(PENDING_USR_TRANSFER_START.toString(), sep6TxnCapture.captured.status)
+    assertEquals(ID_MEMO, sep6TxnCapture.captured.memo)
+  }
+
+  @CsvSource(
+    value =
+      [
+        "deposit,pending_customer_info_update",
+        "deposit,pending_anchor",
+        "deposit-exchange,pending_customer_info_update",
+        "deposit-exchange,pending_anchor",
+      ]
+  )
+  @ParameterizedTest
+  fun test_handle_sep6_deposit_pendingStatuses_rejected(kind: String, status: String) {
+    val request = RequestOnchainFundsRequest.builder().transactionId(TX_ID).build()
+    val txn6 = JdbcSep6Transaction()
+    txn6.status = status
+    txn6.kind = kind
+
+    every { txn6Store.findByTransactionId(TX_ID) } returns txn6
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+
+    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
+    assertEquals(
+      "RPC method[request_onchain_funds] is not supported. Status[$status], kind[$kind], protocol[6], funds received[false]",
+      ex.message,
+    )
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+  }
+
+  @Test
+  fun test_handle_sep24_pendingCustomerInfoUpdate_rejected() {
+    val request = RequestOnchainFundsRequest.builder().transactionId(TX_ID).build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = PENDING_CUSTOMER_INFO_UPDATE.toString()
+    txn24.kind = WITHDRAWAL.kind
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+
+    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
+    assertEquals(
+      "RPC method[request_onchain_funds] is not supported. Status[pending_customer_info_update], kind[withdrawal], protocol[24], funds received[false]",
+      ex.message,
+    )
+
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
   @CsvSource(value = ["deposit", "deposit-exchange"])
   @ParameterizedTest
   fun test_handle_sep6_unsupportedKind(kind: String) {

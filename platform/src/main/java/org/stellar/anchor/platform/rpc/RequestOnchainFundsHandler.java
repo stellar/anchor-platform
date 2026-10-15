@@ -233,9 +233,9 @@ public class RequestOnchainFundsHandler
       JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
       if (ImmutableSet.of(WITHDRAWAL, WITHDRAWAL_EXCHANGE).contains(Kind.from(txn6.getKind()))) {
         supportedStatuses.add(INCOMPLETE);
-        supportedStatuses.add(PENDING_CUSTOMER_INFO_UPDATE);
         if (!areFundsReceived(txn6)) {
           supportedStatuses.add(PENDING_ANCHOR);
+          supportedStatuses.add(PENDING_CUSTOMER_INFO_UPDATE);
         }
       }
       return supportedStatuses;
