@@ -59,13 +59,8 @@ public class Sep12Service {
 
   public Sep12GetCustomerResponse getCustomer(WebAuthJwt token, Sep12GetCustomerRequest request)
       throws AnchorException {
+    fillIdentityFromToken(request, token);
     validateGetOrPutRequest(request, token);
-    if (request.getAccount() == null
-        && token.getAccount() != null
-        && request.getId() == null
-        && request.getTransactionId() == null) {
-      request.setAccount(token.getAccount());
-    }
 
     GetCustomerResponse response =
         customerIntegration.getCustomer(GetCustomerRequest.from(request));
@@ -81,17 +76,7 @@ public class Sep12Service {
 
     boolean isNewCustomer = request.getId() == null && request.getTransactionId() == null;
 
-    if (request.getAccount() == null
-        && token.getAccount() != null
-        && request.getId() == null
-        && request.getTransactionId() == null) {
-      request.setAccount(token.getAccount());
-
-      if (request.getMemo() == null && token.getOwnerMemo() != null) {
-        request.setMemo(token.getOwnerMemo());
-        request.setMemoType(MemoHelper.memoTypeAsString(MemoType.MEMO_ID));
-      }
-    }
+    fillIdentityFromToken(request, token);
 
     validateGetOrPutRequest(request, token);
 
@@ -208,6 +193,24 @@ public class Sep12Service {
     return Sep12PutCustomerResponse.builder().id(updatedCustomer.getId()).build();
   }
 
+  /**
+   * A request that names no customer means the one the token identifies: its account and, when the
+   * token carries a memo or a muxed id, that memo.
+   */
+  private static void fillIdentityFromToken(Sep12CustomerRequestBase request, WebAuthJwt token) {
+    if (request.getAccount() == null
+        && token.getAccount() != null
+        && request.getId() == null
+        && request.getTransactionId() == null) {
+      request.setAccount(token.getAccount());
+
+      if (request.getMemo() == null && token.getOwnerMemo() != null) {
+        request.setMemo(token.getOwnerMemo());
+        request.setMemoType(MemoHelper.memoTypeAsString(MemoType.MEMO_ID));
+      }
+    }
+  }
+
   public void deleteCustomer(WebAuthJwt token, String account, String memo, String memoType)
       throws AnchorException {
     boolean isAccountAuthenticated =
@@ -217,8 +220,13 @@ public class Sep12Service {
 
     boolean isMemoMissingAuthentication = false;
     String muxedAccountId = Objects.toString(token.getMuxedAccountId(), null);
+    boolean isOwnMuxedAddress =
+        muxedAccountId != null && Objects.equals(token.getMuxedAccount(), account);
     if (muxedAccountId != null) {
-      if (!Objects.equals(token.getMuxedAccount(), account)) {
+      if (isOwnMuxedAddress) {
+        // The muxed address already names the sub-account, so the memo may be left out.
+        isMemoMissingAuthentication = memo != null && !Objects.equals(muxedAccountId, memo);
+      } else {
         isMemoMissingAuthentication = !Objects.equals(muxedAccountId, memo);
       }
     } else if (token.getAccountMemo() != null) {
@@ -231,18 +239,40 @@ public class Sep12Service {
           String.format("Not authorized to delete account [%s] with memo [%s]", account, memo));
     }
 
+    // PUT stores a muxed caller's customer as (base account, muxed id, "id"); look it up the same
+    // way. A memo sent without its type is an id memo, as on GET and PUT.
+    String lookupAccount = account;
+    String lookupMemo = memo;
+    String lookupMemoType = memoType;
+    if (isOwnMuxedAddress) {
+      lookupAccount = token.getAccount();
+      lookupMemo = muxedAccountId;
+      lookupMemoType = MemoHelper.memoTypeAsString(MemoType.MEMO_ID);
+    } else if (memo != null && (memoType == null || token.getOwnerMemo() != null)) {
+      // SEP-12: when the token carries a memo, the memo type can be ignored, as on GET and PUT.
+      lookupMemoType = MemoHelper.memoTypeAsString(MemoType.MEMO_ID);
+    }
+
     boolean existingCustomerMatch = false;
     GetCustomerResponse existingCustomer =
         customerIntegration.getCustomer(
-            GetCustomerRequest.builder().account(account).memo(memo).memoType(memoType).build());
+            GetCustomerRequest.builder()
+                .account(lookupAccount)
+                .memo(lookupMemo)
+                .memoType(lookupMemoType)
+                .build());
     if (existingCustomer != null && existingCustomer.getId() != null) {
       existingCustomerMatch = true;
+      verifyCustomerIdOwner(existingCustomer.getId(), token);
       customerIntegration.deleteCustomer(existingCustomer.getId());
     }
 
     if (!existingCustomerMatch) {
       infoF(
-          "No existing customer found for account={} memo={} memoType={}", account, memo, memoType);
+          "No existing customer found for account={} memo={} memoType={}",
+          lookupAccount,
+          lookupMemo,
+          lookupMemoType);
       throw new SepNotFoundException("User not found.");
     }
 
@@ -251,6 +281,23 @@ public class Sep12Service {
   }
 
   private static final String ERR_CUSTOMER_ID_NOT_AUTHORIZED = "not authorized for customer id";
+
+  /**
+   * A customer id claimed in the owner registry belongs to the identity that registered it (client
+   * name, account and memo). Like GET and PUT by id, a DELETE only reaches it for that identity or
+   * for a legacy-key owner the business server confirms. An unclaimed id is the caller's by the
+   * lookup that found it.
+   */
+  private void verifyCustomerIdOwner(String customerId, WebAuthJwt token)
+      throws SepNotAuthorizedException {
+    if (customerIdOwnerStore.isClaimed(customerId)
+        && !customerIdOwnerStore.verify(
+            customerId, token.getOwnerKey(), token.getOwnerMemo(), false)
+        && !CustomerOwnershipReconciliation.tryReconcile(
+            customerIdOwnerStore, customerIntegration, customerId, token, null)) {
+      throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
+    }
+  }
 
   void validateGetOrPutRequest(Sep12CustomerRequestBase requestBase, WebAuthJwt token)
       throws SepException {

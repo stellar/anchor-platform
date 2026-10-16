@@ -41,6 +41,24 @@ class WalletServerClient(private val endpoint: Url = Url("http://localhost:8092"
       .body<String>()
       .let { parseResponse(it, RawCallback::class.java) }
 
+  /**
+   * The SEP-12 callbacks of customer [id] with the `Signature` and `Host` headers and body as
+   * received.
+   */
+  suspend fun getRawCustomerCallbacks(id: String): List<RawCallback> =
+    client
+      .get {
+        url {
+          setupUrl("/callbacks/sep12/raw")
+          parameter("id", id)
+        }
+      }
+      .body<String>()
+      .let { parseResponse(it, RawCallback::class.java) }
+
+  suspend fun pollRawCustomerCallbacks(id: String, expected: Int): List<RawCallback> =
+    poll(expected) { getRawCustomerCallbacks(id) }
+
   suspend fun <T> pollTransactionCallbacks(
     sep: String,
     txnId: String?,

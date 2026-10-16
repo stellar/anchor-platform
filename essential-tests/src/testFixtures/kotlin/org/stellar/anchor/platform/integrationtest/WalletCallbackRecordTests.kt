@@ -4,6 +4,7 @@ import com.google.gson.JsonParser
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.stellar.reference.wallet.CallbackService
 import org.stellar.reference.wallet.RawCallback
 
@@ -71,5 +72,43 @@ class WalletCallbackRecordTests {
     )
     assertEquals(1, service.getTransactionCallbacks("sep24", "txn-9").size)
     assertEquals(emptyList<RawCallback>(), service.getRawTransactionCallbacks("sep24", "txn-9"))
+  }
+
+  // SEP12CB-06
+  @Test
+  fun `the raw reader returns the SEP-12 callbacks of the requested customer exactly as received`() {
+    val service = CallbackService()
+    val first = "{ \"id\" : \"c-1\",  \"status\":\"NEEDS_INFO\" }\n"
+    val second = "{\"status\":\"ACCEPTED\", \"id\":\"c-2\"}"
+    service.processCallback(
+      JsonParser.parseString(first).asJsonObject,
+      "sep12",
+      RawCallback("t=1, s=YQ==", "wallet-server:8092", first),
+    )
+    service.processCallback(
+      JsonParser.parseString(second).asJsonObject,
+      "sep12",
+      RawCallback("t=2, s=Yg==", "wallet-server:8092", second),
+    )
+
+    assertEquals(
+      listOf(RawCallback("t=1, s=YQ==", "wallet-server:8092", first)),
+      service.getRawCustomerCallbacks("c-1"),
+    )
+    assertEquals(
+      listOf(first, second),
+      service.getRawCustomerCallbacks(null).map { it.body },
+    )
+    assertEquals(emptyList<RawCallback>(), service.getRawCustomerCallbacks("c-3"))
+  }
+
+  // SEP12CB-06
+  @Test
+  fun `the SEP-12 raw reader never returns a SEP-24 callback and the transaction reader still refuses sep12`() {
+    val service = CallbackService()
+    record(service, RawCallback("t=1, s=YQ==", "wallet-server:8092", body))
+
+    assertEquals(emptyList<RawCallback>(), service.getRawCustomerCallbacks(null))
+    assertThrows<IllegalArgumentException> { service.getRawTransactionCallbacks("sep12", null) }
   }
 }

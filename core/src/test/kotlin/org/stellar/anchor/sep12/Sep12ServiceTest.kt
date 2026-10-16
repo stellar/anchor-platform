@@ -997,6 +997,114 @@ class Sep12ServiceTest {
     assertEquals(TEST_ACCOUNT, mockGetRequest.account)
   }
 
+  private fun captureGetCustomerRequest(): CapturingSlot<GetCustomerRequest> {
+    val slot = slot<GetCustomerRequest>()
+    every { customerIntegration.getCustomer(capture(slot)) } returns
+      GetCustomerResponse.builder().status(Sep12Status.NEEDS_INFO.name).build()
+    return slot
+  }
+
+  @Test
+  fun `test get customer without id, account or memo uses the memo of a memo token`() {
+    val slot = captureGetCustomerRequest()
+
+    sep12Service.getCustomer(
+      createJwtToken("$TEST_ACCOUNT:$TEST_MEMO"),
+      Sep12GetCustomerRequest.builder().type("sep24").build(),
+    )
+
+    assertEquals(
+      GetCustomerRequest.builder()
+        .account(TEST_ACCOUNT)
+        .memo(TEST_MEMO)
+        .memoType("id")
+        .type("sep24")
+        .build(),
+      slot.captured,
+    )
+  }
+
+  @Test
+  fun `test get customer without id, account or memo uses the base account and muxed id of a muxed token`() {
+    val slot = captureGetCustomerRequest()
+
+    sep12Service.getCustomer(
+      createJwtToken(TEST_MUXED_ACCOUNT),
+      Sep12GetCustomerRequest.builder().type("sep24").build(),
+    )
+
+    assertEquals(
+      GetCustomerRequest.builder()
+        .account(TEST_ACCOUNT)
+        .memo(TEST_MEMO)
+        .memoType("id")
+        .type("sep24")
+        .build(),
+      slot.captured,
+    )
+  }
+
+  @Test
+  fun `test get customer with the token memo sent explicitly resolves the same customer`() {
+    val slot = captureGetCustomerRequest()
+
+    sep12Service.getCustomer(
+      createJwtToken("$TEST_ACCOUNT:$TEST_MEMO"),
+      Sep12GetCustomerRequest.builder().memo(TEST_MEMO).type("sep24").build(),
+    )
+
+    assertEquals(
+      GetCustomerRequest.builder()
+        .account(TEST_ACCOUNT)
+        .memo(TEST_MEMO)
+        .memoType("id")
+        .type("sep24")
+        .build(),
+      slot.captured,
+    )
+  }
+
+  @Test
+  fun `test get customer with an explicit account and no memo is refused for a memo token`() {
+    val ex: SepNotAuthorizedException = assertThrows {
+      sep12Service.getCustomer(
+        createJwtToken("$TEST_ACCOUNT:$TEST_MEMO"),
+        Sep12GetCustomerRequest.builder().account(TEST_ACCOUNT).type("sep24").build(),
+      )
+    }
+
+    assertEquals("The memo specified does not match the memo ID authorized via SEP-10", ex.message)
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test get customer with a memo other than the token memo is refused`() {
+    val ex: SepNotAuthorizedException = assertThrows {
+      sep12Service.getCustomer(
+        createJwtToken("$TEST_ACCOUNT:$TEST_MEMO"),
+        Sep12GetCustomerRequest.builder().memo("bar").type("sep24").build(),
+      )
+    }
+
+    assertEquals("The memo specified does not match the memo ID authorized via SEP-10", ex.message)
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+  }
+
+  @Test
+  fun `test get customer without id, account or memo leaves the memo empty for a memo-less token`() {
+    val slot = captureGetCustomerRequest()
+
+    sep12Service.getCustomer(
+      createJwtToken(TEST_ACCOUNT),
+      Sep12GetCustomerRequest.builder().type("sep24").build(),
+    )
+
+    assertEquals(
+      GetCustomerRequest.builder().account(TEST_ACCOUNT).type("sep24").build(),
+      slot.captured,
+    )
+  }
+
   @Test
   fun `Test get customer request with id injects account`() {
     val callbackApiGetRequestSlot = slot<GetCustomerRequest>()
@@ -1487,6 +1595,329 @@ class Sep12ServiceTest {
 
     // succeeds if request account is equals the token's muxed account
     assertDoesNotThrow { sep12Service.deleteCustomer(jwtToken, TEST_MUXED_ACCOUNT, null, null) }
+  }
+
+  private fun captureDeleteLookup(): CapturingSlot<GetCustomerRequest> {
+    val slot = slot<GetCustomerRequest>()
+    every { customerIntegration.getCustomer(capture(slot)) } returns
+      GetCustomerResponse.builder().id("existing-customer-id").build()
+    every { customerIntegration.deleteCustomer(any()) } just Runs
+    return slot
+  }
+
+  @Test
+  fun `test delete through the muxed address looks up the base account and the muxed id`() {
+    val slot = captureDeleteLookup()
+
+    sep12Service.deleteCustomer(createJwtToken(TEST_MUXED_ACCOUNT), TEST_MUXED_ACCOUNT, null, null)
+
+    assertEquals(
+      GetCustomerRequest.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).memoType("id").build(),
+      slot.captured,
+    )
+    verify(exactly = 1) { customerIntegration.deleteCustomer("existing-customer-id") }
+  }
+
+  @Test
+  fun `test delete through the muxed address accepts the muxed id as the memo`() {
+    val slot = captureDeleteLookup()
+
+    sep12Service.deleteCustomer(
+      createJwtToken(TEST_MUXED_ACCOUNT),
+      TEST_MUXED_ACCOUNT,
+      TEST_MEMO,
+      "id",
+    )
+
+    assertEquals(
+      GetCustomerRequest.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).memoType("id").build(),
+      slot.captured,
+    )
+    verify(exactly = 1) { customerIntegration.deleteCustomer("existing-customer-id") }
+  }
+
+  @Test
+  fun `test delete through the muxed address with another memo is refused`() {
+    captureDeleteLookup()
+
+    val ex: SepNotAuthorizedException = assertThrows {
+      sep12Service.deleteCustomer(
+        createJwtToken(TEST_MUXED_ACCOUNT),
+        TEST_MUXED_ACCOUNT,
+        "bar",
+        "id",
+      )
+    }
+
+    assertEquals(
+      "Not authorized to delete account [$TEST_MUXED_ACCOUNT] with memo [bar]",
+      ex.message
+    )
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+    verify(exactly = 0) { customerIntegration.deleteCustomer(any()) }
+  }
+
+  @Test
+  fun `test delete with a memo and no memo type looks the customer up with memo type id`() {
+    val slot = captureDeleteLookup()
+
+    sep12Service.deleteCustomer(
+      createJwtToken("$TEST_ACCOUNT:$TEST_MEMO"),
+      TEST_ACCOUNT,
+      TEST_MEMO,
+      null,
+    )
+    assertEquals(
+      GetCustomerRequest.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).memoType("id").build(),
+      slot.captured,
+    )
+
+    sep12Service.deleteCustomer(createJwtToken(TEST_ACCOUNT), TEST_ACCOUNT, "foo_bar", null)
+    assertEquals(
+      GetCustomerRequest.builder().account(TEST_ACCOUNT).memo("foo_bar").memoType("id").build(),
+      slot.captured,
+    )
+  }
+
+  @Test
+  fun `test delete without a memo leaves the memo type empty`() {
+    val slot = captureDeleteLookup()
+
+    sep12Service.deleteCustomer(createJwtToken(TEST_ACCOUNT), TEST_ACCOUNT, null, null)
+
+    assertEquals(GetCustomerRequest.builder().account(TEST_ACCOUNT).build(), slot.captured)
+  }
+
+  @Test
+  fun `test delete by a caller whose token carries a memo looks the customer up with memo type id`() {
+    val slot = captureDeleteLookup()
+
+    sep12Service.deleteCustomer(
+      createJwtToken("$TEST_ACCOUNT:$TEST_MEMO"),
+      TEST_ACCOUNT,
+      TEST_MEMO,
+      "text",
+    )
+    assertEquals(
+      GetCustomerRequest.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).memoType("id").build(),
+      slot.captured,
+    )
+
+    sep12Service.deleteCustomer(
+      createJwtToken(TEST_MUXED_ACCOUNT),
+      TEST_ACCOUNT,
+      TEST_MEMO,
+      "text",
+    )
+    assertEquals(
+      GetCustomerRequest.builder().account(TEST_ACCOUNT).memo(TEST_MEMO).memoType("id").build(),
+      slot.captured,
+    )
+  }
+
+  // SEP12DO-12
+  @Test
+  fun `test delete refuses a customer claimed by another client for the same account`() {
+    captureDeleteLookup()
+    every { customerIdOwnerStore.isClaimed("existing-customer-id") } returns true
+    every {
+      customerIdOwnerStore.verify("existing-customer-id", "walletA:$TEST_ACCOUNT", null, false)
+    } returns true
+
+    val ex: SepNotAuthorizedException = assertThrows {
+      sep12Service.deleteCustomer(
+        createJwtToken(TEST_ACCOUNT, "walletB"),
+        TEST_ACCOUNT,
+        null,
+        null,
+      )
+    }
+
+    assertEquals("not authorized for customer id", ex.message)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verify("existing-customer-id", "walletB:$TEST_ACCOUNT", null, false)
+    }
+    verify(exactly = 0) { customerIntegration.deleteCustomer(any()) }
+  }
+
+  // SEP12DO-12
+  @Test
+  fun `test delete refuses a customer claimed by another identity when the token has no client`() {
+    captureDeleteLookup()
+    every { customerIdOwnerStore.isClaimed("existing-customer-id") } returns true
+    every {
+      customerIdOwnerStore.verify("existing-customer-id", "walletA:$TEST_ACCOUNT", null, false)
+    } returns true
+
+    val ex: SepNotAuthorizedException = assertThrows {
+      sep12Service.deleteCustomer(createJwtToken(TEST_ACCOUNT), TEST_ACCOUNT, null, null)
+    }
+
+    assertEquals("not authorized for customer id", ex.message)
+    verify(exactly = 0) { customerIntegration.deleteCustomer(any()) }
+  }
+
+  private fun assertDeleteRefusedForCaller(
+    jwtToken: WebAuthJwt,
+    account: String,
+    memo: String?,
+    memoType: String?,
+    callerKey: String,
+    callerMemo: String?,
+  ) {
+    captureDeleteLookup()
+    every { customerIdOwnerStore.isClaimed("existing-customer-id") } returns true
+    every {
+      customerIdOwnerStore.verify("existing-customer-id", callerKey, callerMemo, false)
+    } returns false
+
+    val ex: SepNotAuthorizedException = assertThrows {
+      sep12Service.deleteCustomer(jwtToken, account, memo, memoType)
+    }
+
+    assertEquals("not authorized for customer id", ex.message)
+    verify(exactly = 1) {
+      customerIdOwnerStore.verify("existing-customer-id", callerKey, callerMemo, false)
+    }
+    verify(exactly = 0) { customerIntegration.deleteCustomer(any()) }
+  }
+
+  // SEP12DO-12
+  @Test
+  fun `test delete refuses a customer claimed by another identity for a caller with a memo token`() {
+    assertDeleteRefusedForCaller(
+      createJwtToken("$TEST_ACCOUNT:$TEST_MEMO"),
+      TEST_ACCOUNT,
+      TEST_MEMO,
+      "id",
+      TEST_ACCOUNT,
+      TEST_MEMO,
+    )
+  }
+
+  // SEP12DO-14
+  @Test
+  fun `test delete refuses a customer of a memo for a memo-less token that sends the memo in the body`() {
+    assertDeleteRefusedForCaller(
+      createJwtToken(TEST_ACCOUNT),
+      TEST_ACCOUNT,
+      TEST_MEMO,
+      "id",
+      TEST_ACCOUNT,
+      null,
+    )
+  }
+
+  // SEP12DO-12
+  @Test
+  fun `test delete refuses a customer claimed by another identity through the muxed address`() {
+    assertDeleteRefusedForCaller(
+      createJwtToken(TEST_MUXED_ACCOUNT),
+      TEST_MUXED_ACCOUNT,
+      null,
+      null,
+      TEST_MUXED_ACCOUNT,
+      TEST_MEMO,
+    )
+  }
+
+  // SEP12DO-12
+  @Test
+  fun `test delete refuses a customer claimed by another identity for a muxed token on its base account`() {
+    assertDeleteRefusedForCaller(
+      createJwtToken(TEST_MUXED_ACCOUNT),
+      TEST_ACCOUNT,
+      TEST_MEMO,
+      "id",
+      TEST_MUXED_ACCOUNT,
+      TEST_MEMO,
+    )
+  }
+
+  // SEP12DO-13
+  @Test
+  fun `test delete lets the claimed owner delete its customer`() {
+    captureDeleteLookup()
+    every { customerIdOwnerStore.isClaimed("existing-customer-id") } returns true
+    every {
+      customerIdOwnerStore.verify("existing-customer-id", "walletA:$TEST_ACCOUNT", null, false)
+    } returns true
+
+    sep12Service.deleteCustomer(createJwtToken(TEST_ACCOUNT, "walletA"), TEST_ACCOUNT, null, null)
+
+    verify(exactly = 1) { customerIntegration.deleteCustomer("existing-customer-id") }
+  }
+
+  // SEP12DO-13
+  @Test
+  fun `test delete lets a muxed owner delete through its muxed address and its base account`() {
+    captureDeleteLookup()
+    every { customerIdOwnerStore.isClaimed("existing-customer-id") } returns true
+    every {
+      customerIdOwnerStore.verify("existing-customer-id", TEST_MUXED_ACCOUNT, TEST_MEMO, false)
+    } returns true
+    val jwtToken = createJwtToken(TEST_MUXED_ACCOUNT)
+
+    sep12Service.deleteCustomer(jwtToken, TEST_MUXED_ACCOUNT, null, null)
+    sep12Service.deleteCustomer(jwtToken, TEST_ACCOUNT, TEST_MEMO, "id")
+
+    verify(exactly = 2) { customerIntegration.deleteCustomer("existing-customer-id") }
+  }
+
+  // SEP12DO-13
+  @Test
+  fun `test delete lets a legacy-key owner that the business server confirms delete`() {
+    val lastRequest = captureDeleteLookup()
+    every { customerIdOwnerStore.isClaimed("existing-customer-id") } returns true
+    every {
+      customerIdOwnerStore.verify("existing-customer-id", "vibrant:$TEST_ACCOUNT", null, false)
+    } returns false
+    every { customerIdOwnerStore.getCreatorMemo("existing-customer-id") } returns null
+    every {
+      customerIdOwnerStore.reconcileLegacyKey(
+        "existing-customer-id",
+        "vibrant",
+        null,
+        "vibrant:$TEST_ACCOUNT",
+        null,
+      )
+    } returns true
+
+    sep12Service.deleteCustomer(createJwtToken(TEST_ACCOUNT, "vibrant"), TEST_ACCOUNT, null, null)
+
+    // The last business server lookup is the reconcile's own: the caller's account, no memo, no
+    // type.
+    assertEquals(GetCustomerRequest.builder().account(TEST_ACCOUNT).build(), lastRequest.captured)
+    verify(exactly = 1) { customerIntegration.deleteCustomer("existing-customer-id") }
+  }
+
+  @Test
+  fun `test delete through the muxed address with no customer answers not found`() {
+    every { customerIntegration.getCustomer(any()) } returns GetCustomerResponse()
+
+    val ex: SepNotFoundException = assertThrows {
+      sep12Service.deleteCustomer(
+        createJwtToken(TEST_MUXED_ACCOUNT),
+        TEST_MUXED_ACCOUNT,
+        null,
+        null,
+      )
+    }
+
+    assertEquals("User not found.", ex.message)
+    verify(exactly = 0) { customerIntegration.deleteCustomer(any()) }
+  }
+
+  @Test
+  fun `test delete forwards an explicit memo type unchanged`() {
+    val slot = captureDeleteLookup()
+
+    sep12Service.deleteCustomer(createJwtToken(TEST_ACCOUNT), TEST_ACCOUNT, "foo_bar", "text")
+
+    assertEquals(
+      GetCustomerRequest.builder().account(TEST_ACCOUNT).memo("foo_bar").memoType("text").build(),
+      slot.captured,
+    )
   }
 
   @Test

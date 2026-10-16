@@ -71,9 +71,13 @@ class Routes(private val config: Config, private val callbackEventService: Callb
 
   private suspend fun PipelineContext<Unit, ApplicationCall>.handleRawCallbackGet() {
     val sep = call.parameters["sep"]!!
-    call.respond(
-      gson.toJson(callbackEventService.getRawTransactionCallbacks(sep, call.parameters["txnId"]))
-    )
+    val raws =
+      if (sep.equals("sep12", ignoreCase = true)) {
+        callbackEventService.getRawCustomerCallbacks(call.parameters["id"])
+      } else {
+        callbackEventService.getRawTransactionCallbacks(sep, call.parameters["txnId"])
+      }
+    call.respond(gson.toJson(raws))
   }
 
   private suspend fun PipelineContext<Unit, ApplicationCall>.handleCallbackGet() {

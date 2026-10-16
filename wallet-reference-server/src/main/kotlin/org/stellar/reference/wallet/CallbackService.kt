@@ -50,6 +50,15 @@ class CallbackService {
       }
   }
 
+  /** The SEP-12 callbacks of [customerId] (all of them when null) exactly as they arrived. */
+  fun getRawCustomerCallbacks(customerId: String?): List<RawCallback> {
+    val sep12Raws = rawCallbacks[CallbackType.SEP12]!!
+    val raws = synchronized(sep12Raws) { sep12Raws.toList() }
+    return if (customerId == null) raws
+    else
+      raws.filter { JsonParser.parseString(it.body).asJsonObject.get("id")?.asString == customerId }
+  }
+
   fun getTransactionCallbacks(type: String, txnId: String?): List<JsonObject> {
     val callbackType = CallbackType.fromString(type)
     if (callbackType == CallbackType.SEP12) {
