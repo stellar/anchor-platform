@@ -104,11 +104,13 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     infoF("Starting the status watcher");
     statusWatcher.scheduleWithFixedDelay(this::checkStatus, 1, 1, TimeUnit.SECONDS);
 
+    ObserverStatus before = status;
     try {
       startInternal();
-      // startInternal() may already have started work that reports an error status; only an
-      // observer that is still STARTING is promoted, so an error is never overwritten.
-      promoteIfStarting();
+      // startInternal() may already have started work that reports an error status; the
+      // observer is set to RUNNING only if nothing changed its status meanwhile, so an error
+      // is never overwritten.
+      promoteIfUnchanged(before);
     } catch (TransactionException tex) {
       errorEx("Error starting the payment observer.", tex);
       setStatus(DATABASE_ERROR);
@@ -118,9 +120,9 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     }
   }
 
-  /** Atomically moves a STARTING observer to RUNNING; any other status is left as it is. */
-  synchronized void promoteIfStarting() {
-    if (status == STARTING) {
+  /** Atomically sets RUNNING unless the status moved away from {@code before} in the meantime. */
+  synchronized void promoteIfUnchanged(ObserverStatus before) {
+    if (status == before) {
       setStatus(RUNNING);
     }
   }

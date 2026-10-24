@@ -1487,10 +1487,7 @@ class StellarRpcPaymentObserverTest {
   @Test
   fun `start does not overwrite an error status set while startInternal ran`() {
     val starting = newStartingObserver()
-    every { starting.startInternal() } answers
-      {
-        starting.setStatus(ObserverStatus.DATABASE_ERROR)
-      }
+    every { starting.startInternal() } answers { starting.setStatus(ObserverStatus.DATABASE_ERROR) }
 
     starting.start()
 
@@ -1500,14 +1497,14 @@ class StellarRpcPaymentObserverTest {
   }
 
   @Test
-  fun `promoteIfStarting moves STARTING to RUNNING and leaves any other status alone`() {
-    val starting = newStartingObserver()
-    starting.promoteIfStarting()
-    assertEquals(ObserverStatus.RUNNING, starting.getStatus())
+  fun `promoteIfUnchanged sets RUNNING only when the status did not move`() {
+    val unchanged = newStartingObserver()
+    unchanged.promoteIfUnchanged(ObserverStatus.STARTING)
+    assertEquals(ObserverStatus.RUNNING, unchanged.getStatus())
 
     val failed = newStartingObserver()
     failed.setStatus(ObserverStatus.STREAM_ERROR)
-    failed.promoteIfStarting()
+    failed.promoteIfUnchanged(ObserverStatus.STARTING)
     assertEquals(ObserverStatus.STREAM_ERROR, failed.getStatus())
   }
 }
