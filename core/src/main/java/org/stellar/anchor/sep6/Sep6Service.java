@@ -242,7 +242,13 @@ public class Sep6Service {
     if (request.getQuoteId() != null) {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
-              request.getQuoteId(), sellAsset, buyAsset, request.getAmount(), fundingMethod, null);
+              request.getQuoteId(),
+              token,
+              sellAsset,
+              buyAsset,
+              request.getAmount(),
+              fundingMethod,
+              null);
       requestValidator.validateAmount(
           amounts.getAmountOut(),
           buyAsset.getCode(),
@@ -440,7 +446,13 @@ public class Sep6Service {
     if (request.getQuoteId() != null) {
       amounts =
           exchangeAmountsCalculator.calculateFromQuote(
-              request.getQuoteId(), sellAsset, buyAsset, request.getAmount(), null, fundingMethod);
+              request.getQuoteId(),
+              token,
+              sellAsset,
+              buyAsset,
+              request.getAmount(),
+              null,
+              fundingMethod);
     } else {
       // TODO(philip): remove this
       // If a quote is not provided, set the fee and out amounts to 0.

@@ -19,7 +19,7 @@ desc = "A test USDC issued by Circle."
 
 [DOCUMENTATION]
 ORG_NAME = "your_org_name1"
-ORG_URL = "https://your_org_url.png"
+ORG_URL = "https://www.stellaranchordemo.com"
 ORG_DESCRIPTION = "your_org_description"
 ORG_LOGO = "https://your_org_logo.png"
 ORG_SUPPORT_EMAIL = "email@your.org"

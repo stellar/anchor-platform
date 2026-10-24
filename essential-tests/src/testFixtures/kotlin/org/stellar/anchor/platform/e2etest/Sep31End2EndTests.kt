@@ -88,6 +88,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     val amount = "2"
 
     walletServerClient.clearCallbacks()
+    val startedAt = System.currentTimeMillis() / 1000
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, null, toml)
 
     val senderCustomerRequest =
@@ -159,6 +160,11 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     val actualCallbacks =
       waitForWalletServerCallbacks(postTxResponse.id, expectedStatusesWithPendingCustomerInfo.size)
     assertCallbacks(actualCallbacks, expectedStatusesWithPendingCustomerInfo)
+    assertRawCallbackSignatures(
+      postTxResponse.id,
+      expectedStatusesWithPendingCustomerInfo.size,
+      startedAt,
+    )
   }
 
   @Test
@@ -168,6 +174,7 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
     val amount = "2"
 
     walletServerClient.clearCallbacks()
+    val startedAt = System.currentTimeMillis() / 1000
     val wallet = WalletClient(clientWalletAccount, CLIENT_WALLET_SECRET, null, toml)
 
     val senderCustomerRequest =
@@ -228,6 +235,22 @@ open class Sep31End2EndTests : IntegrationTestBase(TestConfig()) {
         expectedStatusesWithoutPendingCustomerInfo.size,
       )
     assertCallbacks(actualCallbacks, expectedStatusesWithoutPendingCustomerInfo)
+    assertRawCallbackSignatures(
+      postTxResponse.id,
+      expectedStatusesWithoutPendingCustomerInfo.size,
+      startedAt,
+    )
+  }
+
+  // SEP1CS-02: every callback verifies with the TOML SIGNING_KEY over <t>.<host>.<body>
+  private suspend fun assertRawCallbackSignatures(txnId: String, count: Int, notBefore: Long) {
+    assertCallbackSignatures(
+      walletServerClient.getRawTransactionCallbacks("sep31", txnId),
+      toml.getString("SIGNING_KEY"),
+      config.env["wallet.hostname"],
+      count,
+      notBefore,
+    )
   }
 
   private suspend fun waitForWalletServerCallbacks(

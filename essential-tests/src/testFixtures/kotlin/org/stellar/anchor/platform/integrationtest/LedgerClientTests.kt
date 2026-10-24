@@ -20,6 +20,7 @@ import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.fundAccountWithFriendbot
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.*
 import org.stellar.sdk.Network.TESTNET
@@ -137,14 +138,8 @@ class LedgerClientTests : IntegrationTestBase(TestConfig()) {
   }
 
   fun prepareAccount(horizonServer: Server, kp: KeyPair): AccountResponse? {
-    val friendBotUrl = "https://friendbot.stellar.org/?addr=${kp.accountId}"
-    try {
-      java.net.URL(friendBotUrl).openStream()
-      val account = horizonServer.accounts().account(kp.accountId)
-      return account
-    } catch (e: java.io.IOException) {
-      throw e
-    }
+    fundAccountWithFriendbot(kp.accountId)
+    return horizonServer.accounts().account(kp.accountId)
   }
 }
 

@@ -1,7 +1,12 @@
 package org.stellar.anchor.ledger
 
+import io.mockk.Runs
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
+import io.mockk.verify
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -12,13 +17,16 @@ import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.exception.AccountNotFoundException
 import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.config.StellarNetworkConfig
+import org.stellar.anchor.util.Log
 import org.stellar.sdk.Asset
 import org.stellar.sdk.AssetTypeCreditAlphaNum
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Server
 import org.stellar.sdk.TrustLineAsset
 import org.stellar.sdk.exception.BadRequestException
+import org.stellar.sdk.exception.NetworkException
 import org.stellar.sdk.requests.AccountsRequestBuilder
+import org.stellar.sdk.requests.TransactionsRequestBuilder
 import org.stellar.sdk.responses.AccountResponse
 import org.stellar.sdk.responses.AccountResponse.Balance
 import org.stellar.sdk.responses.SubmitTransactionAsyncResponse.TransactionStatus
@@ -211,5 +219,78 @@ internal class HorizonTest {
     val exception =
       assertThrows<IllegalArgumentException> { Horizon.getKeyTypeDiscriminant("invalid_type") }
     kotlin.test.assertEquals("Invalid signer key type: invalid_type", exception.message)
+  }
+
+  private fun horizonWhoseTransactionLookupThrows(hash: String, failure: Exception): Horizon {
+    val server = mockk<Server>()
+    val transactionsRequestBuilder: TransactionsRequestBuilder = mockk()
+    every { server.transactions() } returns transactionsRequestBuilder
+    every { transactionsRequestBuilder.transaction(hash) } throws failure
+
+    val horizon = mockk<Horizon>()
+    every { horizon.server } returns server
+    every { horizon.getTransaction(hash) } answers { callOriginal() }
+    return horizon
+  }
+
+  @Test
+  fun `test getTransaction returns null for a genuine 404`() {
+    val hash = "a".repeat(64)
+    val horizon =
+      horizonWhoseTransactionLookupThrows(hash, BadRequestException(404, "not found", null, null))
+
+    assertEquals(null, horizon.getTransaction(hash))
+  }
+
+  @Test
+  fun `test getTransaction fails closed on a non-404 4xx instead of reporting not found`() {
+    val hash = "b".repeat(64)
+    for (code in listOf(400, 401, 403)) {
+      val cause = BadRequestException(code, "blocked", null, null)
+      val horizon = horizonWhoseTransactionLookupThrows(hash, cause)
+
+      val exception = assertThrows<LedgerException> { horizon.getTransaction(hash) }
+      assertEquals(cause, exception.cause, "HTTP $code must keep the SDK exception as the cause")
+    }
+  }
+
+  @Test
+  fun `test getTransaction fails closed when the 4xx status code is unknown`() {
+    val hash = "c".repeat(64)
+    // The SDK constructor takes a primitive int, so a null code can only come from a subclass or
+    // a future SDK; getCode() is an Integer and the fail-closed rule must hold for it.
+    val cause = mockk<BadRequestException>()
+    every { cause.code } returns null
+    every { cause.body } returns "blocked"
+    val horizon = horizonWhoseTransactionLookupThrows(hash, cause)
+
+    val exception = assertThrows<LedgerException> { horizon.getTransaction(hash) }
+    assertEquals(cause, exception.cause)
+  }
+
+  @Test
+  fun `test getTransaction logs the hash, status code and body of a rejected non-404 4xx`() {
+    val hash = "d".repeat(64)
+    val horizon =
+      horizonWhoseTransactionLookupThrows(hash, BadRequestException(403, "waf-block", null, null))
+    mockkStatic(Log::class)
+    try {
+      every { Log.errorF(any(), *anyVararg()) } just Runs
+
+      assertThrows<LedgerException> { horizon.getTransaction(hash) }
+
+      verify(exactly = 1) { Log.errorF(any(), hash, 403, "waf-block") }
+    } finally {
+      unmockkStatic(Log::class)
+    }
+  }
+
+  @Test
+  fun `test getTransaction keeps reporting other network errors with code and body in the message`() {
+    val hash = "e".repeat(64)
+    val horizon = horizonWhoseTransactionLookupThrows(hash, NetworkException(500, "boom"))
+
+    val exception = assertThrows<LedgerException> { horizon.getTransaction(hash) }
+    assertEquals("Error getting transaction: $hash. Code: 500, body: boom", exception.message)
   }
 }

@@ -24,7 +24,6 @@ This documentation will configure AWS Infrastructure, Anchor Platform and a samp
 3. Deploy Anchor Platform Example
    1. Run Terraform Plan
    2. Run Terraform Apply
-4. Run [Stellar Anchor Validation Tool][https://anchor-tests.stellar.org/) to verify your deployment.
 
 <img width="1424" alt="image" src="https://user-images.githubusercontent.com/98427531/179148353-cb60db74-a826-480b-aec2-0562dbfd4610.png">
 

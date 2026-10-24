@@ -405,19 +405,11 @@ public class Sep38Service {
     if (token == null) {
       throw new BadRequestException("missing web auth token");
     }
-    String account, memo = null, memoType = null;
-    if (!Objects.toString(token.getMuxedAccount(), "").isEmpty()) {
-      account = token.getMuxedAccount();
-    } else if (!Objects.toString(token.getAccount(), "").isEmpty()) {
-      account = token.getAccount();
-      if (token.getAccountMemo() != null) {
-        memo = token.getAccountMemo();
-        memoType = "id";
-      }
-    } else {
+    Sep38QuoteOwnership.Identity identity = Sep38QuoteOwnership.identityOf(token);
+    if (identity == null) {
       throw new BadRequestException("web auth token is malformed");
     }
-    return Pair.of(account, Pair.of(memo, memoType));
+    return Pair.of(identity.account(), Pair.of(identity.memo(), identity.memoType()));
   }
 
   public Sep38QuoteResponse getQuote(WebAuthJwt token, String quoteId) throws AnchorException {
@@ -426,10 +418,7 @@ public class Sep38Service {
     }
 
     // validate token
-    Pair<String, Pair<String, String>> accountInfo = validateToken(token);
-    String account = accountInfo.getLeft();
-    String memo = accountInfo.getRight().getLeft();
-    String memoType = accountInfo.getRight().getRight();
+    validateToken(token);
 
     // empty quote id
     if (StringUtils.isEmpty(quoteId)) {
@@ -438,10 +427,7 @@ public class Sep38Service {
 
     // validate consistency between quote and jwt token
     Sep38Quote quote = this.sep38QuoteStore.findByQuoteId(quoteId);
-    if (quote == null
-        || !StringUtils.equals(quote.getCreatorAccountId(), account)
-        || !StringUtils.equals(memo, quote.getCreatorMemo())
-        || !StringUtils.equals(memoType, quote.getCreatorMemoType())) {
+    if (quote == null || !Sep38QuoteOwnership.isCreatedBy(quote, token)) {
       throw new NotFoundException("quote not found");
     }
 
@@ -491,6 +477,22 @@ public class Sep38Service {
       }
     }
 
+    // SEP-38: provide either sell_delivery_method or buy_delivery_method, but not both. Unless the
+    // asset lists at most one method, one of them must be provided.
+    boolean hasSellDeliveryMethod =
+        !Objects.toString(request.getSellDeliveryMethod(), "").isEmpty();
+    boolean hasBuyDeliveryMethod = !Objects.toString(request.getBuyDeliveryMethod(), "").isEmpty();
+    if (hasSellDeliveryMethod && hasBuyDeliveryMethod) {
+      throw new BadRequestException(
+          "Please provide either sell_delivery_method or buy_delivery_method, not both");
+    }
+    if (!hasSellDeliveryMethod
+        && !hasBuyDeliveryMethod
+        && (listsMoreThanOne(sellAsset.getSellDeliveryMethods())
+            || listsMoreThanOne(buyAsset.getBuyDeliveryMethods()))) {
+      throw new BadRequestException("sell_delivery_method or buy_delivery_method is required");
+    }
+
     // validate countryCode
     if (!Objects.toString(request.getCountryCode(), "").isEmpty()) {
       List<String> sellCountryCodes = sellAsset.getCountryCodes();
@@ -537,6 +539,10 @@ public class Sep38Service {
     if (context == null || !List.of(SEP6, SEP24, SEP31).contains(context)) {
       throw new BadRequestException("Unsupported context. Should be one of [sep6, sep24, sep31].");
     }
+  }
+
+  private static boolean listsMoreThanOne(List<?> deliveryMethods) {
+    return deliveryMethods != null && deliveryMethods.size() > 1;
   }
 
   private String getTotalPrice(BigDecimal bSellAmount, BigDecimal bBuyAmount) {

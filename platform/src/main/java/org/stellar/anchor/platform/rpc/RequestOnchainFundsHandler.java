@@ -6,6 +6,7 @@ import static org.stellar.anchor.api.platform.PlatformTransactionData.Sep.*;
 import static org.stellar.anchor.api.rpc.method.RpcMethod.REQUEST_ONCHAIN_FUNDS;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.*;
 import static org.stellar.anchor.util.MemoHelper.makeMemo;
+import static org.stellar.anchor.util.MemoHelper.memoAsString;
 import static org.stellar.anchor.util.MemoHelper.memoType;
 import static org.stellar.anchor.util.SepHelper.memoTypeString;
 import static org.stellar.sdk.xdr.MemoType.MEMO_ID;
@@ -233,9 +234,9 @@ public class RequestOnchainFundsHandler
       JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
       if (ImmutableSet.of(WITHDRAWAL, WITHDRAWAL_EXCHANGE).contains(Kind.from(txn6.getKind()))) {
         supportedStatuses.add(INCOMPLETE);
-        supportedStatuses.add(PENDING_CUSTOMER_INFO_UPDATE);
         if (!areFundsReceived(txn6)) {
           supportedStatuses.add(PENDING_ANCHOR);
+          supportedStatuses.add(PENDING_CUSTOMER_INFO_UPDATE);
         }
       }
       return supportedStatuses;
@@ -287,7 +288,7 @@ public class RequestOnchainFundsHandler
 
         if (sep6DepositInfoGenerator instanceof Sep6DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
-          txn6.setMemo(request.getMemo());
+          txn6.setMemo(memoAsString(memo));
           txn6.setMemoType(memoTypeString(memoType(memo)));
           sepRequestValidator.validateDestinationAccount(
               txn6.getWebAuthAccount(), request.getDestinationAccount());
@@ -312,7 +313,7 @@ public class RequestOnchainFundsHandler
 
         if (sep24DepositInfoGenerator instanceof Sep24DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
-          txn24.setMemo(request.getMemo());
+          txn24.setMemo(memoAsString(memo));
           txn24.setMemoType(memoTypeString(memoType(memo)));
           txn24.setWithdrawAnchorAccount(request.getDestinationAccount());
           txn24.setToAccount(request.getDestinationAccount());
@@ -335,7 +336,7 @@ public class RequestOnchainFundsHandler
 
         if (sep31DepositInfoGenerator instanceof Sep31DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
-          txn31.setStellarMemo(request.getMemo());
+          txn31.setStellarMemo(memoAsString(memo));
           txn31.setStellarMemoType(memoTypeString(memoType(memo)));
           txn31.setToAccount(request.getDestinationAccount());
         } else {

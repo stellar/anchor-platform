@@ -12,19 +12,13 @@ import io.micrometer.core.instrument.Metrics;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.stream.Stream;
 import lombok.Builder;
 import lombok.Getter;
-import org.stellar.anchor.api.asset.AssetInfo;
-import org.stellar.anchor.api.asset.StellarAssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.LedgerDecodeException;
 import org.stellar.anchor.api.exception.LedgerException;
@@ -43,7 +37,6 @@ import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.service.AnchorMetrics;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.GsonUtils;
-import org.stellar.anchor.util.Log;
 import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.SorobanServer;
 import org.stellar.sdk.TOID;
@@ -66,23 +59,10 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   final SacToAssetMapper sacToAssetMapper;
   final AssetService assetService;
 
-  /** The maximum number of filters stellar-rpc accepts in one getEvents request. */
-  static final int MAX_FILTERS_PER_REQUEST = 5;
-
   /** The number of consecutive rejected polls after which the observer goes to STREAM_ERROR. */
   static final int RPC_REJECTION_LIMIT = 5;
 
   volatile int consecutiveFailedPolls = 0;
-
-  /**
-   * The last cursor each request (chunk of filters) completed, by chunk index. Kept in memory only:
-   * the persisted cursor is the minimum of these, so a restart safely re-reads from it. A request
-   * that is ahead of the others resumes from its own cursor instead of re-reading events it has
-   * already processed.
-   */
-  final Map<Integer, String> chunkCursors = new ConcurrentHashMap<>();
-
-  int chunkCount = 0;
 
   public StellarRpcPaymentObserver(
       StellarRpc stellarRpc,
@@ -104,7 +84,6 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   void startInternal() {
     info("Starting Soroban RPC payment observer");
     consecutiveFailedPolls = 0;
-    chunkCursors.clear();
     if (executorService == null || executorService.isShutdown()) {
       executorService = Executors.newSingleThreadScheduledExecutor();
     }
@@ -149,7 +128,27 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
 
   ScheduledFuture<?> task;
 
+  /** The first wait, in seconds, before retrying after an event was held. */
+  static final long HOLD_BACKOFF_INITIAL_SECONDS = 1;
+
+  /**
+   * The cap on the wait, in seconds. Fixed rather than taken from the event backoff settings on
+   * purpose: those can be configured above the silence timeout, and a held event must stay retried
+   * often enough for the observer to recover soon after the database is back.
+   */
+  static final long HOLD_BACKOFF_MAX_SECONDS = 30;
+
+  /** Earliest time the next fetch may run, so a held event is not retried on every tick. */
+  Instant retryNotBefore = Instant.EPOCH;
+
+  long holdBackoffSeconds = HOLD_BACKOFF_INITIAL_SECONDS;
+
   void fetchEvents() {
+    if (Instant.now().isBefore(retryNotBefore)) {
+      // Waiting out a held event is not silence from the stream.
+      lastActivityTime = Instant.now();
+      return;
+    }
     String cursor = (this.cursor != null) ? this.cursor : loadStellarRpcCursor();
     // Arm the silence detector at the first poll: a backend that never completes a poll must
     // still be able to trip it (checkSilence ignores a null lastActivityTime).
@@ -158,89 +157,43 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
 
     try {
-      List<GetEventsRequest> requests = buildEventRequests(cursor);
-
-      boolean pollFailed = false;
-      boolean pollRejected = false;
-      boolean caughtUp = true;
-      boolean canPersist = true;
-      long latestLedger = 0;
-      String nextCursor = null;
-
-      for (int i = 0; i < requests.size(); i++) {
-        // A request that does not complete holds its cursor at what it was sent.
-        String sentCursor = chunkCursors.getOrDefault(i, cursor);
-        String requestCursor = sentCursor;
+      GetEventsResponse response = sorobanServer.getEvents(buildEventRequest(cursor));
+      consecutiveFailedPolls = 0;
+      lastActivityTime = Instant.now();
+      silenceTimeoutCount = 0;
+      metricLatestBlockRead.set(response.getLatestLedger());
+      String nextCursor = processEvents(response.getEvents(), response.getCursor());
+      if (nextCursor != null) {
         try {
-          GetEventsResponse response = sorobanServer.getEvents(requests.get(i));
-          latestLedger = response.getLatestLedger();
-          String processed = processEvents(response.getEvents(), response.getCursor());
-          if (processed != null) {
-            requestCursor = processed;
-          }
-          if (processed == null || !processed.equals(response.getCursor())) {
-            caughtUp = false;
-          }
-        } catch (SorobanRpcException rex) {
-          // The RPC answered with an error: the request itself is rejected, so it will not heal.
-          warnF("RPC rejected the events request: {}. ex={}", rex.toString(), rex.getMessage());
-          pollRejected = true;
-        } catch (NetworkException nex) {
-          warnF("Network error in RPC observer loop: {}. ex={}", nex.toString(), nex.getMessage());
-          pollFailed = true;
-        }
-        if (requestCursor == null) {
-          canPersist = false;
-        } else {
-          chunkCursors.put(i, requestCursor);
-          if (nextCursor == null || requestCursor.compareTo(nextCursor) < 0) {
-            nextCursor = requestCursor;
-          }
-        }
-      }
-
-      if (pollRejected) {
-        recordFailedPoll();
-        caughtUp = false;
-      } else if (pollFailed) {
-        // An outage is waited out, as before: it neither counts as a rejection nor resets the
-        // count.
-        caughtUp = false;
-      } else {
-        consecutiveFailedPolls = 0;
-        lastActivityTime = Instant.now();
-        silenceTimeoutCount = 0;
-        if (!requests.isEmpty()) {
-          metricLatestBlockRead.set(latestLedger);
-        }
-      }
-
-      if (canPersist && nextCursor != null) {
-        try {
-          if (!nextCursor.equals(cursor)) {
-            saveCursor(nextCursor);
-          }
-          if (caughtUp) {
+          saveCursor(nextCursor);
+          if (nextCursor.equals(response.getCursor())) {
             streamBackoffTimer.reset();
-            metricLatestBlockProcessed.set(latestLedger);
+            metricLatestBlockProcessed.set(response.getLatestLedger());
           }
         } catch (Exception tex) {
           warnF("Failed to persist RPC cursor. Will retry next tick. ex={}", tex.getMessage());
           setStatus(ObserverStatus.DATABASE_ERROR);
         }
       }
-    } catch (IOException | NetworkException ex) {
+    } catch (IOException ioex) {
       warnF(
-          "Error building the RPC events request: {}. ex={}. Wait for next retry.",
-          ex.toString(),
-          ex.getMessage());
+          "Error fetching latest ledger: {}. ex={}. Wait for next retry.",
+          ioex.toString(),
+          ioex.getMessage());
+    } catch (SorobanRpcException rex) {
+      // The RPC answered with an error: the request itself is rejected, so it will not heal.
+      warnF("RPC rejected the events request: {}. ex={}", rex.toString(), rex.getMessage());
+      recordRejectedPoll();
+    } catch (NetworkException nex) {
+      // An outage is waited out: it neither counts as a rejection nor resets the count.
+      warnF("Network error in RPC observer loop: {}. ex={}", nex.toString(), nex.getMessage());
     } catch (Throwable t) {
       errorEx("Unhandled error in RPC observer loop", t);
       setStatus(ObserverStatus.STREAM_ERROR);
     }
   }
 
-  private void recordFailedPoll() {
+  private void recordRejectedPoll() {
     if (++consecutiveFailedPolls >= RPC_REJECTION_LIMIT) {
       errorF(
           "The RPC rejected {} polls in a row. Setting status to STREAM_ERROR",
@@ -250,7 +203,10 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   String processEvents(List<EventInfo> events, String responseCursor) {
-    if (events == null || events.isEmpty()) return responseCursor;
+    if (events == null || events.isEmpty()) {
+      clearHold();
+      return responseCursor;
+    }
     debugF("Processing {} 'transfer' events", events.size());
 
     for (int i = 0; i < events.size(); i++) {
@@ -266,6 +222,8 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             "Failed to process transfer event of transaction {}. It will be retried. ex={}",
             event.getTransactionHash(),
             ex.toString());
+        retryNotBefore = Instant.now().plusSeconds(holdBackoffSeconds);
+        holdBackoffSeconds = Math.min(holdBackoffSeconds * 2, HOLD_BACKOFF_MAX_SECONDS);
         return i == 0 ? null : events.get(i - 1).getId();
       } catch (Exception ex) {
         errorF(
@@ -274,7 +232,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
             ex.toString());
       }
     }
+    clearHold();
     return responseCursor;
+  }
+
+  private void clearHold() {
+    retryNotBefore = Instant.EPOCH;
+    holdBackoffSeconds = HOLD_BACKOFF_INITIAL_SECONDS;
   }
 
   void processTransferEvent(ShouldProcessResult result) throws IOException, AnchorException {
@@ -430,87 +394,29 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     }
   }
 
-  List<GetEventsRequest> buildEventRequests(String cursor) throws IOException {
-    List<String> uniqueDistributionAccounts =
-        assetService.getStellarAssets().stream()
-            .filter(asset -> asset.getSchema() == AssetInfo.Schema.STELLAR)
-            .map(StellarAssetInfo::getDistributionAccount)
-            .distinct()
-            .toList();
-
+  GetEventsRequest buildEventRequest(String cursor) throws IOException {
+    // Subscribe to every transfer event and let shouldProcess match by the observe list. The
+    // observe list changes at runtime (request_onchain_funds arms a destination that is not a
+    // distribution account), so a filter built from it would miss payments and exceed the
+    // five-filter limit of getEvents.
     List<EventFilter> filters =
-        uniqueDistributionAccounts.stream()
-            .flatMap(
-                distributionAccount -> {
-                  try {
-                    return Stream.of(
-                        // Filter for transfers from the distribution account
-                        EventFilter.builder()
-                            .type(EventFilterType.CONTRACT)
-                            .topic(
-                                List.of(
-                                    Scv.toSymbol("transfer").toXdrBase64(),
-                                    Scv.toAddress(distributionAccount).toXdrBase64(),
-                                    "*",
-                                    "*"))
-                            .build(),
-                        // Filter for transfers to the distribution account
-                        EventFilter.builder()
-                            .type(EventFilterType.CONTRACT)
-                            .topic(
-                                List.of(
-                                    Scv.toSymbol("transfer").toXdrBase64(),
-                                    "*",
-                                    Scv.toAddress(distributionAccount).toXdrBase64(),
-                                    "*"))
-                            .build());
-                  } catch (IOException e) {
-                    Log.errorF(
-                        "Skipping asset due to invalid distribution account: {}. Error: {}",
-                        distributionAccount,
-                        e.getMessage());
-                    return Stream.empty();
-                  }
-                })
-            .toList();
-
-    if (filters.isEmpty()) {
-      return List.of();
-    }
-
-    int chunks = (filters.size() + MAX_FILTERS_PER_REQUEST - 1) / MAX_FILTERS_PER_REQUEST;
-    if (chunks != chunkCount) {
-      // The chunk layout changed, so the indexes no longer name the same filters.
-      chunkCursors.clear();
-      chunkCount = chunks;
-    }
-
-    Long startLedger = null;
-    List<GetEventsRequest> requests = new ArrayList<>();
-    for (int i = 0; i < chunks; i++) {
-      List<EventFilter> chunk =
-          filters.subList(
-              i * MAX_FILTERS_PER_REQUEST,
-              Math.min((i + 1) * MAX_FILTERS_PER_REQUEST, filters.size()));
-      String chunkCursor = chunkCursors.getOrDefault(i, cursor);
-      if (isEmpty(chunkCursor)) {
-        if (startLedger == null) {
-          startLedger = Math.max(1, getLatestLedger() - 5);
-        }
-        requests.add(GetEventsRequest.builder().filters(chunk).startLedger(startLedger).build());
-      } else {
-        requests.add(
-            GetEventsRequest.builder()
-                .filters(chunk)
-                .pagination(
-                    GetEventsRequest.PaginationOptions.builder()
-                        .limit(100L)
-                        .cursor(chunkCursor)
-                        .build())
+        List.of(
+            EventFilter.builder()
+                .type(EventFilterType.CONTRACT)
+                .topic(List.of(Scv.toSymbol("transfer").toXdrBase64(), "*", "*", "*"))
                 .build());
-      }
+
+    if (isEmpty(cursor)) {
+      long latestLedger = getLatestLedger();
+      long startLedger = Math.max(1, latestLedger - 5);
+      return GetEventsRequest.builder().filters(filters).startLedger(startLedger).build();
+    } else {
+      return GetEventsRequest.builder()
+          .filters(filters)
+          .pagination(
+              GetEventsRequest.PaginationOptions.builder().limit(100L).cursor(cursor).build())
+          .build();
     }
-    return requests;
   }
 
   void processOperation(

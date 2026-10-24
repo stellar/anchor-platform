@@ -42,7 +42,7 @@ public class Sep1Controller {
   @CrossOrigin(origins = "*")
   @RequestMapping(
       value = "/.well-known/stellar.toml",
-      produces = {MediaType.APPLICATION_JSON_VALUE},
+      produces = {MediaType.TEXT_PLAIN_VALUE, "application/toml", MediaType.APPLICATION_JSON_VALUE},
       method = {RequestMethod.GET, RequestMethod.OPTIONS})
   public ResponseEntity<String> getToml() throws SepException {
     if (!sep1Config.isEnabled()) {

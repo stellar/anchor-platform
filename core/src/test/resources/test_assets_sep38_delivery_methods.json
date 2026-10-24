@@ -1,0 +1,94 @@
+{
+  "items": [
+    {
+      "id": "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+      "distribution_account": "GA7FYRB5VREZKOBIIKHG5AVTPFGWUBPOBF7LTYG4GTMFVIOOD2DWAL7I",
+      "significant_decimals": 2,
+      "sep38": {
+        "enabled": true,
+        "exchangeable_assets": [
+          "iso4217:USD",
+          "iso4217:EUR"
+        ]
+      }
+    },
+    {
+      "id": "iso4217:USD",
+      "significant_decimals": 2,
+      "sep31": {
+        "enabled": false,
+        "receive": {
+          "min_amount": 1,
+          "max_amount": 1000000,
+          "methods": [
+            "SEPA",
+            "SWIFT"
+          ]
+        }
+      },
+      "sep38": {
+        "enabled": true,
+        "exchangeable_assets": [
+          "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+          "iso4217:EUR"
+        ],
+        "decimals": 4,
+        "sell_delivery_methods": [
+          {
+            "name": "WIRE",
+            "description": "Send USD by wire to the Anchor's bank account."
+          },
+          {
+            "name": "ACH",
+            "description": "Send USD by ACH to the Anchor's bank account."
+          }
+        ],
+        "buy_delivery_methods": [
+          {
+            "name": "WIRE",
+            "description": "Have USD wired to your bank account."
+          },
+          {
+            "name": "ACH",
+            "description": "Have USD sent by ACH to your bank account."
+          }
+        ]
+      }
+    },
+    {
+      "id": "iso4217:EUR",
+      "significant_decimals": 2,
+      "sep31": {
+        "enabled": false,
+        "receive": {
+          "min_amount": 1,
+          "max_amount": 1000000,
+          "methods": [
+            "SEPA",
+            "SWIFT"
+          ]
+        }
+      },
+      "sep38": {
+        "enabled": true,
+        "exchangeable_assets": [
+          "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+          "iso4217:USD"
+        ],
+        "decimals": 4,
+        "sell_delivery_methods": [
+          {
+            "name": "SEPA",
+            "description": "Send EUR by SEPA to the Anchor's bank account."
+          }
+        ],
+        "buy_delivery_methods": [
+          {
+            "name": "SEPA",
+            "description": "Have EUR sent by SEPA to your bank account."
+          }
+        ]
+      }
+    }
+  ]
+}

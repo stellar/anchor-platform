@@ -8,6 +8,8 @@ import java.util.Optional
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 class JdbcSep31CustomerIdOwnerStoreTest {
 
@@ -207,14 +209,140 @@ class JdbcSep31CustomerIdOwnerStoreTest {
   }
 
   @Test
-  fun `reconcileLegacyKey returns false when the row belongs to a different owner`() {
-    every {
-      repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", null, "vibrant:GATTACKER", "111")
-    } returns 0
+  fun `reconcileLegacyKey takes a row that another account of the same client owns`() {
+    // V33 can stamp a co-tenant as owner; the business-server-confirmed account recovers the row.
+    every { repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", null, any(), any()) } returns
+      0
     every { repo.findById("cust-1") } returns
-      Optional.of(ownerRow("cust-1", "vibrant:GVICTIM", "111"))
+      Optional.of(ownerRow("cust-1", "vibrant:GBOTHER", "222")) andThen
+      Optional.of(ownerRow("cust-1", "vibrant:GALICE", "111"))
+    every {
+      repo.reassignIfCreatorAccountMatches(
+        "cust-1",
+        "vibrant:GBOTHER",
+        "222",
+        "vibrant:GALICE",
+        "111"
+      )
+    } returns 1
 
-    assertFalse(store.reconcileLegacyKey("cust-1", "vibrant", null, "vibrant:GATTACKER", "111"))
+    assertTrue(store.reconcileLegacyKey("cust-1", "vibrant", null, "vibrant:GALICE", "111"))
+    verify(exactly = 1) {
+      repo.reassignIfCreatorAccountMatches(
+        "cust-1",
+        "vibrant:GBOTHER",
+        "222",
+        "vibrant:GALICE",
+        "111"
+      )
+    }
+  }
+
+  @Test
+  fun `reconcileLegacyKey replaces a row with a null memo`() {
+    every { repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", null, any(), any()) } returns
+      0
+    every { repo.findById("cust-1") } returns
+      Optional.of(ownerRow("cust-1", "vibrant:GBOTHER", null)) andThen
+      Optional.of(ownerRow("cust-1", "vibrant:GALICE", "111"))
+    every {
+      repo.reassignIfCreatorAccountMatches(
+        "cust-1",
+        "vibrant:GBOTHER",
+        null,
+        "vibrant:GALICE",
+        "111"
+      )
+    } returns 1
+
+    assertTrue(store.reconcileLegacyKey("cust-1", "vibrant", null, "vibrant:GALICE", "111"))
+    verify(exactly = 1) {
+      repo.reassignIfCreatorAccountMatches(
+        "cust-1",
+        "vibrant:GBOTHER",
+        null,
+        "vibrant:GALICE",
+        "111"
+      )
+    }
+  }
+
+  @Test
+  fun `reconcileLegacyKey updates the memo when the row has the same account under another memo`() {
+    // Two sub-users of one account are told apart by memo; the confirmed one must still recover.
+    every { repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", null, any(), any()) } returns
+      0
+    every { repo.findById("cust-1") } returns
+      Optional.of(ownerRow("cust-1", "vibrant:GALICE", "222")) andThen
+      Optional.of(ownerRow("cust-1", "vibrant:GALICE", "111"))
+    every {
+      repo.reassignIfCreatorAccountMatches(
+        "cust-1",
+        "vibrant:GALICE",
+        "222",
+        "vibrant:GALICE",
+        "111"
+      )
+    } returns 1
+
+    assertTrue(store.reconcileLegacyKey("cust-1", "vibrant", null, "vibrant:GALICE", "111"))
+    verify(exactly = 1) {
+      repo.reassignIfCreatorAccountMatches(
+        "cust-1",
+        "vibrant:GALICE",
+        "222",
+        "vibrant:GALICE",
+        "111"
+      )
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings = ["other:GBOTHER", "vibrantx:GBOTHER", "vibrant:sub:GBOTHER", "GBOTHER", "vibrant:"]
+  )
+  fun `reconcileLegacyKey leaves a row that does not belong to the client unchanged`(
+    ownerKey: String
+  ) {
+    every { repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", null, any(), any()) } returns
+      0
+    every { repo.findById("cust-1") } returns Optional.of(ownerRow("cust-1", ownerKey, "222"))
+
+    assertFalse(store.reconcileLegacyKey("cust-1", "vibrant", null, "vibrant:GALICE", "111"))
+    verify(exactly = 0) {
+      repo.reassignIfCreatorAccountMatches(any(), not("vibrant"), any(), any(), any())
+    }
+  }
+
+  @Test
+  fun `reconcileLegacyKey does not overwrite a row that changed after it was read`() {
+    every { repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", null, any(), any()) } returns
+      0
+    every { repo.findById("cust-1") } returns
+      Optional.of(ownerRow("cust-1", "vibrant:GBOTHER", "222")) andThen
+      Optional.of(ownerRow("cust-1", "vibrant:GCONCURRENT", "333"))
+    every {
+      repo.reassignIfCreatorAccountMatches(
+        "cust-1",
+        "vibrant:GBOTHER",
+        "222",
+        "vibrant:GALICE",
+        "111"
+      )
+    } returns 0
+
+    assertFalse(store.reconcileLegacyKey("cust-1", "vibrant", null, "vibrant:GALICE", "111"))
+  }
+
+  @Test
+  fun `reconcileLegacyKey makes no second write when the row already matches the new key`() {
+    every { repo.reassignIfCreatorAccountMatches("cust-1", "vibrant", null, any(), any()) } returns
+      0
+    every { repo.findById("cust-1") } returns
+      Optional.of(ownerRow("cust-1", "vibrant:GALICE", "111"))
+
+    assertTrue(store.reconcileLegacyKey("cust-1", "vibrant", null, "vibrant:GALICE", "111"))
+    verify(exactly = 1) { repo.reassignIfCreatorAccountMatches(any(), any(), any(), any(), any()) }
   }
 
   @Test

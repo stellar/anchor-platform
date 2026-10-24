@@ -118,7 +118,7 @@ public class Sep24Controller {
       produces = {MediaType.APPLICATION_JSON_VALUE},
       method = {RequestMethod.GET})
   public GetTransactionsResponse getTransactions(
-      HttpServletRequest request, @RequestBody GetTransactionsRequest tr)
+      HttpServletRequest request, @RequestBody(required = false) GetTransactionsRequest tr)
       throws SepException, MalformedURLException, URISyntaxException {
     debug("/transactions", tr);
     WebAuthJwt token = SepRequestHelper.getToken(request);

@@ -41,6 +41,8 @@ public interface JdbcSep24TransactionRepo
       "SELECT t FROM JdbcSep24Transaction t WHERE t.webAuthAccount = :account"
           + " AND t.webAuthAccountMemo IS NULL"
           + " AND t.requestAssetCode = :assetCode"
+          + " AND (:assetIssuer IS NULL OR t.requestAssetIssuer IS NULL"
+          + " OR t.requestAssetIssuer = :assetIssuer)"
           + " AND (:kind IS NULL OR t.kind = :kind)"
           + " AND t.startedAt > :noOlderThan"
           + " AND t.startedAt < :olderThan"
@@ -48,6 +50,7 @@ public interface JdbcSep24TransactionRepo
   List<JdbcSep24Transaction> findTransactionsWithFilters(
       @Param("account") String account,
       @Param("assetCode") String assetCode,
+      @Param("assetIssuer") String assetIssuer,
       @Param("kind") String kind,
       @Param("noOlderThan") Instant noOlderThan,
       @Param("olderThan") Instant olderThan,
@@ -61,6 +64,8 @@ public interface JdbcSep24TransactionRepo
       "SELECT t FROM JdbcSep24Transaction t WHERE t.webAuthAccount = :account"
           + " AND t.webAuthAccountMemo = :accountMemo"
           + " AND t.requestAssetCode = :assetCode"
+          + " AND (:assetIssuer IS NULL OR t.requestAssetIssuer IS NULL"
+          + " OR t.requestAssetIssuer = :assetIssuer)"
           + " AND (:kind IS NULL OR t.kind = :kind)"
           + " AND t.startedAt > :noOlderThan"
           + " AND t.startedAt < :olderThan"
@@ -69,6 +74,7 @@ public interface JdbcSep24TransactionRepo
       @Param("account") String account,
       @Param("accountMemo") String accountMemo,
       @Param("assetCode") String assetCode,
+      @Param("assetIssuer") String assetIssuer,
       @Param("kind") String kind,
       @Param("noOlderThan") Instant noOlderThan,
       @Param("olderThan") Instant olderThan,

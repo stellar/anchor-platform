@@ -5,6 +5,7 @@ import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -13,11 +14,14 @@ import org.stellar.anchor.TestConstants
 import org.stellar.anchor.TestConstants.Companion.TEST_ACCOUNT
 import org.stellar.anchor.TestConstants.Companion.TEST_ASSET_SEP38_FORMAT
 import org.stellar.anchor.TestHelper
+import org.stellar.anchor.TestHelper.Companion.createMuxedWebAuthJwt
+import org.stellar.anchor.TestHelper.Companion.createWebAuthJwt
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.shared.FeeDetails
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
+import org.stellar.anchor.auth.WebAuthJwt
 import org.stellar.anchor.sep38.PojoSep38Quote
 import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.util.ExchangeAmountsCalculator.Amounts
@@ -41,6 +45,9 @@ class ExchangeAmountsCalculatorTest {
 
   private fun usdcQuote() =
     PojoSep38Quote().apply {
+      creatorAccountId = TEST_ACCOUNT
+      creatorMemo = TestConstants.TEST_MEMO
+      creatorMemoType = "id"
       sellAsset = TEST_ASSET_SEP38_FORMAT
       sellAmount = "100"
       buyAsset = "iso4217:USD"
@@ -57,7 +64,16 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
 
-    val result = calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
+    val result =
+      calculator.calculateFromQuote(
+        quoteId,
+        ownerToken,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        null,
+        null
+      )
     assertEquals(
       Amounts.builder()
         .amountIn("100")
@@ -74,7 +90,15 @@ class ExchangeAmountsCalculatorTest {
   fun `test calculateFromQuote with invalid quote id`() {
     every { sep38QuoteStore.findByQuoteId(any()) } returns null
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote("id", assetService.getAsset("USDC"), null, "100")
+      calculator.calculateFromQuote(
+        "id",
+        ownerToken,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        null,
+        null
+      )
     }
   }
 
@@ -88,7 +112,15 @@ class ExchangeAmountsCalculatorTest {
       }
 
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
+      calculator.calculateFromQuote(
+        quoteId,
+        ownerToken,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        null,
+        null
+      )
     }
   }
 
@@ -97,7 +129,15 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "99")
+      calculator.calculateFromQuote(
+        quoteId,
+        ownerToken,
+        assetService.getAsset("USDC"),
+        null,
+        "99",
+        null,
+        null
+      )
     }
   }
 
@@ -106,7 +146,15 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote()
     assertThrows<BadRequestException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("JPYC"), null, "100")
+      calculator.calculateFromQuote(
+        quoteId,
+        ownerToken,
+        assetService.getAsset("JPYC"),
+        null,
+        "100",
+        null,
+        null
+      )
     }
   }
 
@@ -115,7 +163,15 @@ class ExchangeAmountsCalculatorTest {
     val quoteId = "id"
     every { sep38QuoteStore.findByQuoteId(quoteId) } returns usdcQuote().apply { fee = null }
     assertThrows<SepValidationException> {
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
+      calculator.calculateFromQuote(
+        quoteId,
+        ownerToken,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        null,
+        null
+      )
     }
   }
 
@@ -126,6 +182,7 @@ class ExchangeAmountsCalculatorTest {
     assertThrows<BadRequestException> {
       calculator.validateQuoteAgainstRequestInfo(
         quoteId,
+        ownerToken,
         assetService.getAsset("USDC"),
         assetService.getAsset("JPYC"),
         "100",
@@ -140,9 +197,12 @@ class ExchangeAmountsCalculatorTest {
     assertThrows<BadRequestException> {
       calculator.calculateFromQuote(
         quoteId,
+        ownerToken,
         assetService.getAsset("USDC"),
         assetService.getAsset("JPYC"),
         "100",
+        null,
+        null,
       )
     }
   }
@@ -155,9 +215,12 @@ class ExchangeAmountsCalculatorTest {
     val result =
       calculator.calculateFromQuote(
         quoteId,
+        ownerToken,
         assetService.getAsset("USDC"),
         assetService.getAsset("USD"),
         "100",
+        null,
+        null,
       )
     assertEquals(
       Amounts.builder()
@@ -178,7 +241,15 @@ class ExchangeAmountsCalculatorTest {
       usdcQuote().apply { transactionId = "existing-txn-id" }
     val ex =
       assertThrows<BadRequestException> {
-        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
+        calculator.calculateFromQuote(
+          quoteId,
+          ownerToken,
+          assetService.getAsset("USDC"),
+          null,
+          "100",
+          null,
+          null,
+        )
       }
     assert(ex.message!!.contains("has already been used"))
   }
@@ -190,6 +261,7 @@ class ExchangeAmountsCalculatorTest {
     val result =
       calculator.validateQuoteAgainstRequestInfo(
         quoteId,
+        ownerToken,
         assetService.getAsset("USDC"),
         null,
         "100",
@@ -217,7 +289,15 @@ class ExchangeAmountsCalculatorTest {
       usdcQuote().apply { transactionId = "T1-cancelled" }
     val ex =
       assertThrows<BadRequestException> {
-        calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100")
+        calculator.calculateFromQuote(
+          quoteId,
+          ownerToken,
+          assetService.getAsset("USDC"),
+          null,
+          "100",
+          null,
+          null,
+        )
       }
     assert(ex.message!!.contains("has already been used"))
   }
@@ -239,6 +319,7 @@ class ExchangeAmountsCalculatorTest {
       assertThrows<BadRequestException> {
         calculator.calculateFromQuote(
           quoteId,
+          ownerToken,
           assetService.getAsset("USDC"),
           null,
           "100",
@@ -261,6 +342,7 @@ class ExchangeAmountsCalculatorTest {
       assertThrows<BadRequestException> {
         calculator.calculateFromQuote(
           quoteId,
+          ownerToken,
           assetService.getAsset("USDC"),
           null,
           "100",
@@ -282,6 +364,7 @@ class ExchangeAmountsCalculatorTest {
     val result =
       calculator.calculateFromQuote(
         quoteId,
+        ownerToken,
         assetService.getAsset("USDC"),
         null,
         "100",
@@ -308,6 +391,7 @@ class ExchangeAmountsCalculatorTest {
     val result =
       calculator.calculateFromQuote(
         quoteId,
+        ownerToken,
         assetService.getAsset("USDC"),
         null,
         "100",
@@ -333,6 +417,7 @@ class ExchangeAmountsCalculatorTest {
     val result =
       calculator.calculateFromQuote(
         quoteId,
+        ownerToken,
         assetService.getAsset("USDC"),
         null,
         "100",
@@ -360,7 +445,15 @@ class ExchangeAmountsCalculatorTest {
         buyDeliveryMethod = "WIRE"
       }
     val result =
-      calculator.calculateFromQuote(quoteId, assetService.getAsset("USDC"), null, "100", null, null)
+      calculator.calculateFromQuote(
+        quoteId,
+        ownerToken,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+        null,
+        null
+      )
     assertEquals(
       Amounts.builder()
         .amountIn("100")
@@ -371,5 +464,174 @@ class ExchangeAmountsCalculatorTest {
         .build(),
       result,
     )
+  }
+
+  // --- quote ownership: the caller must be the quote's creator (SEP38OW) ---
+
+  private val ownerToken = createWebAuthJwt(TEST_ACCOUNT, TestConstants.TEST_MEMO)
+
+  /** A quote created by [ownerToken]'s identity. */
+  private fun ownedQuote() = usdcQuote()
+
+  private fun calculateAs(caller: WebAuthJwt?, amount: String = "100") =
+    calculator.calculateFromQuote(
+      "id",
+      caller,
+      assetService.getAsset("USDC"),
+      null,
+      amount,
+      null,
+      null,
+    )
+
+  @Test
+  fun `test calculateFromQuote with the caller accepts the creator`() {
+    every { sep38QuoteStore.findByQuoteId("id") } returns ownedQuote()
+    assertEquals(
+      Amounts.builder()
+        .amountIn("100")
+        .amountInAsset(TEST_ASSET_SEP38_FORMAT)
+        .amountOut("98")
+        .amountOutAsset("iso4217:USD")
+        .feeDetails(FeeDetails("2", "iso4217:USD"))
+        .build(),
+      calculateAs(ownerToken),
+    )
+  }
+
+  @Test
+  fun `test validateQuoteAgainstRequestInfo with the caller accepts the creator`() {
+    every { sep38QuoteStore.findByQuoteId("id") } returns ownedQuote()
+    val result =
+      calculator.validateQuoteAgainstRequestInfo(
+        "id",
+        ownerToken,
+        assetService.getAsset("USDC"),
+        null,
+        "100",
+      )
+    assertEquals(TEST_ASSET_SEP38_FORMAT, result.sellAsset)
+  }
+
+  @Test
+  fun `test calculateFromQuote with the caller accepts a muxed creator`() {
+    val muxed = createMuxedWebAuthJwt(TEST_ACCOUNT, 7)
+    every { sep38QuoteStore.findByQuoteId("id") } returns
+      ownedQuote().apply {
+        creatorAccountId = muxed.muxedAccount
+        creatorMemo = null
+        creatorMemoType = null
+      }
+    assertEquals("100", calculateAs(muxed).amountIn)
+  }
+
+  @Test
+  fun `test calculateFromQuote with the caller rejects another account as Quote not found`() {
+    every { sep38QuoteStore.findByQuoteId("id") } returns ownedQuote()
+    val other = createWebAuthJwt(TestHelper.TEST_ACCOUNT, TestConstants.TEST_MEMO)
+    val ex = assertThrows<BadRequestException> { calculateAs(other) }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test validateQuoteAgainstRequestInfo with the caller rejects another account as Quote not found`() {
+    every { sep38QuoteStore.findByQuoteId("id") } returns ownedQuote()
+    val other = createWebAuthJwt(TestHelper.TEST_ACCOUNT, TestConstants.TEST_MEMO)
+    val ex =
+      assertThrows<BadRequestException> {
+        calculator.validateQuoteAgainstRequestInfo(
+          "id",
+          other,
+          assetService.getAsset("USDC"),
+          null,
+          "100",
+        )
+      }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test calculateFromQuote with the caller rejects the same account under another memo`() {
+    every { sep38QuoteStore.findByQuoteId("id") } returns ownedQuote()
+    val otherMemo = createWebAuthJwt(TEST_ACCOUNT, "999")
+    val ex = assertThrows<BadRequestException> { calculateAs(otherMemo) }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test calculateFromQuote with a null caller is Quote not found`() {
+    every { sep38QuoteStore.findByQuoteId("id") } returns ownedQuote()
+    val ex = assertThrows<BadRequestException> { calculateAs(null) }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test a non-owner gets Quote not found for a used quote`() {
+    every { sep38QuoteStore.findByQuoteId("id") } returns
+      ownedQuote().apply { transactionId = "existing-txn-id" }
+    val other = createWebAuthJwt(TestHelper.TEST_ACCOUNT, TestConstants.TEST_MEMO)
+    val ex = assertThrows<BadRequestException> { calculateAs(other) }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test a non-owner gets Quote not found for an expired quote`() {
+    every { sep38QuoteStore.findByQuoteId("id") } returns
+      ownedQuote().apply { expiresAt = Instant.parse("2000-01-01T00:00:00Z") }
+    val other = createWebAuthJwt(TestHelper.TEST_ACCOUNT, TestConstants.TEST_MEMO)
+    val ex = assertThrows<BadRequestException> { calculateAs(other) }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test a non-owner gets Quote not found for a mismatched amount`() {
+    every { sep38QuoteStore.findByQuoteId("id") } returns ownedQuote()
+    val other = createWebAuthJwt(TestHelper.TEST_ACCOUNT, TestConstants.TEST_MEMO)
+    val ex = assertThrows<BadRequestException> { calculateAs(other, amount = "99") }
+    assertEquals("Quote not found", ex.message)
+  }
+
+  @Test
+  fun `test the owner of a used quote still gets the already used message`() {
+    every { sep38QuoteStore.findByQuoteId("id") } returns
+      ownedQuote().apply { transactionId = "existing-txn-id" }
+    val ex = assertThrows<BadRequestException> { calculateAs(ownerToken) }
+    assertEquals("quote(id=id) has already been used", ex.message)
+  }
+
+  // --- expiry (SEP38EX): an expired quote is rejected with its exact message; the instant of
+  // expiry itself counts as expired ---
+
+  private val fixedNow = Instant.parse("2030-01-01T00:00:00Z")
+
+  private fun calculatorAtFixedNow() =
+    ExchangeAmountsCalculator(sep38QuoteStore, Clock.fixed(fixedNow, ZoneOffset.UTC))
+
+  private fun calculateOwnedQuoteExpiringAt(expiresAt: Instant) =
+    calculatorAtFixedNow()
+      .also {
+        every { sep38QuoteStore.findByQuoteId("id") } returns
+          ownedQuote().apply { this.expiresAt = expiresAt }
+      }
+      .calculateFromQuote("id", ownerToken, assetService.getAsset("USDC"), null, "100", null, null)
+
+  @Test
+  fun `test an expired quote of the caller is rejected with the expiry message`() {
+    val ex =
+      assertThrows<BadRequestException> {
+        calculateOwnedQuoteExpiringAt(Instant.parse("2000-01-01T00:00:00Z"))
+      }
+    assertEquals("quote(id=id) has expired at 2000-01-01T00:00:00Z", ex.message)
+  }
+
+  @Test
+  fun `test a quote whose expires_at equals the clock instant is expired`() {
+    val ex = assertThrows<BadRequestException> { calculateOwnedQuoteExpiringAt(fixedNow) }
+    assertEquals("quote(id=id) has expired at 2030-01-01T00:00:00Z", ex.message)
+  }
+
+  @Test
+  fun `test a quote expiring one second after the clock instant is accepted`() {
+    assertEquals("100", calculateOwnedQuoteExpiringAt(fixedNow.plusSeconds(1)).amountIn)
   }
 }

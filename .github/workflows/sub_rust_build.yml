@@ -7,7 +7,7 @@ on:
 jobs:
   cargo_build:
     name: Cargo Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: soroban
@@ -15,7 +15,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout the repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           show-progress: false
       - name: Cargo Build

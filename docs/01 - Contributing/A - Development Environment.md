@@ -258,34 +258,3 @@ If you would like to debug the unit tests or the end-to-end tests, there are two
 2. Navigate to the all tests option: `Tasks -> verification -> test`.
 3. Right-click it and select the `run` or `debug` option:
    ![running-the-tests.png](/docs/resources/img/running-the-tests.png)
-
-## Run the Stellar Anchor Test from Gradle
-
-### Run docker compose start
-
-`./gradlew dockerComposeStart`
-
-### Run the servers with the `host-docker-internal` profile
-
-`export TEST_PROFILE_NAME=host-docker-internal && ./gradlew startServersWithTestProfile`
-
-Note: You can also run `Test Profile: host-docker-internal` from IntelliJ.
-
-### Set the `TEST_HOME_DOMAIN` environment variable of the anchor test
-
-Before you run the anchor test, you need to set the `TEST_HOME_DOMAIN` environment variable to set the `--home-domain`
-that you would like the anchor test to run against. The default value of the `TEST_HOME_DOMAIN`
-is `http://host.docker.internal:8080`
-
-To change the value: `export TEST_HOME_DOMAIN=http://{server}:{port}`
-
-### Set the `TEST_SEPS` environment variable that you want to test
-
-Before you run the anchor test, you need to specify the SEPs that you would like to test. The default value of
-the `TEST_SEPS` is `1,10,12,24,31,38`.
-
-To change the value: `export TEST_SEPS=1,10,24`
-
-### Run docker compose down
-
-`./gradlew dockerComposeDown`

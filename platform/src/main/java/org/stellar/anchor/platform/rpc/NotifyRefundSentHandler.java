@@ -294,8 +294,10 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
         }
         break;
       case SEP_31:
-        supportedStatuses.add(PENDING_STELLAR);
-        supportedStatuses.add(PENDING_RECEIVER);
+        if (areFundsReceived(txn)) {
+          supportedStatuses.add(PENDING_STELLAR);
+          supportedStatuses.add(PENDING_RECEIVER);
+        }
     }
 
     return supportedStatuses;
@@ -354,7 +356,8 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
                       refundPayments.stream()
                           .map(org.stellar.anchor.api.shared.RefundPayment::getFee)
                           .map(amount -> decimal(amount.getAmount(), assetInfo))
-                          .reduce(BigDecimal.ZERO, BigDecimal::add)),
+                          .reduce(BigDecimal.ZERO, BigDecimal::add),
+                      assetInfo.getSignificantDecimals()),
                   requestRefund.getAmountFee().getAsset()));
 
           // Calculate the total refunded amount by summing together amounts from all refund
@@ -369,7 +372,9 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
                               refundPayments.stream()
                                   .map(org.stellar.anchor.api.shared.RefundPayment::getAmount)
                                   .map(amount -> decimal(amount.getAmount(), assetInfo))
-                                  .reduce(BigDecimal.ZERO, BigDecimal::add)))),
+                                  .reduce(BigDecimal.ZERO, BigDecimal::add),
+                              assetInfo.getSignificantDecimals())),
+                      assetInfo.getSignificantDecimals()),
                   requestRefund.getAmount().getAsset()));
 
           txn6.setRefunds(refunds);

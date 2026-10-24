@@ -71,7 +71,7 @@ class StellarRpcObserverPoisonResilienceTest {
         ),
         recordPrivateCalls = true,
       )
-    every { observer.buildEventRequests(any()) } returns listOf(mockk<GetEventsRequest>())
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
   }
 
   @AfterEach

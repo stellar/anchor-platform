@@ -16,7 +16,12 @@ class Sep38Client(private val endpoint: String, private val jwt: String) : SepCl
     return gson.fromJson(responseBody, InfoResponse::class.java)
   }
 
-  fun getPrices(sellAsset: String, sellAmount: String): GetPricesResponse {
+  fun getPrices(
+    sellAsset: String,
+    sellAmount: String,
+    sellDeliveryMethod: String? = null,
+    buyDeliveryMethod: String? = null,
+  ): GetPricesResponse {
     // build URL
     val urlBuilder =
       this.endpoint
@@ -25,6 +30,8 @@ class Sep38Client(private val endpoint: String, private val jwt: String) : SepCl
         .addPathSegment("prices")
         .addQueryParameter("sell_asset", sellAsset)
         .addQueryParameter("sell_amount", sellAmount)
+    sellDeliveryMethod?.let { urlBuilder.addQueryParameter("sell_delivery_method", it) }
+    buyDeliveryMethod?.let { urlBuilder.addQueryParameter("buy_delivery_method", it) }
 
     val responseBody = httpGet(urlBuilder.build().toString(), jwt)
     return gson.fromJson(responseBody, GetPricesResponse::class.java)
@@ -32,9 +39,12 @@ class Sep38Client(private val endpoint: String, private val jwt: String) : SepCl
 
   fun getPrice(
     sellAsset: String,
-    sellAmount: String,
+    sellAmount: String?,
     buyAsset: String,
-    context: Sep38Context
+    context: Sep38Context,
+    buyAmount: String? = null,
+    sellDeliveryMethod: String? = null,
+    buyDeliveryMethod: String? = null,
   ): GetPriceResponse {
     // build URL
     val urlBuilder =
@@ -43,9 +53,12 @@ class Sep38Client(private val endpoint: String, private val jwt: String) : SepCl
         .newBuilder()
         .addPathSegment("price")
         .addQueryParameter("sell_asset", sellAsset)
-        .addQueryParameter("sell_amount", sellAmount)
         .addQueryParameter("buy_asset", buyAsset)
         .addQueryParameter("context", context.toString())
+    sellAmount?.let { urlBuilder.addQueryParameter("sell_amount", it) }
+    buyAmount?.let { urlBuilder.addQueryParameter("buy_amount", it) }
+    sellDeliveryMethod?.let { urlBuilder.addQueryParameter("sell_delivery_method", it) }
+    buyDeliveryMethod?.let { urlBuilder.addQueryParameter("buy_delivery_method", it) }
 
     val responseBody = httpGet(urlBuilder.build().toString(), jwt)
     return gson.fromJson(responseBody, GetPriceResponse::class.java)
@@ -53,21 +66,23 @@ class Sep38Client(private val endpoint: String, private val jwt: String) : SepCl
 
   fun postQuote(
     sellAsset: String,
-    sellAmount: String,
+    sellAmount: String?,
     buyAsset: String,
     context: Sep38Context = SEP31,
     expireAfter: Instant? = null,
     sellDeliveryMethod: String? = null,
     buyDeliveryMethod: String? = null,
+    buyAmount: String? = null,
   ): Sep38QuoteResponse {
     // build request body
     val requestBody =
       hashMapOf(
         "sell_asset" to sellAsset,
-        "sell_amount" to sellAmount,
         "buy_asset" to buyAsset,
         "context" to context,
       )
+    sellAmount?.let { requestBody["sell_amount"] = it }
+    buyAmount?.let { requestBody["buy_amount"] = it }
     if (expireAfter != null) {
       requestBody["expire_after"] = DateTimeFormatter.ISO_INSTANT.format(expireAfter)
     }
