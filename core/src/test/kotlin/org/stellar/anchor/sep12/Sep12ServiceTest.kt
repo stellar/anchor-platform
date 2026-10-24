@@ -34,6 +34,9 @@ import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.auth.WebAuthJwt
+import org.stellar.anchor.client.ClientService
+import org.stellar.anchor.client.CustodialClient
+import org.stellar.anchor.client.NonCustodialClient
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
 import org.stellar.anchor.util.StringHelper.json
@@ -44,6 +47,7 @@ class Sep12ServiceTest {
     private const val TEST_CONTRACT_ACCOUNT =
       "CCAASCQKVVBSLREPEUGPOTQZ4BC2NDBY2MW7B2LGIGFUPIY4Z3XUZRVTX"
     private const val TEST_MEMO = "123456"
+    private const val OTHER_KEY = "GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"
     private const val TEST_MUXED_ACCOUNT =
       "MBFZNZTFSI6TWLVAID7VOLCIFX2PMUOS2X7U6H4TNK4PAPSHPWMMUAAAAAAAAAPCIA2IM"
     private const val CLIENT_DOMAIN = "demo-wallet.stellar.org"
@@ -103,6 +107,7 @@ class Sep12ServiceTest {
   @MockK(relaxed = true) private lateinit var eventService: EventService
   @MockK(relaxed = true) private lateinit var eventSession: EventService.Session
   @MockK(relaxed = true) private lateinit var customerIdOwnerStore: Sep31CustomerIdOwnerStore
+  @MockK(relaxed = true) private lateinit var clientService: ClientService
 
   @BeforeEach
   fun setup() {
@@ -122,6 +127,7 @@ class Sep12ServiceTest {
         platformApiClient,
         eventService,
         customerIdOwnerStore,
+        clientService,
       )
   }
 
@@ -1322,6 +1328,177 @@ class Sep12ServiceTest {
     assertInstanceOf(SepNotAuthorizedException::class.java, ex)
     verify(exactly = 0) {
       customerIdOwnerStore.reconcileLegacyKey(any(), any(), any(), any(), any())
+    }
+  }
+
+  private fun registerCustodial(name: String) {
+    every { clientService.getClientConfigByName(name) } returns
+      CustodialClient.builder().name(name).signingKeys(setOf(TEST_ACCOUNT, OTHER_KEY)).build()
+  }
+
+  @Test
+  fun `test id path authorizes a custodial client under any of its signing keys`() {
+    registerCustodial("vibrant")
+    every { customerIdOwnerStore.isClaimed("custodial-id") } returns true
+    every { customerIdOwnerStore.verify("custodial-id", "vibrant", TEST_MEMO, false) } returns true
+    val request = Sep12GetCustomerRequest.builder().id("custodial-id").build()
+
+    assertDoesNotThrow {
+      sep12Service.validateGetOrPutRequest(
+        request,
+        createJwtToken("$TEST_ACCOUNT:$TEST_MEMO", "vibrant"),
+      )
+    }
+    assertDoesNotThrow {
+      sep12Service.validateGetOrPutRequest(
+        Sep12GetCustomerRequest.builder().id("custodial-id").build(),
+        createJwtToken("$OTHER_KEY:$TEST_MEMO", "vibrant"),
+      )
+    }
+    verify(exactly = 0) { customerIntegration.getCustomer(any()) }
+    verify(exactly = 0) {
+      customerIdOwnerStore.reconcileLegacyKey(any(), any(), any(), any(), any())
+    }
+  }
+
+  @Test
+  fun `test id path refuses a custodial caller whose memo or client differs from the owner row`() {
+    registerCustodial("vibrant")
+    registerCustodial("other")
+    every { customerIdOwnerStore.isClaimed("custodial-id") } returns true
+    every { customerIdOwnerStore.verify("custodial-id", "vibrant", TEST_MEMO, false) } returns true
+    every { customerIdOwnerStore.verify("custodial-id", "vibrant", "999", false) } returns false
+    every { customerIdOwnerStore.verify("custodial-id", "other", TEST_MEMO, false) } returns false
+    every { customerIntegration.getCustomer(any()) } returns null
+
+    for (token in
+      listOf(
+        createJwtToken("$TEST_ACCOUNT:999", "vibrant"),
+        createJwtToken("$TEST_ACCOUNT:$TEST_MEMO", "other"),
+      )) {
+      val ex: SepException = assertThrows {
+        sep12Service.validateGetOrPutRequest(
+          Sep12GetCustomerRequest.builder().id("custodial-id").build(),
+          token,
+        )
+      }
+      assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    }
+    verify(exactly = 1) { customerIdOwnerStore.verify("custodial-id", "vibrant", "999", false) }
+    verify(exactly = 1) { customerIdOwnerStore.verify("custodial-id", "other", TEST_MEMO, false) }
+  }
+
+  @Test
+  fun `test id path keeps the per-account key for a non-custodial client`() {
+    every { clientService.getClientConfigByName("wallet") } returns
+      NonCustodialClient.builder().name("wallet").domains(setOf("wallet.org")).build()
+    every { customerIdOwnerStore.isClaimed("wallet-id") } returns true
+    every { customerIdOwnerStore.verify("wallet-id", "wallet:$TEST_ACCOUNT", null, false) } returns
+      true
+    every { customerIdOwnerStore.verify("wallet-id", "wallet:$OTHER_KEY", null, false) } returns
+      false
+    every { customerIntegration.getCustomer(any()) } returns null
+
+    assertDoesNotThrow {
+      sep12Service.validateGetOrPutRequest(
+        Sep12GetCustomerRequest.builder().id("wallet-id").build(),
+        createJwtToken(TEST_ACCOUNT, "wallet"),
+      )
+    }
+    val ex: SepException = assertThrows {
+      sep12Service.validateGetOrPutRequest(
+        Sep12GetCustomerRequest.builder().id("wallet-id").build(),
+        createJwtToken(OTHER_KEY, "wallet"),
+      )
+    }
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+  }
+
+  @Test
+  fun `test id path authorizes a custodial muxed token by client name and muxed id`() {
+    registerCustodial("vibrant")
+    every { customerIdOwnerStore.isClaimed("custodial-muxed-id") } returns true
+    every { customerIdOwnerStore.verify("custodial-muxed-id", "vibrant", TEST_MEMO, false) } returns
+      true
+    every { customerIntegration.getCustomer(any()) } returns null
+
+    assertDoesNotThrow {
+      sep12Service.validateGetOrPutRequest(
+        Sep12GetCustomerRequest.builder().id("custodial-muxed-id").build(),
+        createJwtToken(TEST_MUXED_ACCOUNT, "vibrant"),
+      )
+    }
+    verify(exactly = 1) {
+      customerIdOwnerStore.verify("custodial-muxed-id", "vibrant", TEST_MEMO, false)
+    }
+  }
+
+  @Test
+  fun `test put customer claims a new customer of a custodial client under the client name`() {
+    registerCustodial("vibrant")
+    every { customerIdOwnerStore.isClaimed(any()) } returns true
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("new-custodial-id").status(Sep12Status.ACCEPTED.name).build()
+
+    val request = Sep12PutCustomerRequest.builder().type("sep31-sender").firstName("John").build()
+    assertDoesNotThrow {
+      sep12Service.putCustomer(createJwtToken("$OTHER_KEY:$TEST_MEMO", "vibrant"), request)
+    }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verifyOrClaim("new-custodial-id", "vibrant", TEST_MEMO)
+    }
+    verify(exactly = 0) {
+      customerIdOwnerStore.verifyOrClaim(any(), match { it.startsWith("vibrant:") }, any())
+    }
+  }
+
+  @Test
+  fun `test put customer verifies an already claimed id of a custodial client under the client name`() {
+    registerCustodial("vibrant")
+    every { customerIdOwnerStore.isClaimed("claimed-custodial-id") } returns true
+    every { customerIdOwnerStore.verify("claimed-custodial-id", "vibrant", TEST_MEMO) } returns true
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("claimed-custodial-id").build()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder()
+        .id("claimed-custodial-id")
+        .status(Sep12Status.ACCEPTED.name)
+        .build()
+
+    val request = Sep12PutCustomerRequest.builder().type("sep31-sender").firstName("John").build()
+    assertDoesNotThrow {
+      sep12Service.putCustomer(createJwtToken("$OTHER_KEY:$TEST_MEMO", "vibrant"), request)
+    }
+
+    verify(exactly = 1) {
+      customerIdOwnerStore.verify("claimed-custodial-id", "vibrant", TEST_MEMO)
+    }
+    verify(exactly = 0) {
+      customerIdOwnerStore.reconcileLegacyKey(any(), any(), any(), any(), any())
+    }
+  }
+
+  @Test
+  fun `test id path reconciles a legacy custodial row onto the client name key`() {
+    registerCustodial("vibrant")
+    every { customerIdOwnerStore.isClaimed("legacy-custodial") } returns true
+    every { customerIdOwnerStore.verify("legacy-custodial", "vibrant", null, false) } returns false
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("legacy-custodial").build()
+    every { customerIdOwnerStore.getCreatorMemo("legacy-custodial") } returns null
+    every {
+      customerIdOwnerStore.reconcileLegacyKey("legacy-custodial", "vibrant", null, "vibrant", null)
+    } returns true
+
+    assertDoesNotThrow {
+      sep12Service.validateGetOrPutRequest(
+        Sep12GetCustomerRequest.builder().id("legacy-custodial").build(),
+        createJwtToken(TEST_ACCOUNT, "vibrant"),
+      )
+    }
+    verify(exactly = 1) {
+      customerIdOwnerStore.reconcileLegacyKey("legacy-custodial", "vibrant", null, "vibrant", null)
     }
   }
 

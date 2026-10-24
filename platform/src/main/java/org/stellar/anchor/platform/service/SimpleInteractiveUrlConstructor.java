@@ -34,6 +34,7 @@ import org.stellar.anchor.platform.config.PropertySep24Config;
 import org.stellar.anchor.sep24.InteractiveUrlConstructor;
 import org.stellar.anchor.sep24.Sep24Transaction;
 import org.stellar.anchor.sep31.CustomerOwnershipReconciliation;
+import org.stellar.anchor.sep31.OwnerKeyResolver;
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore;
 import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
@@ -46,6 +47,7 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
   private final CustomerIntegration customerIntegration;
   private final JwtService jwtService;
   private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
+  private final OwnerKeyResolver ownerKeyResolver;
 
   public SimpleInteractiveUrlConstructor(
       AssetService assetService,
@@ -60,6 +62,7 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
     this.customerIntegration = customerIntegration;
     this.jwtService = jwtService;
     this.customerIdOwnerStore = customerIdOwnerStore;
+    this.ownerKeyResolver = new OwnerKeyResolver(clientsService);
   }
 
   @Override
@@ -177,9 +180,11 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
         if (existing != null
             && existing.getId() != null
             && customerIdOwnerStore.isClaimed(existing.getId())
-            && !customerIdOwnerStore.verify(existing.getId(), jwt.getOwnerKey(), jwt.getOwnerMemo())
+            && !customerIdOwnerStore.verify(
+                existing.getId(), ownerKeyResolver.ownerKey(jwt), jwt.getOwnerMemo())
             && !CustomerOwnershipReconciliation.tryReconcile(
                 customerIdOwnerStore,
+                ownerKeyResolver,
                 customerIntegration,
                 existing.getId(),
                 jwt,
@@ -224,9 +229,10 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
         }
 
         if (!customerIdOwnerStore.verifyOrClaim(
-                forwarded.getId(), jwt.getOwnerKey(), jwt.getOwnerMemo())
+                forwarded.getId(), ownerKeyResolver.ownerKey(jwt), jwt.getOwnerMemo())
             && !CustomerOwnershipReconciliation.tryReconcile(
                 customerIdOwnerStore,
+                ownerKeyResolver,
                 customerIntegration,
                 forwarded.getId(),
                 jwt,
