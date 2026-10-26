@@ -41,6 +41,7 @@ import org.stellar.sdk.MuxedAccount;
 import org.stellar.sdk.SorobanServer;
 import org.stellar.sdk.TOID;
 import org.stellar.sdk.exception.NetworkException;
+import org.stellar.sdk.exception.SorobanRpcException;
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType;
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest;
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest.EventFilter;
@@ -57,7 +58,11 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   @Getter final SorobanServer sorobanServer;
   final SacToAssetMapper sacToAssetMapper;
   final AssetService assetService;
-  ObserverStatus status = ObserverStatus.STARTING;
+
+  /** The number of consecutive rejected polls after which the observer goes to STREAM_ERROR. */
+  static final int RPC_REJECTION_LIMIT = 5;
+
+  volatile int consecutiveFailedPolls = 0;
 
   public StellarRpcPaymentObserver(
       StellarRpc stellarRpc,
@@ -72,25 +77,25 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
     this.assetService = assetService;
     this.sorobanServer = stellarRpc.getSorobanServer();
     this.sacToAssetMapper = sacToAssetMapper;
+    this.status = ObserverStatus.STARTING;
   }
 
   @Override
   void startInternal() {
     info("Starting Soroban RPC payment observer");
+    consecutiveFailedPolls = 0;
     if (executorService == null || executorService.isShutdown()) {
       executorService = Executors.newSingleThreadScheduledExecutor();
     }
     task =
         executorService.scheduleAtFixedRate(
             this::fetchEvents, 0, 1, java.util.concurrent.TimeUnit.SECONDS);
-    status = ObserverStatus.RUNNING;
   }
 
   @Override
   void shutdownInternal() {
     task.cancel(true);
     executorService.shutdownNow();
-    status = ObserverStatus.SHUTDOWN;
   }
 
   @Override
@@ -145,9 +150,15 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       return;
     }
     String cursor = (this.cursor != null) ? this.cursor : loadStellarRpcCursor();
+    // Arm the silence detector at the first poll: a backend that never completes a poll must
+    // still be able to trip it (checkSilence ignores a null lastActivityTime).
+    if (lastActivityTime == null) {
+      lastActivityTime = Instant.now();
+    }
 
     try {
       GetEventsResponse response = sorobanServer.getEvents(buildEventRequest(cursor));
+      consecutiveFailedPolls = 0;
       lastActivityTime = Instant.now();
       silenceTimeoutCount = 0;
       metricLatestBlockRead.set(response.getLatestLedger());
@@ -169,10 +180,24 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
           "Error fetching latest ledger: {}. ex={}. Wait for next retry.",
           ioex.toString(),
           ioex.getMessage());
+    } catch (SorobanRpcException rex) {
+      // The RPC answered with an error: the request itself is rejected, so it will not heal.
+      warnF("RPC rejected the events request: {}. ex={}", rex.toString(), rex.getMessage());
+      recordRejectedPoll();
     } catch (NetworkException nex) {
+      // An outage is waited out: it neither counts as a rejection nor resets the count.
       warnF("Network error in RPC observer loop: {}. ex={}", nex.toString(), nex.getMessage());
     } catch (Throwable t) {
       errorEx("Unhandled error in RPC observer loop", t);
+      setStatus(ObserverStatus.STREAM_ERROR);
+    }
+  }
+
+  private void recordRejectedPoll() {
+    if (++consecutiveFailedPolls >= RPC_REJECTION_LIMIT) {
+      errorF(
+          "The RPC rejected {} polls in a row. Setting status to STREAM_ERROR",
+          consecutiveFailedPolls);
       setStatus(ObserverStatus.STREAM_ERROR);
     }
   }
@@ -284,6 +309,21 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   private ShouldProcessResult shouldProcess(EventInfo event) {
+    ShouldProcessResult decoded = decodeTransferEvent(event);
+    if (!decoded.shouldProcess) {
+      return decoded;
+    }
+    // The lookup is outside the decoding try/catch: a failure there (for example the observing
+    // account store) must stop the batch so the cursor is not advanced, not skip the event.
+    if (!paymentObservingAccountsManager.lookupAndUpdate(decoded.fromAddr)
+        && !paymentObservingAccountsManager.lookupAndUpdate(decoded.toAddr)) {
+      // If neither from nor to accounts are being observed, skip processing this event.
+      return builder().event(event).shouldProcess(false).build();
+    }
+    return decoded;
+  }
+
+  private ShouldProcessResult decodeTransferEvent(EventInfo event) {
     ShouldProcessResultBuilder builder = builder().event(event).shouldProcess(false);
     try {
       if (event.getTopic().size() != 4) {
@@ -346,12 +386,6 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                 iae.getMessage());
           }
         }
-      }
-
-      if (!paymentObservingAccountsManager.lookupAndUpdate(fromAddr)
-          && !paymentObservingAccountsManager.lookupAndUpdate(toAddr)) {
-        // If neither from nor to accounts are being observed, skip processing this event.
-        return builder.build();
       }
 
       return builder

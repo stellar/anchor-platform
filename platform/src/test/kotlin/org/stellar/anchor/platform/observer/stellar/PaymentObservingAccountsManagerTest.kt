@@ -237,6 +237,171 @@ class PaymentObservingAccountsManagerTest {
     assertEquals(expectedMax, finalAccount.lastObserved)
   }
 
+  @Test
+  fun `test lookup finds an account armed through another manager instance`() {
+    val observerSide = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    observerSide.initialize()
+    val platformSide = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    platformSide.initialize()
+
+    platformSide.upsert(testAcct1, TRANSIENT)
+
+    assertTrue(observerSide.lookupAndUpdate(testAcct1))
+  }
+
+  @Test
+  fun `test lookup fallback adds the account as TRANSIENT and reads the store only once`() {
+    val store = CountingPaymentObservingAccountStore()
+    val obs = PaymentObservingAccountsManager(store)
+    obs.initialize()
+    store.upsert(testAcct2, Instant.now().minus(60, DAYS))
+
+    val before = Instant.now()
+    assertTrue(obs.lookupAndUpdate(testAcct2))
+    assertTrue(obs.lookupAndUpdate(testAcct2))
+
+    assertEquals(1, store.findCalls)
+    val loaded = obs.accounts.first { it.account == testAcct2 }
+    assertEquals(TRANSIENT, loaded.type)
+    assertFalse(loaded.lastObserved.isBefore(before))
+  }
+
+  @Test
+  fun `test lookup fallback resolves a muxed address to the stored base account`() {
+    val observerSide = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    observerSide.initialize()
+    paymentObservingAccountStore.upsert(testAcct4, Instant.now())
+
+    assertTrue(observerSide.lookupAndUpdate(testMuxAcct100))
+    assertEquals(testAcct4, observerSide.accounts.single().account)
+  }
+
+  @Test
+  fun `test lookup of an account in neither the map nor the store is a miss and adds nothing`() {
+    val obs = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    obs.initialize()
+
+    assertFalse(obs.lookupAndUpdate(testAcct3))
+    assertEquals(0, obs.accounts.size)
+  }
+
+  @Test
+  fun `test lookup of null returns false without reading the store`() {
+    val store = CountingPaymentObservingAccountStore()
+    val obs = PaymentObservingAccountsManager(store)
+    obs.initialize()
+
+    assertFalse(obs.lookupAndUpdate(null))
+    assertEquals(0, store.findCalls)
+  }
+
+  @Test
+  fun `test lookup of an account already in the map does not read the store`() {
+    val store = CountingPaymentObservingAccountStore()
+    val obs = PaymentObservingAccountsManager(store)
+    obs.initialize()
+    obs.upsert(testAcct1, RESIDENTIAL)
+
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+    assertEquals(0, store.findCalls)
+    assertEquals(RESIDENTIAL, obs.accounts.single().type)
+  }
+
+  @Test
+  fun `test lookup propagates a store failure and leaves the map unchanged`() {
+    val store = CountingPaymentObservingAccountStore()
+    val obs = PaymentObservingAccountsManager(store)
+    obs.initialize()
+    store.failFind = true
+
+    assertThrows<RuntimeException> { obs.lookupAndUpdate(testAcct1) }
+    assertEquals(0, obs.accounts.size)
+
+    store.failFind = false
+    store.upsert(testAcct1, Instant.now())
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+  }
+
+  @Test
+  fun `test lookup finds an evicted account whose row still exists`() {
+    val obs = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    obs.initialize()
+    obs.upsert(testAcct1, TRANSIENT)
+    obs.evict(Duration.ZERO)
+    assertEquals(0, obs.accounts.size)
+    paymentObservingAccountStore.upsert(testAcct1, Instant.now())
+
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+  }
+
+  @Test
+  fun `test concurrent fallback lookups and upserts keep one entry and the upserted type`() {
+    val store = CountingPaymentObservingAccountStore()
+    store.upsert(testAcct1, Instant.now())
+    val obs = PaymentObservingAccountsManager(store)
+    obs.initialize()
+    obs.evict(Duration.ZERO)
+    assertEquals(0, obs.accounts.size)
+
+    val before = Instant.now()
+    val threadCount = 16
+    val pool = Executors.newFixedThreadPool(threadCount)
+    val start = CountDownLatch(1)
+    try {
+      repeat(threadCount) { threadIndex ->
+        pool.submit {
+          start.await()
+          if (threadIndex % 2 == 0) obs.upsert(testAcct1, RESIDENTIAL)
+          else obs.lookupAndUpdate(testAcct1)
+        }
+      }
+      start.countDown()
+      pool.shutdown()
+      assertTrue(pool.awaitTermination(30, TimeUnit.SECONDS), "pool did not finish in time")
+    } finally {
+      pool.shutdownNow()
+    }
+
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+    val entry = obs.accounts.single()
+    assertEquals(testAcct1, entry.account)
+    assertEquals(RESIDENTIAL, entry.type)
+    assertFalse(entry.lastObserved.isBefore(before))
+  }
+
+  @Test
+  fun `test upsertOrThrow propagates a store failure while upsert swallows it`() {
+    val obs = PaymentObservingAccountsManager(ThrowingPaymentObservingAccountStore())
+    obs.initialize()
+
+    assertDoesNotThrow { obs.upsert(testAcct1, TRANSIENT) }
+    assertThrows<RuntimeException> { obs.upsertOrThrow(testAcct2, TRANSIENT) }
+  }
+
+  @Test
+  fun `test upsertOrThrow persists the row so another manager finds it`() {
+    val platformSide = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    platformSide.initialize()
+    val observerSide = PaymentObservingAccountsManager(paymentObservingAccountStore)
+    observerSide.initialize()
+
+    platformSide.upsertOrThrow(testAcct1, TRANSIENT)
+
+    assertTrue(observerSide.lookupAndUpdate(testAcct1))
+  }
+
+  @Test
+  fun `test upsertOrThrow ignores a null account or type`() {
+    val obs = PaymentObservingAccountsManager(ThrowingPaymentObservingAccountStore())
+    obs.initialize()
+
+    assertDoesNotThrow {
+      obs.upsertOrThrow(null, TRANSIENT)
+      obs.upsertOrThrow(testAcct1, null)
+    }
+    assertEquals(0, obs.accounts.size)
+  }
+
   private fun staleAccount(
     account: String,
     idleDays: Long = 31,
@@ -510,6 +675,36 @@ class PaymentObservingAccountsManagerTest {
     assertEquals(1, obs.accounts.size)
     assertEquals(emptyList<String>(), store.deleted)
   }
+
+  @Test
+  fun `test evict writes back the row of an account reloaded from the store before the delete`() {
+    val store = RecordingPaymentObservingAccountStore()
+    val obs = PaymentObservingAccountsManager(store)
+    obs.initialize()
+    obs.upsert(staleAccount(testAcct1))
+    store.onDelete = { account ->
+      obs.allAccounts[account] =
+        PaymentObservingAccountsManager.ObservingAccount(account, Instant.now(), TRANSIENT)
+    }
+
+    obs.evict(Duration.of(30, DAYS))
+
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+    assertEquals(listOf(testAcct1), store.list().map { it.account })
+  }
+
+  @Test
+  fun `test lookup fallback rewrites the row with a fresh lastObserved`() {
+    val store = MemoryPaymentObservingAccountStore()
+    val obs = PaymentObservingAccountsManager(store)
+    obs.initialize()
+    store.upsert(testAcct1, Instant.now().minus(60, DAYS))
+
+    val before = Instant.now()
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+
+    assertFalse(store.list().single().lastObserved.isBefore(before))
+  }
 }
 
 /**
@@ -530,8 +725,12 @@ class SnapshotPaymentObservingAccountsManager(store: PaymentObservingAccountStor
 class RecordingPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
   private val accounts = java.util.concurrent.CopyOnWriteArrayList<PaymentObservingAccount>()
   val deleted = java.util.concurrent.CopyOnWriteArrayList<String>()
+  var onDelete: ((String) -> Unit)? = null
 
   public override fun list(): List<PaymentObservingAccount> = accounts
+
+  public override fun find(account: String): PaymentObservingAccount? =
+    accounts.firstOrNull { it.account == account }
 
   public override fun upsert(account: String?, lastObserved: Instant?) {
     accounts.removeIf { it.account == account }
@@ -541,6 +740,7 @@ class RecordingPaymentObservingAccountStore : PaymentObservingAccountStore(null)
   public override fun delete(account: String) {
     deleted.add(account)
     accounts.removeIf { it.account == account }
+    onDelete?.invoke(account)
   }
 }
 
@@ -548,6 +748,9 @@ class MemoryPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
   private val accounts = mutableListOf<PaymentObservingAccount>()
 
   public override fun list(): List<PaymentObservingAccount> = accounts
+
+  public override fun find(account: String): PaymentObservingAccount? =
+    accounts.firstOrNull { it.account == account }
 
   public override fun upsert(account: String?, lastObserved: Instant?) {
     accounts.removeIf { it.account == account }
@@ -562,6 +765,8 @@ class MemoryPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
 class ThrowingPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
   override fun list(): List<PaymentObservingAccount> = emptyList()
 
+  override fun find(account: String): PaymentObservingAccount? = null
+
   override fun upsert(account: String?, lastObserved: Instant?) {
     throw RuntimeException("store unavailable")
   }
@@ -574,6 +779,8 @@ class ThrowingPaymentObservingAccountStore : PaymentObservingAccountStore(null) 
 class NoopPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
   override fun list(): List<PaymentObservingAccount> = emptyList()
 
+  override fun find(account: String): PaymentObservingAccount? = null
+
   override fun upsert(account: String?, lastObserved: Instant?) {}
 
   override fun delete(account: String) {}
@@ -584,6 +791,9 @@ class FlakyPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
   var failNextUpsert = false
 
   public override fun list(): List<PaymentObservingAccount> = accounts
+
+  public override fun find(account: String): PaymentObservingAccount? =
+    accounts.firstOrNull { it.account == account }
 
   public override fun upsert(account: String?, lastObserved: Instant?) {
     if (failNextUpsert) {
@@ -599,10 +809,35 @@ class FlakyPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
   }
 }
 
+class CountingPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
+  val accounts = mutableListOf<PaymentObservingAccount>()
+  @Volatile var findCalls = 0
+  @Volatile var failFind = false
+
+  public override fun list(): List<PaymentObservingAccount> = accounts
+
+  public override fun find(account: String): PaymentObservingAccount? {
+    findCalls++
+    if (failFind) throw RuntimeException("store unavailable")
+    return accounts.firstOrNull { it.account == account }
+  }
+
+  public override fun upsert(account: String?, lastObserved: Instant?) {
+    accounts.removeIf { it.account == account }
+    accounts.add(PaymentObservingAccount(account, lastObserved))
+  }
+
+  public override fun delete(account: String) {
+    accounts.removeIf { it.account == account }
+  }
+}
+
 class DeleteFailingPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
   val deleteAttempts = java.util.concurrent.CopyOnWriteArrayList<String>()
 
   override fun list(): List<PaymentObservingAccount> = emptyList()
+
+  override fun find(account: String): PaymentObservingAccount? = null
 
   override fun upsert(account: String?, lastObserved: Instant?) {}
 

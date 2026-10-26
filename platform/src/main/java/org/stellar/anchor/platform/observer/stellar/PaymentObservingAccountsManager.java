@@ -82,6 +82,24 @@ public class PaymentObservingAccountsManager {
    * @param observingAccount The account being observed.
    */
   public void upsert(ObservingAccount observingAccount) {
+    upsert(observingAccount, false);
+  }
+
+  /**
+   * Adds an account to be observed like {@link #upsert(String, AccountType)}, but a failed durable
+   * write is thrown instead of logged. Use it where a missing row would leave a payment that no
+   * other process can match, so the caller can fail and retry.
+   *
+   * @param account The account being observed.
+   * @param type The account type.
+   */
+  public void upsertOrThrow(String account, AccountType type) {
+    if (account != null && type != null) {
+      upsert(new ObservingAccount(account, Instant.now(), type), true);
+    }
+  }
+
+  private void upsert(ObservingAccount observingAccount, boolean failOnPersistError) {
     if (observingAccount != null) {
       String canonicalAccount = safeCanonicalize(observingAccount.account);
       ObservingAccount merged =
@@ -101,7 +119,7 @@ public class PaymentObservingAccountsManager {
                 return new ObservingAccount(canonicalAccount, lastObserved, type);
               });
 
-      boolean persisted = persistUpsert(merged.account, merged.lastObserved);
+      boolean persisted = persistUpsert(merged.account, merged.lastObserved, failOnPersistError);
       if (persisted && !canonicalAccount.equals(observingAccount.account)) {
         persistDelete(observingAccount.account);
       }
@@ -124,14 +142,21 @@ public class PaymentObservingAccountsManager {
     }
   }
 
-  private boolean persistUpsert(String account, Instant lastObserved) {
+  private boolean persistUpsert(String account, Instant lastObserved, boolean failOnError) {
     try {
       store.upsert(account, lastObserved);
       return true;
     } catch (RuntimeException ex) {
       Log.errorEx(String.format("Failed to persist observing account %s", account), ex);
+      if (failOnError) {
+        throw ex;
+      }
       return false;
     }
+  }
+
+  private boolean persistUpsert(String account, Instant lastObserved) {
+    return persistUpsert(account, lastObserved, false);
   }
 
   private void persistDelete(String account) {
@@ -155,6 +180,10 @@ public class PaymentObservingAccountsManager {
    * Look up if the account is being observed. If the account is being observed, the lastObserved
    * timestamp of the observing account will be updated.
    *
+   * <p>An account that is not in the in-memory list is looked up in the store, because another
+   * process (for example the platform server) may have armed it after this instance was
+   * initialized. A store failure is propagated rather than reported as "not observed".
+   *
    * @param account The account to be checked. The account can be a muxed account or a G-account.
    * @return true if the account is being observed. false, otherwise.
    */
@@ -170,7 +199,26 @@ public class PaymentObservingAccountsManager {
             canonicalAccount,
             (key, existing) ->
                 new ObservingAccount(existing.account, Instant.now(), existing.type));
-    return updated != null;
+    if (updated != null) {
+      return true;
+    }
+
+    if (store.find(canonicalAccount) == null) {
+      return false;
+    }
+
+    ObservingAccount loaded =
+        allAccounts.compute(
+            canonicalAccount,
+            (key, existing) ->
+                existing == null
+                    ? new ObservingAccount(canonicalAccount, Instant.now(), AccountType.TRANSIENT)
+                    : new ObservingAccount(existing.account, Instant.now(), existing.type));
+    // Rewrite the row: a concurrent evict may delete it right after this read, and the loaded
+    // entry must keep a durable row.
+    persistUpsert(loaded.account, loaded.lastObserved);
+    Log.debugF("Loaded observing account {} from the store", canonicalAccount);
+    return true;
   }
 
   /**
@@ -188,6 +236,12 @@ public class PaymentObservingAccountsManager {
         // identity) when the account was re-armed after the snapshot was taken.
         if (allAccounts.remove(acct.account, acct)) {
           persistDelete(acct.account);
+          // A lookup may have reloaded the account from the store (the row is present until the
+          // delete above) after the remove. Its durable row must survive, so write it back.
+          ObservingAccount reloaded = allAccounts.get(acct.account);
+          if (reloaded != null) {
+            persistUpsert(reloaded.account, reloaded.lastObserved);
+          }
         } else {
           Log.debug(
               String.format(
