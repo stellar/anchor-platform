@@ -577,6 +577,43 @@ class RequestOnchainFundsHandlerTest {
   }
 
   @Test
+  fun test_handle_sep24_arming_failure_does_not_save_or_publish() {
+    val request =
+      RequestOnchainFundsRequest.builder()
+        .transactionId(TX_ID)
+        .amountIn(AmountAssetRequest("1", STELLAR_USDC))
+        .amountOut(AmountAssetRequest("0.9", FIAT_USD))
+        .feeDetails(Amount("0.1", STELLAR_USDC).toRate())
+        .amountExpected(AmountRequest("1"))
+        .memo(ID_MEMO)
+        .destinationAccount(DESTINATION_ACCOUNT)
+        .build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = INCOMPLETE.toString()
+    txn24.kind = WITHDRAWAL.kind
+    txn24.requestAssetCode = STELLAR_USDC_CODE
+    txn24.requestAssetIssuer = STELLAR_USDC_ISSUER
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every {
+      paymentObservingAccountsManager.upsertOrThrow(
+        any(),
+        PaymentObservingAccountsManager.AccountType.TRANSIENT,
+      )
+    } throws RuntimeException("store unavailable")
+
+    assertThrows<RuntimeException> { handler.handle(request) }
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @Test
   fun test_handle_ok_sep24_withExpectedAmount() {
     val request =
       RequestOnchainFundsRequest.builder()
@@ -613,14 +650,14 @@ class RequestOnchainFundsHandlerTest {
     verify(exactly = 0) { txn31Store.save(any()) }
     verify(exactly = 1) { sepTransactionCounter.increment() }
     verify(exactly = 1) {
-      paymentObservingAccountsManager.upsert(
+      paymentObservingAccountsManager.upsertOrThrow(
         DESTINATION_ACCOUNT,
         PaymentObservingAccountsManager.AccountType.TRANSIENT,
       )
     }
     verifyOrder {
+      paymentObservingAccountsManager.upsertOrThrow(any(), any())
       txn24Store.save(any())
-      paymentObservingAccountsManager.upsert(any(), any())
     }
 
     val expectedSep24Txn = JdbcSep24Transaction()
@@ -1491,14 +1528,14 @@ class RequestOnchainFundsHandlerTest {
     verify(exactly = 0) { txn31Store.save(any()) }
     verify(exactly = 1) { sepTransactionCounter.increment() }
     verify(exactly = 1) {
-      paymentObservingAccountsManager.upsert(
+      paymentObservingAccountsManager.upsertOrThrow(
         DESTINATION_ACCOUNT,
         PaymentObservingAccountsManager.AccountType.TRANSIENT,
       )
     }
     verifyOrder {
+      paymentObservingAccountsManager.upsertOrThrow(any(), any())
       txn6Store.save(any())
-      paymentObservingAccountsManager.upsert(any(), any())
     }
 
     val expectedSep6Txn = JdbcSep6Transaction()
@@ -1908,14 +1945,14 @@ class RequestOnchainFundsHandlerTest {
     verify(exactly = 0) { txn24Store.save(any()) }
     verify(exactly = 1) { sepTransactionCounter.increment() }
     verify(exactly = 1) {
-      paymentObservingAccountsManager.upsert(
+      paymentObservingAccountsManager.upsertOrThrow(
         DESTINATION_ACCOUNT,
         PaymentObservingAccountsManager.AccountType.TRANSIENT,
       )
     }
     verifyOrder {
+      paymentObservingAccountsManager.upsertOrThrow(any(), any())
       txn31Store.save(any())
-      paymentObservingAccountsManager.upsert(any(), any())
     }
 
     val expectedSep31Txn = JdbcSep31Transaction()

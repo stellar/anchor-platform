@@ -353,8 +353,12 @@ public class RequestOnchainFundsHandler
     }
   }
 
+  /**
+   * Arms the destination before the transaction is saved. The observer reads the durable row, so a
+   * failed write must fail the request while the transaction is still unsaved and can be retried.
+   */
   @Override
-  protected void afterTransactionSaved(JdbcSepTransaction txn, RequestOnchainFundsRequest request)
+  protected void beforeTransactionSaved(JdbcSepTransaction txn, RequestOnchainFundsRequest request)
       throws AnchorException {
     String toAccount;
     switch (Sep.from(txn.getProtocol())) {
@@ -370,7 +374,7 @@ public class RequestOnchainFundsHandler
       default:
         return;
     }
-    paymentObservingAccountsManager.upsert(
+    paymentObservingAccountsManager.upsertOrThrow(
         toAccount, PaymentObservingAccountsManager.AccountType.TRANSIENT);
   }
 }

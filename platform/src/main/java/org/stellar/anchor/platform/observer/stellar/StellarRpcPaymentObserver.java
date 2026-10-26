@@ -309,6 +309,21 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
   }
 
   private ShouldProcessResult shouldProcess(EventInfo event) {
+    ShouldProcessResult decoded = decodeTransferEvent(event);
+    if (!decoded.shouldProcess) {
+      return decoded;
+    }
+    // The lookup is outside the decoding try/catch: a failure there (for example the observing
+    // account store) must stop the batch so the cursor is not advanced, not skip the event.
+    if (!paymentObservingAccountsManager.lookupAndUpdate(decoded.fromAddr)
+        && !paymentObservingAccountsManager.lookupAndUpdate(decoded.toAddr)) {
+      // If neither from nor to accounts are being observed, skip processing this event.
+      return builder().event(event).shouldProcess(false).build();
+    }
+    return decoded;
+  }
+
+  private ShouldProcessResult decodeTransferEvent(EventInfo event) {
     ShouldProcessResultBuilder builder = builder().event(event).shouldProcess(false);
     try {
       if (event.getTopic().size() != 4) {
@@ -371,12 +386,6 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
                 iae.getMessage());
           }
         }
-      }
-
-      if (!paymentObservingAccountsManager.lookupAndUpdate(fromAddr)
-          && !paymentObservingAccountsManager.lookupAndUpdate(toAddr)) {
-        // If neither from nor to accounts are being observed, skip processing this event.
-        return builder.build();
       }
 
       return builder
