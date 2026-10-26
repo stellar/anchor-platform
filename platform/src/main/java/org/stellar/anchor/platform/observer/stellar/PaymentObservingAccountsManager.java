@@ -207,12 +207,16 @@ public class PaymentObservingAccountsManager {
       return false;
     }
 
-    allAccounts.compute(
-        canonicalAccount,
-        (key, existing) ->
-            existing == null
-                ? new ObservingAccount(canonicalAccount, Instant.now(), AccountType.TRANSIENT)
-                : new ObservingAccount(existing.account, Instant.now(), existing.type));
+    ObservingAccount loaded =
+        allAccounts.compute(
+            canonicalAccount,
+            (key, existing) ->
+                existing == null
+                    ? new ObservingAccount(canonicalAccount, Instant.now(), AccountType.TRANSIENT)
+                    : new ObservingAccount(existing.account, Instant.now(), existing.type));
+    // Rewrite the row: a concurrent evict may delete it right after this read, and the loaded
+    // entry must keep a durable row.
+    persistUpsert(loaded.account, loaded.lastObserved);
     Log.debugF("Loaded observing account {} from the store", canonicalAccount);
     return true;
   }
@@ -232,6 +236,12 @@ public class PaymentObservingAccountsManager {
         // identity) when the account was re-armed after the snapshot was taken.
         if (allAccounts.remove(acct.account, acct)) {
           persistDelete(acct.account);
+          // A lookup may have reloaded the account from the store (the row is present until the
+          // delete above) after the remove. Its durable row must survive, so write it back.
+          ObservingAccount reloaded = allAccounts.get(acct.account);
+          if (reloaded != null) {
+            persistUpsert(reloaded.account, reloaded.lastObserved);
+          }
         } else {
           Log.debug(
               String.format(

@@ -675,6 +675,36 @@ class PaymentObservingAccountsManagerTest {
     assertEquals(1, obs.accounts.size)
     assertEquals(emptyList<String>(), store.deleted)
   }
+
+  @Test
+  fun `test evict writes back the row of an account reloaded from the store before the delete`() {
+    val store = RecordingPaymentObservingAccountStore()
+    val obs = PaymentObservingAccountsManager(store)
+    obs.initialize()
+    obs.upsert(staleAccount(testAcct1))
+    store.onDelete = { account ->
+      obs.allAccounts[account] =
+        PaymentObservingAccountsManager.ObservingAccount(account, Instant.now(), TRANSIENT)
+    }
+
+    obs.evict(Duration.of(30, DAYS))
+
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+    assertEquals(listOf(testAcct1), store.list().map { it.account })
+  }
+
+  @Test
+  fun `test lookup fallback rewrites the row with a fresh lastObserved`() {
+    val store = MemoryPaymentObservingAccountStore()
+    val obs = PaymentObservingAccountsManager(store)
+    obs.initialize()
+    store.upsert(testAcct1, Instant.now().minus(60, DAYS))
+
+    val before = Instant.now()
+    assertTrue(obs.lookupAndUpdate(testAcct1))
+
+    assertFalse(store.list().single().lastObserved.isBefore(before))
+  }
 }
 
 /**
@@ -695,6 +725,7 @@ class SnapshotPaymentObservingAccountsManager(store: PaymentObservingAccountStor
 class RecordingPaymentObservingAccountStore : PaymentObservingAccountStore(null) {
   private val accounts = java.util.concurrent.CopyOnWriteArrayList<PaymentObservingAccount>()
   val deleted = java.util.concurrent.CopyOnWriteArrayList<String>()
+  var onDelete: ((String) -> Unit)? = null
 
   public override fun list(): List<PaymentObservingAccount> = accounts
 
@@ -709,6 +740,7 @@ class RecordingPaymentObservingAccountStore : PaymentObservingAccountStore(null)
   public override fun delete(account: String) {
     deleted.add(account)
     accounts.removeIf { it.account == account }
+    onDelete?.invoke(account)
   }
 }
 
