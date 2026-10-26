@@ -56,7 +56,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
   final ExponentialBackoffTimer databaseBackoffTimer = new ExponentialBackoffTimer(1, 20);
 
   int silenceTimeoutCount = 0;
-  ObserverStatus status = RUNNING;
+  volatile ObserverStatus status = RUNNING;
   Instant lastActivityTime;
   AtomicLong metricLatestBlockRead = new AtomicLong(0);
   AtomicLong metricLatestBlockProcessed = new AtomicLong(0);
@@ -104,15 +104,26 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     infoF("Starting the status watcher");
     statusWatcher.scheduleWithFixedDelay(this::checkStatus, 1, 1, TimeUnit.SECONDS);
 
+    ObserverStatus before = status;
     try {
       startInternal();
-      setStatus(RUNNING);
+      // startInternal() may already have started work that reports an error status; the
+      // observer is set to RUNNING only if nothing changed its status meanwhile, so an error
+      // is never overwritten.
+      promoteIfUnchanged(before);
     } catch (TransactionException tex) {
       errorEx("Error starting the payment observer.", tex);
       setStatus(DATABASE_ERROR);
     } catch (RuntimeException rex) {
       errorEx("Error starting the payment observer.", rex);
       setStatus(STREAM_ERROR);
+    }
+  }
+
+  /** Atomically sets RUNNING unless the status moved away from {@code before} in the meantime. */
+  synchronized void promoteIfUnchanged(ObserverStatus before) {
+    if (status == before) {
+      setStatus(RUNNING);
     }
   }
 
@@ -216,7 +227,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
     return this.status;
   }
 
-  void setStatus(ObserverStatus status) {
+  synchronized void setStatus(ObserverStatus status) {
     if (this.status != status) {
       if (this.status.isSettable(status)) {
         infoF("Setting status to {}", status);
@@ -448,6 +459,7 @@ public abstract class AbstractPaymentObserver implements HealthCheckable {
 
     // Build the state transition
     static {
+      addStateTransition(STARTING, RUNNING, DATABASE_ERROR, STREAM_ERROR, NEEDS_SHUTDOWN, SHUTDOWN);
       addStateTransition(
           RUNNING,
           DATABASE_ERROR,
