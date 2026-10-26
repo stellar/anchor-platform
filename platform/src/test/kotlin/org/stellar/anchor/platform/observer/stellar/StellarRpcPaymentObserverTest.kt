@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.asset.StellarAssetInfo
+import org.stellar.anchor.api.platform.HealthCheckStatus
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.LedgerTransaction
@@ -34,9 +35,11 @@ import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.Obse
 import org.stellar.sdk.Address
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.MuxedAccount
 import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.TOID
 import org.stellar.sdk.exception.NetworkException
+import org.stellar.sdk.exception.SorobanRpcException
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse
@@ -144,6 +147,100 @@ class StellarRpcPaymentObserverTest {
 
     assertEquals("e1", observer.processEvents(listOf(e1, e2, e3), "END"))
     verify(exactly = 0) { observer.processTransferEvent(match { it.event === e3 }) }
+  }
+
+  @Test
+  fun `fetchEvents waits before retrying after an event was held`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+
+    assertNull(observer.processEvents(listOf(e1), "END"))
+    observer.fetchEvents()
+
+    verify(exactly = 0) { sorobanServer.getEvents(any()) }
+  }
+
+  @Test
+  fun `the wait after a held event doubles from 1 second to a 30 second cap`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+
+    val waits = mutableListOf<Long>()
+    repeat(6) {
+      observer.processEvents(listOf(e1), "END")
+      waits.add(observer.holdBackoffSeconds)
+    }
+
+    assertEquals(listOf(2L, 4L, 8L, 16L, 30L, 30L), waits)
+  }
+
+  @Test
+  fun `the first held event delays the next fetch by 1 second`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+
+    val before = java.time.Instant.now()
+    observer.processEvents(listOf(e1), "END")
+    val after = java.time.Instant.now()
+
+    assertFalse(observer.retryNotBefore.isBefore(before.plusSeconds(1)))
+    assertFalse(observer.retryNotBefore.isAfter(after.plusSeconds(1)))
+  }
+
+  @Test
+  fun `a network error on an event also delays the next fetch`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws NetworkException(503, "unavailable")
+
+    observer.processEvents(listOf(e1), "END")
+
+    assertEquals(2L, observer.holdBackoffSeconds)
+    assertTrue(observer.retryNotBefore.isAfter(java.time.Instant.now()))
+  }
+
+  @Test
+  fun `a clean batch resets the wait to 1 second`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+    repeat(3) { observer.processEvents(listOf(e1), "END") }
+
+    every { observer.processTransferEvent(any()) } returns Unit
+    assertEquals("END", observer.processEvents(listOf(e1), "END"))
+
+    assertEquals(1L, observer.holdBackoffSeconds)
+    assertFalse(observer.retryNotBefore.isAfter(java.time.Instant.now()))
+  }
+
+  @Test
+  fun `an empty batch resets the wait to 1 second`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+    repeat(3) { observer.processEvents(listOf(e1), "END") }
+
+    assertEquals("END", observer.processEvents(emptyList(), "END"))
+
+    assertEquals(1L, observer.holdBackoffSeconds)
+    assertFalse(observer.retryNotBefore.isAfter(java.time.Instant.now()))
+  }
+
+  @Test
+  fun `waiting out a held event is not counted as silence`() {
+    val e1 = eventWithId("e1")
+    processAll()
+    every { observer.processTransferEvent(any()) } throws IOException("database failed")
+    observer.processEvents(listOf(e1), "END")
+    val stale = java.time.Instant.now().minusSeconds(3600)
+    observer.lastActivityTime = stale
+
+    observer.fetchEvents()
+
+    assertTrue(observer.lastActivityTime.isAfter(stale))
   }
 
   @Test
@@ -614,43 +711,144 @@ class StellarRpcPaymentObserverTest {
     assertDoesNotThrow { observer.checkStatus() }
   }
 
-  @Test
-  fun `test buildEventRequest`() {
-    val account1 = KeyPair.random().accountId
-    val account2 = KeyPair.random().accountId
-    // Mock the behavior of getStellarAssets()
-    every { assetService.stellarAssets } returns
+  private fun distributionAssets(count: Int) =
+    List(count) { StellarAssetInfo().apply { distributionAccount = KeyPair.random().accountId } }
+
+  private fun transferEvent(
+    from: String,
+    to: String,
+    toSCVal: SCVal = Scv.toAddress(to),
+    value: SCVal = Scv.toInt128(BigInteger.valueOf(100)),
+  ): GetEventsResponse.EventInfo {
+    val event = mockk<GetEventsResponse.EventInfo>(relaxed = true)
+    every { event.topic } returns
       listOf(
-        StellarAssetInfo().apply { distributionAccount = account1 },
-        StellarAssetInfo().apply { distributionAccount = account2 },
+        Scv.toSymbol("transfer").toXdrBase64(),
+        Scv.toAddress(from).toXdrBase64(),
+        toSCVal.toXdrBase64(),
+        Scv.toString("native").toXdrBase64(),
       )
+    every { event.value } returns value.toXdrBase64()
+    every { event.contractId } returns "contractId"
+    return event
+  }
 
-    // Call the method under test
-    val request = observer.buildEventRequest(null)
+  @Test
+  fun `buildEventRequest sends one transfer wildcard filter whatever the number of distribution accounts`() {
+    for (count in listOf(0, 1, 3)) {
+      every { assetService.stellarAssets } returns distributionAssets(count)
 
-    // Verify the result
-    assertEquals(4, request.filters.size)
-    val filterList = request.filters.stream().toList()
-    assertEquals(EventFilterType.CONTRACT, filterList[0].type)
-    assertEquals(EventFilterType.CONTRACT, filterList[1].type)
-    assertEquals(EventFilterType.CONTRACT, filterList[2].type)
-    assertEquals(EventFilterType.CONTRACT, filterList[3].type)
-    assertEquals(
-      Scv.toAddress(account1).toXdrBase64(),
-      filterList[0].topics.toList()[0].toList()[1],
-    )
-    assertEquals(
-      Scv.toAddress(account1).toXdrBase64(),
-      filterList[1].topics.toList()[0].toList()[2],
-    )
-    assertEquals(
-      Scv.toAddress(account2).toXdrBase64(),
-      filterList[2].topics.toList()[0].toList()[1],
-    )
-    assertEquals(
-      Scv.toAddress(account2).toXdrBase64(),
-      filterList[3].topics.toList()[0].toList()[2],
-    )
+      val request = observer.buildEventRequest(null)
+
+      assertEquals(1, request.filters.size)
+      val filter = request.filters.first()
+      assertEquals(EventFilterType.CONTRACT, filter.type)
+      assertEquals(
+        listOf(Scv.toSymbol("transfer").toXdrBase64(), "*", "*", "*"),
+        filter.topics.single().toList(),
+      )
+    }
+  }
+
+  @Test
+  fun `buildEventRequest does not depend on the observe list`() {
+    every { assetService.stellarAssets } returns distributionAssets(2)
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+    val before = observer.buildEventRequest(null)
+
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns true
+    every { paymentObservingAccountsManager.accounts } returns
+      listOf(
+        PaymentObservingAccountsManager.ObservingAccount(
+          KeyPair.random().accountId,
+          java.time.Instant.now(),
+          PaymentObservingAccountsManager.AccountType.TRANSIENT,
+        )
+      )
+    val after = observer.buildEventRequest(null)
+
+    assertEquals(before.filters, after.filters)
+  }
+
+  @Test
+  fun `buildEventRequest keeps startLedger without a cursor and pagination with one`() {
+    every { assetService.stellarAssets } returns distributionAssets(1)
+
+    val first = observer.buildEventRequest(null)
+    assertEquals(5L, first.startLedger)
+    assertNull(first.pagination)
+
+    val next = observer.buildEventRequest("CUR")
+    assertNull(next.startLedger)
+    assertEquals("CUR", next.pagination.cursor)
+    assertEquals(100L, next.pagination.limit)
+  }
+
+  @Test
+  fun `processEvents hands an event to an armed non-distribution recipient to processTransferEvent`() {
+    val armed = KeyPair.random().accountId
+    val event = transferEvent(KeyPair.random().accountId, armed)
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+    every { paymentObservingAccountsManager.lookupAndUpdate(armed) } returns true
+    every { observer.processTransferEvent(any()) } answers {}
+
+    assertEquals("END", observer.processEvents(listOf(event), "END"))
+
+    verify(exactly = 1) {
+      observer.processTransferEvent(match { it.event === event && it.toAddr == armed })
+    }
+  }
+
+  @Test
+  fun `processEvents hands an event to a muxed recipient whose base account is observed`() {
+    val base = KeyPair.random().accountId
+    val memo =
+      SCVal.builder()
+        .discriminant(SCValType.SCV_MAP)
+        .map(
+          SCMap(
+            arrayOf(
+              SCMapEntry(Scv.toSymbol("amount"), Scv.toInt128(BigInteger.valueOf(100))),
+              SCMapEntry(Scv.toSymbol("to_muxed_id"), Scv.toUint64(BigInteger.valueOf(42))),
+            )
+          )
+        )
+        .build()
+    val event = transferEvent(KeyPair.random().accountId, base, value = memo)
+    val muxed = MuxedAccount(base, BigInteger.valueOf(42)).address
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+    every { paymentObservingAccountsManager.lookupAndUpdate(muxed) } returns true
+    every { observer.processTransferEvent(any()) } answers {}
+
+    observer.processEvents(listOf(event), "END")
+
+    verify(exactly = 1) {
+      observer.processTransferEvent(match { it.event === event && it.toAddr == muxed })
+    }
+  }
+
+  @Test
+  fun `processEvents skips an event with no observed account without fetching its transaction`() {
+    val event = transferEvent(KeyPair.random().accountId, KeyPair.random().accountId)
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+
+    assertEquals("END", observer.processEvents(listOf(event), "END"))
+
+    verify(exactly = 0) { observer.processTransferEvent(any()) }
+    verify(exactly = 0) { stellarRpc.getTransaction(any()) }
+  }
+
+  @Test
+  fun `processEvents hands an event involving a distribution account to processTransferEvent`() {
+    val distribution = KeyPair.random().accountId
+    val event = transferEvent(distribution, KeyPair.random().accountId)
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+    every { paymentObservingAccountsManager.lookupAndUpdate(distribution) } returns true
+    every { observer.processTransferEvent(any()) } answers {}
+
+    observer.processEvents(listOf(event), "END")
+
+    verify(exactly = 1) { observer.processTransferEvent(match { it.event === event }) }
   }
 
   @Test
@@ -1117,6 +1315,85 @@ class StellarRpcPaymentObserverTest {
     assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
   }
 
+  private fun rejection() = SorobanRpcException(-32602, "too many filters", null)
+
+  private fun emptyResponse(cursor: String): GetEventsResponse {
+    val response = mockk<GetEventsResponse>()
+    every { response.events } returns emptyList()
+    every { response.latestLedger } returns 100L
+    every { response.cursor } returns cursor
+    return response
+  }
+
+  private fun newStartingObserver() =
+    spyk(
+      StellarRpcPaymentObserver(
+        stellarRpc,
+        config,
+        paymentListeners,
+        paymentObservingAccountsManager,
+        paymentStreamerCursorStore,
+        sacToAssetMapper,
+        assetService,
+      ),
+      recordPrivateCalls = true,
+    )
+
+  @Test
+  fun `fetchEvents arms lastActivityTime on the first poll even when getEvents is rejected`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    observer.cursor = "0001"
+    assertNull(observer.lastActivityTime)
+
+    observer.fetchEvents()
+    val armed = observer.lastActivityTime
+    assertNotNull(armed)
+
+    Thread.sleep(5)
+    observer.fetchEvents()
+    assertEquals(armed, observer.lastActivityTime)
+  }
+
+  @Test
+  fun `a backend that never completes a poll trips the silence detector`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws NetworkException(503, "outage")
+    observer.cursor = "0001"
+
+    observer.fetchEvents()
+    observer.lastActivityTime = java.time.Instant.now().minusSeconds(config.silenceTimeout + 1L)
+    observer.checkSilence()
+
+    assertEquals(ObserverStatus.SILENCE_ERROR, observer.getStatus())
+  }
+
+  @Test
+  fun `fetchEvents leaves lastActivityTime alone during an outage`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws NetworkException(503, "outage")
+    observer.cursor = "0001"
+    val old = java.time.Instant.now().minusSeconds(60)
+    observer.lastActivityTime = old
+
+    observer.fetchEvents()
+
+    assertEquals(old, observer.lastActivityTime)
+  }
+
+  @Test
+  fun `fetchEvents sets STREAM_ERROR after 5 consecutive rejected polls and not before`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    observer.cursor = "0001"
+
+    repeat(4) { observer.fetchEvents() }
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+
+    observer.fetchEvents()
+    assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
+  }
+
   @Test
   fun `processEvents propagates an observing account lookup failure`() {
     val event =
@@ -1141,6 +1418,140 @@ class StellarRpcPaymentObserverTest {
     assertEquals("END", observer.processEvents(listOf(event), "END"))
     verify(exactly = 0) { paymentObservingAccountsManager.lookupAndUpdate(any()) }
     verify(exactly = 0) { observer.processTransferEvent(any()) }
+  }
+
+  @Test
+  fun `fetchEvents resets the consecutive rejection count after a successful poll`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    observer.cursor = "0001"
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    repeat(4) { observer.fetchEvents() }
+    every { sorobanServer.getEvents(any()) } returns emptyResponse("0002")
+    observer.fetchEvents()
+    assertEquals(0, observer.consecutiveFailedPolls)
+
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    repeat(4) { observer.fetchEvents() }
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+  }
+
+  @Test
+  fun `an outage between rejections leaves the rejection count as it was`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    observer.cursor = "0001"
+
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    repeat(3) { observer.fetchEvents() }
+    assertEquals(3, observer.consecutiveFailedPolls)
+
+    every { sorobanServer.getEvents(any()) } throws NetworkException(503, "outage")
+    repeat(4) { observer.fetchEvents() }
+    assertEquals(3, observer.consecutiveFailedPolls)
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    observer.fetchEvents()
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    observer.fetchEvents()
+    assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
+  }
+
+  @Test
+  fun `a failed latest-ledger lookup while building the request does not stop the observer`() {
+    every { observer.buildEventRequest(any()) } throws IOException("cannot build")
+
+    repeat(10) { observer.fetchEvents() }
+
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+  }
+
+  @Test
+  fun `startInternal resets the consecutive rejection count so each restart gets a fresh budget`() {
+    observer.consecutiveFailedPolls = 4
+
+    observer.startInternal()
+
+    assertEquals(0, observer.consecutiveFailedPolls)
+    observer.shutdownInternal()
+  }
+
+  @Test
+  fun `check reports YELLOW while STARTING`() {
+    val starting = newStartingObserver()
+    assertEquals(ObserverStatus.STARTING, starting.getStatus())
+    assertEquals(HealthCheckStatus.YELLOW, starting.check().status)
+    starting.setStatus(ObserverStatus.RUNNING)
+    assertEquals(ObserverStatus.RUNNING, starting.getStatus())
+  }
+
+  @Test
+  fun `check reports GREEN while RUNNING`() {
+    assertEquals(HealthCheckStatus.GREEN, observer.check().status)
+  }
+
+  @Test
+  fun `check reports RED once setStatus moves the observer into an error state`() {
+    for (status in
+      listOf(
+        ObserverStatus.STREAM_ERROR,
+        ObserverStatus.DATABASE_ERROR,
+        ObserverStatus.SILENCE_ERROR,
+        ObserverStatus.PUBLISHER_ERROR,
+        ObserverStatus.NEEDS_SHUTDOWN,
+        ObserverStatus.SHUTDOWN,
+      )) {
+      observer.status = ObserverStatus.RUNNING
+      observer.setStatus(status)
+      assertEquals(HealthCheckStatus.RED, observer.check().status, "status=$status")
+    }
+  }
+
+  @Test
+  fun `shutdownInternal does not move the status out of the supervisor's hands`() {
+    observer.startInternal()
+    observer.setStatus(ObserverStatus.STREAM_ERROR)
+
+    observer.shutdownInternal()
+
+    assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
+  }
+
+  @Test
+  fun `start promotes a STARTING observer to RUNNING`() {
+    val starting = newStartingObserver()
+    justRun { starting.startInternal() }
+
+    starting.start()
+
+    assertEquals(ObserverStatus.RUNNING, starting.getStatus())
+    starting.silenceWatcher.shutdownNow()
+    starting.statusWatcher.shutdownNow()
+  }
+
+  @Test
+  fun `start does not overwrite an error status set while startInternal ran`() {
+    val starting = newStartingObserver()
+    every { starting.startInternal() } answers { starting.setStatus(ObserverStatus.DATABASE_ERROR) }
+
+    starting.start()
+
+    assertEquals(ObserverStatus.DATABASE_ERROR, starting.getStatus())
+    starting.silenceWatcher.shutdownNow()
+    starting.statusWatcher.shutdownNow()
+  }
+
+  @Test
+  fun `promoteIfUnchanged sets RUNNING only when the status did not move`() {
+    val unchanged = newStartingObserver()
+    unchanged.promoteIfUnchanged(ObserverStatus.STARTING)
+    assertEquals(ObserverStatus.RUNNING, unchanged.getStatus())
+
+    val failed = newStartingObserver()
+    failed.setStatus(ObserverStatus.STREAM_ERROR)
+    failed.promoteIfUnchanged(ObserverStatus.STARTING)
+    assertEquals(ObserverStatus.STREAM_ERROR, failed.getStatus())
   }
 }
 

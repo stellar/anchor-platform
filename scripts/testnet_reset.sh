@@ -57,12 +57,59 @@ pk_bytes() {
   python3 -W ignore -c "import sys; from stellar_sdk import Keypair; print(Keypair.from_secret(sys.stdin.read().strip()).raw_public_key().hex())" <<<"$1"
 }
 
+HORIZON_URL="${HORIZON_URL:-https://horizon-testnet.stellar.org}"
+FRIENDBOT_URL="${FRIENDBOT_URL:-https://friendbot.stellar.org}"
+FUND_FAILURES=()
+
+ACCOUNT_ADDRS=()
+ACCOUNT_VARS=()
+
+register_account() {
+  ACCOUNT_ADDRS+=("$1")
+  ACCOUNT_VARS+=("$2")
+}
+
+name_for_address() {
+  local target=$1 i
+  for ((i = 0; i < ${#ACCOUNT_ADDRS[@]}; i++)); do
+    if [[ "${ACCOUNT_ADDRS[$i]}" == "$target" ]]; then
+      echo "${ACCOUNT_VARS[$i]}"
+      return 0
+    fi
+  done
+  echo "UNKNOWN"
+}
+
+account_exists() {
+  local public_key=$1
+  [[ "$(curl -s -o /dev/null -w "%{http_code}" "$HORIZON_URL/accounts/$public_key")" == "200" ]]
+}
+
 fund_account() {
   local public_key=$1
-  log_info "Funding: $public_key"
-  if ! curl -s "https://friendbot.stellar.org/?addr=$public_key" >/dev/null 2>&1; then
-    log_warning "Friendbot funding failed for $public_key (may already be funded)"
+  local name=${2:-UNKNOWN}
+  local max_attempts=6 attempt http_code
+  register_account "$public_key" "$name"
+  log_info "Funding: $name ($public_key)"
+
+  if account_exists "$public_key"; then
+    log_success "Already funded: $name ($public_key)"
+    return 0
   fi
+
+  for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" "$FRIENDBOT_URL/?addr=$public_key" || echo "000")
+    if [[ "$http_code" == "200" ]] || account_exists "$public_key"; then
+      log_success "Funded: $name ($public_key)"
+      return 0
+    fi
+    log_warning "Friendbot attempt $attempt/$max_attempts for $name ($public_key) returned HTTP $http_code"
+    sleep $((attempt * 2))
+  done
+
+  log_error "Failed to fund $name ($public_key) after $max_attempts attempts"
+  FUND_FAILURES+=("$public_key")
+  return 0
 }
 
 fund_test_accounts() {
@@ -87,7 +134,7 @@ fund_test_accounts() {
   for secret_var in "${secret_vars[@]}"; do
     local secret="${!secret_var}"
     if [[ -n "$secret" ]]; then
-      fund_account "$(public_key "$secret")"
+      fund_account "$(public_key "$secret")" "$secret_var"
     else
       log_warning "Skipping $secret_var (not set)"
     fi
@@ -166,7 +213,7 @@ issue_and_fund_usdc() {
   local usdc_issuer_public
   usdc_issuer_public="$(public_key "$usdc_issuer_secret")"
 
-  fund_account "$usdc_issuer_public"
+  fund_account "$usdc_issuer_public" "USDC_ISSUER_SECRET"
 
   local recipient_vars=(
     "TEST_CLIENT_WALLET_SECRET"
@@ -184,8 +231,8 @@ issue_and_fund_usdc() {
         amount=100000000000  # 10000 USDC in stroops
         amount_human="10000"
       elif [[ "$account_var" == "TEST_CLIENT_WALLET_SECRET" ]]; then
-        amount=1000000000  # 100 USDC in stroops
-        amount_human="100"
+        amount=100000000000  # 100 USDC in stroops
+        amount_human="10000"
       else
         amount=1000000  # 0.1 USDC in stroops
         amount_human="0.1"
@@ -213,7 +260,7 @@ issue_and_fund_srt() {
   local srt_issuer_public
   srt_issuer_public="$(public_key "$srt_issuer_secret")"
 
-  fund_account "$srt_issuer_public"
+  fund_account "$srt_issuer_public" "SRT_ISSUER_SECRET"
 
   local anchor_dist_public
   anchor_dist_public="$(public_key "$TESTANCHOR_DISTRIBUTION_SECRET")"
@@ -334,6 +381,13 @@ main() {
   issue_and_fund_usdc
   issue_and_fund_srt
   deploy_contracts
+  if [[ ${#FUND_FAILURES[@]} -gt 0 ]]; then
+    log_error "The following accounts could not be funded:"
+    for acc in "${FUND_FAILURES[@]}"; do
+      log_error "  - $(name_for_address "$acc") ($acc)"
+    done
+    exit 1
+  fi
   log_success "✨ Testnet setup completed!"
 }
 

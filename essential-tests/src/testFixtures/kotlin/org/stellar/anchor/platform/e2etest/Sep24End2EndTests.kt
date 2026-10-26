@@ -38,6 +38,7 @@ import org.stellar.anchor.platform.TestSecrets.DEPOSIT_FUND_CLIENT_SECRET_2
 import org.stellar.anchor.platform.TestSecrets.WITHDRAW_FUND_CLIENT_SECRET_1
 import org.stellar.anchor.platform.TestSecrets.WITHDRAW_FUND_CLIENT_SECRET_2
 import org.stellar.anchor.platform.WalletClient
+import org.stellar.anchor.platform.assertCallbackSignatures
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log.debug
 import org.stellar.anchor.util.Log.info
@@ -86,6 +87,7 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
     runBlocking {
       val keypair = SigningKeyPair.fromSecret(walletSecretKey)
       walletServerClient.clearCallbacks()
+      val testStartedAt = System.currentTimeMillis() / 1000
 
       val token = anchor.auth().authenticate(keypair)
       val response = makeDeposit(asset, amount, token)
@@ -116,6 +118,16 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       val actualCallbacks =
         waitForWalletServerCallbacks(response.id, getExpectedDepositStatus().size)
       assertCallbacks(actualCallbacks, getExpectedDepositStatus())
+
+      // SEP24IF-33, SEP24IF-34: every callback carries a signature a wallet server can verify with
+      // AP's published key
+      assertCallbackSignatures(
+        walletServerClient.getRawTransactionCallbacks("sep24", response.id),
+        toml.getString("SIGNING_KEY"),
+        config.env["wallet.hostname"],
+        getExpectedDepositStatus().size,
+        testStartedAt,
+      )
     }
 
   @Test

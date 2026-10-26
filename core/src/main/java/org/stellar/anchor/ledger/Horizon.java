@@ -125,8 +125,16 @@ public class Horizon implements LedgerClient {
     try {
       txnResponse = getServer().transactions().transaction(txnHash);
     } catch (BadRequestException brex) {
-      debug("Transaction not found: " + txnHash);
-      return null;
+      // Only a genuine 404 means the transaction is absent. Every other 4xx (commonly emitted by a
+      // WAF/CDN/proxy in front of Horizon) must fail closed: the payment observers read null as
+      // "no ledger transaction" and move their cursor past the payment. See ANCHOR-1364.
+      Integer code = brex.getCode();
+      if (code != null && code == 404) {
+        debug("Transaction not found: " + txnHash);
+        return null;
+      }
+      errorF("Error getting transaction: {}. Code: {}, body: {}", txnHash, code, brex.getBody());
+      throw new LedgerException("Error getting transaction: " + txnHash, brex);
     } catch (NetworkException nex) {
       throw new LedgerException(
           String.format(

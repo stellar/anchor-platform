@@ -58,14 +58,7 @@ public class PaymentObserverBeans {
     if (paymentObserverConfig == null) {
       throw new ServerErrorException("PaymentObserverConfig cannot be empty.");
     }
-    // Add distribution wallet to the observing list as type RESIDENTIAL
-    for (StellarAssetInfo asset : stellarAssets) {
-      if (!paymentObservingAccountsManager.lookupAndUpdate(asset.getDistributionAccount())) {
-        paymentObservingAccountsManager.upsert(
-            asset.getDistributionAccount(),
-            PaymentObservingAccountsManager.AccountType.RESIDENTIAL);
-      }
-    }
+    seedDistributionAccounts(paymentObservingAccountsManager, stellarAssets);
     AbstractPaymentObserver paymentObserver;
     if (ledgerClient instanceof StellarRpc stellarRpc) {
       paymentObserver =
@@ -101,7 +94,8 @@ public class PaymentObserverBeans {
       JdbcSep24TransactionStore sep24TransactionStore,
       JdbcSep6TransactionStore sep6TransactionStore,
       PlatformApiClient platformApiClient,
-      RpcConfig rpcConfig) {
+      RpcConfig rpcConfig,
+      AssetService assetService) {
 
     return new DefaultPaymentListener(
         paymentObservingAccountsManager,
@@ -109,6 +103,21 @@ public class PaymentObserverBeans {
         sep24TransactionStore,
         sep6TransactionStore,
         platformApiClient,
-        rpcConfig);
+        rpcConfig,
+        assetService);
+  }
+
+  /**
+   * Add the distribution wallets to the observing list as type RESIDENTIAL. The account type is not
+   * persisted, so on a restart the manager loads the stored distribution accounts as TRANSIENT;
+   * upserting unconditionally promotes them back to RESIDENTIAL so they are never evicted.
+   */
+  public static void seedDistributionAccounts(
+      PaymentObservingAccountsManager paymentObservingAccountsManager,
+      List<StellarAssetInfo> stellarAssets) {
+    for (StellarAssetInfo asset : stellarAssets) {
+      paymentObservingAccountsManager.upsert(
+          asset.getDistributionAccount(), PaymentObservingAccountsManager.AccountType.RESIDENTIAL);
+    }
   }
 }

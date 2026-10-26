@@ -1833,6 +1833,7 @@ class NotifyRefundSentHandlerTest {
     val request = NotifyRefundSentRequest.builder().transactionId(TX_ID).build()
     val txn31 = JdbcSep31Transaction()
     txn31.status = PENDING_RECEIVER.toString()
+    txn31.transferReceivedAt = Instant.now()
 
     every { txn6Store.findByTransactionId(any()) } returns null
     every { txn24Store.findByTransactionId(TX_ID) } returns null
@@ -1862,6 +1863,7 @@ class NotifyRefundSentHandlerTest {
         .build()
     val txn31 = JdbcSep31Transaction()
     txn31.status = PENDING_RECEIVER.toString()
+    txn31.transferReceivedAt = Instant.now()
 
     val payment = JdbcSep31RefundPayment()
     payment.id = "1"
@@ -1887,5 +1889,175 @@ class NotifyRefundSentHandlerTest {
     verify(exactly = 0) { txn24Store.save(any()) }
     verify(exactly = 0) { txn31Store.save(any()) }
     verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @ParameterizedTest
+  @CsvSource(value = ["pending_receiver", "pending_stellar"])
+  fun test_handle_sep31_fundsNotReceived(status: String) {
+    val request =
+      NotifyRefundSentRequest.builder()
+        .transactionId(TX_ID)
+        .refund(
+          NotifyRefundSentRequest.Refund.builder()
+            .amount(AmountAssetRequest("1", STELLAR_USDC))
+            .amountFee(AmountAssetRequest("0", STELLAR_USDC))
+            .id("1")
+            .build()
+        )
+        .build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = status
+    txn31.amountInAsset = STELLAR_USDC
+    txn31.amountIn = "1"
+    txn31.amountFeeAsset = STELLAR_USDC
+    txn31.amountFee = "0"
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns txn31
+
+    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
+    assertEquals(
+      "RPC method[notify_refund_sent] is not supported. Status[$status], kind[receive], protocol[31], funds received[false]",
+      ex.message
+    )
+
+    assertEquals(status, txn31.status)
+    assertEquals(null, txn31.refunds)
+    assertEquals(null, txn31.transferReceivedAt)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun test_handle_sep31_pendingSender_fundsNotReceived() {
+    val request = NotifyRefundSentRequest.builder().transactionId(TX_ID).build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_SENDER.toString()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns txn31
+
+    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
+    assertEquals(
+      "RPC method[notify_refund_sent] is not supported. Status[pending_sender], kind[receive], protocol[31], funds received[false]",
+      ex.message
+    )
+
+    verify(exactly = 0) { txn31Store.save(any()) }
+  }
+
+  @Test
+  fun test_handle_sep31_pendingSender_fundsReceived() {
+    val request = NotifyRefundSentRequest.builder().transactionId(TX_ID).build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_SENDER.toString()
+    txn31.transferReceivedAt = Instant.now()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns txn31
+
+    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
+    assertEquals(
+      "RPC method[notify_refund_sent] is not supported. Status[pending_sender], kind[receive], protocol[31], funds received[true]",
+      ex.message
+    )
+
+    verify(exactly = 0) { txn31Store.save(any()) }
+  }
+
+  @Test
+  fun test_handle_sep31_fundsNotReceived_missingRefund_statusCheckFirst() {
+    val request = NotifyRefundSentRequest.builder().transactionId(TX_ID).build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_RECEIVER.toString()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns txn31
+
+    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
+    assertEquals(
+      "RPC method[notify_refund_sent] is not supported. Status[pending_receiver], kind[receive], protocol[31], funds received[false]",
+      ex.message
+    )
+  }
+
+  @Test
+  fun test_handle_sep31_partialRefund_fundsReceived() {
+    val request =
+      NotifyRefundSentRequest.builder()
+        .transactionId(TX_ID)
+        .refund(
+          NotifyRefundSentRequest.Refund.builder()
+            .amount(AmountAssetRequest("0.5", STELLAR_USDC))
+            .amountFee(AmountAssetRequest("0", STELLAR_USDC))
+            .id("1")
+            .build()
+        )
+        .build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_RECEIVER.toString()
+    txn31.transferReceivedAt = Instant.now()
+    txn31.amountInAsset = STELLAR_USDC
+    txn31.amountIn = "1"
+    txn31.amountOutAsset = FIAT_USD
+    txn31.amountOut = "1"
+    txn31.amountFeeAsset = STELLAR_USDC
+    txn31.amountFee = "0"
+
+    val sep31TxnCapture = slot<JdbcSep31Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns txn31
+    every { txn31Store.save(capture(sep31TxnCapture)) } returns null
+    every { eventSession.publish(any()) } just Runs
+
+    handler.handle(request)
+
+    assertEquals(PENDING_ANCHOR.toString(), sep31TxnCapture.captured.status)
+  }
+
+  @Test
+  fun test_handle_sep31_pendingStellar_fundsReceived() {
+    val request =
+      NotifyRefundSentRequest.builder()
+        .transactionId(TX_ID)
+        .refund(
+          NotifyRefundSentRequest.Refund.builder()
+            .amount(AmountAssetRequest("1", STELLAR_USDC))
+            .amountFee(AmountAssetRequest("0", STELLAR_USDC))
+            .id("1")
+            .build()
+        )
+        .build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_STELLAR.toString()
+    txn31.transferReceivedAt = Instant.now()
+    txn31.amountInAsset = STELLAR_USDC
+    txn31.amountIn = "1"
+    txn31.amountOutAsset = FIAT_USD
+    txn31.amountOut = "1"
+    txn31.amountFeeAsset = STELLAR_USDC
+    txn31.amountFee = "0"
+
+    val sep31TxnCapture = slot<JdbcSep31Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns txn31
+    every { txn31Store.save(capture(sep31TxnCapture)) } returns null
+    every { eventSession.publish(any()) } just Runs
+
+    handler.handle(request)
+
+    assertEquals(REFUNDED.toString(), sep31TxnCapture.captured.status)
   }
 }

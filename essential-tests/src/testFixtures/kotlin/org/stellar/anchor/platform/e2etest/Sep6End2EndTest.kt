@@ -25,6 +25,7 @@ import org.stellar.anchor.platform.TestConfig
 import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.platform.WalletClient
+import org.stellar.anchor.platform.assertCallbackSignatures
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
 import org.stellar.reference.wallet.WalletServerClient
@@ -40,6 +41,14 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
   private val walletServerClient = WalletServerClient(Url(config.env["wallet.server.url"]!!))
   private val gson = GsonUtils.getInstance()
   private val clientWalletAccount = KeyPair.fromSecretSeed(CLIENT_WALLET_SECRET).accountId
+
+  // Lower bound of the timestamp of every callback the running test receives (SEP1CS-01).
+  private var testStartedAt = 0L
+
+  @BeforeEach
+  fun markTestStart() {
+    testStartedAt = System.currentTimeMillis() / 1000
+  }
 
   companion object {
     private val USDC =
@@ -739,6 +748,15 @@ open class Sep6End2EndTest : IntegrationTestBase(TestConfig()) {
       )
     val statuses = callbacks.map { it.transaction.status }
     assertEquals(expected.map { it.status }, statuses)
+
+    // SEP1CS-01: every callback verifies with the TOML SIGNING_KEY over <t>.<host>.<body>
+    assertCallbackSignatures(
+      walletServerClient.getRawTransactionCallbacks("sep6", txnId),
+      toml.getString("SIGNING_KEY"),
+      config.env["wallet.hostname"],
+      expected.size,
+      testStartedAt,
+    )
   }
 
   private suspend fun assertWalletReceivedCustomerStatuses(

@@ -4,6 +4,7 @@ import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.mockk
+import java.math.BigDecimal
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -144,6 +145,65 @@ class SepRequestValidatorTest {
     }
   }
 
+  private fun amountError(amount: String?, min: Long? = null, max: Long? = null): String? =
+    assertThrows<SepValidationException> {
+        requestValidator.validateAmount(amount, TEST_ASSET, 2, min, max)
+      }
+      .message
+
+  @Test
+  fun `test validateAmount rejects a null amount without echoing it`() {
+    assertEquals("invalid amount for asset USDC", amountError(null))
+  }
+
+  @Test
+  fun `test validateAmount rejects an empty amount without echoing it`() {
+    assertEquals("invalid amount for asset USDC", amountError(""))
+  }
+
+  @Test
+  fun `test validateAmount rejects an amount longer than 64 characters without echoing it`() {
+    // 65 characters that parse to 1, so only the length can reject it
+    val padded = "0".repeat(64) + "1"
+    assertEquals(65, padded.length)
+    assertEquals("invalid amount for asset USDC", amountError(padded))
+  }
+
+  @Test
+  fun `test validateAmount accepts an amount of exactly 64 characters`() {
+    val padded = "0".repeat(63) + "1"
+    assertEquals(64, padded.length)
+    requestValidator.validateAmount(padded, TEST_ASSET, 2, null, null)
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      ["abc", " ", "1,5", "1e20000000", "1E+21", "100000000000000000000", "1e-21", "1e999999999999"]
+  )
+  fun `test validateAmount rejects a non numeric or out of magnitude amount`(amount: String) {
+    // "100000000000000000000" has 21 integer digits; "1e999999999999" overflows the exponent
+    assertEquals("invalid amount $amount for asset USDC", amountError(amount))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["1", "10", "99999999999999999999", "1.5", "1e2"])
+  fun `test validateAmount accepts a valid amount when there is no min or max`(amount: String) {
+    requestValidator.validateAmount(amount, TEST_ASSET, 2, null, null)
+  }
+
+  @Test
+  fun `test validateAmount still applies the scale sign and bounds checks to a bounded amount`() {
+    assertEquals(
+      "invalid amount 1.001 for asset USDC, significant decimals is 2",
+      amountError("1.001"),
+    )
+    assertEquals("invalid amount 0 for asset USDC", amountError("0"))
+    assertEquals("invalid amount -1 for asset USDC", amountError("-1"))
+    assertEquals("invalid amount 5 for asset USDC", amountError("5", min = 10))
+    assertEquals("invalid amount 500 for asset USDC", amountError("500", max = 100))
+  }
+
   @ValueSource(strings = ["bank_account", "cash"])
   @ParameterizedTest
   fun `test validateTypes`(type: String) {
@@ -211,6 +271,97 @@ class SepRequestValidatorTest {
   )
   fun `test static validateAmount accepts reasonable amounts`(amount: String) {
     SepRequestValidator.validateAmount("", amount, false)
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["0e-50000000", "0e+50000000", "0.000000000000000000000", "-0e-50000000"])
+  fun `test static validateAmount rejects zero with an extreme scale`(amount: String) {
+    val ex =
+      assertThrows<BadRequestException> { SepRequestValidator.validateAmount("", amount, true) }
+    assertEquals("amount is invalid", ex.message)
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["0", "0.00", "0.00000000000000000000", "0e+5", "0e-20"])
+  fun `test static validateAmount accepts zero with a bounded scale`(amount: String) {
+    SepRequestValidator.validateAmount("", amount, true)
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        // 58 digits that strip to 1: padded with trailing zeros, 62 characters
+        "1000000000000000000000000000000000000000000000000000000000e-57",
+        // precision 41: the 41st digit is a trailing zero
+        "1.0000000000000000000000000000000000000000",
+      ]
+  )
+  fun `test static validateAmount rejects an amount padded beyond 40 digits of precision`(
+    amount: String
+  ) {
+    val ex =
+      assertThrows<BadRequestException> { SepRequestValidator.validateAmount("", amount, false) }
+    assertEquals("amount is invalid", ex.message)
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        // precision 40: 20 integer and 20 fractional digits
+        "99999999999999999999.99999999999999999999",
+        "10000000000000000000.00000000000000000000",
+        // precision 40 padded with trailing zeros
+        "1.000000000000000000000000000000000000000",
+        // the usual shape
+        "1.0000000",
+      ]
+  )
+  fun `test static validateAmount accepts an amount of up to 40 digits of precision`(
+    amount: String
+  ) {
+    SepRequestValidator.validateAmount("", amount, false)
+  }
+
+  @Test
+  fun `test static validateAmount rejects amount strings longer than 64 characters`() {
+    // Otherwise valid (parses to 1, precision 1), so only the length cap can reject it.
+    val padded = "0".repeat(64) + "1"
+    assertEquals(65, padded.length)
+    val ex =
+      assertThrows<BadRequestException> {
+        SepRequestValidator.validateAmount("fee_details.", padded, false)
+      }
+    assertEquals("fee_details.amount is invalid", ex.message)
+  }
+
+  @Test
+  fun `test static validateAmount accepts an amount string of exactly 64 characters`() {
+    val padded = "0".repeat(63) + "1"
+    assertEquals(64, padded.length)
+    val amount = SepRequestValidator.validateAmount("", padded, false)
+    assertEquals(0, amount.compareTo(BigDecimal.ONE))
+  }
+
+  @Test
+  fun `test static validateAmount applies the length cap before the sign check`() {
+    // 65 characters each: the cap reports 'amount is invalid', not the sign message. The zero is
+    // 65 plain digits (scale 0) so only the cap can reject it: it would otherwise be a valid zero.
+    val zero = "0".repeat(65)
+    val negative = "-" + "0".repeat(63) + "1"
+    assertEquals(65, zero.length)
+    assertEquals(65, negative.length)
+    assertEquals(
+      "amount is invalid",
+      assertThrows<BadRequestException> { SepRequestValidator.validateAmount("", zero, true) }
+        .message,
+    )
+    assertEquals(
+      "amount is invalid",
+      assertThrows<BadRequestException> { SepRequestValidator.validateAmount("", negative, true) }
+        .message,
+    )
   }
 
   @Test

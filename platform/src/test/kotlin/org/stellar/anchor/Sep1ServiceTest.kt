@@ -7,6 +7,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.config.Sep1Config.TomlType.*
 import org.stellar.anchor.platform.config.PropertySep1Config
@@ -59,6 +60,38 @@ class Sep1ServiceTest {
     val config = PropertySep1Config(true, TomlConfig(FILE, Sep1ConfigTest.getTestTomlAsFile()))
     sep1 = Sep1Service(config)
     assertEquals(sep1.toml, Files.readString(Path.of(Sep1ConfigTest.getTestTomlAsFile())))
+  }
+
+  // A valid TOML padded with comment lines to exactly `size` bytes.
+  private fun tomlOfSize(dir: Path, size: Int): String {
+    val head = "VERSION = \"0.1.0\"\n"
+    val padding = StringBuilder()
+    while (head.length + padding.length < size - 1) {
+      val room = size - head.length - padding.length
+      padding.append("#").append("x".repeat(minOf(room - 2, 78))).append("\n")
+    }
+    val content = head + padding
+    check(content.length == size) { "built ${content.length} bytes, wanted $size" }
+    return dir.resolve("stellar-$size.toml").also { Files.writeString(it, content) }.toString()
+  }
+
+  // SEP1SV-12
+  @Test
+  fun `test a toml file of exactly 100 KiB is served`(@TempDir dir: Path) {
+    val path = tomlOfSize(dir, 102_400)
+    sep1 = Sep1Service(PropertySep1Config(true, TomlConfig(FILE, path)))
+
+    assertEquals(Files.readString(Path.of(path)), sep1.toml)
+  }
+
+  // SEP1SV-12
+  @Test
+  fun `test a toml file one byte over 100 KiB is refused`(@TempDir dir: Path) {
+    val path = tomlOfSize(dir, 102_401)
+    sep1 = Sep1Service(PropertySep1Config(true, TomlConfig(FILE, path)))
+
+    val exception = assertThrows(SepException::class.java) { sep1.toml }
+    assertEquals("Unable to read SEP-1 value", exception.message)
   }
 
   @Test

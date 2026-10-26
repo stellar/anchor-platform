@@ -7,23 +7,84 @@ import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.utils.io.core.readBytes
+import java.time.DateTimeException
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.withTimeoutOrNull
 import org.apache.hc.core5.http.HttpStatus
 import org.stellar.anchor.api.callback.SendEventResponse
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.reference.data.SendEventRequest
 import org.stellar.reference.di.AUTH_CONFIG_ENDPOINT
 
-fun Route.event(eventService: EventService, enableTestEndpoints: Boolean) {
+const val MAX_EVENT_BODY_BYTES = 1_048_576
+
+// `EventService.channel` is a rendezvous channel, so every handler waits in `channel.send` holding
+// its body and parsed event until the consumer takes it. The Platform sends one event at a time and
+// retries a non-2xx with backoff, so a handful of concurrent handlers is plenty.
+const val MAX_IN_FLIGHT_EVENTS = 16
+
+// A permit is held while the body is read, so a client that trickles its body must not keep it
+// forever. The Platform sends the whole body at once. Only the body read is timed out, never the
+// wait for the consumer (`channel.send`), whose speed is the server's own.
+val EVENT_BODY_READ_TIMEOUT = 10.seconds
+
+fun Route.event(
+  eventService: EventService,
+  enableTestEndpoints: Boolean,
+  bodyReadTimeout: Duration = EVENT_BODY_READ_TIMEOUT,
+) {
   val gson: Gson = GsonUtils.getInstance()
+  val inFlight = Semaphore(MAX_IN_FLIGHT_EVENTS)
 
   authenticate(AUTH_CONFIG_ENDPOINT) {
     route("/event") {
       // The `POST /event` endpoint of the Callback API to receive an event.
       post {
-        val receivedEventJson = call.receive<String>()
-        val receivedEvent = gson.fromJson(receivedEventJson, SendEventRequest::class.java)
-        eventService.processEvent(receivedEvent)
-        call.respond(gson.toJson(SendEventResponse(HttpStatus.SC_OK, "event processed")))
+        // Refuse before reading the body: a refused request must not cost memory.
+        if (!inFlight.tryAcquire()) {
+          call.response.header(HttpHeaders.RetryAfter, "1")
+          call.respond(HttpStatusCode.ServiceUnavailable, "Too many events in flight")
+          return@post
+        }
+        try {
+          // Read at most MAX_EVENT_BODY_BYTES + 1 bytes: enough to tell that the body is too
+          // large, without buffering an attacker-sized body (a chunked body has no Content-Length).
+          val bodyBytes =
+            withTimeoutOrNull(bodyReadTimeout) {
+              call.receiveChannel().readRemaining(MAX_EVENT_BODY_BYTES + 1L).readBytes()
+            }
+          if (bodyBytes == null) {
+            // the request body is half read: do not keep that connection
+            call.response.header(HttpHeaders.Connection, "close")
+            call.respond(HttpStatusCode.RequestTimeout, "Timed out reading the event body")
+            return@post
+          }
+          if (bodyBytes.size > MAX_EVENT_BODY_BYTES) {
+            call.respond(
+              HttpStatusCode.PayloadTooLarge,
+              "Event body exceeds $MAX_EVENT_BODY_BYTES bytes"
+            )
+            return@post
+          }
+          val receivedEvent = parseEvent(gson, String(bodyBytes, Charsets.UTF_8))
+          if (receivedEvent.error != null) {
+            call.respond(
+              HttpStatusCode.BadRequest,
+              gson.toJson(SendEventResponse(HttpStatus.SC_BAD_REQUEST, receivedEvent.error)),
+            )
+            return@post
+          }
+          eventService.processEvent(receivedEvent.event!!)
+          call.respond(gson.toJson(SendEventResponse(HttpStatus.SC_OK, "event processed")))
+        } finally {
+          inFlight.release()
+        }
       }
     }
 
@@ -53,4 +114,39 @@ fun Route.event(eventService: EventService, enableTestEndpoints: Boolean) {
       }
     }
   }
+}
+
+private class ParsedEvent(val event: SendEventRequest?, val error: String?)
+
+// Gson builds the object through reflection and ignores Kotlin's non-null types, so a missing
+// field arrives as null. Reject it here instead of letting it crash the event consumer later.
+@Suppress("SENSELESS_COMPARISON")
+private fun parseEvent(gson: Gson, json: String): ParsedEvent {
+  val event =
+    try {
+      gson.fromJson(json, SendEventRequest::class.java)
+    } catch (e: RuntimeException) {
+      // GsonUtils' converters (e.g. InstantConverter) throw DateTimeParseException and similar
+      // instead of JsonParseException, so any failure here means the body is malformed.
+      null
+    } ?: return ParsedEvent(null, "Invalid event: malformed JSON")
+
+  val missing =
+    when {
+      event.id == null -> "id"
+      event.type == null -> "type"
+      event.timestamp == null -> "timestamp"
+      event.payload == null -> "payload"
+      else -> null
+    }
+  if (missing != null) return ParsedEvent(null, "Invalid event: $missing is required")
+
+  try {
+    // EventService converts the timestamp the same way; validating the same conversion keeps
+    // values inside Instant's range but outside LocalDateTime's from failing later with a 500.
+    LocalDateTime.ofInstant(Instant.parse(event.timestamp), ZoneId.systemDefault())
+  } catch (e: DateTimeException) {
+    return ParsedEvent(null, "Invalid event: timestamp must be an ISO-8601 instant")
+  }
+  return ParsedEvent(event, null)
 }

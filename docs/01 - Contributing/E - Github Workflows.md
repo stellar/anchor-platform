@@ -13,8 +13,7 @@ The following workflows are triggered according to the Github events:
 Here are the callable workflows:
 
 - `sub_gradle_build.yml`: Run Gradle build and unit tests.
-- `sub_essential_tests.yml`: Run essential tests.
-- `sub_extended_tests.yml`: Run extended tests.
+- `tests.yml`: Run the essential tests and the extended tests in parallel, only for the suites affected by the change.
 - `sub_codeql_analysis.yml`: Run the CodeQL.
 
 Please note that when triggered from comments, these callable workflow are running from the `develop` branch instead of

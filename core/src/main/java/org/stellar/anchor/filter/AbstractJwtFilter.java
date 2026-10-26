@@ -100,6 +100,9 @@ public abstract class AbstractJwtFilter implements Filter {
   private static void sendForbiddenError(HttpServletResponse response) throws IOException {
     error("Forbidden: JwtTokenFilter failed to authenticate the request.");
     response.setStatus(HttpStatus.SC_FORBIDDEN);
+    // The filter answers before Spring's CORS handling, so without this header a browser wallet
+    // cannot read the 403; the controllers allow any origin the same way.
+    response.setHeader("Access-Control-Allow-Origin", "*");
     response.setContentType(APPLICATION_JSON_VALUE);
     response.getWriter().print(gson.toJson(new SepExceptionResponse("forbidden")));
   }

@@ -3,6 +3,10 @@ name: On Pull Request Workflow
 on:
   pull_request:
 
+concurrency:
+  group: tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   gradle_build:
     uses: ./.github/workflows/sub_gradle_build.yml
@@ -10,23 +14,24 @@ jobs:
   rust_build:
     uses: ./.github/workflows/sub_rust_build.yml
 
-  essential_tests:
+  tests:
     needs: [ gradle_build ]
-    uses: ./.github/workflows/sub_essential_tests.yml
-    concurrency:
-      group: ap-test-job
-      cancel-in-progress: false
-
-  extended_tests:
-    needs: [ gradle_build, essential_tests ]
-    uses: ./.github/workflows/sub_extended_tests.yml
-    concurrency:
-      group: ap-test-job
-      cancel-in-progress: false
+    uses: ./.github/workflows/tests.yml
+    secrets:
+      SECRET_SEP10_SIGNING_SEED: ${{ secrets.SECRET_SEP10_SIGNING_SEED }}
+      APP__PAYMENT_SIGNING_SEED: ${{ secrets.APP__PAYMENT_SIGNING_SEED }}
+      SECRET__KEY: ${{ secrets.SECRET__KEY }}
+      TEST_CLIENT_WALLET_SECRET: ${{ secrets.TEST_CLIENT_WALLET_SECRET }}
+      TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET: ${{ secrets.TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET }}
+      TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET: ${{ secrets.TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET }}
+      TEST_WITHDRAW_FUND_CLIENT_SECRET_1: ${{ secrets.TEST_WITHDRAW_FUND_CLIENT_SECRET_1 }}
+      TEST_WITHDRAW_FUND_CLIENT_SECRET_2: ${{ secrets.TEST_WITHDRAW_FUND_CLIENT_SECRET_2 }}
+      TEST_DEPOSIT_FUND_CLIENT_SECRET_1: ${{ secrets.TEST_DEPOSIT_FUND_CLIENT_SECRET_1 }}
+      TEST_DEPOSIT_FUND_CLIENT_SECRET_2: ${{ secrets.TEST_DEPOSIT_FUND_CLIENT_SECRET_2 }}
 
   complete:
     if: always()
-    needs: [ gradle_build, essential_tests, extended_tests, rust_build ]
+    needs: [ gradle_build, tests, rust_build ]
     runs-on: ubuntu-24.04
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

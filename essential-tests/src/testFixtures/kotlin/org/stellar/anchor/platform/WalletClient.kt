@@ -7,12 +7,12 @@ import org.stellar.anchor.client.*
 import org.stellar.anchor.platform.TestSecrets.CLIENT_SMART_WALLET_ACCOUNT
 import org.stellar.anchor.platform.TestSecrets.CLIENT_WALLET_SECRET
 import org.stellar.anchor.util.Sep1Helper.TomlContent
+import org.stellar.reference.client.sendWithSequenceRetry
 import org.stellar.sdk.*
 import org.stellar.sdk.AbstractTransaction.MIN_BASE_FEE
 import org.stellar.sdk.Auth.authorizeEntry
 import org.stellar.sdk.contract.AssembledTransaction
 import org.stellar.sdk.operations.InvokeHostFunctionOperation
-import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.SCVal
 import org.stellar.sdk.xdr.SCValType
@@ -160,23 +160,6 @@ class WalletClient(
         .auth(signedAuthEntries)
         .build()
 
-    val authorizedTransaction =
-      TransactionBuilder(rpc.getAccount(keyPair.accountId), Network.TESTNET)
-        .addOperation(signedOperation)
-        .setBaseFee(MIN_BASE_FEE)
-        .setTimeout(300)
-        .build()
-
-    val preparedTransaction = rpc.prepareTransaction(authorizedTransaction)
-    preparedTransaction.sign(keyPair)
-
-    val transactionResponse = rpc.sendTransaction(preparedTransaction)
-    if (transactionResponse.status == SendTransactionResponse.SendTransactionStatus.ERROR) {
-      throw RuntimeException(
-        "sendTransaction rejected: errorResultXdr=${transactionResponse.errorResultXdr}"
-      )
-    }
-
-    return transactionResponse.hash
+    return sendWithSequenceRetry(rpc, keyPair, signedOperation)
   }
 }

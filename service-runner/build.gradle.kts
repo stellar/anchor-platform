@@ -1,7 +1,3 @@
-import com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer
-import com.bmuschko.gradle.docker.tasks.container.DockerLogsContainer
-import com.bmuschko.gradle.docker.tasks.container.DockerStartContainer
-import com.bmuschko.gradle.docker.tasks.image.DockerPullImage
 import java.io.ByteArrayOutputStream
 
 @Suppress(
@@ -12,7 +8,6 @@ plugins {
   alias(libs.plugins.spring.boot)
   alias(libs.plugins.spring.dependency.management)
   alias(libs.plugins.kotlin.jvm)
-  id("com.bmuschko.docker-remote-api") version "9.3.7"
 }
 
 dependencies {
@@ -96,66 +91,3 @@ tasks.register<Exec>("dockerComposeStop") {
     }
   }
 }
-
-val dockerPullAnchorTest by
-    tasks.register<DockerPullImage>("pullDockerImage") {
-      group = "docker"
-      image.set("stellar/anchor-tests:latest")
-      
-      doLast {
-        println("Pulling the docker image.")
-      }
-    }
-
-val dockerCreateAnchorTest by
-    tasks.register<DockerCreateContainer>("dockerCreatePullAnchorTest") {
-      group = "docker"
-      dependsOn(dockerPullAnchorTest)
-      targetImageId { dockerPullAnchorTest.image.get() }
-      
-      doLast {
-      // These values need to be captured during configuration time to set up the container properly
-      val homeDomain = System.getenv("TEST_HOME_DOMAIN") ?: "http://host.docker.internal:8080"
-      val seps = System.getenv().getOrDefault("TEST_SEPS", "1,6,10,12,24,31,38").split(",")
-      val configPath = "${project.projectDir}/../platform/src/test/resources"
-      
-      hostConfig.autoRemove.set(true)
-      hostConfig.binds.set(mutableMapOf(configPath to "/config"))
-      hostConfig.network.set("host")
-
-      val cmdList = mutableListOf("--home-domain", homeDomain, "--seps")
-      cmdList.addAll(seps)
-      cmdList.addAll(
-          listOf("--sep-config", "/config/stellar-anchor-tests-sep-config.json", "--verbose"))
-
-      cmd.set(cmdList)
-      
-        println("Creating the docker container.")
-        println("TEST_HOME_DOMAIN=$homeDomain")
-        println("TEST_SEPS=$seps")
-      }
-    }
-
-val dockerStartAnchorTest by
-    tasks.register<DockerStartContainer>("dockerStartAnchorTest") {
-      group = "docker"
-      dependsOn(dockerCreateAnchorTest)
-      targetContainerId(dockerCreateAnchorTest.containerId)
-      
-      doLast {
-        println("Starting the docker container.")
-      }
-    }
-
-val anchorTest by
-    tasks.register<DockerLogsContainer>("anchorTest") {
-      group = "docker"
-      dependsOn(dockerStartAnchorTest)
-      targetContainerId(dockerCreateAnchorTest.containerId)
-      follow.set(true)
-      tailAll.set(true)
-      
-      doLast {
-        println("Running the docker container.")
-      }
-    }

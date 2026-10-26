@@ -1,6 +1,6 @@
 [![License](https://badgen.net/badge/license/Apache%202/blue?icon=github&label=License)](https://github.com/stellar/anchor-platform/blob/develop/LICENSE)
 [![GitHub Version](https://badgen.net/github/release/stellar/anchor-platform?icon=github&label=Latest%20release)](https://github.com/stellar/anchor-platform/releases)
-[![Docker](https://badgen.net/badge/Latest%20Release/v4.9.0/blue?icon=docker)](https://hub.docker.com/r/stellar/anchor-platform/tags?page=1&name=4.9.0)
+[![Docker](https://badgen.net/badge/Latest%20Release/v5.0.0/blue?icon=docker)](https://hub.docker.com/r/stellar/anchor-platform/tags?page=1&name=5.0.0)
 ![Develop Branch](https://github.com/stellar/anchor-platform/actions/workflows/on_push_to_develop.yml/badge.svg?branch=develop)
 
 <div style="text-align: center">
@@ -20,6 +20,13 @@ rates, and off-chain transaction status updates.
 
 The goal of the Anchor Platform is to abstract all Stellar-specific functionality and requirements for running an
 anchor, allowing businesses to focus on the core business logic necessary to provide these services.
+
+## Reporting Security Vulnerabilities
+
+> [!NOTE]
+> Please do not report security vulnerabilities through public GitHub issues. Submit them through our HackerOne
+> program using the report format described in [SECURITY.md](SECURITY.md). Reports that don't follow it are sent back
+> for a rewrite before triage.
 
 ## Getting Started
 

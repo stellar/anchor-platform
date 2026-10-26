@@ -3,6 +3,7 @@ package org.stellar.anchor.platform.service
 import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
+import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -39,6 +40,8 @@ import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.sep6.Sep6DepositInfoGenerator
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.MemoHelper
+import org.stellar.sdk.Memo
 
 @Suppress("unused")
 class TransactionServiceTest {
@@ -268,6 +271,473 @@ class TransactionServiceTest {
   )
   fun test_validateIfStatusIsSupported(sepTxnStatus: SepTransactionStatus) {
     assertDoesNotThrow { transactionService.validateIfStatusIsSupported(sepTxnStatus.status) }
+  }
+
+  private val patchFeeAsset =
+    "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+
+  // An asset without significant decimals, so only the fee amounts themselves are under test.
+  private fun supportPatchFeeAsset() {
+    val asset = mockk<AssetInfo>(relaxed = true)
+    every { asset.id } returns patchFeeAsset
+    every { asset.significantDecimals } returns null
+    every { assetService.assets } returns listOf(asset)
+  }
+
+  private fun stubOnly(protocol: String, tx: JdbcSepTransaction) {
+    every { sep6TransactionStore.findByTransactionId(any()) } returns
+      (if (protocol == "6") tx as JdbcSep6Transaction else null)
+    every { sep24TransactionStore.findByTransactionId(any()) } returns
+      (if (protocol == "24") tx as JdbcSep24Transaction else null)
+    every { sep31TransactionStore.findByTransactionId(any()) } returns
+      (if (protocol == "31") tx as JdbcSep31Transaction else null)
+  }
+
+  private fun patchWithFeeDetails(status: SepTransactionStatus, fee: FeeDetails) =
+    PatchTransactionsRequest.builder()
+      .records(
+        listOf(
+          PatchTransactionRequest(
+            PlatformTransactionData().apply {
+              id = "testTxId"
+              this.status = status
+              feeDetails = fee
+            }
+          )
+        )
+      )
+      .build()
+
+  private fun transactionFor(protocol: String): JdbcSepTransaction =
+    when (protocol) {
+      "6" -> JdbcSep6Transaction().apply { kind = "deposit" }
+      "24" -> JdbcSep24Transaction().apply { kind = "deposit" }
+      else -> JdbcSep31Transaction()
+    }
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "6, 1e20000000, fee_details.amount is invalid",
+        "24, 1e20000000, fee_details.amount is invalid",
+        "31, 1e20000000, fee_details.amount is invalid",
+        "6, -1, fee_details.amount should be non-negative",
+        "24, abc, fee_details.amount is invalid",
+        "31, 100000000000000000000, fee_details.amount is invalid",
+      ]
+  )
+  fun test_patchTransaction_rejectsAnInvalidFeeDetailsTotalAndDoesNotSave(
+    protocol: String,
+    total: String,
+    expected: String,
+  ) {
+    supportPatchFeeAsset()
+    val tx = transactionFor(protocol)
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly(protocol, tx)
+
+    val ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithFeeDetails(
+            SepTransactionStatus.PENDING_ANCHOR,
+            FeeDetails(total, patchFeeAsset),
+          )
+        )
+      }
+
+    assertEquals(expected, ex.message)
+    verify(exactly = 0) { sep6TransactionStore.save(any()) }
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun test_patchTransaction_sep31ValidatesFeeDetailsBeforeTheQuoteMath() {
+    supportPatchFeeAsset()
+    // same asset and all amounts present: validateQuoteAndAmounts would add amount_out and the fee
+    // total, so only validating first reports the fee total instead of expanding it
+    val tx = JdbcSep31Transaction()
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    tx.amountIn = "10"
+    tx.amountInAsset = patchFeeAsset
+    tx.amountOut = "9"
+    tx.amountOutAsset = patchFeeAsset
+    stubOnly("31", tx)
+
+    val ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithFeeDetails(
+            SepTransactionStatus.PENDING_RECEIVER,
+            FeeDetails("1e20000000", patchFeeAsset),
+          )
+        )
+      }
+
+    assertEquals("fee_details.amount is invalid", ex.message)
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun test_patchTransaction_appliesTheRpcRulesToFeeDetails() {
+    supportPatchFeeAsset()
+    val tx = JdbcSep24Transaction().apply { kind = "deposit" }
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly("24", tx)
+
+    // total must equal the sum of the details
+    var ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithFeeDetails(
+            SepTransactionStatus.PENDING_ANCHOR,
+            FeeDetails("2", patchFeeAsset, listOf(FeeDescription("svc", "1"))),
+          )
+        )
+      }
+    assertEquals(
+      "fee_details.total is not equal to the sum of (fee_details.details.amount)",
+      ex.message,
+    )
+
+    // the fee asset must be the one already stored on the transaction (checked before the sum)
+    tx.amountFeeAsset = "stellar:SRT:GISSUER"
+    ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithFeeDetails(SepTransactionStatus.PENDING_ANCHOR, FeeDetails("1", patchFeeAsset))
+        )
+      }
+    assertEquals(
+      "fee_details.asset is different from expected database asset (stellar:SRT:GISSUER)",
+      ex.message,
+    )
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["6", "24", "31"])
+  fun test_patchTransaction_acceptsValidFeeDetails(protocol: String) {
+    supportPatchFeeAsset()
+    val tx = transactionFor(protocol)
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly(protocol, tx)
+
+    transactionService.patchTransactions(
+      patchWithFeeDetails(
+        SepTransactionStatus.PENDING_ANCHOR,
+        FeeDetails(
+          "1",
+          patchFeeAsset,
+          listOf(FeeDescription("svc", "0.4"), FeeDescription("tax", "0.6"))
+        ),
+      )
+    )
+
+    assertEquals("1", tx.feeDetails.total)
+    assertEquals(patchFeeAsset, tx.feeDetails.asset)
+    when (protocol) {
+      "6" -> verify(exactly = 1) { sep6TransactionStore.save(any()) }
+      "24" -> verify(exactly = 1) { sep24TransactionStore.save(any()) }
+      else -> verify(exactly = 1) { sep31TransactionStore.save(any()) }
+    }
+  }
+
+  private fun refundsWith(
+    amountRefunded: String = "1",
+    amountFee: String = "0.1",
+    firstAmount: String = "0.6",
+    firstFee: String = "0.1",
+    secondAmount: String = "0.4",
+    secondFee: String = "0",
+  ): Refunds {
+    fun payment(id: String, amount: String, fee: String) =
+      RefundPayment.builder()
+        .id(id)
+        .idType(RefundPayment.IdType.EXTERNAL)
+        .amount(Amount(amount, patchFeeAsset))
+        .fee(Amount(fee, patchFeeAsset))
+        .build()
+    return Refunds.builder()
+      .amountRefunded(Amount(amountRefunded, patchFeeAsset))
+      .amountFee(Amount(amountFee, patchFeeAsset))
+      .payments(
+        arrayOf(
+          payment("1", firstAmount, firstFee),
+          payment("2", secondAmount, secondFee),
+        )
+      )
+      .build()
+  }
+
+  private fun patchWithRefunds(status: SepTransactionStatus, refunds: Refunds) =
+    PatchTransactionsRequest.builder()
+      .records(
+        listOf(
+          PatchTransactionRequest(
+            PlatformTransactionData().apply {
+              id = "testTxId"
+              this.status = status
+              this.refunds = refunds
+            }
+          )
+        )
+      )
+      .build()
+
+  private fun stubRefundFactories() {
+    every { sep24TransactionStore.newRefunds() } returns JdbcSep24Refunds()
+    every { sep24TransactionStore.newRefundPayment() } answers { JdbcSep24RefundPayment() }
+    every { sep31TransactionStore.newRefunds() } returns JdbcSep31Refunds()
+    every { sep31TransactionStore.newRefundPayment() } answers { JdbcSep31RefundPayment() }
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "24, amountRefunded, refunds.amount_refunded.amount is invalid",
+        "24, amountFee, refunds.amount_fee.amount is invalid",
+        "24, firstAmount, refunds.payments[0].amount.amount is invalid",
+        "24, firstFee, refunds.payments[0].fee.amount is invalid",
+        "24, secondAmount, refunds.payments[1].amount.amount is invalid",
+        "24, secondFee, refunds.payments[1].fee.amount is invalid",
+        "31, amountRefunded, refunds.amount_refunded.amount is invalid",
+        "31, amountFee, refunds.amount_fee.amount is invalid",
+        "31, firstAmount, refunds.payments[0].amount.amount is invalid",
+        "31, firstFee, refunds.payments[0].fee.amount is invalid",
+        "31, secondAmount, refunds.payments[1].amount.amount is invalid",
+        "31, secondFee, refunds.payments[1].fee.amount is invalid",
+      ]
+  )
+  fun test_patchTransaction_rejectsAnOutOfRangeRefundAmountAndDoesNotSave(
+    protocol: String,
+    field: String,
+    expected: String,
+  ) {
+    stubRefundFactories()
+    val tx = transactionFor(protocol)
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly(protocol, tx)
+    val poison = "1e20000000"
+    val refunds =
+      when (field) {
+        "amountRefunded" -> refundsWith(amountRefunded = poison)
+        "amountFee" -> refundsWith(amountFee = poison)
+        "firstAmount" -> refundsWith(firstAmount = poison)
+        "firstFee" -> refundsWith(firstFee = poison)
+        "secondAmount" -> refundsWith(secondAmount = poison)
+        else -> refundsWith(secondFee = poison)
+      }
+
+    val ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithRefunds(SepTransactionStatus.PENDING_ANCHOR, refunds)
+        )
+      }
+
+    assertEquals(expected, ex.message)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "-1, refunds.payments[0].amount.amount should be non-negative",
+        "abc, refunds.payments[0].amount.amount is invalid",
+        "100000000000000000000, refunds.payments[0].amount.amount is invalid",
+      ]
+  )
+  fun test_patchTransaction_rejectsNegativeAndMalformedRefundAmounts(
+    amount: String,
+    expected: String,
+  ) {
+    stubRefundFactories()
+    val tx = JdbcSep24Transaction().apply { kind = "withdrawal" }
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly("24", tx)
+
+    val ex =
+      assertThrows<BadRequestException> {
+        transactionService.patchTransactions(
+          patchWithRefunds(
+            SepTransactionStatus.PENDING_ANCHOR,
+            refundsWith(firstAmount = amount),
+          )
+        )
+      }
+
+    assertEquals(expected, ex.message)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["24", "31"])
+  fun test_patchTransaction_acceptsTheRefundsOfTheE2eFixtureAndStoresThem(protocol: String) {
+    stubRefundFactories()
+    val tx = transactionFor(protocol)
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly(protocol, tx)
+
+    transactionService.patchTransactions(
+      patchWithRefunds(SepTransactionStatus.PENDING_ANCHOR, refundsWith())
+    )
+
+    if (protocol == "24") {
+      verify(exactly = 1) { sep24TransactionStore.save(any()) }
+      assertEquals("1", (tx as JdbcSep24Transaction).refunds.amountRefunded)
+      assertEquals("0.1", tx.refunds.amountFee)
+      assertEquals(2, tx.refunds.refundPayments.size)
+      assertEquals("0", tx.refunds.refundPayments[1].fee)
+    } else {
+      verify(exactly = 1) { sep31TransactionStore.save(any()) }
+      assertEquals("1", (tx as JdbcSep31Transaction).refunds.amountRefunded)
+      assertEquals("0.1", tx.refunds.amountFee)
+      assertEquals(2, tx.refunds.refundPayments.size)
+      assertEquals("0", tx.refunds.refundPayments[1].fee)
+    }
+  }
+
+  @Test
+  fun test_patchTransaction_doesNotValidateTheRefundsOfASep6Transaction() {
+    // PATCH ignores SEP-6 refunds, so nothing out of range is stored
+    val tx = JdbcSep6Transaction().apply { kind = "deposit" }
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    stubOnly("6", tx)
+
+    assertDoesNotThrow {
+      transactionService.patchTransactions(
+        patchWithRefunds(
+          SepTransactionStatus.PENDING_USR_TRANSFER_START,
+          refundsWith(amountRefunded = "1e20000000"),
+        )
+      )
+    }
+    verify(exactly = 1) { sep6TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun test_validatePatchAmounts_skipsNullRefundParts() {
+    val tx = JdbcSep24Transaction()
+    val nullAmounts =
+      Refunds.builder()
+        .amountRefunded(null)
+        .amountFee(null)
+        .payments(
+          arrayOf(
+            null,
+            RefundPayment.builder().id("1").amount(null).fee(null).build(),
+          )
+        )
+        .build()
+    val noPayments = Refunds.builder().payments(null).build()
+
+    listOf(nullAmounts, noPayments).forEach { refunds ->
+      assertDoesNotThrow {
+        transactionService.validatePatchAmounts(
+          PlatformTransactionData().apply { this.refunds = refunds },
+          tx,
+        )
+      }
+    }
+    assertDoesNotThrow { transactionService.validatePatchAmounts(PlatformTransactionData(), tx) }
+  }
+
+  private fun sep31WithStoredAmounts(
+    amountIn: String,
+    amountOut: String,
+    feeTotal: String,
+  ): JdbcSep31Transaction {
+    val tx = JdbcSep31Transaction()
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    tx.amountIn = amountIn
+    tx.amountInAsset = patchFeeAsset
+    tx.amountOut = amountOut
+    tx.amountOutAsset = patchFeeAsset
+    tx.feeDetails = FeeDetails(feeTotal, patchFeeAsset)
+    return tx
+  }
+
+  // A PATCH that sends no amounts re-runs the quote math on the values already stored, which is
+  // how a row written before the PATCH validation can still reach it.
+  private fun patchStatusOnly() =
+    PatchTransactionsRequest.builder()
+      .records(
+        listOf(
+          PatchTransactionRequest(
+            PlatformTransactionData().apply {
+              id = "testTxId"
+              status = SepTransactionStatus.PENDING_RECEIVER
+            }
+          )
+        )
+      )
+      .build()
+
+  @ParameterizedTest
+  @CsvSource(
+    value =
+      [
+        "10, 9, 1e20000000",
+        "1e20000000, 9, 1",
+        "10, 1e20000000, 1",
+        "10, 9, 0e-50000000",
+        "10, 9, 1e-21000000",
+      ]
+  )
+  fun test_patchTransaction_sep31RejectsAStoredAmountOutsideTheSupportedRangeBeforeTheQuoteMath(
+    amountIn: String,
+    amountOut: String,
+    feeTotal: String,
+  ) {
+    stubOnly("31", sep31WithStoredAmounts(amountIn, amountOut, feeTotal))
+
+    val ex =
+      assertThrows<BadRequestException> { transactionService.patchTransactions(patchStatusOnly()) }
+
+    assertEquals("fee_details.total is invalid", ex.message)
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun test_patchTransaction_sep31RejectsAStoredAmountLongerThanTheSupportedLength() {
+    // 1001 characters that parse to 1 (leading zeros): only the length can reject it
+    stubOnly("31", sep31WithStoredAmounts("10", "9", "0".repeat(1000) + "1"))
+
+    val ex =
+      assertThrows<BadRequestException> { transactionService.patchTransactions(patchStatusOnly()) }
+
+    assertEquals("fee_details.total is invalid", ex.message)
+  }
+
+  @Test
+  fun test_patchTransaction_sep31AcceptsAStoredAmountOfExactlyTheSupportedLength() {
+    // 1000 characters that parse to 1 (leading zeros, precision 1): the longest accepted length
+    val thousand = "0".repeat(999) + "1"
+    assertEquals(1000, thousand.length)
+    stubOnly("31", sep31WithStoredAmounts("10", "9", thousand))
+
+    transactionService.patchTransactions(patchStatusOnly())
+
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun test_patchTransaction_sep31QuoteMathIsUnchangedForValidStoredAmounts() {
+    stubOnly("31", sep31WithStoredAmounts("10", "9", "1"))
+    transactionService.patchTransactions(patchStatusOnly())
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+
+    stubOnly("31", sep31WithStoredAmounts("10", "9", "2"))
+    val ex =
+      assertThrows<BadRequestException> { transactionService.patchTransactions(patchStatusOnly()) }
+    assertEquals("amount_in != amount_out + fee_details.total", ex.message)
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
   }
 
   @Test
@@ -1362,5 +1832,171 @@ class TransactionServiceTest {
       }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("Transaction is missing.", ex.message)
+  }
+
+  private fun patchSep24Withdrawal(
+    tx: JdbcSep24Transaction,
+    memo: String?,
+    memoType: String?
+  ): JdbcSep24Transaction {
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    tx.kind = "withdrawal"
+    val data = PlatformTransactionData()
+    data.id = "testTxId"
+    data.memo = memo
+    data.memoType = memoType
+    data.status = SepTransactionStatus.PENDING_ANCHOR
+    val request =
+      PatchTransactionsRequest.builder().records(listOf(PatchTransactionRequest(data))).build()
+
+    every { sep31TransactionStore.findByTransactionId(any()) } returns null
+    every { sep6TransactionStore.findByTransactionId(any()) } returns null
+    every { sep24TransactionStore.findByTransactionId(any()) } returns tx
+
+    transactionService.patchTransactions(request)
+    return tx
+  }
+
+  @Test
+  fun `test patchTransactions stores a SEP-24 hash memo as hex, the form the observer looks up`() {
+    val tx =
+      patchSep24Withdrawal(
+        JdbcSep24Transaction(),
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+        "hash"
+      )
+
+    assertEquals("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", tx.memo)
+    assertEquals("hash", tx.memoType)
+    // The observer looks a withdrawal up by memoAsString of the on-chain memo.
+    assertEquals(MemoHelper.memoAsString(Memo.hash(ByteArray(32) { it.toByte() })), tx.memo)
+    verify(exactly = 1) { sep24TransactionStore.save(tx) }
+  }
+
+  @ParameterizedTest
+  @CsvSource("007,7", "+7,7", "0,0", "12345,12345", "18446744073709551615,18446744073709551615")
+  fun `test patchTransactions stores a SEP-24 id memo in its canonical decimal form`(
+    input: String,
+    expected: String
+  ) {
+    val tx = patchSep24Withdrawal(JdbcSep24Transaction(), input, "id")
+
+    assertEquals(expected, tx.memo)
+    assertEquals("id", tx.memoType)
+    assertEquals(MemoHelper.memoAsString(MemoHelper.makeMemo(tx.memo, tx.memoType)), tx.memo)
+  }
+
+  @Test
+  fun `test patchTransactions stores a SEP-24 text memo unchanged`() {
+    val tx = patchSep24Withdrawal(JdbcSep24Transaction(), "my-memo", "text")
+
+    assertEquals("my-memo", tx.memo)
+    assertEquals("text", tx.memoType)
+  }
+
+  @Test
+  fun `test patchTransactions leaves the SEP-24 memo untouched when the patch has no memo`() {
+    val existing = JdbcSep24Transaction()
+    existing.memo = "99"
+    existing.memoType = "id"
+
+    val tx = patchSep24Withdrawal(existing, null, null)
+
+    assertEquals("99", tx.memo)
+    assertEquals("id", tx.memoType)
+  }
+
+  @Test
+  fun `test patchTransactions leaves the SEP-24 memo untouched when the patch has a type and an empty memo`() {
+    val existing = JdbcSep24Transaction()
+    existing.memo = "99"
+    existing.memoType = "id"
+
+    val tx = patchSep24Withdrawal(existing, "", "hash")
+
+    assertEquals("99", tx.memo)
+    assertEquals("id", tx.memoType)
+  }
+
+  @ParameterizedTest
+  @CsvSource("abc,id", "-1,id")
+  fun `test patchTransactions rejects an unparsable SEP-24 id memo and writes nothing`(
+    memo: String,
+    memoType: String
+  ) {
+    val tx = JdbcSep24Transaction()
+
+    assertThrows<AnchorException> { patchSep24Withdrawal(tx, memo, memoType) }
+
+    assertNull(tx.memo)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun `test patchTransactions rejects a SEP-24 hash memo that is not base64 and writes nothing`() {
+    val tx = JdbcSep24Transaction()
+
+    assertThrows<IllegalArgumentException> { patchSep24Withdrawal(tx, "not base64!", "hash") }
+
+    assertNull(tx.memo)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun `test patchTransactions stores non-ASCII decimal digits of a SEP-24 id memo as ASCII`() {
+    val tx = patchSep24Withdrawal(JdbcSep24Transaction(), "\u0661\u0662\u0663", "id")
+
+    assertEquals("123", tx.memo)
+  }
+
+  @Test
+  fun `test patchTransactions rejects a SEP-24 id memo above the uint64 maximum`() {
+    val tx = JdbcSep24Transaction()
+
+    assertThrows<AnchorException> { patchSep24Withdrawal(tx, "18446744073709551616", "id") }
+
+    assertNull(tx.memo)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun `test patchTransactions rejects a SEP-24 return-hash memo type`() {
+    val tx = JdbcSep24Transaction()
+
+    val ex =
+      assertThrows<AnchorException> {
+        patchSep24Withdrawal(tx, "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", "return")
+      }
+
+    assertEquals("Unsupported value: return", ex.message)
+    assertNull(tx.memo)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun `test patchTransactions does not touch updatedAt when the SEP-24 memo is already canonical`() {
+    val updatedAt = java.time.Instant.parse("2026-01-01T00:00:00Z")
+    val tx = JdbcSep24Transaction()
+    tx.status = SepTransactionStatus.PENDING_ANCHOR.toString()
+    tx.kind = "withdrawal"
+    tx.memo = "7"
+    tx.memoType = "id"
+    tx.updatedAt = updatedAt
+    val data = PlatformTransactionData()
+    data.id = "testTxId"
+    data.memo = "7"
+    data.memoType = "id"
+    data.status = SepTransactionStatus.PENDING_ANCHOR
+    val request =
+      PatchTransactionsRequest.builder().records(listOf(PatchTransactionRequest(data))).build()
+
+    every { sep31TransactionStore.findByTransactionId(any()) } returns null
+    every { sep6TransactionStore.findByTransactionId(any()) } returns null
+    every { sep24TransactionStore.findByTransactionId(any()) } returns tx
+
+    transactionService.patchTransactions(request)
+
+    assertEquals("7", tx.memo)
+    assertEquals(updatedAt, tx.updatedAt)
   }
 }

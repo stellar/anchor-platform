@@ -14,7 +14,9 @@ import org.stellar.reference.ClientException
 import org.stellar.reference.data.ErrorResponse
 import org.stellar.reference.data.Success
 import org.stellar.reference.di.AUTH_CONFIG_ENDPOINT
+import org.stellar.reference.event.processor.MAX_AUTO_ADVANCE_OPT_OUTS
 import org.stellar.reference.event.processor.Sep31EventProcessor
+import org.stellar.reference.event.processor.isTransactionUuid
 import org.stellar.reference.service.sep31.ReceiveService
 
 private val log = KotlinLogging.logger {}
@@ -45,30 +47,39 @@ fun Route.testSep31(receiveService: ReceiveService) {
         }
       }
     }
-  }
 
-  // Lets a test that drives a SEP-31 transaction through RPC calls itself (e.g. exercising an
-  // error/recovery path Sep31EventProcessor doesn't know about) opt that one transaction out of
-  // the processor's automatic advancement, instead of disabling it for every transaction.
-  route("/sep31/transactions/{transactionId}/skip-auto-advance") {
-    post {
-      try {
-        val transactionId =
-          call.parameters["transactionId"]
-            ?: throw ClientException("Missing transactionId parameter")
+    // Lets a test that drives a SEP-31 transaction through RPC calls itself (e.g. exercising an
+    // error/recovery path Sep31EventProcessor doesn't know about) opt that one transaction out of
+    // the processor's automatic advancement, instead of disabling it for every transaction.
+    route("/sep31/transactions/{transactionId}/skip-auto-advance") {
+      post {
+        try {
+          val transactionId =
+            call.parameters["transactionId"]
+              ?: throw ClientException("Missing transactionId parameter")
 
-        Sep31EventProcessor.skipAutoAdvance(transactionId)
+          if (!isTransactionUuid(transactionId)) {
+            throw ClientException("Invalid transactionId: must be a UUID")
+          }
+          if (!Sep31EventProcessor.skipAutoAdvance(transactionId)) {
+            log.warn {
+              "Rejected skip-auto-advance: opt-out limit of $MAX_AUTO_ADVANCE_OPT_OUTS reached"
+            }
+            call.respond(HttpStatusCode.TooManyRequests, ErrorResponse("Opt-out limit reached"))
+            return@post
+          }
 
-        call.respond(Success(transactionId))
-      } catch (e: ClientException) {
-        log.error { e }
-        call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message!!))
-      } catch (e: Exception) {
-        log.error { e }
-        call.respond(
-          HttpStatusCode.InternalServerError,
-          ErrorResponse("Error occurred: ${e.message}"),
-        )
+          call.respond(Success(transactionId))
+        } catch (e: ClientException) {
+          log.error { e }
+          call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message!!))
+        } catch (e: Exception) {
+          log.error { e }
+          call.respond(
+            HttpStatusCode.InternalServerError,
+            ErrorResponse("Error occurred: ${e.message}"),
+          )
+        }
       }
     }
   }

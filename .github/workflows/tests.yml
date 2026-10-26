@@ -1,0 +1,328 @@
+name: Run Tests Workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: 'Suites to run, space separated (Infrastructure Sep10 Sep12 Sep38 Sep6 Sep24 Sep31 Sep45 Platform AuthApikey AuthJwt ClientsDb End2EndHorizon), or "all"'
+        default: all
+      tests:
+        description: 'Optional gradle --tests filter, used with a single suite'
+        default: ''
+      ignore_cache:
+        description: 'Run the suites even if they already passed with the same inputs'
+        type: boolean
+        default: false
+  workflow_call:
+    secrets:
+      SECRET_SEP10_SIGNING_SEED:
+        required: true
+      APP__PAYMENT_SIGNING_SEED:
+        required: true
+      SECRET__KEY:
+        required: true
+      TEST_CLIENT_WALLET_SECRET:
+        required: true
+      TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET:
+        required: true
+      TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET:
+        required: true
+      TEST_WITHDRAW_FUND_CLIENT_SECRET_1:
+        required: true
+      TEST_WITHDRAW_FUND_CLIENT_SECRET_2:
+        required: true
+      TEST_DEPOSIT_FUND_CLIENT_SECRET_1:
+        required: true
+      TEST_DEPOSIT_FUND_CLIENT_SECRET_2:
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  # Anchor Platform secrets
+  SECRET_SEP10_SIGNING_SEED: ${{ secrets.SECRET_SEP10_SIGNING_SEED }}
+  APP__PAYMENT_SIGNING_SEED: ${{ secrets.APP__PAYMENT_SIGNING_SEED }}
+  SECRET__KEY: ${{ secrets.SECRET__KEY }}
+
+  # Test secrets
+  TEST_CLIENT_WALLET_SECRET: ${{ secrets.TEST_CLIENT_WALLET_SECRET }}
+  TEST_CLIENT_SMART_WALLET_ACCOUNT: ${{ vars.TEST_CLIENT_SMART_WALLET_ACCOUNT }}
+  TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET: ${{ secrets.TEST_CLIENT_WALLET_EXTRA_SIGNER_1_SECRET }}
+  TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET: ${{ secrets.TEST_CLIENT_WALLET_EXTRA_SIGNER_2_SECRET }}
+  TEST_WITHDRAW_FUND_CLIENT_SECRET_1: ${{ secrets.TEST_WITHDRAW_FUND_CLIENT_SECRET_1 }}
+  TEST_WITHDRAW_FUND_CLIENT_SECRET_2: ${{ secrets.TEST_WITHDRAW_FUND_CLIENT_SECRET_2 }}
+  TEST_DEPOSIT_FUND_CLIENT_SECRET_1: ${{ secrets.TEST_DEPOSIT_FUND_CLIENT_SECRET_1 }}
+  TEST_DEPOSIT_FUND_CLIENT_SECRET_2: ${{ secrets.TEST_DEPOSIT_FUND_CLIENT_SECRET_2 }}
+
+jobs:
+  changes:
+    name: Pick Test Suites
+    runs-on: ubuntu-24.04
+    outputs:
+      essential: ${{ steps.pick.outputs.essential }}
+      extended: ${{ steps.pick.outputs.extended }}
+      gradle_cache: ${{ steps.gradle.outputs.key }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Compute the Gradle cache key
+        id: gradle
+        env:
+          KEY: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+        run: echo "key=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Pick the suites to test
+        id: pick
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          EVENT: ${{ github.event_name }}
+          WANTED: ${{ inputs.suites }}
+        run: |
+          suites=${WANTED:-all}
+          if [ "$EVENT" = pull_request ]; then
+            suites=$({ bash scripts/ci/essential-suites.sh select "$BASE"; bash scripts/ci/essential-suites.sh select-extended "$BASE"; } | xargs)
+          fi
+          bash scripts/ci/essential-suites.sh matrix $suites >> "$GITHUB_OUTPUT"
+          echo "Testing: ${suites:-nothing (no test input changed)}" >> "$GITHUB_STEP_SUMMARY"
+
+  essential:
+    name: Essential ${{ matrix.suite }}
+    needs: changes
+    if: needs.changes.outputs.essential != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.essential) }}
+    steps:
+      - name: Look up a pass with the same inputs
+        id: passed
+        if: inputs.ignore_cache != true
+        uses: actions/cache/restore@v5
+        with:
+          path: essential-passed
+          key: essential-passed-${{ matrix.suite }}-${{ matrix.fingerprint }}
+          lookup-only: true
+
+      - name: Already passed
+        if: steps.passed.outputs.cache-hit == 'true'
+        run: echo "${{ matrix.suite }} already passed with fingerprint ${{ matrix.fingerprint }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up JDK 17
+        if: steps.passed.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Restore Gradle dependencies
+        if: steps.passed.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ needs.changes.outputs.gradle_cache }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Download anchor-platform.tar
+        if: steps.passed.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: anchor-platform-tar
+          path: /home/runner/
+
+      - name: Extract anchor-platform.tar
+        if: steps.passed.outputs.cache-hit != 'true'
+        run: |
+          cd /home/runner
+          tar -xf /home/runner/anchor-platform.tar
+
+      - name: Set up hostnames (/etc/hosts)
+        if: steps.passed.outputs.cache-hit != 'true'
+        run: |
+          sudo echo "127.0.0.1 db" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 kafka" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 sep24-reference-ui" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 reference-server" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 reference-db" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 wallet-server" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 platform" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+
+      - name: Run Kafka, Postgres, and Sep24 UI with docker compose
+        if: steps.passed.outputs.cache-hit != 'true'
+        run: docker compose -f /home/runner/anchor-platform/service-runner/src/main/resources/docker-compose-test.yaml up -d --build
+
+      - name: Start `default` configuration
+        if: steps.passed.outputs.cache-hit != 'true'
+        env:
+          TEST_PROFILE_NAME: default
+          SEP1_TOML_VALUE: /home/runner/anchor-platform/service-runner/src/main/resources/config/stellar.host.docker.internal.toml
+          SEP10_WEB_AUTH_DOMAIN: host.docker.internal:8080
+          SEP10_HOME_DOMAINS: host.docker.internal:8080,*.stellar.org
+          SEP45_WEB_AUTH_DOMAIN: host.docker.internal:8080
+          SEP45_HOME_DOMAINS: host.docker.internal:8080,*.stellar.org
+          TOML_PATH: /home/runner/anchor-platform/wallet-reference-server/src/main/resources/toml
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
+        run: |
+          cd /home/runner/anchor-platform
+          mkdir -p /home/runner/stack-logs
+          ./gradlew startServersWithTestProfile > /home/runner/stack-logs/default.log 2>&1 &
+          echo "PID=$!" >> $GITHUB_ENV
+
+      - name: Wait for all servers to start
+        if: steps.passed.outputs.cache-hit != 'true'
+        run: |
+          cd /home/runner/anchor-platform
+          make wait-for-servers
+
+      - name: Run ${{ matrix.suite }} Tests
+        if: steps.passed.outputs.cache-hit != 'true'
+        env:
+          TEST_PROFILE_NAME: default
+          RUN_DOCKER: false
+          ANCHOR_DOMAIN: http://host.docker.internal:8080
+          SEP1_TOML_VALUE: /home/runner/anchor-platform/service-runner/src/main/resources/config/stellar.host.docker.internal.toml
+          TESTS: ${{ inputs.tests }}
+        run: |
+          cd /home/runner/anchor-platform
+          make "run-$(echo '${{ matrix.suite }}' | tr '[:upper:]' '[:lower:]')-tests"
+
+      - name: Mark these inputs as passed
+        if: steps.passed.outputs.cache-hit != 'true' && !inputs.tests
+        run: echo "${{ github.run_id }}" > essential-passed
+
+      - name: Save the pass
+        if: steps.passed.outputs.cache-hit != 'true' && !inputs.tests
+        uses: actions/cache/save@v5
+        with:
+          path: essential-passed
+          key: essential-passed-${{ matrix.suite }}-${{ matrix.fingerprint }}
+
+      - name: Upload ${{ matrix.suite }} Tests report
+        if: always() && steps.passed.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.suite }}-tests-report-${{ github.run_attempt }}
+          path: |
+            /home/runner/anchor-platform/essential-tests/build/reports/
+            /home/runner/stack-logs/
+          retention-days: 7
+
+  extended:
+    name: Extended ${{ matrix.group }}
+    needs: changes
+    if: needs.changes.outputs.extended != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.extended) }}
+    steps:
+      - name: Look up a pass with the same inputs
+        id: passed
+        if: inputs.ignore_cache != true
+        uses: actions/cache/restore@v5
+        with:
+          path: extended-passed
+          key: extended-passed-${{ matrix.group }}-${{ matrix.fingerprint }}
+          lookup-only: true
+
+      - name: Already passed
+        if: steps.passed.outputs.cache-hit == 'true'
+        run: echo "${{ matrix.suites }} already passed with fingerprint ${{ matrix.fingerprint }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up JDK 17
+        if: steps.passed.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Restore Gradle dependencies
+        if: steps.passed.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ needs.changes.outputs.gradle_cache }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Download anchor-platform.tar
+        if: steps.passed.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: anchor-platform-tar
+          path: /home/runner/
+
+      - name: Extract anchor-platform.tar
+        if: steps.passed.outputs.cache-hit != 'true'
+        run: |
+          cd /home/runner
+          tar -xf /home/runner/anchor-platform.tar
+
+      - name: Set up hostnames (/etc/hosts)
+        if: steps.passed.outputs.cache-hit != 'true'
+        run: |
+          sudo echo "127.0.0.1 db" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 kafka" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 sep24-reference-ui" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 reference-server" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 reference-db" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 wallet-server" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 platform" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+
+      - name: Run Kafka, Postgres, and Sep24 UI with docker compose
+        if: steps.passed.outputs.cache-hit != 'true'
+        run: docker compose -f /home/runner/anchor-platform/service-runner/src/main/resources/docker-compose-test.yaml up -d --build
+
+      - name: Run ${{ matrix.suites }} Tests
+        if: steps.passed.outputs.cache-hit != 'true'
+        env:
+          SUITES: ${{ matrix.suites }}
+          TESTS: ${{ inputs.tests }}
+          KT_REFERENCE_SERVER_CONFIG: /home/runner/anchor-platform/service-runner/src/main/resources/config/reference-config.yaml
+        run: |
+          cd /home/runner/anchor-platform
+          make run-extended-suites SUITES="$SUITES"
+
+      - name: Mark these inputs as passed
+        if: steps.passed.outputs.cache-hit != 'true' && !inputs.tests
+        run: echo "${{ github.run_id }}" > extended-passed
+
+      - name: Save the pass
+        if: steps.passed.outputs.cache-hit != 'true' && !inputs.tests
+        uses: actions/cache/save@v5
+        with:
+          path: extended-passed
+          key: extended-passed-${{ matrix.group }}-${{ matrix.fingerprint }}
+
+      - name: Upload ${{ matrix.group }} Tests report
+        if: always() && steps.passed.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: extended-${{ matrix.group }}-tests-report-${{ github.run_attempt }}
+          path: |
+            /home/runner/anchor-platform/extended-tests/build/reports/
+            /home/runner/anchor-platform/build/servers-*.log
+          retention-days: 7
+
+  tests:
+    name: Tests
+    needs: [changes, essential, extended]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          for r in "${{ needs.changes.result }}" "${{ needs.essential.result }}" "${{ needs.extended.result }}"; do
+            case "$r" in success|skipped) ;; *) echo "Tests failed: $r"; exit 1 ;; esac
+          done
+          echo "All selected test suites passed."

@@ -15,8 +15,10 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
@@ -429,21 +431,53 @@ public class Sep10Service implements ISep10Service {
         clientDomain,
         threshold,
         signers.size());
-    Sep10ChallengeWrapper.instance()
-        .verifyChallengeTransactionThreshold(
-            request.getTransaction(),
-            serverAccountId,
-            network,
-            homeDomain,
-            sep10Config.getWebAuthDomain(),
-            threshold,
-            signers);
+    Set<String> verifiedSigners =
+        Sep10ChallengeWrapper.instance()
+            .verifyChallengeTransactionThreshold(
+                request.getTransaction(),
+                serverAccountId,
+                network,
+                homeDomain,
+                sep10Config.getWebAuthDomain(),
+                threshold,
+                signers);
+    // The SDK counts the client_domain signer as a client signer for its "signed by a client
+    // signer" check and removes it from the returned set afterwards. A medium threshold of 0 is
+    // then met by an empty set, so SEP-10's requirement of at least one signature from a signer of
+    // the client account must be enforced here.
+    validateVerifiedSignersWeight(verifiedSigners, signers, clientDomain, account.getAccountId());
+  }
+
+  void validateVerifiedSignersWeight(
+      Set<String> verifiedSigners,
+      Set<Sep10Challenge.Signer> signers,
+      String clientDomain,
+      String accountId)
+      throws InvalidSep10ChallengeException {
+    long totalWeight = 0;
+    if (verifiedSigners != null) {
+      Map<String, Integer> weights = new HashMap<>();
+      signers.forEach(s -> weights.merge(s.getKey(), s.getWeight(), Math::max));
+      for (String key : new HashSet<>(verifiedSigners)) {
+        totalWeight += Math.max(weights.getOrDefault(key, 0), 0);
+      }
+    }
+    if (totalWeight <= 0) {
+      String errorMessage =
+          String.format(
+              "Invalid SEP 10 challenge. The challenge is not signed by a client account signer with positive weight. account_id=%s",
+              accountId);
+      infoF("{} client_domain={}", errorMessage, clientDomain);
+      throw new InvalidSep10ChallengeException(errorMessage);
+    }
   }
 
   Set<Sep10Challenge.Signer> fetchSigners(LedgerClient.Account account) {
-    // Find the signers of the client account.
+    // Find the signers of the client account. A signer with weight 0 (e.g. a revoked master key)
+    // carries no authority and must not satisfy a medium threshold of 0.
     return account.getSigners().stream()
         .filter(as -> as.getType().equals(SIGNER_KEY_TYPE_ED25519.name()))
+        .filter(as -> as.getWeight() > 0)
         .map(as -> new Sep10Challenge.Signer(as.getKey(), as.getWeight().intValue()))
         .collect(Collectors.toSet());
   }
@@ -736,7 +770,7 @@ class Sep10ChallengeWrapper {
         challengeXdr, serverAccountId, network, domainName, webAuthDomain, signers);
   }
 
-  public synchronized void verifyChallengeTransactionThreshold(
+  public synchronized Set<String> verifyChallengeTransactionThreshold(
       String challengeXdr,
       String serverAccountId,
       Network network,
@@ -744,7 +778,7 @@ class Sep10ChallengeWrapper {
       String webAuthDomain,
       int threshold,
       Set<Sep10Challenge.Signer> signers) {
-    Sep10Challenge.verifyChallengeTransactionThreshold(
+    return Sep10Challenge.verifyChallengeTransactionThreshold(
         challengeXdr, serverAccountId, network, domainName, webAuthDomain, threshold, signers);
   }
 }

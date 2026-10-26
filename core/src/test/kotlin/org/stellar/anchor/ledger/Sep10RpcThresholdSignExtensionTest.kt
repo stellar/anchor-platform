@@ -23,7 +23,10 @@ import org.stellar.anchor.sep10.Sep10Service
 import org.stellar.anchor.setupMock
 import org.stellar.sdk.*
 import org.stellar.sdk.Network.TESTNET
+import org.stellar.sdk.Server
 import org.stellar.sdk.exception.InvalidSep10ChallengeException
+import org.stellar.sdk.requests.AccountsRequestBuilder
+import org.stellar.sdk.responses.AccountResponse
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse
 import org.stellar.sdk.xdr.AccountEntry
 import org.stellar.sdk.xdr.Int64
@@ -52,7 +55,7 @@ import org.stellar.sdk.xdr.XdrUnsignedInteger
 class Sep10RpcThresholdSignExtensionTest {
   private val serverKeyPair = KeyPair.fromSecretSeed(TEST_SIGNING_SEED)
 
-  private fun buildService(stellarRpc: StellarRpc): Sep10Service {
+  private fun buildService(stellarRpc: LedgerClient): Sep10Service {
     val stellarNetworkConfig = mockk<StellarNetworkConfig>(relaxed = true)
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns TESTNET.networkPassphrase
 
@@ -222,7 +225,64 @@ class Sep10RpcThresholdSignExtensionTest {
 
     val ex = assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
 
-    assertEquals("Signers with weight 0 do not meet threshold 200.", ex.message)
+    // The weight-0 master is dropped by Sep10Service.fetchSigners, leaving no verifiable signer.
+    assertEquals(
+      "No verifiable signers provided, at least one G... address must be provided.",
+      ex.message,
+    )
+  }
+
+  /** Stubs only the Horizon HTTP boundary; the real `Horizon.getAccount()` maps the response. */
+  private fun horizonStubbedWith(
+    accountId: String,
+    mediumThreshold: Int,
+    signers: List<Pair<String, Int>>,
+  ): Horizon {
+    val accountResponse = mockk<AccountResponse>()
+    every { accountResponse.accountId } returns accountId
+    every { accountResponse.sequenceNumber } returns 1L
+    every { accountResponse.thresholds } returns
+      mockk {
+        every { lowThreshold } returns 0
+        every { medThreshold } returns mediumThreshold
+        every { highThreshold } returns 0
+      }
+    every { accountResponse.signers } returns
+      signers.map { (key, weight) ->
+        mockk<AccountResponse.Signer> {
+          every { this@mockk.key } returns key
+          every { type } returns "ed25519_public_key"
+          every { this@mockk.weight } returns weight
+        }
+      }
+    val accountsRequestBuilder = mockk<AccountsRequestBuilder>()
+    every { accountsRequestBuilder.account(accountId) } returns accountResponse
+    val server = mockk<Server>()
+    every { server.accounts() } returns accountsRequestBuilder
+    val horizon = mockk<Horizon>()
+    every { horizon.server } returns server
+    every { horizon.getAccount(accountId) } answers { callOriginal() }
+    return horizon
+  }
+
+  @Test
+  fun `ATTACK B via Horizon - a revoked weight-0 master key alone is rejected when med_threshold is 0`() {
+    val client = KeyPair.random()
+    val addedSigner = KeyPair.random()
+    val horizon =
+      horizonStubbedWith(
+        client.accountId,
+        0,
+        listOf(client.accountId to 0, addedSigner.accountId to 1),
+      )
+    val sep10Service = buildService(horizon)
+
+    val vr = ValidationRequest()
+    vr.transaction = signedChallenge(client.accountId, listOf(client))
+
+    val ex = assertThrows<InvalidSep10ChallengeException> { sep10Service.validateChallenge(vr) }
+
+    assertEquals("Transaction not signed by any client signer.", ex.message)
   }
 
   @Test

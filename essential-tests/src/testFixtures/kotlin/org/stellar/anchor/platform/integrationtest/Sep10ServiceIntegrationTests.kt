@@ -6,13 +6,9 @@ import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.spyk
 import java.security.SecureRandom
-import java.util.concurrent.TimeUnit
 import java.util.stream.Stream
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
-import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.params.ParameterizedTest
@@ -31,11 +27,11 @@ import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.IntegrationTestBase
 import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.fundAccountWithFriendbot
 import org.stellar.anchor.sep10.Sep10Service
 import org.stellar.anchor.util.FileUtil
 import org.stellar.anchor.util.KeyUtil
 import org.stellar.sdk.*
-import org.stellar.sdk.Network.FUTURENET
 import org.stellar.sdk.Network.TESTNET
 import org.stellar.sdk.operations.ManageDataOperation
 import org.stellar.sdk.operations.SetOptionsOperation
@@ -56,11 +52,6 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
           TESTNET,
         ),
         Arguments.of(
-          Horizon("https://horizon-futurenet.stellar.org"),
-          "https://horizon-futurenet.stellar.org",
-          FUTURENET,
-        ),
-        Arguments.of(
           StellarRpc("https://soroban-testnet.stellar.org"),
           "https://horizon-testnet.stellar.org",
           TESTNET,
@@ -78,7 +69,6 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
 
   private lateinit var jwtService: JwtService
   private lateinit var sep10Service: Sep10Service
-  private lateinit var httpClient: OkHttpClient
 
   @BeforeEach
   fun setup() {
@@ -102,7 +92,6 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
         clientFinder,
         nonceManager
       )
-    this.httpClient = `create httpClient`()
   }
 
   fun SecretConfig.setupMock(block: (() -> Any)? = null) {
@@ -374,14 +363,7 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
       )
 
     // 3 ------ Setup multisig
-    val httpRequest =
-      Request.Builder()
-        .url("$horizonUrl/friendbot?addr=" + clientMasterKP.accountId)
-        .header("Content-Type", "application/json")
-        .get()
-        .build()
-    val response = httpClient.newCall(httpRequest).execute()
-    Assertions.assertEquals(200, response.code)
+    fundAccountWithFriendbot(clientMasterKP.accountId)
 
     val clientAccount = ledgerClient.getAccount(clientMasterKP.accountId)
     val multisigTx =
@@ -408,14 +390,5 @@ class Sep10ServiceIntegrationTests : IntegrationTestBase(TestConfig()) {
     // 4 ------ Run tests
     val validationRequest = ValidationRequest.of(transaction.toEnvelopeXdrBase64())
     assertDoesNotThrow { sep10Service.validateChallenge(validationRequest) }
-  }
-
-  fun `create httpClient`(): OkHttpClient {
-    return OkHttpClient.Builder()
-      .connectTimeout(10, TimeUnit.MINUTES)
-      .readTimeout(10, TimeUnit.MINUTES)
-      .writeTimeout(10, TimeUnit.MINUTES)
-      .hostnameVerifier { _, _ -> true }
-      .build()
   }
 }

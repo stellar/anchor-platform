@@ -5,6 +5,7 @@ import static org.stellar.anchor.platform.service.UrlConstructorHelper.addTxnFie
 import static org.stellar.anchor.sep24.Sep24Service.INTERACTIVE_URL_JWT_REQUIRED_FIELDS_FROM_REQUEST;
 import static org.stellar.anchor.sep9.Sep9Fields.extractSep9Fields;
 import static org.stellar.anchor.util.Log.debugF;
+import static org.stellar.anchor.util.StringHelper.isEmpty;
 
 import com.google.gson.Gson;
 import java.net.URI;
@@ -65,6 +66,9 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
   @SneakyThrows
   public String construct(
       Sep24Transaction txn, Map<String, String> request, AssetInfo asset, WebAuthJwt jwt) {
+    // A customer_id claimed by another client must not be signed into the token.
+    verifyCustomerIdOwnership(request, jwt);
+
     // If there are KYC fields in the request, they will be forwarded to PUT /customer before
     // returning the token.
     forwardKycFields(request, jwt);
@@ -112,6 +116,14 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
     // Add required JWT fields from request
     Map<String, String> data =
         new HashMap<>(extractRequiredJwtFieldsFromRequest(request, asset, homeDomain));
+    // The request is caller-controlled: data.client_domain is only the SEP-10 verified value
+    data.remove("client_domain");
+    if (txn.getClientDomain() != null) {
+      data.put("client_domain", txn.getClientDomain());
+    }
+    if (isEmpty(data.get("customer_id"))) {
+      data.remove("customer_id");
+    }
     // Add fields defined in txnFields
     addTxnFields(assetService, data, txn, sep24Config.getInteractiveUrl().getTxnFields());
 
@@ -120,6 +132,23 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
     debugF("Attaching data to the token: {}", data);
 
     return jwtService.encode(token);
+  }
+
+  void verifyCustomerIdOwnership(Map<String, String> request, WebAuthJwt jwt)
+      throws SepNotAuthorizedException {
+    String customerId = request.get("customer_id");
+    if (isEmpty(customerId) || !customerIdOwnerStore.isClaimed(customerId)) {
+      return;
+    }
+    if (!customerIdOwnerStore.verify(customerId, jwt.getOwnerKey(), jwt.getOwnerMemo())
+        && !CustomerOwnershipReconciliation.tryReconcile(
+            customerIdOwnerStore,
+            customerIntegration,
+            customerId,
+            jwt,
+            FORWARD_KYC_CUSTOMER_TYPE)) {
+      throw new SepNotAuthorizedException("customer id already claimed by another client");
+    }
   }
 
   void forwardKycFields(Map<String, String> request, WebAuthJwt jwt) throws AnchorException {

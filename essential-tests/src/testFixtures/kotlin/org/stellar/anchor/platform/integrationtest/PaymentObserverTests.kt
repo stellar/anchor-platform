@@ -18,6 +18,7 @@ import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
+import org.stellar.anchor.platform.fundAccountWithFriendbot
 import org.stellar.anchor.platform.observer.PaymentListener
 import org.stellar.anchor.platform.observer.stellar.*
 import org.stellar.anchor.util.AssetHelper
@@ -466,15 +467,8 @@ internal class EventCapturingListener : PaymentListener {
 }
 
 internal fun createAndFundAccount(keyPair: KeyPair): KeyPair {
-  val friendBotUrl = "https://friendbot.stellar.org/?addr=${keyPair.accountId}"
-  try {
-    java.net.URL(friendBotUrl).openStream()
-    info("Funded account: ${keyPair.accountId}")
-  } catch (e: java.io.IOException) {
-    info("ERROR! " + e.message)
-    throw e
-  }
-
+  fundAccountWithFriendbot(keyPair.accountId)
+  info("Funded account: ${keyPair.accountId}")
   return keyPair
 }
 

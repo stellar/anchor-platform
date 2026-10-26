@@ -2,6 +2,7 @@ package org.stellar.anchor.platform
 
 import io.ktor.client.plugins.*
 import io.ktor.http.*
+import java.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
@@ -25,7 +26,17 @@ open class IntegrationTestBase(val config: TestConfig) {
   var wallet =
     Wallet(
       StellarConfiguration.Testnet,
-      ApplicationConfiguration { defaultRequest { url { protocol = URLProtocol.HTTP } } },
+      ApplicationConfiguration {
+        defaultRequest { url { protocol = URLProtocol.HTTP } }
+        engine {
+          config {
+            connectTimeout(Duration.ofSeconds(30))
+            readTimeout(Duration.ofSeconds(60))
+            writeTimeout(Duration.ofSeconds(60))
+            callTimeout(Duration.ofSeconds(90))
+          }
+        }
+      },
     )
   var walletKeyPair = SigningKeyPair.fromSecret(CLIENT_WALLET_SECRET)
   var anchor = wallet.anchor(config.env["anchor.domain"]!!)
@@ -50,6 +61,25 @@ open class IntegrationTestBase(val config: TestConfig) {
       .collect {}
 
   init {
-    runBlocking { token = anchor.auth().authenticate(walletKeyPair) }
+    runBlocking { token = withAuthRetry { anchor.auth().authenticate(walletKeyPair) } }
+  }
+
+  suspend fun <T> withAuthRetry(
+    maxAttempts: Int = 4,
+    delaySeconds: Int = 2,
+    block: suspend () -> T,
+  ): T {
+    lateinit var lastError: Exception
+    repeat(maxAttempts) { attempt ->
+      try {
+        return block()
+      } catch (e: Exception) {
+        lastError = e
+        if (attempt < maxAttempts - 1) {
+          delay(delaySeconds.seconds)
+        }
+      }
+    }
+    throw lastError
   }
 }

@@ -84,6 +84,23 @@ public class PropertySep24Config implements Sep24Config, Validator {
       validateInteractiveUrlConfig(errors);
       validateMoreInfoUrlConfig(errors);
       validateDepositInfoGeneratorType(errors);
+      validateFeatures(errors);
+    }
+  }
+
+  void validateFeatures(Errors errors) {
+    if (features == null) return;
+    if (Boolean.TRUE.equals(features.getAccountCreation())) {
+      errors.rejectValue(
+          "features",
+          "sep24-features-account-creation-invalid",
+          "sep24.features.account_creation: account creation is not supported");
+    }
+    if (Boolean.TRUE.equals(features.getClaimableBalances())) {
+      errors.rejectValue(
+          "features",
+          "sep24-features-claimable-balances-invalid",
+          "sep24.features.claimable_balances: claimable balances are not supported");
     }
   }
 

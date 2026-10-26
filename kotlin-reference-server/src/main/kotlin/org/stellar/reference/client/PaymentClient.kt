@@ -8,7 +8,6 @@ import org.stellar.sdk.contract.AssembledTransaction
 import org.stellar.sdk.exception.BadRequestException
 import org.stellar.sdk.operations.InvokeHostFunctionOperation
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
-import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.SCVal
 import org.stellar.sdk.xdr.SCValType
@@ -117,23 +116,6 @@ class PaymentClient(
         .auth(signedAuthEntries)
         .build()
 
-    val authorizedTransaction =
-      TransactionBuilder(rpc.getAccount(keyPair.accountId), Network.TESTNET)
-        .addOperation(signedOperation)
-        .setBaseFee(MIN_BASE_FEE)
-        .setTimeout(300)
-        .build()
-
-    val preparedTransaction = rpc.prepareTransaction(authorizedTransaction)
-    preparedTransaction.sign(keyPair)
-
-    val transactionResponse = rpc.sendTransaction(preparedTransaction)
-    if (transactionResponse.status == SendTransactionResponse.SendTransactionStatus.ERROR) {
-      throw RuntimeException(
-        "sendTransaction rejected: errorResultXdr=${transactionResponse.errorResultXdr}"
-      )
-    }
-
-    return transactionResponse.hash
+    return sendWithSequenceRetry(rpc, keyPair, signedOperation)
   }
 }
