@@ -2448,6 +2448,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
     every { quoteStore.findByQuoteId("q1") } returns ownedQuote("q1").apply { expiresAt = now }
 

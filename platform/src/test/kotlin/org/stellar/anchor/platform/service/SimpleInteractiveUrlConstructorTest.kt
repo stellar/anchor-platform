@@ -568,6 +568,7 @@ class SimpleInteractiveUrlConstructorTest {
     every { customerIntegration.getCustomer(any()) } returns null
     every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIdOwnerStore.verifyOrClaim(any(), any(), any()) } returns true
+    every { customerIdOwnerStore.verify(any(), "vibrant", "123") } returns true
     val constructor =
       SimpleInteractiveUrlConstructor(
         assetService,
@@ -605,6 +606,7 @@ class SimpleInteractiveUrlConstructorTest {
       PutCustomerResponse.builder().id("claimed-customer-id").build()
     every { customerIdOwnerStore.isClaimed(any()) } returns true
     every { customerIdOwnerStore.verify("claimed-customer-id", "vibrant", "123") } returns true
+    every { customerIdOwnerStore.verify("123", "vibrant", "123") } returns true
     every { customerIdOwnerStore.verifyOrClaim("claimed-customer-id", "vibrant", "123") } returns
       true
     val constructor =

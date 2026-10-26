@@ -143,9 +143,10 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
     if (isEmpty(customerId) || !customerIdOwnerStore.isClaimed(customerId)) {
       return;
     }
-    if (!customerIdOwnerStore.verify(customerId, jwt.getOwnerKey(), jwt.getOwnerMemo())
+    if (!customerIdOwnerStore.verify(customerId, ownerKeyResolver.ownerKey(jwt), jwt.getOwnerMemo())
         && !CustomerOwnershipReconciliation.tryReconcile(
             customerIdOwnerStore,
+            ownerKeyResolver,
             customerIntegration,
             customerId,
             jwt,

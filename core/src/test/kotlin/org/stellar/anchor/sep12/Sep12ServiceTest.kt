@@ -1917,6 +1917,24 @@ class Sep12ServiceTest {
     verify(exactly = 0) { customerIntegration.deleteCustomer(any()) }
   }
 
+  @Test
+  fun `test delete authorizes a custodial client under the client name for any of its signing keys`() {
+    registerCustodial("vibrant")
+    captureDeleteLookup()
+    every { customerIdOwnerStore.isClaimed("existing-customer-id") } returns true
+    every { customerIdOwnerStore.verify("existing-customer-id", "vibrant", null, false) } returns
+      true
+
+    assertDoesNotThrow {
+      sep12Service.deleteCustomer(createJwtToken(OTHER_KEY, "vibrant"), OTHER_KEY, null, null)
+    }
+
+    verify(exactly = 1) { customerIntegration.deleteCustomer("existing-customer-id") }
+    verify(exactly = 1) {
+      customerIdOwnerStore.verify("existing-customer-id", "vibrant", null, false)
+    }
+  }
+
   // SEP12DO-12
   @Test
   fun `test delete refuses a customer claimed by another identity when the token has no client`() {

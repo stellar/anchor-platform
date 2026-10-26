@@ -299,9 +299,9 @@ public class Sep12Service {
       throws SepNotAuthorizedException {
     if (customerIdOwnerStore.isClaimed(customerId)
         && !customerIdOwnerStore.verify(
-            customerId, token.getOwnerKey(), token.getOwnerMemo(), false)
+            customerId, ownerKeyResolver.ownerKey(token), token.getOwnerMemo(), false)
         && !CustomerOwnershipReconciliation.tryReconcile(
-            customerIdOwnerStore, customerIntegration, customerId, token, null)) {
+            customerIdOwnerStore, ownerKeyResolver, customerIntegration, customerId, token, null)) {
       throw new SepNotAuthorizedException(ERR_CUSTOMER_ID_NOT_AUTHORIZED);
     }
   }
