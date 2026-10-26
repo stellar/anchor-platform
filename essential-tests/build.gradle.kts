@@ -125,6 +125,7 @@ val essentialSuites =
         "integrationtest.Sep12Tests",
         "integrationtest.Sep12AuthTests",
         "integrationtest.Sep12DeleteOwnershipTests",
+        "integrationtest.CustodialKeyRotationTests",
         "integrationtest.Sep12TokenResolutionTests",
         "e2etest.Sep12CallbackSignatureTests",
       ),
