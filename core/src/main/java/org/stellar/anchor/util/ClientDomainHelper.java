@@ -5,7 +5,6 @@ import static org.stellar.anchor.util.Log.infoF;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -20,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import okhttp3.Dns;
+import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.exception.SepException;
@@ -333,22 +333,17 @@ public class ClientDomainHelper {
   }
 
   /**
-   * Extracts the hostname from a client domain string, correctly handling IPv6 literals (e.g.
-   * [::1]:8080) and domains with ports.
+   * Extracts the hostname from a client domain string, using the same parser (OkHttp's {@link
+   * HttpUrl}) that builds the real stellar.toml request, so the host validated here can never
+   * differ from the host actually connected to. Fails closed (throws) rather than falling back to
+   * the raw, unparsed string when the host cannot be extracted.
    */
-  static String extractHostname(String clientDomain) {
-    try {
-      URI uri = new URI("https://" + clientDomain);
-      String host = uri.getHost();
-      if (host != null) {
-        if (host.startsWith("[") && host.endsWith("]")) {
-          host = host.substring(1, host.length() - 1);
-        }
-        return host;
-      }
-    } catch (Exception ignored) {
-      // Fall through
+  static String extractHostname(String clientDomain) throws SepException {
+    HttpUrl url = HttpUrl.parse("https://" + clientDomain + "/.well-known/stellar.toml");
+    if (url == null) {
+      infoF("client_domain {} could not be parsed", clientDomain);
+      throw new SepException("client_domain could not be resolved");
     }
-    return clientDomain;
+    return url.host();
   }
 }

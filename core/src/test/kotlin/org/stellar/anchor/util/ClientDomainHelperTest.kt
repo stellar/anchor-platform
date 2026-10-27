@@ -81,8 +81,10 @@ class ClientDomainHelperTest {
 
   @Test
   fun `test public IPv6 address is accepted`() {
+    // Bracketed form: the only one that also succeeds in the real stellar.toml fetch, since OkHttp
+    // (like this validation) requires brackets around an IPv6 host in a URL.
     assertDoesNotThrow {
-      ClientDomainHelper.validateDomainNotPrivateNetwork("2001:4860:4860::8888")
+      ClientDomainHelper.validateDomainNotPrivateNetwork("[2001:4860:4860::8888]")
     }
   }
 
@@ -243,5 +245,53 @@ class ClientDomainHelperTest {
   @Test
   fun `test extractHostname with bracketed IPv6 and port`() {
     assertEquals("::1", ClientDomainHelper.extractHostname("[::1]:8080"))
+  }
+
+  @Test
+  fun `test extractHostname with backslash stops at the private IP instead of the raw string`() {
+    assertEquals(
+      "10.0.0.5",
+      ClientDomainHelper.extractHostname("10.0.0.5\\x.attacker.example"),
+    )
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork rejects a private IP hidden behind a backslash`() {
+    assertThrows(SepException::class.java) {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("10.0.0.5\\x.attacker.example")
+    }
+  }
+
+  @Test
+  fun `test extractHostname with unparsable client_domain fails closed instead of returning the raw string`() {
+    assertThrows(SepException::class.java) { ClientDomainHelper.extractHostname("") }
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork rejects an unparsable client_domain`() {
+    assertThrows(SepException::class.java) {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("")
+    }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain on mainnet is blocked from reaching a loopback server via backslash`() {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/.well-known/stellar.toml") { exchange ->
+      val body = "SIGNING_KEY=\"GABC\"".toByteArray()
+      exchange.sendResponseHeaders(200, body.size.toLong())
+      exchange.responseBody.use { it.write(body) }
+    }
+    server.start()
+    try {
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.fetchSigningKeyFromClientDomain(
+          "127.0.0.1:${server.address.port}\\x.attacker.invalid",
+          false,
+        )
+      }
+    } finally {
+      server.stop(0)
+    }
   }
 }
