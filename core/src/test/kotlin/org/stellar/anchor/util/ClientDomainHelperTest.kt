@@ -257,21 +257,49 @@ class ClientDomainHelperTest {
 
   @Test
   fun `test validateDomainNotPrivateNetwork rejects a private IP hidden behind a backslash`() {
-    assertThrows(SepException::class.java) {
-      ClientDomainHelper.validateDomainNotPrivateNetwork("10.0.0.5\\x.attacker.example")
-    }
+    val ex =
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.validateDomainNotPrivateNetwork("10.0.0.5\\x.attacker.example")
+      }
+    assertEquals("client_domain resolves to a non-public address", ex.message)
   }
 
   @Test
   fun `test extractHostname with unparsable client_domain fails closed instead of returning the raw string`() {
-    assertThrows(SepException::class.java) { ClientDomainHelper.extractHostname("") }
+    val ex = assertThrows(SepException::class.java) { ClientDomainHelper.extractHostname("") }
+    assertEquals("client_domain could not be resolved", ex.message)
   }
 
   @Test
   fun `test validateDomainNotPrivateNetwork rejects an unparsable client_domain`() {
-    assertThrows(SepException::class.java) {
-      ClientDomainHelper.validateDomainNotPrivateNetwork("")
+    val ex =
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.validateDomainNotPrivateNetwork("")
+      }
+    assertEquals("client_domain could not be resolved", ex.message)
+  }
+
+  @Test
+  fun `test extractHostname with backslash does not throw when the resolved host is itself public`() {
+    assertEquals(
+      "example.com",
+      ClientDomainHelper.extractHostname("example.com\\x.attacker.example")
+    )
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork does not throw when a backslash resolves to a public host`() {
+    assertDoesNotThrow {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("example.com\\x.attacker.example")
     }
+  }
+
+  @Test
+  fun `test extractHostname with trailing whitespace fails closed instead of silently trimming`() {
+    // Pins the decision to parse the exact request URL (scheme, authority, AND the stellar.toml
+    // path) rather than just "https://" + clientDomain: the trailing space is only invalid once a
+    // path follows it, so a prefix-only parse would wrongly accept this as host "example.com".
+    assertThrows(SepException::class.java) { ClientDomainHelper.extractHostname("example.com ") }
   }
 
   @Test
