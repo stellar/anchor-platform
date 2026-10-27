@@ -95,6 +95,17 @@ class Sep1HelperTest {
   }
 
   @Test
+  fun `test the committed test_stellar toml fixture parses unchanged`() {
+    val tomlText =
+      Sep1HelperTest::class.java.classLoader.getResource("test_stellar.toml")!!.readText()
+    val content = Sep1Helper.parse(tomlText)
+    assertTrue(
+      content.getString("SIGNING_KEY") == "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+    )
+    assertTrue(content.getString("DOCUMENTATION.ORG_NAME") == "Stellar Development Foundation")
+  }
+
+  @Test
   fun `test currencies documentation and principals tables parse unchanged`() {
     val toml =
       """
