@@ -54,6 +54,18 @@ class Sep1HelperTest {
   }
 
   @Test
+  fun `test a quoted segment with many internal dots does not push a legitimate header over the limit`() {
+    // 18 plain segments + 1 quoted segment (19 real segments, under the limit) whose quoted text
+    // alone contains 5 literal dots. If those internal dots were ever counted toward the segment
+    // total, the miscounted total would be 18 dots (s1..s18) + 1 connecting dot + 5 internal dots =
+    // 24 dots -> 25 segments, well over the limit, and this header would be wrongly rejected.
+    val quotedSegment = "\"${(1..6).joinToString(".") { "x" }}\""
+    val toml = "[${dottedChain(18)}.$quotedSegment]\nleaf = \"ok\"\n"
+    val content = Sep1Helper.parse(toml)
+    assertTrue(content.getString("${dottedChain(18)}.$quotedSegment.leaf") == "ok")
+  }
+
+  @Test
   fun `test a deeply dotted header is rejected regardless of overall document size`() {
     val small = "[${dottedChain(21)}]\n"
     assertThrows(InvalidConfigException::class.java) { Sep1Helper.parse(small) }
