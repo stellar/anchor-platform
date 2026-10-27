@@ -106,6 +106,18 @@ class Sep1HelperTest {
   }
 
   @Test
+  fun `test deeply nested inline arrays raise StackOverflowError that is caught and obfuscated`() {
+    // Reported independently by the HackerOne reporter while validating the segment-depth guard:
+    // nesting (not dotted keys) also drives toml4j into unbounded recursion, this time exhausting
+    // the stack rather than the heap. Confirmed directly against the bundled jar: 50,000 levels of
+    // nested arrays reliably throws StackOverflowError. Sep1Helper must convert it into the same
+    // InvalidConfigException as any other malformed document, not let it escape as an Error.
+    val depth = 50_000
+    val toml = "a = " + "[".repeat(depth) + "1" + "]".repeat(depth) + "\n"
+    assertThrows(InvalidConfigException::class.java) { Sep1Helper.parse(toml) }
+  }
+
+  @Test
   fun `test currencies documentation and principals tables parse unchanged`() {
     val toml =
       """

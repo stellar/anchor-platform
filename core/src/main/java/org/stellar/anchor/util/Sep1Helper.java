@@ -55,8 +55,9 @@ public class Sep1Helper {
   public static TomlContent parse(String tomlString) throws InvalidConfigException {
     try {
       return new TomlContent(tomlString);
-    } catch (Exception e) {
-      // Obfuscate the message and rethrow
+    } catch (Throwable e) {
+      // Obfuscate the message and rethrow. Caught as Throwable because toml4j can raise
+      // StackOverflowError on pathologically nested inline tables/arrays, not just Exception.
       String obfuscatedMessage = "Failed to parse TOML content. Invalid Config.";
       Log.error(e.toString()); // Log the parsing exception
       throw new InvalidConfigException(
@@ -71,8 +72,9 @@ public class Sep1Helper {
       checkKeySegmentDepth(tomlString);
       try {
         toml = new Toml().read(tomlString);
-      } catch (Exception e) {
-        // Obfuscate the message and rethrow
+      } catch (Throwable e) {
+        // Obfuscate the message and rethrow. Caught as Throwable because toml4j can raise
+        // StackOverflowError on pathologically nested inline tables/arrays, not just Exception.
         String obfuscatedMessage = "Failed to parse TOML content. Invalid Config.";
         Log.error(e.toString()); // Log the parsing exception
         throw new InvalidConfigException(
