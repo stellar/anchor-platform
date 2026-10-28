@@ -1062,6 +1062,22 @@ internal class Sep10ServiceTest {
   }
 
   @Test
+  fun `Test request to create challenge with a wildcard home domain spanning a path failure`() {
+    every { sep10Config.homeDomains } returns listOf("*.stellar.org")
+    val cr =
+      ChallengeRequest.builder()
+        .account(TEST_ACCOUNT)
+        .memo(TEST_MEMO)
+        .homeDomain("evil.example/x.stellar.org")
+        .clientDomain(TEST_CLIENT_DOMAIN)
+        .build()
+
+    val ex = assertThrows<SepValidationException> { sep10Service.createChallenge(cr) }
+
+    assertEquals("home_domain [evil.example/x.stellar.org] is not supported.", ex.message)
+  }
+
+  @Test
   @LockAndMockStatic([NetUtil::class, ClientDomainHelper::class])
   fun `Test create challenge with wildcard matched home domain success`() {
     every { ClientDomainHelper.validateDomainNotPrivateNetwork(any()) } just Runs
