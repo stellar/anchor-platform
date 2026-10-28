@@ -244,4 +244,50 @@ class ClientDomainHelperTest {
   fun `test extractHostname with bracketed IPv6 and port`() {
     assertEquals("::1", ClientDomainHelper.extractHostname("[::1]:8080"))
   }
+
+  @Test
+  fun `isDomainNameMatch accepts a multi-level wildcard subdomain`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    assertTrue(ClientDomainHelper.isDomainNameMatch(patterns, "foo.sdp.stellar.org"))
+    assertTrue(ClientDomainHelper.isDomainNameMatch(patterns, "a.b.sdp.stellar.org"))
+  }
+
+  @Test
+  fun `isDomainNameMatch rejects structural characters spanned by a wildcard`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf(
+        "evil.example/x.sdp.stellar.org",
+        "evil.example?.sdp.stellar.org",
+        "evil.example#.sdp.stellar.org",
+        "u@evil.example.sdp.stellar.org",
+        "evil.example\\x.sdp.stellar.org",
+        "evil.example:80.sdp.stellar.org",
+        "a b.sdp.stellar.org",
+      )
+      .forEach {
+        assertFalse(ClientDomainHelper.isDomainNameMatch(patterns, it), "should reject: $it")
+      }
+  }
+
+  @Test
+  fun `isDomainNameMatch keeps matching plain exact and wildcard hostnames`() {
+    assertTrue(ClientDomainHelper.isDomainNameMatch(listOf("localhost:8080"), "localhost:8080"))
+    assertFalse(ClientDomainHelper.isDomainNameMatch(listOf("localhost:8080"), "localhost:8081"))
+    assertFalse(ClientDomainHelper.isDomainNameMatch(listOf("stellar.org"), "foo.stellar.org"))
+    assertTrue(
+      ClientDomainHelper.isDomainNameMatch(listOf("*.stellar.org"), "foo_bar-1.stellar.org")
+    )
+    assertTrue(
+      ClientDomainHelper.isDomainNameMatch(listOf("*.example.com:8080"), "a.example.com:8080")
+    )
+    assertFalse(
+      ClientDomainHelper.isDomainNameMatch(listOf("*.example.com:8080"), "a.example.com:9090")
+    )
+    assertTrue(
+      ClientDomainHelper.isDomainNameMatch(
+        listOf("localhost:8080", "*.stellar.org"),
+        "x.stellar.org"
+      )
+    )
+  }
 }

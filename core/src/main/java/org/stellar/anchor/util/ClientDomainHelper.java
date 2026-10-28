@@ -155,8 +155,9 @@ public class ClientDomainHelper {
     for (String patternOrDomain : patternsAndDomains) {
       if (patternOrDomain.contains("*")) {
         // wildcard domain
-        // Escape special characters in the pattern and replace '*' with '.*'
-        String regex = patternOrDomain.replace(".", "\\.").replace("*", ".*");
+        // Escape special characters in the pattern and let '*' span only host-name characters, so
+        // it can never match '/', '?', '#', '@', '\', ':' or whitespace.
+        String regex = patternOrDomain.replace(".", "\\.").replace("*", "[A-Za-z0-9_.-]*");
         Pattern patternObject = Pattern.compile(regex);
         Matcher matcher = patternObject.matcher(domainName);
         if (matcher.matches()) {
