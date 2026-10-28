@@ -2,6 +2,8 @@ package org.stellar.anchor.platform.utils;
 
 import com.google.common.net.InetAddresses;
 import jakarta.servlet.http.HttpServletRequest;
+import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -14,7 +16,6 @@ import java.util.List;
  */
 public class ClientIpResolver {
   private static final String FORWARDED_FOR = "X-Forwarded-For";
-  private static final String IPV6_LOOPBACK = "0:0:0:0:0:0:0:1";
 
   private final TrustedProxies trustedProxies;
 
@@ -25,7 +26,17 @@ public class ClientIpResolver {
   public String resolve(HttpServletRequest request) {
     String peer = request.getRemoteAddr();
     String ip = trustedProxies.contains(peer) ? resolveBehindProxy(request, peer) : peer;
-    return IPV6_LOOPBACK.equals(ip) ? "127.0.0.1" : ip;
+    return canonical(ip);
+  }
+
+  /** IPv6 in its canonical form, any spelling of the IPv6 loopback as 127.0.0.1. */
+  private static String canonical(String ip) {
+    if (!InetAddresses.isInetAddress(ip)) return ip;
+    InetAddress address = InetAddresses.forString(ip);
+    if (address instanceof Inet6Address) {
+      return address.isLoopbackAddress() ? "127.0.0.1" : InetAddresses.toAddrString(address);
+    }
+    return ip;
   }
 
   private String resolveBehindProxy(HttpServletRequest request, String peer) {

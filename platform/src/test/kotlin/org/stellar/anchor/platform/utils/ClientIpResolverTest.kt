@@ -147,4 +147,29 @@ class ClientIpResolverTest {
     val v6Chain = request("198.51.100.7", "X-Forwarded-For" to "203.0.113.9, 2001:db8::1")
     assertEquals("203.0.113.9", v6Proxy.resolve(v6Chain))
   }
+
+  @Test
+  fun `every IPv6 spelling is recorded in canonical form`() {
+    assertEquals("2001:db8::5", noProxies.resolve(request("2001:DB8::5")))
+    assertEquals(
+      "2001:db8::5",
+      noProxies.resolve(request("2001:0db8:0000:0000:0000:0000:0000:0005"))
+    )
+    val viaProxy = request("198.51.100.7", "X-Forwarded-For" to "2001:0DB8:0:0:0:0:0:5, 10.0.0.1")
+    assertEquals("2001:db8::5", trusted.resolve(viaProxy))
+  }
+
+  @Test
+  fun `every spelling of the IPv6 loopback is recorded as 127 0 0 1 and IPv4 is left as written`() {
+    listOf("::1", "0:0:0:0:0:0:0:1", "0000:0000:0000:0000:0000:0000:0000:0001").forEach {
+      assertEquals("127.0.0.1", noProxies.resolve(request(it)), it)
+      assertEquals(
+        "127.0.0.1",
+        trusted.resolve(request("198.51.100.7", "X-Forwarded-For" to "$it, 10.0.0.1")),
+        it
+      )
+    }
+    assertEquals("127.0.0.1", noProxies.resolve(request("127.0.0.1")))
+    assertEquals("203.0.113.9", noProxies.resolve(request("203.0.113.9")))
+  }
 }
