@@ -172,4 +172,17 @@ class ClientIpResolverTest {
     assertEquals("127.0.0.1", noProxies.resolve(request("127.0.0.1")))
     assertEquals("203.0.113.9", noProxies.resolve(request("203.0.113.9")))
   }
+
+  @Test
+  fun `every IPv4-mapped IPv6 spelling is recorded as the plain IPv4 address`() {
+    listOf("::ffff:203.0.113.9", "::ffff:cb00:7109", "0:0:0:0:0:ffff:cb00:7109").forEach {
+      assertEquals("203.0.113.9", noProxies.resolve(request(it)), it)
+      assertEquals(
+        "203.0.113.9",
+        trusted.resolve(request("198.51.100.7", "X-Forwarded-For" to "$it, 10.0.0.1")),
+        it
+      )
+    }
+    assertEquals("127.0.0.1", noProxies.resolve(request("::ffff:127.0.0.1")))
+  }
 }

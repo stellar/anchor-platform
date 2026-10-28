@@ -29,14 +29,18 @@ public class ClientIpResolver {
     return canonical(ip);
   }
 
-  /** IPv6 in its canonical form, any spelling of the IPv6 loopback as 127.0.0.1. */
+  /**
+   * The canonical form of the address: IPv6 compressed, IPv4-mapped IPv6 as IPv4, IPv6 loopback as
+   * 127.0.0.1.
+   */
   private static String canonical(String ip) {
     if (!InetAddresses.isInetAddress(ip)) return ip;
     InetAddress address = InetAddresses.forString(ip);
     if (address instanceof Inet6Address) {
       return address.isLoopbackAddress() ? "127.0.0.1" : InetAddresses.toAddrString(address);
     }
-    return ip;
+    // Guava returns an Inet4Address for an IPv4-mapped IPv6 literal, so this also unwraps it.
+    return InetAddresses.toAddrString(address);
   }
 
   private String resolveBehindProxy(HttpServletRequest request, String peer) {
