@@ -125,13 +125,16 @@ class ClientIpResolverTest {
 
   @Test
   fun `several X-Forwarded-For header lines are read as one list in the order received`() {
-    val twoLines =
+    // The caller's spoof is on the first line and the trusted proxy on the last, so reading only
+    // the first or only the last line gives another answer.
+    val threeLines =
       request(
         "198.51.100.7",
-        "X-Forwarded-For" to "6.6.6.6, 203.0.113.9",
-        "X-Forwarded-For" to "10.0.0.2, 10.0.0.1",
+        "X-Forwarded-For" to "6.6.6.6",
+        "X-Forwarded-For" to "203.0.113.9",
+        "X-Forwarded-For" to "10.0.0.1",
       )
-    assertEquals("203.0.113.9", trusted.resolve(twoLines))
+    assertEquals("203.0.113.9", trusted.resolve(threeLines))
   }
 
   @Test
