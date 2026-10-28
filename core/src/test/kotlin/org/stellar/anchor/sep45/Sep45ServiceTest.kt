@@ -28,6 +28,7 @@ import org.stellar.sdk.Auth
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Network
 import org.stellar.sdk.SorobanServer
+import org.stellar.sdk.operations.InvokeHostFunctionOperation
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse
 import org.stellar.sdk.responses.sorobanrpc.GetNetworkResponse
 import org.stellar.sdk.responses.sorobanrpc.SimulateTransactionResponse
@@ -323,6 +324,82 @@ class Sep45ServiceTest {
     val ex =
       assertThrows(BadRequestException::class.java) { sep45Service.validate(validationRequest) }
     assertEquals("authorization_entries must contain at least one entry", ex.message)
+  }
+
+  private fun challengeRequestFor(homeDomain: String) =
+    ChallengeRequest.builder()
+      .account(TEST_CONTRACT_ID)
+      .homeDomain(homeDomain)
+      .clientDomain(null)
+      .build()
+
+  @Test
+  fun `test getChallenge rejects a home_domain that is not the configured domain`() {
+    every { sep45Config.homeDomains } returns listOf("localhost:8080")
+
+    rejectedHomeDomains.forEach {
+      val ex =
+        assertThrows(BadRequestException::class.java) {
+          sep45Service.getChallenge(challengeRequestFor(it))
+        }
+      assertEquals("Invalid home domain", ex.message, "message for: $it")
+    }
+  }
+
+  @Test
+  fun `test getChallenge rejecting a home_domain creates no nonce and runs no simulation`() {
+    every { sep45Config.homeDomains } returns listOf("localhost:8080")
+
+    rejectedHomeDomains.forEach {
+      assertThrows(BadRequestException::class.java) {
+        sep45Service.getChallenge(challengeRequestFor(it))
+      }
+    }
+
+    verify(exactly = 0) { nonceManager.create(any()) }
+    verify(exactly = 0) { stellarRpc.simulateTransaction(any()) }
+  }
+
+  @Test
+  fun `test getChallenge accepts a wildcard subdomain`() {
+    every { sep45Config.homeDomains } returns listOf("*.sdp.stellar.org")
+
+    val response = sep45Service.getChallenge(challengeRequestFor("foo.sdp.stellar.org"))
+
+    assertNotNull(response.authorizationEntries)
+  }
+
+  @Test
+  fun `test getChallenge accepts a scheme prefix and mixed case`() {
+    every { sep45Config.homeDomains } returns listOf("localhost:8080")
+
+    listOf("http://localhost:8080", "https://localhost:8080", "LOCALHOST:8080").forEach {
+      val response = sep45Service.getChallenge(challengeRequestFor(it))
+      assertNotNull(response.authorizationEntries, "challenge for: $it")
+    }
+  }
+
+  @Test
+  fun `test getChallenge builds the challenge with the supplied home_domain unchanged`() {
+    every { sep45Config.homeDomains } returns listOf("localhost:8080")
+    val simulated = slot<org.stellar.sdk.Transaction>()
+    every { stellarRpc.simulateTransaction(capture(simulated)) } returns
+      GsonUtils.getInstance()
+        .fromJson(jsonSimulateTransactionResponse, SimulateTransactionResponse::class.java)
+
+    sep45Service.getChallenge(challengeRequestFor("LOCALHOST:8080"))
+
+    val operation = simulated.captured.operations[0] as InvokeHostFunctionOperation
+    val homeDomain =
+      operation.hostFunction.invokeContract.args[0]
+        .map
+        .scMap
+        .first { it.key.sym.scSymbol.toString() == "home_domain" }
+        .`val`
+        .str
+        .scString
+        .toString()
+    assertEquals("LOCALHOST:8080", homeDomain)
   }
 
   private val rejectedHomeDomains =

@@ -58,6 +58,9 @@ public class Sep45Service {
     if (isEmpty(request.getHomeDomain())) {
       throw new BadRequestException("home_domain is required");
     }
+    if (!isHomeDomainAllowed(request.getHomeDomain())) {
+      throw new BadRequestException("Invalid home domain");
+    }
 
     KeyPair signingKeypair = KeyPair.fromSecretSeed(secretConfig.getSep10SigningSeed());
     // Transaction simulation does not require a real account, but it does need to be different from
