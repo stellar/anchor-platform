@@ -81,11 +81,23 @@ class ClientDomainHelperTest {
 
   @Test
   fun `test public IPv6 address is accepted`() {
-    // Bracketed form: the only one that also succeeds in the real stellar.toml fetch, since OkHttp
-    // (like this validation) requires brackets around an IPv6 host in a URL.
+    assertDoesNotThrow {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("2001:4860:4860::8888")
+    }
+  }
+
+  @Test
+  fun `test bracketed public IPv6 address is accepted`() {
+    // The bracketed form is the only one that also succeeds in the real stellar.toml fetch, since
+    // OkHttp's request builder (unlike this validation's bare-IPv6 fallback) requires brackets.
     assertDoesNotThrow {
       ClientDomainHelper.validateDomainNotPrivateNetwork("[2001:4860:4860::8888]")
     }
+  }
+
+  @Test
+  fun `test extractHostname with bare (unbracketed) IPv6 falls back to the bracketed parse`() {
+    assertEquals("::1", ClientDomainHelper.extractHostname("::1"))
   }
 
   @Test

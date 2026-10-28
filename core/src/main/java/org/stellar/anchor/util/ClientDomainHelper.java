@@ -337,13 +337,30 @@ public class ClientDomainHelper {
    * HttpUrl}) that builds the real stellar.toml request, so the host validated here can never
    * differ from the host actually connected to. Fails closed (throws) rather than falling back to
    * the raw, unparsed string when the host cannot be extracted.
+   *
+   * <p>A bare (unbracketed) IPv6 literal, e.g. {@code ::1}, is not a valid URL host under RFC 3986
+   * and so fails the first parse; it is retried once with brackets added, the normal way to address
+   * an IPv6 literal, so the private-network guard still classifies it correctly. The retry is never
+   * attempted when the raw string already contains a backslash, so it cannot interact with the
+   * backslash divergence this method exists to close.
    */
   static String extractHostname(String clientDomain) throws SepException {
-    HttpUrl url = HttpUrl.parse("https://" + clientDomain + "/.well-known/stellar.toml");
-    if (url == null) {
+    String host = parseHost("https://" + clientDomain + "/.well-known/stellar.toml");
+    if (host == null
+        && !clientDomain.contains("\\")
+        && !clientDomain.startsWith("[")
+        && clientDomain.contains(":")) {
+      host = parseHost("https://[" + clientDomain + "]/.well-known/stellar.toml");
+    }
+    if (host == null) {
       infoF("client_domain {} could not be parsed", clientDomain);
       throw new SepException("client_domain could not be resolved");
     }
-    return url.host();
+    return host;
+  }
+
+  private static String parseHost(String url) {
+    HttpUrl parsed = HttpUrl.parse(url);
+    return parsed == null ? null : parsed.host();
   }
 }
