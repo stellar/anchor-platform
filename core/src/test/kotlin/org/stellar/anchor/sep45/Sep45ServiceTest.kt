@@ -373,10 +373,16 @@ class Sep45ServiceTest {
   fun `test getChallenge accepts a scheme prefix and mixed case`() {
     every { sep45Config.homeDomains } returns listOf("localhost:8080")
 
-    listOf("http://localhost:8080", "https://localhost:8080", "LOCALHOST:8080").forEach {
-      val response = sep45Service.getChallenge(challengeRequestFor(it))
-      assertNotNull(response.authorizationEntries, "challenge for: $it")
-    }
+    listOf(
+        "http://localhost:8080",
+        "https://localhost:8080",
+        "LOCALHOST:8080",
+        "HTTP://Localhost:8080",
+      )
+      .forEach {
+        val response = sep45Service.getChallenge(challengeRequestFor(it))
+        assertNotNull(response.authorizationEntries, "challenge for: $it")
+      }
   }
 
   @Test
@@ -387,19 +393,21 @@ class Sep45ServiceTest {
       GsonUtils.getInstance()
         .fromJson(jsonSimulateTransactionResponse, SimulateTransactionResponse::class.java)
 
-    sep45Service.getChallenge(challengeRequestFor("LOCALHOST:8080"))
+    listOf("LOCALHOST:8080", "http://localhost:8080").forEach {
+      sep45Service.getChallenge(challengeRequestFor(it))
 
-    val operation = simulated.captured.operations[0] as InvokeHostFunctionOperation
-    val homeDomain =
-      operation.hostFunction.invokeContract.args[0]
-        .map
-        .scMap
-        .first { it.key.sym.scSymbol.toString() == "home_domain" }
-        .`val`
-        .str
-        .scString
-        .toString()
-    assertEquals("LOCALHOST:8080", homeDomain)
+      val operation = simulated.captured.operations[0] as InvokeHostFunctionOperation
+      val homeDomain =
+        operation.hostFunction.invokeContract.args[0]
+          .map
+          .scMap
+          .first { entry -> entry.key.sym.scSymbol.toString() == "home_domain" }
+          .`val`
+          .str
+          .scString
+          .toString()
+      assertEquals(it, homeDomain, "home_domain argument for: $it")
+    }
   }
 
   private val rejectedHomeDomains =
@@ -411,6 +419,7 @@ class Sep45ServiceTest {
       "localhost:8080@evil.example",
       "localhost:8081",
       "http://http://localhost:8080",
+      "ftp://localhost:8080",
     )
 
   /**
@@ -476,13 +485,30 @@ class Sep45ServiceTest {
 
   @Test
   fun `test validate rejects entries without home_domain`() {
-    every { sep45Config.homeDomains } returns listOf("localhost:8080")
+    listOf(listOf("localhost:8080"), listOf("*.sdp.stellar.org")).forEach { configured ->
+      every { sep45Config.homeDomains } returns configured
 
-    val ex =
-      assertThrows(BadRequestException::class.java) {
-        sep45Service.validate(authEntriesWithHomeDomain(null))
-      }
-    assertEquals("Invalid home domain", ex.message)
+      val ex =
+        assertThrows(BadRequestException::class.java) {
+          sep45Service.validate(authEntriesWithHomeDomain(null))
+        }
+      assertEquals("Invalid home domain", ex.message, "message for config: $configured")
+    }
+  }
+
+  @Test
+  fun `test validate rejects an empty or scheme-only home_domain even with a bare wildcard`() {
+    every { sep45Config.homeDomains } returns listOf("*")
+    every { jwtService.encode<Sep45Jwt>(any()) } returns "header.payload.signature"
+
+    listOf("", "http://", "HTTPS://").forEach {
+      val ex =
+        assertThrows(BadRequestException::class.java) {
+          sep45Service.validate(authEntriesWithHomeDomain(it))
+        }
+      assertEquals("Invalid home domain", ex.message, "message for: '$it'")
+    }
+    verify(exactly = 0) { jwtService.encode<Sep45Jwt>(any()) }
   }
 
   @Test

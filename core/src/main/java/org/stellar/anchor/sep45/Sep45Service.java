@@ -430,15 +430,20 @@ public class Sep45Service {
    * normalized values.
    *
    * @param homeDomain the home domain supplied by a client, or null if it is missing
-   * @return true if the home domain is exactly a configured domain or matches a configured wildcard
+   * @return true if the home domain is not empty and is exactly a configured domain or matches a
+   *     configured wildcard
    */
   private boolean isHomeDomainAllowed(String homeDomain) {
     if (homeDomain == null) {
       return false;
     }
+    String normalized = normalizeHomeDomain(homeDomain);
+    if (normalized.isEmpty()) {
+      return false;
+    }
     List<String> configured =
         sep45Config.getHomeDomains().stream().map(Sep45Service::normalizeHomeDomain).toList();
-    return ClientDomainHelper.isDomainNameMatch(configured, normalizeHomeDomain(homeDomain));
+    return ClientDomainHelper.isDomainNameMatch(configured, normalized);
   }
 
   private void validateClientDomainAllowed(String clientDomain) throws SepNotAuthorizedException {

@@ -263,6 +263,7 @@ class ClientDomainHelperTest {
         "evil.example\\x.sdp.stellar.org",
         "evil.example:80.sdp.stellar.org",
         "a b.sdp.stellar.org",
+        "fóo.sdp.stellar.org",
       )
       .forEach {
         assertFalse(ClientDomainHelper.isDomainNameMatch(patterns, it), "should reject: $it")
