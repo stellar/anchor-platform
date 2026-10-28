@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.asset.AssetInfo
+import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.platform.GetTransactionResponse
 import org.stellar.anchor.api.sep.sep10.ChallengeRequest as Sep10ChallengeRequest
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest as Sep45ChallengeRequest
@@ -109,6 +110,21 @@ class WireKeyNamingTest {
 
     assertFalse(json.has("funding_method"), "keys: ${json.keySet()}")
     assertFalse(json.has("required_info_updates_fields"), "keys: ${json.keySet()}")
+  }
+
+  // the event queue carries this payload, and its transaction already uses client_name
+  @Test
+  fun `test AnchorEvent publishes client_name and client_domain`() {
+    val json =
+      toJson(AnchorEvent.builder().clientName("wallet").clientDomain("wallet.example").build())
+
+    assertEquals("wallet", json.get("client_name").asString)
+    assertEquals("wallet.example", json.get("client_domain").asString)
+    assertFalse(json.has("clientName"), "keys: ${json.keySet()}")
+    assertFalse(json.has("clientDomain"), "keys: ${json.keySet()}")
+    val read = gson.fromJson(json, AnchorEvent::class.java)
+    assertEquals("wallet", read.clientName)
+    assertEquals("wallet.example", read.clientDomain)
   }
 
   // WIRE-08

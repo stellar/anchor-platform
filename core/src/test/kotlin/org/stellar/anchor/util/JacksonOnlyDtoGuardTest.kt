@@ -16,6 +16,10 @@ import org.springframework.context.annotation.ClassPathScanningCandidateComponen
  * Only `value` counts: Gson writes a field under `value` and merely also reads `alternate`. The
  * scan reads Jackson's annotation by name, while the synthetic classes of the self-test use it
  * directly, hence the test-only `jackson-annotations` dependency in `core/build.gradle.kts`.
+ *
+ * The complement is a field with no annotation of either kind, which Gson writes under its Java
+ * name: no serialized field may have a wire key with an upper-case letter, apart from the named
+ * exceptions in [camelCaseWireKeys].
  */
 class JacksonOnlyDtoGuardTest {
   private val jsonProperty = "com.fasterxml.jackson.annotation.JsonProperty"
@@ -40,17 +44,58 @@ class JacksonOnlyDtoGuardTest {
         }
     }
 
-  private fun apiClasses(): List<Class<*>> {
+  // the request DTOs overwrite requestClientIpAddress from the connection and never read it from
+  // the body; SepDepositInfo is only handed between the platform's own classes
+  private val camelCaseWireKeys =
+    setOf(
+      "org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest.requestClientIpAddress",
+      "org.stellar.anchor.api.sep.sep6.StartDepositRequest.requestClientIpAddress",
+      "org.stellar.anchor.api.sep.sep6.StartDepositExchangeRequest.requestClientIpAddress",
+      "org.stellar.anchor.api.sep.sep6.StartWithdrawRequest.requestClientIpAddress",
+      "org.stellar.anchor.api.sep.sep6.StartWithdrawExchangeRequest.requestClientIpAddress",
+      "org.stellar.anchor.api.shared.SepDepositInfo.stellarAddress",
+    )
+
+  private fun scan(everyClass: Boolean): List<Class<*>> {
     val scanner =
       object : ClassPathScanningCandidateComponentProvider(false) {
         // every class counts, not only concrete top-level ones
-        override fun isCandidateComponent(beanDefinition: AnnotatedBeanDefinition) = true
+        override fun isCandidateComponent(beanDefinition: AnnotatedBeanDefinition) =
+          everyClass || super.isCandidateComponent(beanDefinition)
       }
     scanner.addIncludeFilter { _, _ -> true }
     return scanner.findCandidateComponents("org.stellar.anchor.api").map {
       Class.forName(it.beanClassName, false, javaClass.classLoader)
     }
   }
+
+  private fun apiClasses(): List<Class<*>> = scan(true)
+
+  // Gson never reads a Lombok builder, writes an enum by constant name, and no exception reaches a
+  // response body as itself
+  private fun isSerialized(cls: Class<*>): Boolean =
+    !cls.isEnum &&
+      !cls.isInterface &&
+      !cls.isAnonymousClass &&
+      !Throwable::class.java.isAssignableFrom(cls) &&
+      !(cls.enclosingClass != null && cls.simpleName.endsWith("Builder"))
+
+  private fun camelCaseKeys(classes: Collection<Class<*>>): List<String> =
+    classes
+      .filter { isSerialized(it) }
+      .flatMap { cls ->
+        cls.declaredFields
+          .filter {
+            !Modifier.isStatic(it.modifiers) &&
+              !Modifier.isTransient(it.modifiers) &&
+              !it.isSynthetic
+          }
+          .filter { field ->
+            val key = field.getAnnotation(SerializedName::class.java)?.value ?: field.name
+            key.any { it.isUpperCase() } && "${cls.name}.${field.name}" !in camelCaseWireKeys
+          }
+          .map { "${cls.name}.${it.name}" }
+      }
 
   // WIRE-10
   @Test
@@ -111,5 +156,41 @@ class JacksonOnlyDtoGuardTest {
     assertTrue(found[0].contains("JacksonOnly.homeDomain"), found[0])
     assertTrue(found[1].contains("Alternate.homeDomain"), found[1])
     assertTrue(found[2].contains("Mismatched.homeDomain"), found[2])
+  }
+
+  // the scan must reach what Spring's default filter skips (abstract, nested and builder classes),
+  // or a DTO declared that way goes unchecked while the sentinels above still pass
+  @Test
+  fun `test the scan reaches classes beyond Spring's default candidate filter`() {
+    val widened = apiClasses().map { it.name }.toSet()
+    val default = scan(false).map { it.name }.toSet()
+
+    assertTrue(default.all { it in widened })
+    assertTrue(widened.size > default.size, "widened=${widened.size} default=${default.size}")
+  }
+
+  // WIRE-12
+  @Test
+  fun `test no serialized DTO field is published under a camelCase wire key`() {
+    assertEquals(emptyList<String>(), camelCaseKeys(apiClasses()))
+  }
+
+  // WIRE-12
+  @Test
+  fun `test the camelCase check names a field with no annotation`() {
+    class Bare {
+      var payoutRailHint: String? = null
+    }
+    class Named {
+      @SerializedName("payout_rail_hint") var payoutRailHint: String? = null
+    }
+    class PlainKey {
+      var amount: String? = null
+    }
+
+    val found = camelCaseKeys(listOf(Bare::class.java, Named::class.java, PlainKey::class.java))
+
+    assertEquals(1, found.size, found.toString())
+    assertTrue(found[0].contains("Bare.payoutRailHint"), found[0])
   }
 }

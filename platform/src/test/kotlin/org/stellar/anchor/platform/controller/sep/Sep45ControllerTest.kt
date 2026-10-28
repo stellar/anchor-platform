@@ -121,6 +121,21 @@ class Sep45ControllerTest {
       .andExpect(jsonPath("$.error").value("authorization_entries is required"))
   }
 
+  // a value that is not base64 is a client error, not a 500
+  @Test
+  fun `test POST auth with an authorization_entries value that is not base64 answers 400`() {
+    for (value in listOf("spec-entries", "   ", "\\t", "!!!", "AA=A", "not base64!")) {
+      mvc(realService())
+        .perform(
+          post("/sep45/auth")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""{"authorization_entries": "$value"}""")
+        )
+        .andExpect(status().isBadRequest)
+        .andExpect(jsonPath("$.error").value("Failed to decode auth entries"))
+    }
+  }
+
   // WIRE-09: the camelCase name is not an accepted key
   @Test
   fun `test POST auth with only the camelCase key answers 400`() {
