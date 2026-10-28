@@ -235,6 +235,8 @@ sep_server:
   # address or a CIDR range, compared against the TCP peer address of the request.
   # Without a trusted proxy the recorded address is the TCP peer address and every forwarding header is ignored,
   # so behind a proxy or load balancer the recorded address is the proxy's address until the proxy is listed here.
+  # Every host inside a listed range is trusted, not only the proxy: prefer the proxy's own addresses and use a wide
+  # CIDR range (such as 10.0.0.0/8) only when nothing else that can reach the SEP server lives inside it.
   # Ex: trusted_proxies: [10.0.0.0/8, 2001:db8::/32]
   # Ex: trusted_proxies: 10.0.0.0/8,2001:db8::/32
   trusted_proxies:
