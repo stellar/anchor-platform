@@ -53,6 +53,7 @@ import org.stellar.anchor.sep31.Sep31TransactionStore
 import org.stellar.anchor.sep6.Sep6Transaction
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.sep6.Sep6TransactionUtils
+import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.StringHelper.json
 import org.stellar.sdk.KeyPair
 
@@ -947,6 +948,36 @@ class ClientStatusCallbackHandlerTest {
       "Receiver routing number",
       sep31Txn.requiredInfoUpdates.transaction["receiver_routing_number"]!!.description,
     )
+  }
+
+  // WIRE-05: a response read from the published key reaches the callback, so the metadata cannot
+  // sit in a field the getter does not read
+  @Test
+  fun `fromSep31Txn should read the metadata published under required_info_updates_fields`() {
+    val txnResponse =
+      GsonUtils.getInstance()
+        .fromJson(
+          """
+          {
+            "id": "sep31-id", "sep": "31", "kind": "receive",
+            "status": "pending_sender",
+            "required_info_updates": ["receiver_bank_account"],
+            "required_info_updates_fields": {
+              "receiver_bank_account": {
+                "description": "The receiver's bank account number",
+                "choices": ["SEPA", "SWIFT"]
+              }
+            }
+          }
+          """,
+          GetTransactionResponse::class.java,
+        )
+
+    val sep31Txn = ClientStatusCallbackHandler.fromSep31Txn(txnResponse)
+
+    val field = sep31Txn.requiredInfoUpdates.transaction["receiver_bank_account"]!!
+    assertEquals("The receiver's bank account number", field.description)
+    assertEquals(listOf("SEPA", "SWIFT"), field.choices)
   }
 
   // The wallet server verifies the signature over the UTF-8 bytes of the body it receives. A JVM
