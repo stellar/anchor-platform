@@ -130,6 +130,7 @@ sep6.more_info_url.txn_fields:
 sep_server.context_path:
 sep_server.management_server_port:
 sep_server.port:
+sep_server.trusted_proxies:
 stellar_network.horizon_url:
 stellar_network.network:
 stellar_network.rpc_auth.type:

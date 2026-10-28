@@ -230,6 +230,14 @@ sep_server:
   # The management_server_port is the port used by Spring actuator.
   # https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html
   management_server_port: 9080
+  # The proxies whose `X-Forwarded-For` header the SEP server believes when it records the client IP address
+  # (`request_client_ip_address`) of a SEP-6, SEP-24 or SEP-31 transaction. Each item is an IPv4 or IPv6
+  # address or a CIDR range, compared against the TCP peer address of the request.
+  # Without a trusted proxy the recorded address is the TCP peer address and every forwarding header is ignored,
+  # so behind a proxy or load balancer the recorded address is the proxy's address until the proxy is listed here.
+  # Ex: trusted_proxies: [10.0.0.0/8, 2001:db8::/32]
+  # Ex: trusted_proxies: 10.0.0.0/8,2001:db8::/32
+  trusted_proxies:
 
 ######################
 # SEP-1 Configuration
