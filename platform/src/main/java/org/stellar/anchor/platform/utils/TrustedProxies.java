@@ -48,11 +48,10 @@ public class TrustedProxies {
     int slash = entry.indexOf('/');
     if (slash >= 0) {
       addressPart = entry.substring(0, slash);
-      try {
-        prefixLength = Integer.parseInt(entry.substring(slash + 1));
-      } catch (NumberFormatException e) {
-        throw invalid(entry);
-      }
+      String prefix = entry.substring(slash + 1);
+      // Digits only: Integer.parseInt alone would accept "-0" (a /0 that trusts everyone) and "+8".
+      if (!prefix.matches("[0-9]{1,3}")) throw invalid(entry);
+      prefixLength = Integer.parseInt(prefix);
     }
     if (!InetAddresses.isInetAddress(addressPart)) throw invalid(entry);
     InetAddress address = InetAddresses.forString(addressPart);

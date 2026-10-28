@@ -91,7 +91,17 @@ class TrustedProxiesTest {
 
   @Test
   fun `invalid entries name the key and the entry`() {
-    listOf("proxy.local", "10.0.0.0/33", "2001:db8::/129", "10.0.0.0/-1", "10.0.0.0/abc", "10.0.0")
+    listOf(
+        "proxy.local",
+        "10.0.0.0/33",
+        "2001:db8::/129",
+        "10.0.0.0/-1",
+        "10.0.0.0/-0",
+        "10.0.0.0/+8",
+        "10.0.0.0/",
+        "10.0.0.0/abc",
+        "10.0.0"
+      )
       .forEach { entry ->
         val ex =
           assertThrows<InvalidConfigException> { TrustedProxies.parse(listOf("10.0.0.1", entry)) }
