@@ -10,6 +10,7 @@ import org.stellar.anchor.platform.config.PlatformApiConfig;
 import org.stellar.anchor.platform.config.PlatformServerConfig;
 import org.stellar.anchor.platform.config.PropertyDataConfig;
 import org.stellar.anchor.platform.config.PropertySecretConfig;
+import org.stellar.anchor.platform.config.SepServerConfig;
 
 @Configuration
 public class SharedConfigBeans {
@@ -36,6 +37,12 @@ public class SharedConfigBeans {
   @ConfigurationProperties(prefix = "platform-server")
   PlatformServerConfig platformServerConfig(PropertySecretConfig secretConfig) {
     return new PlatformServerConfig(secretConfig);
+  }
+
+  @Bean
+  @ConfigurationProperties(prefix = "sep-server")
+  SepServerConfig sepServerConfig() {
+    return new SepServerConfig();
   }
 
   @Bean
