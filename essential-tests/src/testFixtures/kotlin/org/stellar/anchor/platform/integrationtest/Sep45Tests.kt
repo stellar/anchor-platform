@@ -47,6 +47,8 @@ class Sep45Tests : IntegrationTestBase(TestConfig()) {
 
   private var webAuthDomain = toml.getString("WEB_AUTH_FOR_CONTRACTS_ENDPOINT")
   private var homeDomain = "http://${URI.create(webAuthDomain).authority}"
+  // The platform tolerates the scheme in the request but signs the bare domain into the token.
+  private var expectedHomeDomain = URI.create(webAuthDomain).authority
 
   @BeforeEach
   fun checkStellarRpc() {
@@ -75,10 +77,10 @@ class Sep45Tests : IntegrationTestBase(TestConfig()) {
 
     val jwt = jwtService.decode(validationResponse.token, Sep45Jwt::class.java)
 
-    assertEquals(homeDomain, jwt.homeDomain)
+    assertEquals(expectedHomeDomain, jwt.homeDomain)
     assertEquals(CLIENT_SMART_WALLET_ACCOUNT, jwt.account)
     assertNotNull(jwt.jti)
-    assertEquals(homeDomain, jwt.iss)
+    assertEquals(expectedHomeDomain, jwt.iss)
     assertNotNull(jwt.issuedAt)
     assertNotNull(jwt.expiresAt)
   }
@@ -182,10 +184,10 @@ class Sep45Tests : IntegrationTestBase(TestConfig()) {
 
     val jwt = jwtService.decode(validationResponse.token, Sep45Jwt::class.java)
 
-    assertEquals(homeDomain, jwt.homeDomain)
+    assertEquals(expectedHomeDomain, jwt.homeDomain)
     assertEquals(CLIENT_SMART_WALLET_ACCOUNT, jwt.account)
     assertNotNull(jwt.jti)
-    assertEquals(homeDomain, jwt.iss)
+    assertEquals(expectedHomeDomain, jwt.iss)
     assertNotNull(jwt.issuedAt)
     assertNotNull(jwt.expiresAt)
   }
