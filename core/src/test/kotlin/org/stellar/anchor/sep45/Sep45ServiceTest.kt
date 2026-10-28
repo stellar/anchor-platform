@@ -24,12 +24,17 @@ import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.util.ClientDomainHelper
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.Asset
+import org.stellar.sdk.Auth
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Network
 import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse
 import org.stellar.sdk.responses.sorobanrpc.GetNetworkResponse
 import org.stellar.sdk.responses.sorobanrpc.SimulateTransactionResponse
+import org.stellar.sdk.scval.Scv
+import org.stellar.sdk.xdr.SCAddressType
+import org.stellar.sdk.xdr.SCMap
+import org.stellar.sdk.xdr.SCMapEntry
 import org.stellar.sdk.xdr.SorobanAuthorizationEntries
 
 @ExtendWith(LockAndMockTest::class)
@@ -319,6 +324,156 @@ class Sep45ServiceTest {
       assertThrows(BadRequestException::class.java) { sep45Service.validate(validationRequest) }
     assertEquals("authorization_entries must contain at least one entry", ex.message)
   }
+
+  private val rejectedHomeDomains =
+    listOf(
+      "localhost:8080/evil",
+      "localhost:8080?x=1",
+      "localhost:8080#f",
+      "localhost:8080\\evil",
+      "localhost:8080@evil.example",
+      "localhost:8081",
+      "http://http://localhost:8080",
+    )
+
+  /**
+   * Re-writes the `home_domain` argument of the valid fixture entries (all entries carry the same
+   * arguments) and re-signs the server entry, so the service sees a well-formed, server-signed
+   * response for any `home_domain`. A null [homeDomain] drops the argument.
+   */
+  private fun authEntriesWithHomeDomain(homeDomain: String?): ValidationRequest {
+    val signingKp =
+      KeyPair.fromSecretSeed("SAX3AH622R2XT6DXWWSRIDCMMUCCMATBZ5U6XKJWDO7M2EJUBFC3AW5X")
+    val network = Network(Network.TESTNET.networkPassphrase)
+    val entries =
+      SorobanAuthorizationEntries.fromXdrBase64(VALID_AUTH_ENTRIES_XDR).sorobanAuthorizationEntries
+    val rewritten =
+      entries.map { entry ->
+        val args = entry.rootInvocation.function.contractFn.args
+        val kept =
+          args[0]
+            .map
+            .scMap
+            .filter { it.key.sym.scSymbol.toString() != "home_domain" }
+            .toMutableList()
+        if (homeDomain != null) {
+          kept.add(
+            SCMapEntry.builder()
+              .key(Scv.toSymbol("home_domain"))
+              .`val`(Scv.toString(homeDomain))
+              .build()
+          )
+        }
+        args[0].map = SCMap(kept.sortedBy { it.key.sym.scSymbol.toString() }.toTypedArray())
+        val isServerEntry =
+          entry.credentials.address.address.discriminant == SCAddressType.SC_ADDRESS_TYPE_ACCOUNT &&
+            KeyPair.fromXdrPublicKey(entry.credentials.address.address.accountId.accountID)
+              .accountId == signingKp.accountId
+        if (isServerEntry) Auth.authorizeEntry(entry, signingKp, 123465L, network) else entry
+      }
+    return ValidationRequest.builder()
+      .authorizationEntries(SorobanAuthorizationEntries(rewritten.toTypedArray()).toXdrBase64())
+      .build()
+  }
+
+  private fun captureEncodedJwt(): CapturingSlot<Sep45Jwt> {
+    val jwt = slot<Sep45Jwt>()
+    every { jwtService.encode(capture(jwt)) } returns "header.payload.signature"
+    return jwt
+  }
+
+  @Test
+  fun `test validate rejects a home_domain that is not the configured domain`() {
+    every { sep45Config.homeDomains } returns listOf("localhost:8080")
+    every { jwtService.encode<Sep45Jwt>(any()) } returns "header.payload.signature"
+
+    rejectedHomeDomains.forEach {
+      val ex =
+        assertThrows(BadRequestException::class.java) {
+          sep45Service.validate(authEntriesWithHomeDomain(it))
+        }
+      assertEquals("Invalid home domain", ex.message, "message for: $it")
+    }
+    verify(exactly = 0) { jwtService.encode<Sep45Jwt>(any()) }
+  }
+
+  @Test
+  fun `test validate rejects entries without home_domain`() {
+    every { sep45Config.homeDomains } returns listOf("localhost:8080")
+
+    val ex =
+      assertThrows(BadRequestException::class.java) {
+        sep45Service.validate(authEntriesWithHomeDomain(null))
+      }
+    assertEquals("Invalid home domain", ex.message)
+  }
+
+  @Test
+  fun `test validate signs a wildcard subdomain`() {
+    every { sep45Config.homeDomains } returns listOf("*.sdp.stellar.org")
+    val jwt = captureEncodedJwt()
+
+    sep45Service.validate(authEntriesWithHomeDomain("foo.sdp.stellar.org"))
+
+    assertEquals("foo.sdp.stellar.org", jwt.captured.iss)
+    assertEquals("foo.sdp.stellar.org", jwt.captured.homeDomain)
+  }
+
+  @Test
+  fun `test validate accepts a scheme prefix and mixed case`() {
+    every { sep45Config.homeDomains } returns listOf("localhost:8080")
+    captureEncodedJwt()
+
+    listOf(
+        "http://localhost:8080",
+        "https://localhost:8080",
+        "LOCALHOST:8080",
+        "HTTP://Localhost:8080"
+      )
+      .forEach {
+        val response = sep45Service.validate(authEntriesWithHomeDomain(it))
+        assertEquals("header.payload.signature", response.token, "token for: $it")
+      }
+  }
+
+  @Test
+  fun `test validate signs the normalized home_domain as iss and home_domain`() {
+    every { sep45Config.homeDomains } returns listOf("localhost:8080")
+    val jwt = captureEncodedJwt()
+
+    listOf("https://localhost:8080", "HTTP://Localhost:8080", "LOCALHOST:8080").forEach {
+      sep45Service.validate(authEntriesWithHomeDomain(it))
+
+      assertEquals("localhost:8080", jwt.captured.iss, "iss for: $it")
+      assertEquals("localhost:8080", jwt.captured.homeDomain, "home_domain for: $it")
+    }
+  }
+
+  @Test
+  fun `test validate accepts a value matching either of several configured domains`() {
+    every { sep45Config.homeDomains } returns listOf("localhost:8080", "*.sdp.stellar.org")
+    val jwt = captureEncodedJwt()
+
+    listOf("localhost:8080", "foo.sdp.stellar.org").forEach {
+      sep45Service.validate(authEntriesWithHomeDomain(it))
+
+      assertEquals(it, jwt.captured.homeDomain, "home_domain for: $it")
+    }
+  }
+
+  @Test
+  fun `test validate with the exact configured domain signs it`() {
+    every { sep45Config.homeDomains } returns listOf("localhost:8080")
+    val jwt = captureEncodedJwt()
+
+    sep45Service.validate(authEntriesWithHomeDomain("localhost:8080"))
+
+    assertEquals("localhost:8080", jwt.captured.iss)
+    assertEquals("localhost:8080", jwt.captured.homeDomain)
+  }
+
+  private val VALID_AUTH_ENTRIES_XDR =
+    "AAAAAgAAAAEAAAABMXx6BpvcLPv+Ys0+pKSVYuT5yS/rba13ZMWowRmb+pxF2uWzaxsY/AAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAg0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlUAAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAo074x7qA8Iqyn/P1Ewffdh7zMeBtIHvcMhTaUyIBzPEyTx67xLr9pO2AToTSh/VHFki+g3lfEz8eZsh0w0b0BQAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAAAAAAAQAAAAAAAAAAjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0rVNLbc72XYAAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAgjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0AAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAw4WS+M2bdw9HoLBOiFT9DjqU02Z8gm13Mk0/sBS2AIdC7AbxmoWtS/o1A6feb/hNixTaSBArU0SZKx/l3p5TBAAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAA"
 
   val jsonSimulateTransactionResponse =
     """

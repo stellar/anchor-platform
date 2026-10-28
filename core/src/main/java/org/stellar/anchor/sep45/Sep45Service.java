@@ -4,7 +4,6 @@ import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.Auth.authorizeEntry;
 
 import java.io.IOException;
-import java.net.URI;
 import java.time.Instant;
 import java.util.*;
 import lombok.AllArgsConstructor;
@@ -249,7 +248,7 @@ public class Sep45Service {
     // Construct the JWT token
     long issuedAt = Instant.now().getEpochSecond();
     String account = argsMap.get(KEY_ACCOUNT);
-    String homeDomain = argsMap.get(KEY_HOME_DOMAIN);
+    String homeDomain = normalizeHomeDomain(argsMap.get(KEY_HOME_DOMAIN));
     String clientDomain = argsMap.get(KEY_CLIENT_DOMAIN);
 
     String hashHex;
@@ -382,15 +381,7 @@ public class Sep45Service {
   private void verifyArguments(SCMapEntry[] entries) throws BadRequestException, SepException {
     Map<String, String> argsMap = extractArgs(entries);
 
-    if (sep45Config.getHomeDomains().stream()
-        .noneMatch(
-            homeDomain -> {
-              URI expected = URI.create("http://" + homeDomain.replaceFirst("^https?://", ""));
-              URI given =
-                  URI.create(
-                      "http://" + argsMap.get(KEY_HOME_DOMAIN).replaceFirst("^https?://", ""));
-              return expected.getAuthority().equalsIgnoreCase(given.getAuthority());
-            })) {
+    if (!isHomeDomainAllowed(argsMap.get(KEY_HOME_DOMAIN))) {
       throw new BadRequestException("Invalid home domain");
     }
 
@@ -416,6 +407,35 @@ public class Sep45Service {
         throw new BadRequestException("Invalid client domain address");
       }
     }
+  }
+
+  /**
+   * Lower-cases a home domain and drops one leading http(s):// so equivalent spellings compare
+   * equal.
+   *
+   * @param homeDomain the home domain as configured or as supplied by a client
+   * @return the normalized home domain, or null if none was given
+   */
+  private static String normalizeHomeDomain(String homeDomain) {
+    return homeDomain == null
+        ? null
+        : homeDomain.toLowerCase(Locale.ROOT).replaceFirst("^https?://", "");
+  }
+
+  /**
+   * Checks a home domain against the configured home domains with the matcher SEP-10 uses, on
+   * normalized values.
+   *
+   * @param homeDomain the home domain supplied by a client, or null if it is missing
+   * @return true if the home domain is exactly a configured domain or matches a configured wildcard
+   */
+  private boolean isHomeDomainAllowed(String homeDomain) {
+    if (homeDomain == null) {
+      return false;
+    }
+    List<String> configured =
+        sep45Config.getHomeDomains().stream().map(Sep45Service::normalizeHomeDomain).toList();
+    return ClientDomainHelper.isDomainNameMatch(configured, normalizeHomeDomain(homeDomain));
   }
 
   private void validateClientDomainAllowed(String clientDomain) throws SepNotAuthorizedException {
