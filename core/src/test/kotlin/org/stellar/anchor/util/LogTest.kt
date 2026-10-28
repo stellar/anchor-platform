@@ -94,11 +94,13 @@ internal class LogTest {
   @Test
   @LockAndMockStatic([Log::class])
   fun `test shorter string conversion`() {
+    // ANCHOR-1395 (HackerOne #4107899): a value too short to truncate without exposing it in
+    // full must be masked, never returned unchanged -- shorter() is relied on as a log redaction.
     assertNull(shorter(null))
-    assertEquals(shorter("123"), "123")
     assertEquals(shorter(""), "")
-    assertEquals(shorter("12345678"), "12345678")
-    assertEquals(shorter("ABCD123ABCD"), "ABCD123ABCD")
+    assertEquals(shorter("123"), "***")
+    assertEquals(shorter("12345678"), "***")
+    assertEquals(shorter("ABCD123ABCD"), "***")
     assertEquals(shorter("ABCD123_ABCD"), "ABCD...ABCD")
   }
 

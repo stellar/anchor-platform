@@ -2,7 +2,9 @@ package org.stellar.anchor.filter
 
 import com.google.gson.JsonParser
 import io.mockk.Called
+import io.mockk.Runs
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
 import jakarta.servlet.FilterChain
@@ -15,12 +17,17 @@ import org.apache.hc.core5.http.HttpStatus
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.setupMock
+import org.stellar.anchor.util.Log
 
+@ExtendWith(LockAndMockTest::class)
 class AbstractJwtFilterTest {
   private lateinit var jwtService: JwtService
 
@@ -132,6 +139,42 @@ class AbstractJwtFilterTest {
       val refusal = refusalOf(null, origin = origin)
 
       verify(exactly = 1) { refusal.response.setHeader("Access-Control-Allow-Origin", "*") }
+    }
+  }
+
+  // ANCHOR-1395 (HackerOne #4107899): the raw query string (e.g. SEP-6's email_address) must
+  // never reach the per-request log line.
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test the per-request log line does not include the raw query string`() {
+    every { Log.infoF(any(), *anyVararg()) } just Runs
+
+    val request = mockk<HttpServletRequest>(relaxed = true)
+    val response = mockk<HttpServletResponse>(relaxed = true)
+    val chain = mockk<FilterChain>(relaxed = true)
+    every { request.method } returns "GET"
+    every { request.requestURL } returns
+      StringBuffer("https://anchor.example.com/sep6/transactions")
+    every { request.queryString } returns "email_address=secret@example.com&token=abc123"
+    every { request.getHeader("Authorization") } returns null
+
+    val filter =
+      object : AbstractJwtFilter(jwtService, "Authorization") {
+        @Throws(Exception::class)
+        override fun check(
+          jwtCipher: String?,
+          request: HttpServletRequest,
+          servletResponse: ServletResponse?,
+        ) {}
+      }
+    filter.doFilter(request, response, chain)
+
+    verify(exactly = 1) {
+      Log.infoF(
+        "Applying JwtTokenFilter on request {} {}",
+        "GET",
+        "https://anchor.example.com/sep6/transactions",
+      )
     }
   }
 }
