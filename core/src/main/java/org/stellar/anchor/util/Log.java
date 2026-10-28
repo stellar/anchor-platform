@@ -189,14 +189,18 @@ public class Log {
   }
 
   /**
-   * Return shorter version of the account.
+   * Return a redacted version of the account, safe for logging. Values too short to truncate
+   * without exposing them in full are masked instead of returned unchanged.
    *
    * @param account The Stellar account Id.
-   * @return The shorter version.
+   * @return The shorter, or masked, version.
    */
   public static String shorter(final String account) {
-    if (account == null || account.length() <= 11) {
+    if (account == null || account.isEmpty()) {
       return account;
+    }
+    if (account.length() <= 11) {
+      return "***";
     }
     return account.substring(0, 4) + "..." + account.substring(account.length() - 4);
   }
