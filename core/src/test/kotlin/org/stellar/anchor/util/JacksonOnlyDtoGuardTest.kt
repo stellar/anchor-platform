@@ -13,7 +13,9 @@ import org.springframework.context.annotation.ClassPathScanningCandidateComponen
  * The servers serialize every body with Gson, which ignores `@JsonProperty`: a field annotated for
  * Jackson only goes out under its raw Java name. This guard fails when a DTO in
  * `org.stellar.anchor.api` carries a `@JsonProperty` without a `@SerializedName` of the same value.
- * Jackson's annotation is read by name so the test needs no compile dependency on it.
+ * Only `value` counts: Gson writes a field under `value` and merely also reads `alternate`. The
+ * scan reads Jackson's annotation by name, while the synthetic classes of the self-test use it
+ * directly, hence the test-only `jackson-annotations` dependency in `core/build.gradle.kts`.
  */
 class JacksonOnlyDtoGuardTest {
   private val jsonProperty = "com.fasterxml.jackson.annotation.JsonProperty"
@@ -24,8 +26,7 @@ class JacksonOnlyDtoGuardTest {
       ?.let { it.annotationClass.java.getMethod("value").invoke(it) as String }
 
   private fun serializedNames(field: Field): Set<String> =
-    field.getAnnotation(SerializedName::class.java)?.let { setOf(it.value) + it.alternate }
-      ?: emptySet()
+    field.getAnnotation(SerializedName::class.java)?.let { setOf(it.value) } ?: emptySet()
 
   private fun violations(classes: Collection<Class<*>>): List<String> =
     classes.flatMap { cls ->
@@ -58,8 +59,18 @@ class JacksonOnlyDtoGuardTest {
 
     // the scan must see the DTOs, or an empty result would pass for the wrong reason
     val annotated =
-      classes.flatMap { it.declaredFields.toList() }.filter { jacksonName(it) != null }
-    assertTrue(annotated.size >= 10, "scan found only ${annotated.size} @JsonProperty fields")
+      classes
+        .flatMap { cls -> cls.declaredFields.map { "${cls.name}.${it.name}" to jacksonName(it) } }
+        .filter { it.second != null }
+        .map { it.first }
+    val sentinels =
+      listOf(
+        "org.stellar.anchor.api.sep.sep45.ValidationRequest.authorizationEntries",
+        "org.stellar.anchor.api.sep.sep10.ChallengeRequest.clientDomain",
+        "org.stellar.anchor.api.shared.Refunds.amountRefunded",
+        "org.stellar.anchor.api.platform.GetQuoteResponse.sellAmount",
+      )
+    assertEquals(emptyList<String>(), sentinels.filter { it !in annotated })
 
     assertEquals(emptyList<String>(), violations(classes))
   }
@@ -75,6 +86,11 @@ class JacksonOnlyDtoGuardTest {
       @SerializedName("home_domain")
       var homeDomain: String? = null
     }
+    class Alternate {
+      @com.fasterxml.jackson.annotation.JsonProperty("home_domain")
+      @SerializedName(value = "homeDomain", alternate = ["home_domain"])
+      var homeDomain: String? = null
+    }
     class Mismatched {
       @com.fasterxml.jackson.annotation.JsonProperty("home_domain")
       @SerializedName("homeDomain")
@@ -82,10 +98,18 @@ class JacksonOnlyDtoGuardTest {
     }
 
     val found =
-      violations(listOf(JacksonOnly::class.java, Both::class.java, Mismatched::class.java))
+      violations(
+        listOf(
+          JacksonOnly::class.java,
+          Both::class.java,
+          Alternate::class.java,
+          Mismatched::class.java,
+        )
+      )
 
-    assertEquals(2, found.size, found.toString())
+    assertEquals(3, found.size, found.toString())
     assertTrue(found[0].contains("JacksonOnly.homeDomain"), found[0])
-    assertTrue(found[1].contains("Mismatched.homeDomain"), found[1])
+    assertTrue(found[1].contains("Alternate.homeDomain"), found[1])
+    assertTrue(found[2].contains("Mismatched.homeDomain"), found[2])
   }
 }
