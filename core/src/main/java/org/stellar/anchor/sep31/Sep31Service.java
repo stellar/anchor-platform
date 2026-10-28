@@ -798,7 +798,7 @@ public class Sep31Service {
     String assetName = Context.get().getAsset().getId();
     String destAsset =
         (request.getDestinationAsset() == null) ? assetName : request.getDestinationAsset();
-    infoF("Requesting fee for request ({})", request);
+    info("Requesting fee for request:", request);
     // request.getAmount() is always denominated in asset_code (the sell asset) per SEP-31,
     // regardless of paymentType -- so sell_amount is always what's fixed here. paymentType only
     // affects how the fee combines with it afterward, in updateTxAmountsWhenNoQuoteWasUsed.
@@ -817,7 +817,7 @@ public class Sep31Service {
     if (fee == null) {
       throw new SepValidationException("Fee is not present in /rate response");
     }
-    infoF("Fee for request ({}) is ({})", request, fee);
+    info("Fee for request:", Map.of("request", request, "fee", fee));
     Context.get().setFee(fee);
   }
 

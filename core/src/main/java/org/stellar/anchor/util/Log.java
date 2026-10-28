@@ -298,7 +298,7 @@ public class Log {
     Metrics.counter("logger", "type", "warn").increment();
   }
 
-  static Logger getLogger() {
+  public static Logger getLogger() {
     String cls = Thread.currentThread().getStackTrace()[3].getClassName();
     return LoggerFactory.getLogger(cls);
   }

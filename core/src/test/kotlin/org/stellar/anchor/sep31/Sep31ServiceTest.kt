@@ -15,7 +15,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.extension.ExtendWith
 import org.skyscreamer.jsonassert.JSONAssert
+import org.slf4j.Logger
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.asset.AssetInfo.Field
@@ -52,8 +56,10 @@ import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.ExchangeAmountsCalculator
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.Log
 
 @Order(13)
+@ExtendWith(LockAndMockTest::class)
 class Sep31ServiceTest {
   companion object {
     val gson: Gson = GsonUtils.getInstance()
@@ -236,6 +242,7 @@ class Sep31ServiceTest {
   @MockK(relaxed = true) lateinit var clientService: ClientService
   @MockK(relaxed = true) lateinit var eventService: EventService
   @MockK(relaxed = true) lateinit var eventSession: Session
+  @MockK(relaxed = true) lateinit var logger: Logger
 
   private lateinit var jwtService: JwtService
   private lateinit var sep31Service: Sep31Service
@@ -436,6 +443,38 @@ class Sep31ServiceTest {
 
     assertEquals("100", rateRequestSlot.captured.sellAmount)
     assertNull(rateRequestSlot.captured.buyAmount)
+  }
+
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test updateFee does not log client IP or bank fields`() {
+    every { Log.getLogger() } returns logger
+    val loggedLines = mutableListOf<String>()
+    every { logger.info(capture(loggedLines)) } answers {}
+
+    Context.reset()
+    request.requestClientIpAddress = "203.0.113.5"
+    Context.get().request = request
+    Context.get().webAuthJwt = TestHelper.createWebAuthJwt()
+    Context.get().asset = asset
+    every { sep31Config.paymentType } returns STRICT_SEND
+    every { rateIntegration.getRate(any()) } returns
+      GetRateResponse(GetRateResponse.Rate.builder().fee(fee).build())
+
+    sep31Service.updateFee()
+
+    assertEquals(2, loggedLines.size)
+    val allLogged = loggedLines.joinToString("\n")
+    // PII/secret carriers never appear.
+    assertFalse(allLogged.contains("203.0.113.5"))
+    assertFalse(allLogged.contains("receiver_account_number"))
+    assertFalse(allLogged.contains("receiver_routing_number"))
+    assertFalse(allLogged.contains("SWIFT"))
+    // Non-PII diagnostics remain visible.
+    assertTrue(allLogged.contains(request.assetCode))
+    assertTrue(allLogged.contains(request.senderId))
+    assertTrue(allLogged.contains(request.receiverId))
+    assertTrue(allLogged.contains("GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"))
   }
 
   @Test
