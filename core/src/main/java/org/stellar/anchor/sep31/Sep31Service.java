@@ -851,21 +851,21 @@ public class Sep31Service {
   void validateRequiredFields() throws BadRequestException, Sep31MissingFieldException {
     AssetInfo assetInfo = Context.get().getAsset();
     if (assetInfo == null) {
-      infoF("Missing asset information for request ({})", Context.get().getRequest());
+      info("Missing asset information for request:", Context.get().getRequest());
       throw new BadRequestException("Missing asset information.");
     }
 
     AssetResponse fieldSpecs = this.infoResponse.getReceive().get(assetInfo.getCode());
     if (fieldSpecs == null) {
-      infoF("Asset [{}] has no fields definition", Context.get().getRequest());
+      info("Asset has no fields definition for request:", Context.get().getRequest());
       throw new BadRequestException(
           String.format("Asset [%s] has no fields definition", assetInfo.getCode()));
     }
 
     Map<String, String> requestFields = Context.get().getTransactionFields();
     if (requestFields == null) {
-      infoF(
-          "'fields' field must have one 'transaction' field for request ({})",
+      info(
+          "'fields' field must have one 'transaction' field for request:",
           Context.get().getRequest());
       throw new BadRequestException("'fields' field must have one 'transaction' field");
     }
@@ -889,10 +889,12 @@ public class Sep31Service {
         }
       }
       if (!missingFields.isEmpty()) {
-        infoF(
-            "Missing required transaction fields [{}] for request ({})",
-            missingFields.keySet(),
-            Context.get().getRequest());
+        // Context.get().getRequest() may be null here (e.g. the PATCH flow never sets it), so a
+        // null-tolerant map is used instead of Map.of, which throws on a null value.
+        Map<String, Object> logDetail = new LinkedHashMap<>();
+        logDetail.put("missingFields", missingFields.keySet());
+        logDetail.put("request", Context.get().getRequest());
+        info("Missing required transaction fields for request:", logDetail);
         Sep31Info.Fields fields = new Sep31Info.Fields();
         fields.setTransaction(missingFields);
         throw new Sep31MissingFieldException(fields);

@@ -454,6 +454,8 @@ class Sep31ServiceTest {
 
     Context.reset()
     request.requestClientIpAddress = "203.0.113.5"
+    request.destinationAsset = stellarJPYC
+    request.quoteId = "7a1e2b3c-0000-4000-8000-000000000001"
     Context.get().request = request
     Context.get().webAuthJwt = TestHelper.createWebAuthJwt()
     Context.get().asset = asset
@@ -470,10 +472,13 @@ class Sep31ServiceTest {
     assertFalse(allLogged.contains("receiver_account_number"))
     assertFalse(allLogged.contains("receiver_routing_number"))
     assertFalse(allLogged.contains("SWIFT"))
-    // Non-PII diagnostics remain visible.
+    // Non-PII diagnostics remain visible (AC2: asset code, destination asset, amount, quote id).
     assertTrue(allLogged.contains(request.assetCode))
     assertTrue(allLogged.contains(request.senderId))
     assertTrue(allLogged.contains(request.receiverId))
+    assertTrue(allLogged.contains(request.amount))
+    assertTrue(allLogged.contains(request.destinationAsset))
+    assertTrue(allLogged.contains(request.quoteId))
     assertTrue(allLogged.contains("GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"))
   }
 
@@ -2243,8 +2248,15 @@ class Sep31ServiceTest {
   }
 
   @Test
+  @LockAndMockStatic([Log::class])
   fun `test validate required fields`() {
+    every { Log.getLogger() } returns logger
+    val loggedLines = mutableListOf<String>()
+    every { logger.info(capture(loggedLines)) } answers {}
+
     Context.reset()
+    request.requestClientIpAddress = "203.0.113.7"
+    Context.get().request = request
     val ex1 = assertThrows<BadRequestException> { sep31Service.validateRequiredFields() }
     assertEquals("Missing asset information.", ex1.message)
 
@@ -2293,6 +2305,19 @@ class Sep31ServiceTest {
         "type" to "SWIFT"
       )
     assertDoesNotThrow { sep31Service.validateRequiredFields() }
+
+    // ANCHOR-1395 (HackerOne #4107899): every failure path above logs the request at INFO; none
+    // of them may carry the client IP or the deprecated bank/routing fields. The field *names*
+    // ("receiver_account_number" etc.) legitimately still appear via `missingFields.keySet()` on
+    // the last path (ex4-ex6) -- that is the schema label, not submitted data -- so the exclusion
+    // is checked by the absence of the serialized `fields`/`requestClientIpAddress` keys and the
+    // IP's literal value, not by the field names.
+    assertTrue(loggedLines.isNotEmpty())
+    val allLogged = loggedLines.joinToString("\n")
+    assertFalse(allLogged.contains("203.0.113.7"))
+    assertFalse(allLogged.contains("requestClientIpAddress"))
+    assertFalse(allLogged.contains("\"transaction\""))
+    assertTrue(allLogged.contains(request.assetCode))
   }
 
   @Test
