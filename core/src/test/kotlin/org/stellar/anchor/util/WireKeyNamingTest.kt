@@ -7,6 +7,10 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.platform.GetTransactionResponse
+import org.stellar.anchor.api.sep.sep10.ChallengeRequest as Sep10ChallengeRequest
+import org.stellar.anchor.api.sep.sep45.ChallengeRequest as Sep45ChallengeRequest
+import org.stellar.anchor.api.sep.sep45.ChallengeResponse
+import org.stellar.anchor.api.sep.sep45.ValidationRequest
 
 /**
  * Pins the JSON keys the shipped DTOs use on the wire. The servers hand every body to
@@ -105,5 +109,69 @@ class WireKeyNamingTest {
 
     assertFalse(json.has("funding_method"), "keys: ${json.keySet()}")
     assertFalse(json.has("required_info_updates_fields"), "keys: ${json.keySet()}")
+  }
+
+  // WIRE-08
+  @Test
+  fun `test SEP-45 ChallengeResponse is serialized with the spec keys`() {
+    val json =
+      toJson(
+        ChallengeResponse.builder()
+          .authorizationEntries("entries")
+          .networkPassphrase("passphrase")
+          .build()
+      )
+
+    assertEquals(setOf("authorization_entries", "network_passphrase"), json.keySet())
+    assertEquals("entries", json.get("authorization_entries").asString)
+    assertEquals("passphrase", json.get("network_passphrase").asString)
+  }
+
+  // WIRE-08
+  @Test
+  fun `test SEP-45 ValidationRequest is populated from authorization_entries`() {
+    val request =
+      gson.fromJson("""{"authorization_entries": "entries"}""", ValidationRequest::class.java)
+
+    assertEquals("entries", request.authorizationEntries)
+  }
+
+  // WIRE-11
+  @Test
+  fun `test SEP-45 and SEP-10 ChallengeRequest read home_domain and client_domain`() {
+    val body =
+      """{"account": "G1", "home_domain": "home.example", "client_domain": "client.example"}"""
+
+    val sep45 = gson.fromJson(body, Sep45ChallengeRequest::class.java)
+    val sep10 = gson.fromJson(body, Sep10ChallengeRequest::class.java)
+
+    assertEquals("home.example", sep45.homeDomain)
+    assertEquals("client.example", sep45.clientDomain)
+    assertEquals("home.example", sep10.homeDomain)
+    assertEquals("client.example", sep10.clientDomain)
+  }
+
+  // WIRE-11
+  @Test
+  fun `test SEP-45 and SEP-10 ChallengeRequest write home_domain and client_domain`() {
+    val sep45 =
+      toJson(
+        Sep45ChallengeRequest.builder()
+          .account("G1")
+          .homeDomain("home.example")
+          .clientDomain("client.example")
+          .build()
+      )
+    val sep10 =
+      toJson(
+        Sep10ChallengeRequest.builder()
+          .account("G1")
+          .homeDomain("home.example")
+          .clientDomain("client.example")
+          .build()
+      )
+
+    assertEquals(setOf("account", "home_domain", "client_domain"), sep45.keySet())
+    assertEquals(setOf("account", "home_domain", "client_domain"), sep10.keySet())
   }
 }
