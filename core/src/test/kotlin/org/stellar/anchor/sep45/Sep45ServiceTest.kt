@@ -410,6 +410,54 @@ class Sep45ServiceTest {
     }
   }
 
+  private val rejectedWildcardHomeDomains =
+    listOf(
+      "evil.example/x.sdp.stellar.org",
+      "evil.example?.sdp.stellar.org",
+      "evil.example#.sdp.stellar.org",
+      "u@evil.example.sdp.stellar.org",
+      "evil.example\\x.sdp.stellar.org",
+      "evil.example:80.sdp.stellar.org",
+      "a b.sdp.stellar.org",
+      ".sdp.stellar.org",
+      "..sdp.stellar.org",
+      "-.sdp.stellar.org",
+      "-a.sdp.stellar.org",
+      "a-.sdp.stellar.org",
+    )
+
+  @Test
+  fun `test getChallenge rejects structural and host-syntax values under a wildcard configuration`() {
+    every { sep45Config.homeDomains } returns listOf("*.sdp.stellar.org")
+
+    rejectedWildcardHomeDomains.forEach {
+      val ex =
+        assertThrows(BadRequestException::class.java) {
+          sep45Service.getChallenge(challengeRequestFor(it))
+        }
+      assertEquals("Invalid home domain", ex.message, "message for: $it")
+    }
+
+    verify(exactly = 0) { nonceManager.create(any()) }
+    verify(exactly = 0) { stellarRpc.simulateTransaction(any()) }
+  }
+
+  @Test
+  fun `test validate rejects structural and host-syntax values under a wildcard configuration`() {
+    every { sep45Config.homeDomains } returns listOf("*.sdp.stellar.org")
+    every { jwtService.encode<Sep45Jwt>(any()) } returns "header.payload.signature"
+
+    rejectedWildcardHomeDomains.forEach {
+      val ex =
+        assertThrows(BadRequestException::class.java) {
+          sep45Service.validate(authEntriesWithHomeDomain(it))
+        }
+      assertEquals("Invalid home domain", ex.message, "message for: $it")
+    }
+
+    verify(exactly = 0) { jwtService.encode<Sep45Jwt>(any()) }
+  }
+
   private val rejectedHomeDomains =
     listOf(
       "localhost:8080/evil",
