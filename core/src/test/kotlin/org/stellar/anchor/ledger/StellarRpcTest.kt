@@ -22,6 +22,7 @@ import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.StrKey
+import org.stellar.sdk.exception.UnknownResponseException
 import org.stellar.sdk.responses.sorobanrpc.GetLedgerEntriesResponse
 import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
 import org.stellar.sdk.xdr.LedgerEntry
@@ -342,7 +343,10 @@ class StellarRpcTest {
     )
     rpcTarget.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
 
-    assertThrows<Exception> { rpc.hasTrustline(rpcAccount, rpcAsset) }
+    val exception =
+      assertThrows<UnknownResponseException> { rpc.hasTrustline(rpcAccount, rpcAsset) }
+
+    assertTrue(exception.message!!.startsWith("Unknown response from server: [307]"))
 
     assertEquals(1, rpcOrigin.requestCount)
     assertEquals(0, rpcTarget.requestCount)
@@ -363,8 +367,10 @@ class StellarRpcTest {
     rpcOrigin.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
     rpcTarget.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
 
-    assertThrows<Exception> { rpc.hasTrustline(rpcAccount, rpcAsset) }
+    val exception =
+      assertThrows<UnknownResponseException> { rpc.hasTrustline(rpcAccount, rpcAsset) }
 
+    assertTrue(exception.message!!.startsWith("Unknown response from server: [$status]"))
     assertEquals(1, rpcOrigin.requestCount)
     assertEquals(0, rpcTarget.requestCount)
   }
