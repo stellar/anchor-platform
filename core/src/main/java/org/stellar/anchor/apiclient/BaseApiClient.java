@@ -44,6 +44,8 @@ public abstract class BaseApiClient {
       throw new SepNotAuthorizedException("Forbidden");
     } else if (response.code() == HttpStatus.SC_NOT_FOUND) {
       throw new SepNotFoundException("Not found");
+    } else if (response.code() >= 300 && response.code() < 400) {
+      throw new SepException("Unexpected redirect response: HTTP " + response.code());
     } else if (response.code() >= 400 || response.code() < 200) {
       throw new SepException(responseBody);
     }
