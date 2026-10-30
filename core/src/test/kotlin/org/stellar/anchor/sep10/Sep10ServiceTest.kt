@@ -1078,6 +1078,51 @@ internal class Sep10ServiceTest {
   }
 
   @Test
+  fun `Test createChallenge rejects a wildcard home domain spanning a path under the wildcard fixture`() {
+    every { sep10Config.homeDomains } returns listOf(TEST_HOME_DOMAIN_PATTERN)
+    every { sep10Config.knownCustodialAccountList } returns listOf(TEST_ACCOUNT)
+
+    listOf("evil.com/x.wildcard.stellar.org", "a.wildcard.stellar.org/evil").forEach { homeDomain ->
+      val cr =
+        ChallengeRequest.builder()
+          .account(TEST_ACCOUNT)
+          .memo(TEST_MEMO)
+          .homeDomain(homeDomain)
+          .clientDomain(null)
+          .build()
+
+      val ex = assertThrows<SepValidationException> { sep10Service.createChallenge(cr) }
+
+      assertEquals("home_domain [$homeDomain] is not supported.", ex.message)
+    }
+  }
+
+  @Test
+  fun `Test createChallenge accepts multi-label wildcard home domains under the wildcard fixture`() {
+    every { sep10Config.homeDomains } returns listOf(TEST_HOME_DOMAIN_PATTERN)
+    every { sep10Config.knownCustodialAccountList } returns listOf(TEST_ACCOUNT)
+
+    listOf("abc.def.wildcard.stellar.org", "a.wildcard.stellar.org").forEach { homeDomain ->
+      val cr =
+        ChallengeRequest.builder()
+          .account(TEST_ACCOUNT)
+          .memo(TEST_MEMO)
+          .homeDomain(homeDomain)
+          .clientDomain(null)
+          .build()
+
+      val response = sep10Service.createChallenge(cr)
+
+      val txn = Transaction.fromEnvelopeXdr(response.transaction, TESTNET) as Transaction
+      val keyName = (txn.operations[0] as ManageDataOperation).name
+      assertTrue(
+        keyName.startsWith(homeDomain),
+        "key name [$keyName] should start with $homeDomain"
+      )
+    }
+  }
+
+  @Test
   @LockAndMockStatic([NetUtil::class, ClientDomainHelper::class])
   fun `Test create challenge with wildcard matched home domain success`() {
     every { ClientDomainHelper.validateDomainNotPrivateNetwork(any()) } just Runs
