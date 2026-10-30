@@ -4,11 +4,15 @@ import io.mockk.*
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.api.exception.AccountNotFoundException
 import org.stellar.anchor.config.RpcAuthConfig
@@ -296,6 +300,114 @@ class StellarRpcTest {
     verify { rpc.createSorobanServerWithHttpClient(testUrl, any()) }
     val proceededRequest = proceedSlot.captured
     assertEquals("test-token", proceededRequest.header("Authorization"))
+  }
+
+  private val rpcAuthHeader = "X-Rpc-Auth"
+  private val rpcAuthSecret = "rpc-secret"
+  private val rpcAccount = "GDJLBYYKMCXNVVNABOE66NYXQGIA5AC5D223Z2KF6ZEYK4UBCA7FKLTG"
+  private val rpcAsset = "USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+  private val rpcOrigin = MockWebServer()
+  private val rpcTarget = MockWebServer()
+
+  @AfterEach
+  fun shutdownRpcServers() {
+    rpcOrigin.shutdown()
+    rpcTarget.shutdown()
+  }
+
+  private fun headerAuthConfig(url: String): Pair<StellarNetworkConfig, SecretConfig> {
+    val config = mockk<StellarNetworkConfig>()
+    val secret = mockk<SecretConfig>()
+    val rpcAuth = mockk<RpcAuthConfig>()
+    every { config.rpcAuth } returns rpcAuth
+    every { rpcAuth.type } returns RpcAuthConfig.RpcAuthType.HEADER
+    every { rpcAuth.headerConfig } returns RpcAuthConfig.HeaderConfig(rpcAuthHeader)
+    every { secret.rpcAuthSecret } returns rpcAuthSecret
+    every { config.rpcUrl } returns url
+    return config to secret
+  }
+
+  private fun headerAuthRpc(): StellarRpc {
+    rpcOrigin.start()
+    rpcTarget.start()
+    val (config, secret) = headerAuthConfig(rpcOrigin.url("/").toString())
+    return StellarRpc(config, secret)
+  }
+
+  @Test
+  fun `header auth client refuses a cross-origin redirect and sends nothing to the target`() {
+    val rpc = headerAuthRpc()
+    rpcOrigin.enqueue(
+      MockResponse().setResponseCode(307).setHeader("Location", rpcTarget.url("/").toString())
+    )
+    rpcTarget.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+
+    assertThrows<Exception> { rpc.hasTrustline(rpcAccount, rpcAsset) }
+
+    assertEquals(1, rpcOrigin.requestCount)
+    assertEquals(0, rpcTarget.requestCount)
+  }
+
+  @ParameterizedTest
+  @CsvSource("302,origin", "301,target", "303,target")
+  fun `header auth client refuses same-origin and get-converting redirects`(
+    status: Int,
+    location: String,
+  ) {
+    val rpc = headerAuthRpc()
+    val locationUrl =
+      if (location == "origin") rpcOrigin.url("/elsewhere") else rpcTarget.url("/elsewhere")
+    rpcOrigin.enqueue(
+      MockResponse().setResponseCode(status).setHeader("Location", locationUrl.toString())
+    )
+    rpcOrigin.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+    rpcTarget.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+
+    assertThrows<Exception> { rpc.hasTrustline(rpcAccount, rpcAsset) }
+
+    assertEquals(1, rpcOrigin.requestCount)
+    assertEquals(0, rpcTarget.requestCount)
+  }
+
+  @Test
+  fun `header auth client still sends the credential header to the endpoint`() {
+    val rpc = headerAuthRpc()
+    rpcOrigin.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .setBody("""{"jsonrpc":"2.0","id":"1","result":$trustlineTestResponse}""")
+    )
+
+    assertTrue(rpc.hasTrustline(rpcAccount, rpcAsset))
+
+    assertEquals(rpcAuthSecret, rpcOrigin.takeRequest().getHeader(rpcAuthHeader))
+  }
+
+  private fun capturedHeaderAuthClient(): OkHttpClient {
+    val slotOkHttpClient = slot<OkHttpClient>()
+    val (config, secret) = headerAuthConfig("https://rpc-url")
+    val rpc = spyk(StellarRpc(config, secret))
+    every { rpc.createSorobanServerWithHttpClient(any(), capture(slotOkHttpClient)) } returns
+      sorobanServer
+    rpc.createHeaderAuthServer(config, secret)
+    return slotOkHttpClient.captured
+  }
+
+  @Test
+  fun `header auth client disables redirects`() {
+    val client = capturedHeaderAuthClient()
+
+    assertFalse(client.followRedirects)
+    assertFalse(client.followSslRedirects)
+  }
+
+  @Test
+  fun `header auth client keeps its timeouts and retry setting`() {
+    val client = capturedHeaderAuthClient()
+
+    assertEquals(10_000, client.connectTimeoutMillis)
+    assertEquals(40_000, client.readTimeoutMillis)
+    assertTrue(client.retryOnConnectionFailure)
   }
 }
 
