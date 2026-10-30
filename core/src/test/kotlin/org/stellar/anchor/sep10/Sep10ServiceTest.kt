@@ -1123,6 +1123,29 @@ internal class Sep10ServiceTest {
   }
 
   @Test
+  fun `Test createChallenge rejects an over-long wildcard home domain`() {
+    every { sep10Config.homeDomains } returns listOf("*.sdp.stellar.org")
+    every { sep10Config.knownCustodialAccountList } returns listOf(TEST_ACCOUNT)
+    val longLabel = "a".repeat(64) + ".sdp.stellar.org"
+    val longHost = listOf(63, 63, 63, 46).joinToString(".") { "a".repeat(it) } + ".sdp.stellar.org"
+    assertEquals(254, longHost.length)
+
+    listOf(longLabel, longHost).forEach { homeDomain ->
+      val cr =
+        ChallengeRequest.builder()
+          .account(TEST_ACCOUNT)
+          .memo(TEST_MEMO)
+          .homeDomain(homeDomain)
+          .clientDomain(null)
+          .build()
+
+      val ex = assertThrows<SepValidationException> { sep10Service.createChallenge(cr) }
+
+      assertEquals("home_domain [$homeDomain] is not supported.", ex.message)
+    }
+  }
+
+  @Test
   fun `Test validateChallenge rejects a wildcard home domain spanning a path`() {
     every { sep10Config.homeDomains } returns listOf(TEST_HOME_DOMAIN_PATTERN)
     val vr = ValidationRequest()
