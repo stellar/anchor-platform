@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.LockAndMockStatic
 import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.asset.AssetInfo
@@ -407,6 +409,59 @@ class ClientStatusCallbackHandlerTest {
 
       // the next, valid event in the same queue is delivered normally
       assertEquals(true, serverHandler.handleEvent(sep24WithdrawalWithRefund("valid", "1")))
+      assertEquals(1, server.requestCount)
+    } finally {
+      server.shutdown()
+    }
+  }
+
+  private fun deliverableHandler(server: MockWebServer): ClientStatusCallbackHandler {
+    val assetInfo = mockk<AssetInfo>()
+    every { assetInfo.significantDecimals } returns 7
+    every { assetService.getAsset(any(), any()) } returns assetInfo
+    val client =
+      CustodialClient.builder()
+        .name("circle")
+        .signingKeys(setOf("GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"))
+        .callbackUrls(
+          CallbackUrls.builder().sep24(server.url("/callback/sep24").toString()).build()
+        )
+        .allowAnyDestination(false)
+        .destinationAccounts(emptySet())
+        .build()
+    return ClientStatusCallbackHandler(
+      secretConfig,
+      client,
+      assetService,
+      sep6MoreInfoUrlConstructor,
+      sep24MoreInfoUrlConstructor
+    )
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = [300, 301, 302, 303, 307, 308, 399])
+  fun `handleEvent fails on a redirect status`(status: Int) {
+    val server = MockWebServer()
+    server.start()
+    try {
+      server.enqueue(MockResponse().setResponseCode(status))
+
+      assertFalse(deliverableHandler(server).handleEvent(sep24WithdrawalWithRefund("id", "1")))
+      assertEquals(1, server.requestCount)
+    } finally {
+      server.shutdown()
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = [200, 299])
+  fun `handleEvent succeeds on status 200 and 299`(status: Int) {
+    val server = MockWebServer()
+    server.start()
+    try {
+      server.enqueue(MockResponse().setResponseCode(status))
+
+      assertTrue(deliverableHandler(server).handleEvent(sep24WithdrawalWithRefund("id", "1")))
       assertEquals(1, server.requestCount)
     } finally {
       server.shutdown()
