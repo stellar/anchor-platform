@@ -160,7 +160,7 @@ public class ClientDomainHelper {
         String regex = patternOrDomain.replace(".", "\\.").replace("*", "[A-Za-z0-9_.-]*");
         Pattern patternObject = Pattern.compile(regex);
         Matcher matcher = patternObject.matcher(domainName);
-        if (matcher.matches()) {
+        if (matcher.matches() && hasValidHostLabels(domainName)) {
           return true;
         }
       } else {
@@ -171,6 +171,28 @@ public class ClientDomainHelper {
       }
     }
     return false;
+  }
+
+  /**
+   * Checks that the host part of a domain name (without a trailing port) is made of non-empty
+   * labels that neither start nor end with a hyphen, so a wildcard cannot expand to something that
+   * is not a host name.
+   *
+   * @param domainName The domain name, optionally followed by ":port".
+   * @return true if every label of the host part is well formed, false otherwise.
+   */
+  private static boolean hasValidHostLabels(String domainName) {
+    String host = domainName;
+    int portSeparator = host.lastIndexOf(':');
+    if (portSeparator >= 0) {
+      host = host.substring(0, portSeparator);
+    }
+    for (String label : host.split("\\.", -1)) {
+      if (label.isEmpty() || label.startsWith("-") || label.endsWith("-")) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

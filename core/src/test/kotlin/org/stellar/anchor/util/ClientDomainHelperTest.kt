@@ -291,4 +291,42 @@ class ClientDomainHelperTest {
       )
     )
   }
+
+  @Test
+  fun `isDomainNameMatch rejects a wildcard match with an empty or hyphen-edged label`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf(
+        ".sdp.stellar.org",
+        "..sdp.stellar.org",
+        "...........sdp.stellar.org",
+        "-.sdp.stellar.org",
+        "-a.sdp.stellar.org",
+        "a-.sdp.stellar.org",
+      )
+      .forEach {
+        assertFalse(ClientDomainHelper.isDomainNameMatch(patterns, it), "should reject: $it")
+      }
+    assertFalse(
+      ClientDomainHelper.isDomainNameMatch(listOf("*.example.com:8080"), ".example.com:8080")
+    )
+  }
+
+  @Test
+  fun `isDomainNameMatch accepts valid host labels under a wildcard`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf(
+        "foo-bar.sdp.stellar.org",
+        "a--b.sdp.stellar.org",
+        "xn--abc.sdp.stellar.org",
+        "_.sdp.stellar.org",
+        "foo_bar-1.sdp.stellar.org",
+        "a.b.sdp.stellar.org",
+      )
+      .forEach {
+        assertTrue(ClientDomainHelper.isDomainNameMatch(patterns, it), "should accept: $it")
+      }
+    assertTrue(
+      ClientDomainHelper.isDomainNameMatch(listOf("*.example.com:8080"), "a.example.com:8080")
+    )
+  }
 }
