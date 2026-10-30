@@ -10,8 +10,11 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.*
 import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import okio.Buffer
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -22,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.LockAndMockStatic
 import org.stellar.anchor.LockAndMockTest
@@ -466,6 +470,108 @@ class ClientStatusCallbackHandlerTest {
     } finally {
       server.shutdown()
     }
+  }
+
+  private fun redirectingServers(
+    origin: MockWebServer,
+    target: MockWebServer,
+    status: Int,
+    locationOnTarget: Boolean,
+    path: String = "/elsewhere",
+  ) {
+    val locationUrl = if (locationOnTarget) target.url(path) else origin.url(path)
+    origin.dispatcher =
+      object : Dispatcher() {
+        override fun dispatch(request: RecordedRequest): MockResponse =
+          if (request.path == path) MockResponse().setResponseCode(200)
+          else MockResponse().setResponseCode(status).setHeader("Location", locationUrl.toString())
+      }
+    target.dispatcher =
+      object : Dispatcher() {
+        override fun dispatch(request: RecordedRequest): MockResponse =
+          MockResponse().setResponseCode(200)
+      }
+  }
+
+  @Test
+  fun `handleEvent refuses a cross-origin redirect and sends nothing to the target`() {
+    val origin = MockWebServer()
+    val target = MockWebServer()
+    origin.start()
+    target.start()
+    try {
+      redirectingServers(origin, target, 307, locationOnTarget = true, path = "/")
+
+      assertFalse(deliverableHandler(origin).handleEvent(sep24WithdrawalWithRefund("id", "1")))
+
+      assertEquals(1, origin.requestCount)
+      assertEquals(0, target.requestCount)
+    } finally {
+      origin.shutdown()
+      target.shutdown()
+    }
+  }
+
+  @ParameterizedTest
+  @CsvSource("302,origin", "301,target", "303,target")
+  fun `handler client refuses same-origin and get-converting redirects`(
+    status: Int,
+    location: String,
+  ) {
+    val origin = MockWebServer()
+    val target = MockWebServer()
+    origin.start()
+    target.start()
+    try {
+      redirectingServers(origin, target, status, locationOnTarget = location == "target")
+
+      assertFalse(deliverableHandler(origin).handleEvent(sep24WithdrawalWithRefund("id", "1")))
+
+      assertEquals(1, origin.requestCount)
+      assertEquals(0, target.requestCount)
+    } finally {
+      origin.shutdown()
+      target.shutdown()
+    }
+  }
+
+  @Test
+  fun `handler client still sends the signature header to the callback URL`() {
+    val server = MockWebServer()
+    server.start()
+    try {
+      server.enqueue(MockResponse().setResponseCode(200))
+
+      assertTrue(deliverableHandler(server).handleEvent(sep24WithdrawalWithRefund("id", "1")))
+
+      val signature = server.takeRequest().getHeader("Signature")!!
+      assertTrue(Regex("t=\\d+, s=.+").matches(signature))
+    } finally {
+      server.shutdown()
+    }
+  }
+
+  private fun handlerHttpClient(): OkHttpClient {
+    val field = ClientStatusCallbackHandler::class.java.getDeclaredField("httpClient")
+    field.isAccessible = true
+    return field.get(null) as OkHttpClient
+  }
+
+  @Test
+  fun `handler client disables redirects`() {
+    assertFalse(handlerHttpClient().followRedirects)
+    assertFalse(handlerHttpClient().followSslRedirects)
+  }
+
+  @Test
+  fun `handler client keeps its timeouts`() {
+    val tenMinutesMillis = 10 * 60 * 1000
+    val client = handlerHttpClient()
+
+    assertEquals(tenMinutesMillis, client.connectTimeoutMillis)
+    assertEquals(tenMinutesMillis, client.readTimeoutMillis)
+    assertEquals(tenMinutesMillis, client.writeTimeoutMillis)
+    assertEquals(tenMinutesMillis, client.callTimeoutMillis)
   }
 
   @Test

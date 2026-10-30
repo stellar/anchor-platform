@@ -59,6 +59,8 @@ public class ClientStatusCallbackHandler extends EventHandler {
           .readTimeout(10, TimeUnit.MINUTES)
           .writeTimeout(10, TimeUnit.MINUTES)
           .callTimeout(10, TimeUnit.MINUTES)
+          .followRedirects(false)
+          .followSslRedirects(false)
           .build();
   private final SecretConfig secretConfig;
   private final ClientConfig clientConfig;
