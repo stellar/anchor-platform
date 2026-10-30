@@ -458,6 +458,33 @@ class Sep45ServiceTest {
     verify(exactly = 0) { jwtService.encode<Sep45Jwt>(any()) }
   }
 
+  @Test
+  fun `test getChallenge and validate reject an over-long wildcard home domain`() {
+    every { sep45Config.homeDomains } returns listOf("*.sdp.stellar.org")
+    every { jwtService.encode<Sep45Jwt>(any()) } returns "header.payload.signature"
+    val longLabel = "a".repeat(64) + ".sdp.stellar.org"
+    val longHost = listOf(63, 63, 63, 46).joinToString(".") { "a".repeat(it) } + ".sdp.stellar.org"
+    assertEquals(254, longHost.length)
+
+    listOf(longLabel, longHost).forEach {
+      val challengeEx =
+        assertThrows(BadRequestException::class.java) {
+          sep45Service.getChallenge(challengeRequestFor(it))
+        }
+      assertEquals("Invalid home domain", challengeEx.message, "getChallenge message for: $it")
+
+      val validateEx =
+        assertThrows(BadRequestException::class.java) {
+          sep45Service.validate(authEntriesWithHomeDomain(it))
+        }
+      assertEquals("Invalid home domain", validateEx.message, "validate message for: $it")
+    }
+
+    verify(exactly = 0) { nonceManager.create(any()) }
+    verify(exactly = 0) { stellarRpc.simulateTransaction(any()) }
+    verify(exactly = 0) { jwtService.encode<Sep45Jwt>(any()) }
+  }
+
   private val rejectedHomeDomains =
     listOf(
       "localhost:8080/evil",
