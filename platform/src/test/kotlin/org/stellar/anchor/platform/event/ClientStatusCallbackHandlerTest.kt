@@ -458,6 +458,35 @@ class ClientStatusCallbackHandlerTest {
   }
 
   @ParameterizedTest
+  @ValueSource(ints = [400, 404, 500])
+  fun `handleEvent fails on a client or server error status`(status: Int) {
+    val server = MockWebServer()
+    server.start()
+    try {
+      server.enqueue(MockResponse().setResponseCode(status))
+
+      assertFalse(deliverableHandler(server).handleEvent(sep24WithdrawalWithRefund("id", "1")))
+      assertEquals(1, server.requestCount)
+    } finally {
+      server.shutdown()
+    }
+  }
+
+  @Test
+  fun `handleEvent fails on a status below 200`() {
+    val server = MockWebServer()
+    server.start()
+    try {
+      server.enqueue(MockResponse().setResponseCode(101))
+
+      assertFalse(deliverableHandler(server).handleEvent(sep24WithdrawalWithRefund("id", "1")))
+      assertEquals(1, server.requestCount)
+    } finally {
+      server.shutdown()
+    }
+  }
+
+  @ParameterizedTest
   @ValueSource(ints = [200, 299])
   fun `handleEvent succeeds on status 200 and 299`(status: Int) {
     val server = MockWebServer()
