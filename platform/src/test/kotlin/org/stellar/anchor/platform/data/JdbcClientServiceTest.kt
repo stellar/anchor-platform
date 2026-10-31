@@ -128,4 +128,110 @@ class JdbcClientServiceTest {
 
     assertEquals(setOf("MGI", "VIBRANT"), names)
   }
+
+  @Test
+  fun `getClientConfigBySigningKey returns null for a noncustodial row that carries the key`() {
+    every { repo.findBySigningKey("GWALLET") } returns
+      nonCustodialRow("VIBRANT", setOf("vibrantapp.com")).apply {
+        signingKeys = mutableSetOf("GWALLET")
+        setAllowAnyDestination(true)
+        destinationAccounts = mutableSetOf("GDEST")
+      }
+
+    assertNull(service.getClientConfigBySigningKey("GWALLET"))
+  }
+
+  @Test
+  fun `getClientConfigBySigningKey returns null when no row holds the key`() {
+    every { repo.findBySigningKey("GUNKNOWN") } returns null
+
+    assertNull(service.getClientConfigBySigningKey("GUNKNOWN"))
+  }
+
+  @Test
+  fun `getClientConfigBySigningKey maps every field of a custodial row`() {
+    every { repo.findBySigningKey("GALICE") } returns
+      custodialRow("MGI", setOf("GALICE", "GBOB")).apply {
+        destinationAccounts = mutableSetOf("GDEST")
+        callbackUrlSep6 = "https://example.com/sep6"
+        callbackUrlSep24 = "https://example.com/sep24"
+        callbackUrlSep12 = "https://example.com/sep12"
+      }
+
+    val result = service.getClientConfigBySigningKey("GALICE")!!
+
+    assertEquals("MGI", result.name)
+    assertEquals(setOf("GALICE", "GBOB"), result.signingKeys)
+    assertEquals(setOf("GDEST"), result.destinationAccounts)
+    assertTrue(result.isAllowAnyDestination)
+    assertEquals("https://example.com/sep6", result.callbackUrls.sep6)
+    assertEquals("https://example.com/sep24", result.callbackUrls.sep24)
+    assertEquals("https://example.com/sep31", result.callbackUrls.sep31)
+    assertEquals("https://example.com/sep12", result.callbackUrls.sep12)
+  }
+
+  @Test
+  fun `getClientConfigBySigningKey answers only for keys of getCustodialClients`() {
+    val custodial = custodialRow("MGI", setOf("GALICE", "GBOB"))
+    val noncustodialWithKey =
+      nonCustodialRow("VIBRANT", setOf("vibrantapp.com")).apply {
+        signingKeys = mutableSetOf("GWALLET")
+      }
+    every { repo.findByType(ClientType.CUSTODIAL) } returns listOf(custodial)
+    every { repo.findBySigningKey("GALICE") } returns custodial
+    every { repo.findBySigningKey("GBOB") } returns custodial
+    every { repo.findBySigningKey("GWALLET") } returns noncustodialWithKey
+    every { repo.findBySigningKey("GUNKNOWN") } returns null
+
+    val custodialKeys = service.custodialClients.flatMap { it.signingKeys }.toSet()
+    val resolvedKeys =
+      listOf("GALICE", "GBOB", "GWALLET", "GUNKNOWN")
+        .filter { service.getClientConfigBySigningKey(it) != null }
+        .toSet()
+
+    assertEquals(setOf("GALICE", "GBOB"), custodialKeys)
+    assertEquals(custodialKeys, resolvedKeys)
+  }
+
+  @Test
+  fun `getClientConfigByDomain returns null for a custodial row that carries the domain`() {
+    every { repo.findByDomain("custodial.example") } returns
+      custodialRow("MGI", setOf("GALICE")).apply { domains = mutableSetOf("custodial.example") }
+
+    assertNull(service.getClientConfigByDomain("custodial.example"))
+  }
+
+  @Test
+  fun `a custodial row carrying a domain resolves by its signing key only`() {
+    val row = custodialRow("MGI", setOf("GALICE")).apply { domains = mutableSetOf("mgi.example") }
+    every { repo.findBySigningKey("GALICE") } returns row
+    every { repo.findByDomain("mgi.example") } returns row
+
+    assertEquals("MGI", service.getClientConfigBySigningKey("GALICE")!!.name)
+    assertNull(service.getClientConfigByDomain("mgi.example"))
+  }
+
+  @Test
+  fun `a noncustodial row carrying a signing key resolves by its domain only`() {
+    val row =
+      nonCustodialRow("VIBRANT", setOf("vibrantapp.com")).apply {
+        signingKeys = mutableSetOf("GWALLET")
+      }
+    every { repo.findBySigningKey("GWALLET") } returns row
+    every { repo.findByDomain("vibrantapp.com") } returns row
+
+    assertEquals("VIBRANT", service.getClientConfigByDomain("vibrantapp.com")!!.name)
+    assertNull(service.getClientConfigBySigningKey("GWALLET"))
+  }
+
+  @Test
+  fun `getClientConfigByDomainAndAccount returns null for a noncustodial key and an unknown domain`() {
+    every { repo.findByDomain("unknown.com") } returns null
+    every { repo.findBySigningKey("GWALLET") } returns
+      nonCustodialRow("VIBRANT", setOf("vibrantapp.com")).apply {
+        signingKeys = mutableSetOf("GWALLET")
+      }
+
+    assertNull(service.getClientConfigByDomainAndAccount("unknown.com", "GWALLET"))
+  }
 }
