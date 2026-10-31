@@ -234,4 +234,19 @@ class JdbcClientServiceTest {
 
     assertNull(service.getClientConfigByDomainAndAccount("unknown.com", "GWALLET"))
   }
+
+  @Test
+  fun `a client reclassified between types resolves by the new type on the next lookup`() {
+    val row = custodialRow("MGI", setOf("GALICE")).apply { domains = mutableSetOf("mgi.example") }
+    every { repo.findBySigningKey("GALICE") } returns row
+    every { repo.findByDomain("mgi.example") } returns row
+
+    assertEquals("MGI", service.getClientConfigBySigningKey("GALICE")!!.name)
+    assertNull(service.getClientConfigByDomain("mgi.example"))
+
+    row.type = ClientType.NONCUSTODIAL
+
+    assertNull(service.getClientConfigBySigningKey("GALICE"))
+    assertEquals("MGI", service.getClientConfigByDomain("mgi.example")!!.name)
+  }
 }
