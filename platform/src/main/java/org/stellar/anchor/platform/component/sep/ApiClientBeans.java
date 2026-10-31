@@ -46,7 +46,9 @@ public class ApiClientBeans {
             .connectTimeout(10, TimeUnit.MINUTES)
             .readTimeout(10, TimeUnit.MINUTES)
             .writeTimeout(10, TimeUnit.MINUTES)
-            .callTimeout(10, TimeUnit.MINUTES);
+            .callTimeout(10, TimeUnit.MINUTES)
+            .followRedirects(false)
+            .followSslRedirects(false);
 
     if (!callbackApiConfig.getCheckCertificate()) {
       SSLContext sslContext = SSLContext.getInstance("SSL");

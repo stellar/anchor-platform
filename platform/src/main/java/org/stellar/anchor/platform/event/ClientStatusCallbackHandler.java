@@ -59,6 +59,8 @@ public class ClientStatusCallbackHandler extends EventHandler {
           .readTimeout(10, TimeUnit.MINUTES)
           .writeTimeout(10, TimeUnit.MINUTES)
           .callTimeout(10, TimeUnit.MINUTES)
+          .followRedirects(false)
+          .followSslRedirects(false)
           .build();
   private final SecretConfig secretConfig;
   private final ClientConfig clientConfig;
@@ -123,7 +125,7 @@ public class ClientStatusCallbackHandler extends EventHandler {
     if (request != null) {
       try (Response response = httpClient.newCall(request).execute()) {
         debugF("Sending event: {} to client status api: {}", redactedJson(event), request.url());
-        if (response.code() < 200 || response.code() >= 400) {
+        if (response.code() < 200 || response.code() >= 300) {
           errorF("Failed to send event to client status API. Error code: {}", response.code());
           return false;
         }
