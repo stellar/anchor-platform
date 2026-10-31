@@ -48,9 +48,33 @@ class BaseApiClientTest {
     assertEquals("""{"ok":true}""", client.handleResponse(response(299, """{"ok":true}""")))
   }
 
+  @ParameterizedTest
+  @ValueSource(ints = [400, 401, 500, 503])
+  fun `handleResponse keeps the error message of a 4xx or 5xx status`(code: Int) {
+    val exception =
+      assertThrows<SepException> { client.handleResponse(response(code, "error body $code")) }
+
+    assertEquals("error body $code", exception.message)
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = [100, 199])
+  fun `handleResponse rejects a status below 200`(code: Int) {
+    val exception =
+      assertThrows<SepException> { client.handleResponse(response(code, "informational body")) }
+
+    assertEquals("informational body", exception.message)
+  }
+
   @Test
   fun `handleResponse keeps the forbidden and not found mapping`() {
-    assertThrows<SepNotAuthorizedException> { client.handleResponse(response(403)) }
-    assertThrows<SepNotFoundException> { client.handleResponse(response(404)) }
+    assertEquals(
+      "Forbidden",
+      assertThrows<SepNotAuthorizedException> { client.handleResponse(response(403)) }.message,
+    )
+    assertEquals(
+      "Not found",
+      assertThrows<SepNotFoundException> { client.handleResponse(response(404)) }.message,
+    )
   }
 }
