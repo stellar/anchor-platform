@@ -26,6 +26,7 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
+import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerInvokeHostFunctionOperation;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPayment;
@@ -57,6 +58,7 @@ public class DefaultPaymentListener implements PaymentListener {
   private final PlatformApiClient platformApiClient;
   private final RpcConfig rpcConfig;
   private final AssetService assetService;
+  private final EventService.Session eventSession;
 
   public DefaultPaymentListener(
       PaymentObservingAccountsManager paymentObservingAccountsManager,
@@ -65,7 +67,8 @@ public class DefaultPaymentListener implements PaymentListener {
       JdbcSep6TransactionStore sep6TransactionStore,
       PlatformApiClient platformApiClient,
       RpcConfig rpcConfig,
-      AssetService assetService) {
+      AssetService assetService,
+      EventService eventService) {
     this.paymentObservingAccountsManager = paymentObservingAccountsManager;
     this.sep31TransactionStore = sep31TransactionStore;
     this.sep24TransactionStore = sep24TransactionStore;
@@ -73,6 +76,8 @@ public class DefaultPaymentListener implements PaymentListener {
     this.platformApiClient = platformApiClient;
     this.rpcConfig = rpcConfig;
     this.assetService = assetService;
+    this.eventSession =
+        eventService.createSession(this.getClass().getName(), EventService.EventQueue.TRANSACTION);
   }
 
   @Override

@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.asset.AssetService
+import org.stellar.anchor.event.EventService
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
@@ -730,6 +731,7 @@ class HorizonPaymentObserverTest {
           platformApiClient,
           mockk<RpcConfig>(relaxed = true),
           mockk<AssetService>(relaxed = true),
+          mockk<EventService>(relaxed = true),
         )
     }
   }

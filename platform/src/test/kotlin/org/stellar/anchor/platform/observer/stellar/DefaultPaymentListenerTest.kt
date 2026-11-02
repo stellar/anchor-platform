@@ -25,6 +25,7 @@ import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.platform.PlatformTransactionData
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.asset.AssetService
+import org.stellar.anchor.event.EventService
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.ledger.PaymentTransferEvent
@@ -54,6 +55,7 @@ class DefaultPaymentListenerTest {
   @MockK(relaxed = true) private lateinit var platformApiClient: PlatformApiClient
   @MockK(relaxed = true) private lateinit var rpcConfig: RpcConfig
   @MockK(relaxed = true) private lateinit var assetService: AssetService
+  @MockK(relaxed = true) private lateinit var eventService: EventService
 
   private lateinit var paymentListener: DefaultPaymentListener
 
@@ -79,6 +81,7 @@ class DefaultPaymentListenerTest {
           platformApiClient,
           rpcConfig,
           assetService,
+          eventService,
         )
       )
   }
