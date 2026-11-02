@@ -12,6 +12,14 @@ import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.asset.Sep31Info
 import org.stellar.anchor.util.GsonUtils
 
+/**
+ * What these tests pin: the JSON mapping annotations on `fields` and `required_info_updates`, and
+ * that the declared field types survive a Jackson round trip (long, non-ASCII, empty, absent and
+ * values written by the old Gson code). What they do not prove is Hibernate itself: that a document
+ * and not a quoted string reaches the `json` column, and that an in-place edit of `fields` is
+ * dirty-checked. The repo has no database in its unit tests, so those are carried by the live
+ * `Sep31Tests` (long POST, PATCH merge, `required_info_updates` read-back) on PostgreSQL.
+ */
 class JdbcSep31TransactionTest {
   // Hibernate writes a @JdbcTypeCode(SqlTypes.JSON) attribute with Jackson, built like this.
   private val jackson = ObjectMapper().findAndRegisterModules()
