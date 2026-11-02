@@ -75,6 +75,11 @@ class PaymentHelperTest {
     assertEquals(listOf("hash-1"), txn.stellarTransactions.map { it.id })
     assertEquals(listOf("1", "2"), txn.stellarTransactions[0].payments.map { it.id })
     assertEquals("hash-1", txn.stellarTransactionId)
+
+    // a payment of the earlier entry that the later call does not carry is kept
+    PaymentHelper.addStellarTransaction(null, ledgerTransaction("hash-1", payment("3", 30)), txn)
+    assertEquals(listOf("hash-1"), txn.stellarTransactions.map { it.id })
+    assertEquals(listOf("1", "2", "3"), txn.stellarTransactions[0].payments.map { it.id })
   }
 
   @Test

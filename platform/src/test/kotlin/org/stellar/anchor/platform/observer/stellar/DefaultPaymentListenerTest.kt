@@ -9,9 +9,11 @@ import java.math.BigDecimal
 import java.math.BigInteger
 import java.sql.SQLException
 import java.time.Instant
+import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -589,18 +591,25 @@ class DefaultPaymentListenerTest {
   @Test
   fun `test underpayment leaves status and amounts and transfer fields unchanged`() {
     val event = underpaidEvent()
-    val saved = stubSep31(pendingSep31())
+    val txn =
+      pendingSep31().apply {
+        amountOut = "95.0000000"
+        amountFee = "5.0000000"
+        requiredInfoMessage = "waiting for the sender"
+      }
+    val saved = stubSep31(txn)
 
     paymentListener.onReceived(event)
 
-    val txn = saved.captured as JdbcSep31Transaction
-    assertEquals(SepTransactionStatus.PENDING_SENDER.toString(), txn.status)
-    assertNull(txn.amountIn)
-    assertNull(txn.amountOut)
-    assertNull(txn.amountFee)
-    assertNull(txn.transferReceivedAt)
-    assertNull(txn.stellarTransactionId)
-    assertNull(txn.requiredInfoMessage)
+    val txnAfter = saved.captured as JdbcSep31Transaction
+    assertEquals(SepTransactionStatus.PENDING_SENDER.toString(), txnAfter.status)
+    assertEquals("100.0000000", txnAfter.amountExpected)
+    assertEquals("95.0000000", txnAfter.amountOut)
+    assertEquals("5.0000000", txnAfter.amountFee)
+    assertEquals("waiting for the sender", txnAfter.requiredInfoMessage)
+    assertNull(txnAfter.amountIn)
+    assertNull(txnAfter.transferReceivedAt)
+    assertNull(txnAfter.stellarTransactionId)
   }
 
   @Test
@@ -625,6 +634,8 @@ class DefaultPaymentListenerTest {
     verify(exactly = 1) { eventSession.publish(any()) }
     assertEquals(AnchorEvent.Type.TRANSACTION_STATUS_CHANGED, published.captured.type)
     assertEquals("31", published.captured.sep)
+    assertNotEquals("sep31-underpaid", published.captured.id)
+    assertDoesNotThrow { UUID.fromString(published.captured.id) }
     val transaction = published.captured.transaction
     assertEquals(PlatformTransactionData.Sep.SEP_31, transaction.sep)
     assertEquals(SepTransactionStatus.PENDING_SENDER, transaction.status)
@@ -1089,6 +1100,53 @@ class DefaultPaymentListenerTest {
     verify(exactly = 0) { sep31TransactionStore.save(any()) }
     assertEquals(recorded, txn.stellarTransactions)
     verify(exactly = 1) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test underpayment save failing on the transaction manager throws IOException`() {
+    stubSep31(pendingSep31())
+    every { sep31TransactionStore.save(any()) } throws
+      CannotCreateTransactionException("database unreachable")
+
+    val thrown =
+      assertThrows(IOException::class.java) { paymentListener.onReceived(underpaidEvent()) }
+
+    assertEquals(IOException::class.java, thrown.javaClass)
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test underpayment publish failing with an unchecked exception throws IOException and keeps the record`() {
+    val event = underpaidEvent()
+    val saved = stubSep31(pendingSep31())
+    every { eventSession.publish(any()) } throws IllegalStateException("producer closed")
+
+    val thrown = assertThrows(IOException::class.java) { paymentListener.onReceived(event) }
+
+    assertEquals(IOException::class.java, thrown.javaClass)
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+    assertEquals(
+      listOf(event.ledgerTransaction.hash),
+      saved.captured.stellarTransactions.map { it.id }
+    )
+  }
+
+  @Test
+  fun `test underpayment recorded id that is a prefix of the payment hash is still recorded`() {
+    val event = underpaidEvent()
+    val hash = event.ledgerTransaction.hash
+    for (otherId in listOf(hash.substring(0, 10), hash + "ff")) {
+      clearMocks(sep31TransactionStore, eventSession, answers = false, recordedCalls = true)
+      val txn = pendingSep31()
+      txn.stellarTransactions =
+        mutableListOf(StellarTransaction.builder().id(otherId).payments(mutableListOf()).build())
+      val saved = stubSep31(txn)
+
+      paymentListener.onReceived(event)
+
+      verify(exactly = 1) { sep31TransactionStore.save(any()) }
+      assertEquals(listOf(otherId, hash), saved.captured.stellarTransactions.map { it.id })
+    }
   }
 
   /** Runs [block] with a fresh meter registry attached and returns that registry. */

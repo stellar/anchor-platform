@@ -790,10 +790,10 @@ public class DefaultPaymentListener implements PaymentListener {
    */
   private void recordUnderpayment(
       LedgerTransaction ledgerTransaction, JdbcSepTransaction sepTransaction) throws IOException {
-    try {
-      // A redelivered payment is already in the list: it is not saved again, but the event is sent
-      // again, because the first delivery may have failed after the save.
-      if (!isRecorded(ledgerTransaction, sepTransaction)) {
+    // A redelivered payment is already in the list: it is not saved again, but the event is sent
+    // again, because the first delivery may have failed after the save.
+    if (!isRecorded(ledgerTransaction, sepTransaction)) {
+      try {
         PaymentHelper.recordStellarTransaction(sacToAssetMapper, ledgerTransaction, sepTransaction);
         switch (Sep.from(sepTransaction.getProtocol())) {
           case SEP_6 -> sep6TransactionStore.save((JdbcSep6Transaction) sepTransaction);
@@ -803,24 +803,35 @@ public class DefaultPaymentListener implements PaymentListener {
               throw new IllegalStateException(
                   "Unsupported protocol: " + sepTransaction.getProtocol());
         }
+      } catch (AnchorException | DataAccessException | TransactionException ex) {
+        throw holdUnderpayment(ledgerTransaction, sepTransaction, ex);
       }
-      eventSession.publish(
-          AnchorEvent.builder()
-              .id(UUID.randomUUID().toString())
-              .sep(sepTransaction.getProtocol())
-              .type(AnchorEvent.Type.TRANSACTION_STATUS_CHANGED)
-              .transaction(
-                  PlatformTransactionHelper.toGetTransactionResponse(sepTransaction, assetService))
-              .build());
-    } catch (AnchorException | DataAccessException ex) {
-      errorF(
-          "Recording the underpayment failed, so the payment will be retried. sepTxn.id={}, ledgerTxn.id={}",
-          sepTransaction.getId(),
-          ledgerTransaction.getHash());
-      errorEx(ex);
-      throw new IOException(
-          "Recording the underpayment of transaction " + sepTransaction.getId() + " failed", ex);
     }
+
+    AnchorEvent event =
+        AnchorEvent.builder()
+            .id(UUID.randomUUID().toString())
+            .sep(sepTransaction.getProtocol())
+            .type(AnchorEvent.Type.TRANSACTION_STATUS_CHANGED)
+            .transaction(
+                PlatformTransactionHelper.toGetTransactionResponse(sepTransaction, assetService))
+            .build();
+    try {
+      eventSession.publish(event);
+    } catch (AnchorException | RuntimeException ex) {
+      throw holdUnderpayment(ledgerTransaction, sepTransaction, ex);
+    }
+  }
+
+  private IOException holdUnderpayment(
+      LedgerTransaction ledgerTransaction, JdbcSepTransaction sepTransaction, Exception cause) {
+    errorF(
+        "Recording the underpayment failed, so the payment will be retried. sepTxn.id={}, ledgerTxn.id={}",
+        sepTransaction.getId(),
+        ledgerTransaction.getHash());
+    errorEx(cause);
+    return new IOException(
+        "Recording the underpayment of transaction " + sepTransaction.getId() + " failed", cause);
   }
 
   private static boolean isRecorded(
