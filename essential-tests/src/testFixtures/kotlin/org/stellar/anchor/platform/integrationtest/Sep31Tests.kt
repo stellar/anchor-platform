@@ -695,6 +695,42 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test PATCH sep31 transactions merges fields past 255 characters`() {
+    val (senderCustomer, receiverCustomer) = mkCustomers()
+    val posted = createTx(senderCustomer, receiverCustomer)
+    requestInfoUpdate(posted.id, "receiver_account_number")
+    val longValue = "a".repeat(300)
+
+    val patched =
+      sep31Client.patchTransaction(
+        posted.id,
+        Sep31PatchTransactionRequest.builder()
+          .fields(Sep31TxnFields(hashMapOf("receiver_account_number" to longValue)))
+          .build()
+      )
+
+    assertEquals(PENDING_RECEIVER.status, patched.transaction.status)
+    val stored = platformApiClient.getTransaction(posted.id).fields
+    assertEquals(longValue, stored["receiver_account_number"])
+    // The merge keeps the fields the PATCH did not mention.
+    assertEquals("r0123", stored["receiver_routing_number"])
+    assertEquals("SWIFT", stored["type"])
+  }
+
+  @Test
+  fun `test required_info_updates past 255 characters persist`() {
+    val (senderCustomer, receiverCustomer) = mkCustomers()
+    val posted = createTx(senderCustomer, receiverCustomer)
+    val requested = (1..10).map { "receiver_bank_account_holder_name_$it" }
+
+    requestInfoUpdate(posted.id, *requested.toTypedArray())
+
+    val stored = platformApiClient.getTransaction(posted.id).requiredInfoUpdatesFields
+    assertEquals(requested.toSet(), stored.keys)
+    stored.values.forEach { assertFalse(it.description.isNullOrBlank()) }
+  }
+
+  @Test
   fun testBadAsset() {
     val customer =
       GsonUtils.getInstance().fromJson(testCustomer1Json, Sep12PutCustomerRequest::class.java)
