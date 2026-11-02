@@ -732,6 +732,7 @@ class HorizonPaymentObserverTest {
           mockk<RpcConfig>(relaxed = true),
           mockk<AssetService>(relaxed = true),
           mockk<EventService>(relaxed = true),
+          mockk<SacToAssetMapper>(relaxed = true),
         )
     }
   }

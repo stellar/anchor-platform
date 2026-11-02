@@ -97,7 +97,8 @@ public class PaymentObserverBeans {
       PlatformApiClient platformApiClient,
       RpcConfig rpcConfig,
       AssetService assetService,
-      EventService eventService) {
+      EventService eventService,
+      SacToAssetMapper sacToAssetMapper) {
 
     return new DefaultPaymentListener(
         paymentObservingAccountsManager,
@@ -107,7 +108,8 @@ public class PaymentObserverBeans {
         platformApiClient,
         rpcConfig,
         assetService,
-        eventService);
+        eventService,
+        sacToAssetMapper);
   }
 
   /**

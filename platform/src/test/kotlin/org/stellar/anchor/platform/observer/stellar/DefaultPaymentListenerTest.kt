@@ -8,9 +8,11 @@ import java.io.IOException
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.sql.SQLException
+import java.time.Instant
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -22,10 +24,14 @@ import org.springframework.dao.QueryTimeoutException
 import org.springframework.jdbc.CannotGetJdbcConnectionException
 import org.springframework.transaction.CannotCreateTransactionException
 import org.stellar.anchor.api.asset.AssetInfo
+import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.platform.PlatformTransactionData
+import org.stellar.anchor.api.sep.SepTransactionStatus
+import org.stellar.anchor.api.shared.Amount
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.event.EventService
+import org.stellar.anchor.event.EventService.EventQueue
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.ledger.PaymentTransferEvent
@@ -33,6 +39,8 @@ import org.stellar.anchor.platform.config.RpcConfig
 import org.stellar.anchor.platform.data.*
 import org.stellar.anchor.platform.service.AnchorMetrics
 import org.stellar.anchor.platform.utils.AssetValidationUtils
+import org.stellar.anchor.platform.utils.PaymentHelper
+import org.stellar.anchor.sep31.Sep31Transaction
 import org.stellar.anchor.util.AssetHelper.fromXdrAmount
 import org.stellar.anchor.util.AssetHelper.getSep11AssetName
 import org.stellar.anchor.util.Log
@@ -56,6 +64,8 @@ class DefaultPaymentListenerTest {
   @MockK(relaxed = true) private lateinit var rpcConfig: RpcConfig
   @MockK(relaxed = true) private lateinit var assetService: AssetService
   @MockK(relaxed = true) private lateinit var eventService: EventService
+  @MockK(relaxed = true) private lateinit var eventSession: EventService.Session
+  @MockK(relaxed = true) private lateinit var sacToAssetMapper: SacToAssetMapper
 
   private lateinit var paymentListener: DefaultPaymentListener
 
@@ -70,6 +80,7 @@ class DefaultPaymentListenerTest {
     xdrMemoText.text = XdrString("text")
 
     every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns true
+    every { eventService.createSession(any(), EventQueue.TRANSACTION) } returns eventSession
 
     paymentListener =
       spyk(
@@ -82,6 +93,7 @@ class DefaultPaymentListenerTest {
           rpcConfig,
           assetService,
           eventService,
+          sacToAssetMapper,
         )
       )
   }
@@ -503,6 +515,213 @@ class DefaultPaymentListenerTest {
         "pending_sender",
       )
     }
+  }
+
+  private val underpaidAsset =
+    "stellar:FOO:GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
+
+  /**
+   * A payment of 99 FOO for the memo `my_memo_1`, in a ledger transaction created at a fixed time.
+   */
+  private fun underpaidEvent(): PaymentTransferEvent {
+    val event = createEventWithTextMemo("my_memo_1")
+    val amount = BigInteger.valueOf(990_000_000L)
+    event.amount = amount
+    event.ledgerTransaction.operations[0].paymentOperation.amount = amount
+    event.ledgerTransaction.createdAt = Instant.parse("2023-05-10T10:18:20Z")
+    return event
+  }
+
+  /** A SEP-31 transaction waiting for 100 FOO, matched by [underpaidEvent]'s memo. */
+  private fun pendingSep31(
+    amountExpected: String? = "100.0000000",
+    asset: String = underpaidAsset
+  ) =
+    JdbcSep31Transaction().apply {
+      id = "sep31-underpaid"
+      status = SepTransactionStatus.PENDING_SENDER.toString()
+      toAccount = "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
+      stellarMemo = "my_memo_1"
+      stellarMemoType = "text"
+      amountInAsset = asset
+      this.amountExpected = amountExpected
+    }
+
+  private fun stubSep31(txn: JdbcSep31Transaction): CapturingSlot<Sep31Transaction> {
+    val saved = slot<Sep31Transaction>()
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      listOf(txn)
+    every { sep31TransactionStore.save(capture(saved)) } answers { firstArg() }
+    return saved
+  }
+
+  @Test
+  fun `test underpaid SEP-31 payment is appended to stellar_transactions and saved`() {
+    val event = underpaidEvent()
+    val saved = stubSep31(pendingSep31())
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+    val entries = saved.captured.stellarTransactions
+    assertEquals(listOf(event.ledgerTransaction.hash), entries.map { it.id })
+    assertEquals(1, entries[0].payments.size)
+    val payment = entries[0].payments[0]
+    assertEquals(event.operationId, payment.id)
+    assertEquals(
+      Amount("99.0000000", "FOO:GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"),
+      payment.amount
+    )
+    assertEquals("GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5", payment.sourceAccount)
+    assertEquals(
+      "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364",
+      payment.destinationAccount
+    )
+  }
+
+  @Test
+  fun `test underpayment leaves status and amounts and transfer fields unchanged`() {
+    val event = underpaidEvent()
+    val saved = stubSep31(pendingSep31())
+
+    paymentListener.onReceived(event)
+
+    val txn = saved.captured as JdbcSep31Transaction
+    assertEquals(SepTransactionStatus.PENDING_SENDER.toString(), txn.status)
+    assertNull(txn.amountIn)
+    assertNull(txn.amountOut)
+    assertNull(txn.amountFee)
+    assertNull(txn.transferReceivedAt)
+    assertNull(txn.stellarTransactionId)
+    assertNull(txn.requiredInfoMessage)
+  }
+
+  @Test
+  fun `test underpayment does not call the Platform API`() {
+    stubSep31(pendingSep31())
+
+    paymentListener.onReceived(underpaidEvent())
+
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsSent(any(), any(), any()) }
+  }
+
+  @Test
+  fun `test underpayment publishes one transaction_status_changed event with the saved transaction`() {
+    val event = underpaidEvent()
+    stubSep31(pendingSep31())
+    val published = slot<AnchorEvent>()
+    every { eventSession.publish(capture(published)) } just Runs
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 1) { eventSession.publish(any()) }
+    assertEquals(AnchorEvent.Type.TRANSACTION_STATUS_CHANGED, published.captured.type)
+    assertEquals("31", published.captured.sep)
+    val transaction = published.captured.transaction
+    assertEquals(PlatformTransactionData.Sep.SEP_31, transaction.sep)
+    assertEquals(SepTransactionStatus.PENDING_SENDER, transaction.status)
+    assertNull(transaction.amountIn.amount)
+    assertEquals(
+      listOf(event.ledgerTransaction.hash),
+      transaction.stellarTransactions.map { it.id }
+    )
+  }
+
+  @Test
+  fun `test underpayment still logs the insufficient amount error and counts it`() {
+    val event = underpaidEvent()
+    val ledgerTransaction = event.ledgerTransaction
+    val payment = ledgerTransaction.operations[0].paymentOperation
+    stubSep31(pendingSep31())
+
+    mockkStatic(Log::class)
+    try {
+      every { Log.debugF(any(), *anyVararg()) } just Runs
+      every { Log.errorF(any(), *anyVararg()) } just Runs
+
+      val registry = withMetrics {
+        assertFalse(
+          paymentListener.checkAssetAmountSufficient(
+            ledgerTransaction,
+            payment,
+            pendingSep31(),
+            true
+          )
+        )
+      }
+
+      verify(exactly = 1) {
+        Log.errorF(match { it.contains("amount was insufficient") }, *anyVararg())
+      }
+      assertEquals(
+        1.0,
+        registry.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_INSUFFICIENT.toString()).count(),
+      )
+    } finally {
+      unmockkStatic(Log::class)
+    }
+  }
+
+  @Test
+  fun `test a sufficient payment is credited and records nothing`() {
+    val event = underpaidEvent()
+    stubSep31(pendingSep31(amountExpected = "99.0000000"))
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 1) {
+      platformApiClient.notifyOnchainFundsReceived(
+        "sep31-underpaid",
+        event.ledgerTransaction.hash,
+        any(),
+        any()
+      )
+    }
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test a transaction without amount_expected is credited and records nothing`() {
+    val event = underpaidEvent()
+    stubSep31(pendingSep31(amountExpected = null))
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 1) {
+      platformApiClient.notifyOnchainFundsReceived(
+        "sep31-underpaid",
+        event.ledgerTransaction.hash,
+        any(),
+        any()
+      )
+    }
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test SEP-31 asset mismatch records and publishes nothing`() {
+    stubSep31(pendingSep31(asset = "stellar:native"))
+
+    paymentListener.onReceived(underpaidEvent())
+
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test recorded underpayment entry equals the entry addStellarTransaction builds`() {
+    val event = underpaidEvent()
+    val saved = stubSep31(pendingSep31())
+
+    paymentListener.onReceived(event)
+
+    val expected = pendingSep31()
+    PaymentHelper.addStellarTransaction(sacToAssetMapper, event.ledgerTransaction, expected)
+    assertEquals(expected.stellarTransactions, saved.captured.stellarTransactions)
   }
 
   /** Runs [block] with a fresh meter registry attached and returns that registry. */
@@ -1441,6 +1660,7 @@ class DefaultPaymentListenerTest {
 
     val testJdbcSepTransaction = JdbcSep31Transaction()
     testJdbcSepTransaction.id = "123"
+    testJdbcSepTransaction.status = SepTransactionStatus.PENDING_SENDER.toString()
     testJdbcSepTransaction.amountInAsset = "stellar:" + getSep11AssetName(testPayment.asset)
     testJdbcSepTransaction.amountExpected = fromXdrAmount(testPayment.amount + BigInteger.ONE)
 
@@ -1473,6 +1693,7 @@ class DefaultPaymentListenerTest {
 
     val testJdbcSepTransaction = JdbcSep31Transaction()
     testJdbcSepTransaction.id = "123"
+    testJdbcSepTransaction.status = SepTransactionStatus.PENDING_SENDER.toString()
     testJdbcSepTransaction.amountInAsset = "stellar:" + getSep11AssetName(testPayment.asset)
     val expected = fromXdrAmount(testPayment.amount + BigInteger.ONE)
     testJdbcSepTransaction.amountExpected = expected

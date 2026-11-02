@@ -50,7 +50,24 @@ public class PaymentHelper {
     }
   }
 
+  /**
+   * Adds the Stellar transaction to the transaction's {@code stellar_transactions} and marks the
+   * funds as received.
+   */
   public static void addStellarTransaction(
+      SacToAssetMapper sacToAssetMapper, LedgerTransaction ledgerTxn, JdbcSepTransaction sepTxn) {
+    recordStellarTransaction(sacToAssetMapper, ledgerTxn, sepTxn);
+
+    sepTxn.setTransferReceivedAt(
+        Optional.ofNullable(ledgerTxn.getCreatedAt()).orElse(Instant.now()));
+    sepTxn.setStellarTransactionId(ledgerTxn.getHash());
+  }
+
+  /**
+   * Adds the Stellar transaction to the transaction's {@code stellar_transactions} only, leaving
+   * the received-funds fields alone, for a payment that is recorded but not credited.
+   */
+  public static void recordStellarTransaction(
       SacToAssetMapper sacToAssetMapper, LedgerTransaction ledgerTxn, JdbcSepTransaction sepTxn) {
     String memo = null;
     String memoType = null;
@@ -119,10 +136,6 @@ public class PaymentHelper {
             .build();
 
     sepTxn.setStellarTransactions(addOrMerge(sepTxn.getStellarTransactions(), stellarTransaction));
-
-    sepTxn.setTransferReceivedAt(
-        Optional.ofNullable(ledgerTxn.getCreatedAt()).orElse(Instant.now()));
-    sepTxn.setStellarTransactionId(ledgerTxn.getHash());
   }
 
   /**

@@ -17,12 +17,15 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.asset.AssetInfo;
+import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.platform.PlatformTransactionData.Sep;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
@@ -35,6 +38,8 @@ import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.*;
 import org.stellar.anchor.platform.observer.PaymentListener;
 import org.stellar.anchor.platform.service.AnchorMetrics;
+import org.stellar.anchor.platform.utils.PaymentHelper;
+import org.stellar.anchor.platform.utils.PlatformTransactionHelper;
 import org.stellar.anchor.util.AssetHelper;
 import org.stellar.anchor.util.GsonUtils;
 import org.stellar.sdk.Memo;
@@ -59,6 +64,7 @@ public class DefaultPaymentListener implements PaymentListener {
   private final RpcConfig rpcConfig;
   private final AssetService assetService;
   private final EventService.Session eventSession;
+  private final SacToAssetMapper sacToAssetMapper;
 
   public DefaultPaymentListener(
       PaymentObservingAccountsManager paymentObservingAccountsManager,
@@ -68,7 +74,8 @@ public class DefaultPaymentListener implements PaymentListener {
       PlatformApiClient platformApiClient,
       RpcConfig rpcConfig,
       AssetService assetService,
-      EventService eventService) {
+      EventService eventService,
+      SacToAssetMapper sacToAssetMapper) {
     this.paymentObservingAccountsManager = paymentObservingAccountsManager;
     this.sep31TransactionStore = sep31TransactionStore;
     this.sep24TransactionStore = sep24TransactionStore;
@@ -78,6 +85,7 @@ public class DefaultPaymentListener implements PaymentListener {
     this.assetService = assetService;
     this.eventSession =
         eventService.createSession(this.getClass().getName(), EventService.EventQueue.TRANSACTION);
+    this.sacToAssetMapper = sacToAssetMapper;
   }
 
   @Override
@@ -724,7 +732,8 @@ public class DefaultPaymentListener implements PaymentListener {
       LedgerTransaction ledgerTransaction,
       LedgerPayment ledgerPayment,
       JdbcSepTransaction sepTransaction,
-      boolean enforceAssetMatch) {
+      boolean enforceAssetMatch)
+      throws IOException {
     String paymentAssetName = "stellar:" + getSep11AssetName(ledgerPayment.getAsset());
     if (!sepTransaction.getAmountInAsset().equals(paymentAssetName)) {
       if (enforceAssetMatch) {
@@ -758,6 +767,7 @@ public class DefaultPaymentListener implements PaymentListener {
           expectedAmount.toPlainString(),
           gotAmount.toPlainString());
       Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_INSUFFICIENT.toString()).increment();
+      recordUnderpayment(ledgerTransaction, sepTransaction);
       return false;
     }
 
@@ -767,5 +777,38 @@ public class DefaultPaymentListener implements PaymentListener {
         sepTransaction.getId(),
         ledgerTransaction.getHash());
     return true;
+  }
+
+  /**
+   * Gives a payment rejected for its amount somewhere to go: the Stellar transaction is added to
+   * the transaction's {@code stellar_transactions} and the business server is told with one {@code
+   * transaction_status_changed} event. The status and the amounts stay as they are, so the payment
+   * is not credited; the business server decides whether to credit it through {@code
+   * notify_onchain_funds_received}, ask for the rest, or refund it.
+   */
+  private void recordUnderpayment(
+      LedgerTransaction ledgerTransaction, JdbcSepTransaction sepTransaction) throws IOException {
+    PaymentHelper.recordStellarTransaction(sacToAssetMapper, ledgerTransaction, sepTransaction);
+    try {
+      switch (Sep.from(sepTransaction.getProtocol())) {
+        case SEP_6 -> sep6TransactionStore.save((JdbcSep6Transaction) sepTransaction);
+        case SEP_24 -> sep24TransactionStore.save((JdbcSep24Transaction) sepTransaction);
+        case SEP_31 -> sep31TransactionStore.save((JdbcSep31Transaction) sepTransaction);
+        default ->
+            throw new IllegalStateException(
+                "Unsupported protocol: " + sepTransaction.getProtocol());
+      }
+      eventSession.publish(
+          AnchorEvent.builder()
+              .id(UUID.randomUUID().toString())
+              .sep(sepTransaction.getProtocol())
+              .type(AnchorEvent.Type.TRANSACTION_STATUS_CHANGED)
+              .transaction(
+                  PlatformTransactionHelper.toGetTransactionResponse(sepTransaction, assetService))
+              .build());
+    } catch (AnchorException aex) {
+      throw new IOException(
+          "Recording the underpayment of transaction " + sepTransaction.getId() + " failed", aex);
+    }
   }
 }
