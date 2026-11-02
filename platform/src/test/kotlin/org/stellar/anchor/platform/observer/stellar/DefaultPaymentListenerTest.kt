@@ -929,7 +929,9 @@ class DefaultPaymentListenerTest {
     val first = underpaidEvent()
     val second = underpaidEvent()
     val secondAmount = BigInteger.valueOf(10_000_000L)
-    second.ledgerTransaction.hash = "second-payment-hash"
+    // the hash starts with the first one, so a prefix match would wrongly see it as recorded
+    val secondHash = first.ledgerTransaction.hash + "ff"
+    second.ledgerTransaction.hash = secondHash
     second.ledgerTransaction.operations[0].paymentOperation.amount = secondAmount
     second.amount = secondAmount
     val txn = pendingSep31()
@@ -941,7 +943,7 @@ class DefaultPaymentListenerTest {
     verify(exactly = 2) { sep31TransactionStore.save(any()) }
     verify(exactly = 2) { eventSession.publish(any()) }
     val entries = saved.captured.stellarTransactions
-    assertEquals(listOf(first.ledgerTransaction.hash, "second-payment-hash"), entries.map { it.id })
+    assertEquals(listOf(first.ledgerTransaction.hash, secondHash), entries.map { it.id })
     assertEquals("99.0000000", entries[0].payments[0].amount.amount)
     assertEquals("1.0000000", entries[1].payments[0].amount.amount)
     assertNull(saved.captured.amountIn)
