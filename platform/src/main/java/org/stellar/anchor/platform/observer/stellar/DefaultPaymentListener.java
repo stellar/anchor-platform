@@ -784,7 +784,9 @@ public class DefaultPaymentListener implements PaymentListener {
    * the transaction's {@code stellar_transactions} and the business server is told with one {@code
    * transaction_status_changed} event. The status and the amounts stay as they are, so the payment
    * is not credited; the business server decides whether to credit it through {@code
-   * notify_onchain_funds_received}, ask for the rest, or refund it.
+   * notify_onchain_funds_received}, ask for the rest, or refund it. A failure to save or to publish
+   * is rethrown as an {@link IOException}, which holds the observer's cursor so the payment is
+   * retried, as for a failed Platform API notification.
    */
   private void recordUnderpayment(
       LedgerTransaction ledgerTransaction, JdbcSepTransaction sepTransaction) throws IOException {
@@ -806,9 +808,14 @@ public class DefaultPaymentListener implements PaymentListener {
               .transaction(
                   PlatformTransactionHelper.toGetTransactionResponse(sepTransaction, assetService))
               .build());
-    } catch (AnchorException aex) {
+    } catch (AnchorException | DataAccessException ex) {
+      errorF(
+          "Recording the underpayment failed, so the payment will be retried. sepTxn.id={}, ledgerTxn.id={}",
+          sepTransaction.getId(),
+          ledgerTransaction.getHash());
+      errorEx(ex);
       throw new IOException(
-          "Recording the underpayment of transaction " + sepTransaction.getId() + " failed", aex);
+          "Recording the underpayment of transaction " + sepTransaction.getId() + " failed", ex);
     }
   }
 }

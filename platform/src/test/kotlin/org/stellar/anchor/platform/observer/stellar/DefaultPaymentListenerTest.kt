@@ -20,11 +20,13 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.InvalidDataAccessResourceUsageException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.dao.QueryTimeoutException
 import org.springframework.jdbc.CannotGetJdbcConnectionException
 import org.springframework.transaction.CannotCreateTransactionException
 import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.event.AnchorEvent
+import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.platform.PlatformTransactionData
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.shared.Amount
@@ -39,6 +41,7 @@ import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation
 import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.platform.config.RpcConfig
 import org.stellar.anchor.platform.data.*
+import org.stellar.anchor.platform.event.NoOpSession
 import org.stellar.anchor.platform.service.AnchorMetrics
 import org.stellar.anchor.platform.utils.AssetValidationUtils
 import org.stellar.anchor.platform.utils.PaymentHelper
@@ -960,6 +963,92 @@ class DefaultPaymentListenerTest {
       listOf(first.paymentOperation.id, "other-operation"),
       saved.captured.stellarTransactions[0].payments.map { it.id },
     )
+  }
+
+  @Test
+  fun `test underpayment save failure throws IOException and publishes nothing`() {
+    stubSep31(pendingSep31())
+    every { sep31TransactionStore.save(any()) } throws QueryTimeoutException("database down")
+
+    assertThrows(IOException::class.java) { paymentListener.onReceived(underpaidEvent()) }
+
+    verify(exactly = 0) { eventSession.publish(any()) }
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+  }
+
+  @Test
+  fun `test underpayment publish failure throws IOException and keeps the record`() {
+    val event = underpaidEvent()
+    val saved = stubSep31(pendingSep31())
+    every { eventSession.publish(any()) } throws SepException("queue down")
+
+    assertThrows(IOException::class.java) { paymentListener.onReceived(event) }
+
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+    assertEquals(
+      listOf(event.ledgerTransaction.hash),
+      saved.captured.stellarTransactions.map { it.id }
+    )
+  }
+
+  @Test
+  fun `test underpayment failures are plain IOException`() {
+    stubSep31(pendingSep31())
+    every { sep31TransactionStore.save(any()) } throws QueryTimeoutException("database down")
+    val saveFailure =
+      assertThrows(IOException::class.java) { paymentListener.onReceived(underpaidEvent()) }
+
+    stubSep31(pendingSep31())
+    every { eventSession.publish(any()) } throws SepException("queue down")
+    val publishFailure =
+      assertThrows(IOException::class.java) { paymentListener.onReceived(underpaidEvent()) }
+
+    assertEquals(IOException::class.java, saveFailure.javaClass)
+    assertEquals(IOException::class.java, publishFailure.javaClass)
+  }
+
+  @Test
+  fun `test underpayment with events disabled is saved without error`() {
+    every { eventService.createSession(any(), EventQueue.TRANSACTION) } returns NoOpSession()
+    val listener =
+      DefaultPaymentListener(
+        paymentObservingAccountsManager,
+        sep31TransactionStore,
+        sep24TransactionStore,
+        sep6TransactionStore,
+        platformApiClient,
+        rpcConfig,
+        assetService,
+        eventService,
+        sacToAssetMapper,
+      )
+    val event = underpaidEvent()
+    val saved = stubSep31(pendingSep31())
+
+    assertDoesNotThrow { listener.onReceived(event) }
+
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+    assertEquals(
+      listOf(event.ledgerTransaction.hash),
+      saved.captured.stellarTransactions.map { it.id }
+    )
+  }
+
+  @Test
+  fun `test underpayment optimistic lock conflict holds the cursor and the retry does nothing`() {
+    val event = underpaidEvent()
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      listOf(pendingSep31()) andThen
+      emptyList()
+    every { sep31TransactionStore.save(any()) } throws
+      OptimisticLockingFailureException("version changed by a concurrent credit")
+
+    assertThrows(IOException::class.java) { paymentListener.onReceived(event) }
+    assertDoesNotThrow { paymentListener.onReceived(event) }
+
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
   }
 
   /** Runs [block] with a fresh meter registry attached and returns that registry. */
