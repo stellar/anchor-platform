@@ -7,6 +7,9 @@ import io.sentry.SentryLevel;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.NotSupportedException;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -119,7 +122,9 @@ public abstract class AbstractControllerExceptionHandler {
   }
 
   private static boolean hasPersistenceCause(Throwable ex) {
-    for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+    // The visited set ends the walk on a cyclic cause chain, which `initCause` can build.
+    Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+    for (Throwable cause = ex; cause != null && visited.add(cause); cause = cause.getCause()) {
       if (cause instanceof DataAccessException
           || cause instanceof TransactionException
           || cause instanceof PersistenceException

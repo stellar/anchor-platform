@@ -10,19 +10,25 @@ import io.sentry.Sentry
 import io.sentry.protocol.SentryId
 import jakarta.persistence.PersistenceException
 import java.sql.SQLException
+import java.time.Duration
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Test
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.transaction.CannotCreateTransactionException
 import org.springframework.transaction.TransactionSystemException
 import org.springframework.web.bind.MissingServletRequestParameterException
+import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.stellar.anchor.api.exception.BadRequestException
+import org.stellar.anchor.api.exception.SepCustomerInfoNeededException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepNotFoundException
+import org.stellar.anchor.api.exception.SepNotImplementedException
 import org.stellar.anchor.api.exception.SepRateLimitExceededException
+import org.stellar.anchor.api.exception.ServerErrorException
 import org.stellar.anchor.platform.controller.observer.ObserverControllerExceptionHandler
 import org.stellar.anchor.platform.controller.platform.PlatformControllerExceptionHandler
 import org.stellar.anchor.platform.controller.sep.SepControllerExceptionHandler
@@ -107,6 +113,17 @@ class AbstractControllerExceptionHandlerTest {
 
   private val fixedBody = "An internal error occurred."
 
+  // One input per way the criteria name a persistence failure: each of the four types, and a
+  // wrapper that only has one in its cause chain.
+  private fun persistenceFailures(): List<Exception> =
+    listOf(
+      DataIntegrityViolationException(pocMessage),
+      TransactionSystemException(pocMessage),
+      PersistenceException(pocMessage),
+      SQLException(pocMessage),
+      RuntimeException("outer $pocMessage", SQLException(pocMessage)),
+    )
+
   @Test
   fun `data access exception answers a fixed 500 body`() {
     val response =
@@ -183,17 +200,18 @@ class AbstractControllerExceptionHandlerTest {
 
   @Test
   fun `sanitized exception is logged and captured`() {
-    val ex = DataIntegrityViolationException(pocMessage)
     mockkStatic(Log::class)
     mockkStatic(Sentry::class)
     try {
       every { Log.errorEx(any<Throwable>()) } just Runs
       every { Sentry.captureException(any()) } returns SentryId.EMPTY_ID
 
-      SepControllerExceptionHandler().handleInternalError(ex)
+      for (ex in persistenceFailures()) {
+        SepControllerExceptionHandler().handleInternalError(ex)
 
-      verify(exactly = 1) { Log.errorEx(ex) }
-      verify(exactly = 1) { Sentry.captureException(ex) }
+        verify(exactly = 1) { Log.errorEx(ex) }
+        verify(exactly = 1) { Sentry.captureException(ex) }
+      }
     } finally {
       unmockkStatic(Sentry::class)
       unmockkStatic(Log::class)
@@ -231,11 +249,53 @@ class AbstractControllerExceptionHandlerTest {
       )
 
     for (advice in advices) {
-      assertEquals(
-        fixedBody,
-        advice.handleInternalError(DataIntegrityViolationException(pocMessage)).error,
-        advice.javaClass.simpleName
-      )
+      for (ex in persistenceFailures()) {
+        assertEquals(
+          fixedBody,
+          advice.handleInternalError(ex).error,
+          "${advice.javaClass.simpleName} / ${ex.javaClass.simpleName}"
+        )
+      }
+    }
+  }
+
+  @Test
+  fun `persistence failures are routed to the internal error handler`() {
+    // Spring picks the closest @ExceptionHandler for the thrown type. No other handler may claim a
+    // persistence failure, or the fixed body would never be reached for it.
+    val handlers =
+      AbstractControllerExceptionHandler::class.java.declaredMethods.filter {
+        it.isAnnotationPresent(ExceptionHandler::class.java)
+      }
+
+    for (ex in persistenceFailures()) {
+      val claiming =
+        handlers
+          .filter { m ->
+            m.getAnnotation(ExceptionHandler::class.java).value.any { it.java.isInstance(ex) }
+          }
+          .map { it.name }
+      assertEquals(listOf("handleInternalError"), claiming, ex.javaClass.simpleName)
+    }
+  }
+
+  @Test
+  fun `cyclic cause chain answers without looping`() {
+    val persistence = SQLException(pocMessage)
+    val wrapper = RuntimeException("outer $pocMessage")
+    persistence.initCause(wrapper)
+    wrapper.initCause(persistence)
+
+    val other1 = IllegalStateException("not a db failure")
+    val other2 = IllegalArgumentException("also not a db failure")
+    other1.initCause(other2)
+    other2.initCause(other1)
+
+    val handler = SepControllerExceptionHandler()
+
+    assertTimeoutPreemptively(Duration.ofSeconds(5)) {
+      assertEquals(fixedBody, handler.handleInternalError(wrapper).error)
+      assertEquals("not a db failure", handler.handleInternalError(other1).error)
     }
   }
 
@@ -247,11 +307,39 @@ class AbstractControllerExceptionHandlerTest {
     assertEquals("bad input", handler.handleBadRequest(BadRequestException("bad input")).error)
     assertEquals("no token", handler.handleAuthError(SepNotAuthorizedException("no token")).error)
     assertEquals("missing", handler.handleNotFound(SepNotFoundException("missing")).error)
+    assertEquals(
+      "not yet",
+      handler.handleNotImplementedError(SepNotImplementedException("not yet")).error
+    )
+    assertEquals(
+      "upstream down",
+      handler.handleServerErrorException(ServerErrorException("upstream down")).error
+    )
+    assertEquals(
+      listOf("first_name"),
+      handler.handle(SepCustomerInfoNeededException(listOf("first_name"))).fields
+    )
+    assertEquals(
+      "The \"account\" parameter is missing.",
+      handler
+        .handleMissingParams(MissingServletRequestParameterException("account", "String"))
+        .error
+    )
+    assertEquals(
+      "too many",
+      handler.handleRateLimitExceeded(SepRateLimitExceededException("too many")).error
+    )
 
+    // Every specific handler keeps the status it answers with.
     val statuses =
       mapOf(
         "handleBadRequest" to HttpStatus.BAD_REQUEST,
+        "handleMissingParams" to HttpStatus.BAD_REQUEST,
         "handleAuthError" to HttpStatus.FORBIDDEN,
+        "handle" to HttpStatus.FORBIDDEN,
+        "handleRateLimitExceeded" to HttpStatus.TOO_MANY_REQUESTS,
+        "handleNotImplementedError" to HttpStatus.NOT_IMPLEMENTED,
+        "handleServerErrorException" to HttpStatus.BAD_GATEWAY,
         "handleNotFound" to HttpStatus.NOT_FOUND,
       )
     for ((name, status) in statuses) {
