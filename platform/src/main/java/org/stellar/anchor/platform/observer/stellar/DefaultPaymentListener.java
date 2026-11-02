@@ -790,15 +790,19 @@ public class DefaultPaymentListener implements PaymentListener {
    */
   private void recordUnderpayment(
       LedgerTransaction ledgerTransaction, JdbcSepTransaction sepTransaction) throws IOException {
-    PaymentHelper.recordStellarTransaction(sacToAssetMapper, ledgerTransaction, sepTransaction);
     try {
-      switch (Sep.from(sepTransaction.getProtocol())) {
-        case SEP_6 -> sep6TransactionStore.save((JdbcSep6Transaction) sepTransaction);
-        case SEP_24 -> sep24TransactionStore.save((JdbcSep24Transaction) sepTransaction);
-        case SEP_31 -> sep31TransactionStore.save((JdbcSep31Transaction) sepTransaction);
-        default ->
-            throw new IllegalStateException(
-                "Unsupported protocol: " + sepTransaction.getProtocol());
+      // A redelivered payment is already in the list: it is not saved again, but the event is sent
+      // again, because the first delivery may have failed after the save.
+      if (!isRecorded(ledgerTransaction, sepTransaction)) {
+        PaymentHelper.recordStellarTransaction(sacToAssetMapper, ledgerTransaction, sepTransaction);
+        switch (Sep.from(sepTransaction.getProtocol())) {
+          case SEP_6 -> sep6TransactionStore.save((JdbcSep6Transaction) sepTransaction);
+          case SEP_24 -> sep24TransactionStore.save((JdbcSep24Transaction) sepTransaction);
+          case SEP_31 -> sep31TransactionStore.save((JdbcSep31Transaction) sepTransaction);
+          default ->
+              throw new IllegalStateException(
+                  "Unsupported protocol: " + sepTransaction.getProtocol());
+        }
       }
       eventSession.publish(
           AnchorEvent.builder()
@@ -817,5 +821,12 @@ public class DefaultPaymentListener implements PaymentListener {
       throw new IOException(
           "Recording the underpayment of transaction " + sepTransaction.getId() + " failed", ex);
     }
+  }
+
+  private static boolean isRecorded(
+      LedgerTransaction ledgerTransaction, JdbcSepTransaction sepTransaction) {
+    return sepTransaction.getStellarTransactions() != null
+        && sepTransaction.getStellarTransactions().stream()
+            .anyMatch(tx -> Objects.equals(tx.getId(), ledgerTransaction.getHash()));
   }
 }

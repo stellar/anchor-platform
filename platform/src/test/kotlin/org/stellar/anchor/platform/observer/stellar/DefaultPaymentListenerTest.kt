@@ -1051,6 +1051,46 @@ class DefaultPaymentListenerTest {
     verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
   }
 
+  @Test
+  fun `test underpayment redelivered after a failed save is recorded and published once`() {
+    val event = underpaidEvent()
+    val saved = slot<Sep31Transaction>()
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } answers
+      {
+        listOf(pendingSep31())
+      }
+    every { sep31TransactionStore.save(capture(saved)) } throws
+      QueryTimeoutException("database down") andThenAnswer
+      {
+        firstArg()
+      }
+
+    assertThrows(IOException::class.java) { paymentListener.onReceived(event) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+    paymentListener.onReceived(event)
+
+    assertEquals(
+      listOf(event.ledgerTransaction.hash),
+      saved.captured.stellarTransactions.map { it.id }
+    )
+    verify(exactly = 1) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test underpayment already recorded is not appended again and is published again`() {
+    val event = underpaidEvent()
+    val txn = pendingSep31()
+    PaymentHelper.recordStellarTransaction(sacToAssetMapper, event.ledgerTransaction, txn)
+    val recorded = txn.stellarTransactions.toList()
+    stubSep31(txn)
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+    assertEquals(recorded, txn.stellarTransactions)
+    verify(exactly = 1) { eventSession.publish(any()) }
+  }
+
   /** Runs [block] with a fresh meter registry attached and returns that registry. */
   private fun withMetrics(block: () -> Unit): SimpleMeterRegistry {
     val registry = SimpleMeterRegistry()
