@@ -4,7 +4,10 @@ import static java.util.stream.Collectors.toList;
 import static org.stellar.anchor.util.Log.warnF;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep;
@@ -115,14 +118,36 @@ public class PaymentHelper {
                     .collect(toList()))
             .build();
 
-    if (sepTxn.getStellarTransactions() == null) {
-      sepTxn.setStellarTransactions(List.of(stellarTransaction));
-    } else {
-      sepTxn.getStellarTransactions().add(stellarTransaction);
-    }
+    sepTxn.setStellarTransactions(addOrMerge(sepTxn.getStellarTransactions(), stellarTransaction));
 
     sepTxn.setTransferReceivedAt(
         Optional.ofNullable(ledgerTxn.getCreatedAt()).orElse(Instant.now()));
     sepTxn.setStellarTransactionId(ledgerTxn.getHash());
+  }
+
+  /**
+   * Returns the transactions with the new one in place of the entry that has the same hash, or
+   * appended when there is none, so a hash never appears twice. The payments of both are kept,
+   * ordered by first appearance.
+   */
+  private static List<StellarTransaction> addOrMerge(
+      List<StellarTransaction> transactions, StellarTransaction added) {
+    List<StellarTransaction> merged =
+        transactions == null ? new ArrayList<>() : new ArrayList<>(transactions);
+    for (int i = 0; i < merged.size(); i++) {
+      StellarTransaction existing = merged.get(i);
+      if (Objects.equals(existing.getId(), added.getId())) {
+        Map<String, StellarPayment> payments = new LinkedHashMap<>();
+        if (existing.getPayments() != null) {
+          existing.getPayments().forEach(p -> payments.put(p.getId(), p));
+        }
+        added.getPayments().forEach(p -> payments.put(p.getId(), p));
+        added.setPayments(new ArrayList<>(payments.values()));
+        merged.set(i, added);
+        return merged;
+      }
+    }
+    merged.add(added);
+    return merged;
   }
 }
