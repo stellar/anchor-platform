@@ -354,7 +354,8 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
 
   fun createTx(
     senderCustomer: Sep12PutCustomerResponse,
-    receiverCustomer: Sep12PutCustomerResponse
+    receiverCustomer: Sep12PutCustomerResponse,
+    fields: HashMap<String, String>? = null
   ): Sep31PostTransactionResponse {
     // Create asset quote
     val quote =
@@ -369,6 +370,7 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     txnRequest.senderId = senderCustomer.id
     txnRequest.receiverId = receiverCustomer.id
     txnRequest.quoteId = quote.id
+    if (fields != null) txnRequest.fields = Sep31TxnFields(fields)
     val postTxResponse = sep31Client.postTransaction(txnRequest)
     return postTxResponse
   }
@@ -612,6 +614,84 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
           .build()
       )
     }
+  }
+
+  // The configured required fields with `receiver_account_number` padded so the serialized map has
+  // exactly `serializedLength` characters.
+  private fun fieldsOfSerializedLength(serializedLength: Int): HashMap<String, String> {
+    val fields =
+      hashMapOf(
+        "receiver_routing_number" to "r0123",
+        "receiver_account_number" to "",
+        "type" to "SWIFT"
+      )
+    val padding = serializedLength - GsonUtils.getInstance().toJson(fields).length
+    check(padding >= 0) { "$serializedLength is shorter than the required fields" }
+    fields["receiver_account_number"] = "a".repeat(padding)
+    assertEquals(serializedLength, GsonUtils.getInstance().toJson(fields).length)
+    return fields
+  }
+
+  private fun postWithFields(fields: HashMap<String, String>): Sep31PostTransactionResponse {
+    val (senderCustomer, receiverCustomer) = mkCustomers()
+    return createTx(senderCustomer, receiverCustomer, fields)
+  }
+
+  @Test
+  fun `test POST sep31 transactions persists fields longer than 255 characters`() {
+    // The PoC of HackerOne #4113076: a 300-character value used to answer 500 with the INSERT text.
+    val fields =
+      hashMapOf(
+        "receiver_routing_number" to "r0123",
+        "receiver_account_number" to "a".repeat(300),
+        "type" to "SWIFT"
+      )
+
+    val posted = postWithFields(fields)
+
+    assertFalse(posted.id.isNullOrBlank())
+    assertEquals(PENDING_RECEIVER.status, platformApiClient.getTransaction(posted.id).status.status)
+  }
+
+  @Test
+  fun `test POST sep31 transactions persists fields of exactly 255 characters`() {
+    val fields = fieldsOfSerializedLength(255)
+
+    val posted = postWithFields(fields)
+
+    assertFalse(posted.id.isNullOrBlank())
+    assertEquals(fields, platformApiClient.getTransaction(posted.id).fields)
+  }
+
+  @Test
+  fun `test POST sep31 transactions persists fields of exactly 256 characters`() {
+    val fields = fieldsOfSerializedLength(256)
+
+    val posted = postWithFields(fields)
+
+    assertFalse(posted.id.isNullOrBlank())
+    assertEquals(fields, platformApiClient.getTransaction(posted.id).fields)
+  }
+
+  @Test
+  fun `test long fields read back through the Platform API`() {
+    val fields = fieldsOfSerializedLength(600)
+
+    val posted = postWithFields(fields)
+
+    val stored = platformApiClient.getTransaction(posted.id).fields
+    assertEquals(fields.keys, stored.keys)
+    fields.forEach { (name, value) -> assertEquals(value, stored[name], name) }
+  }
+
+  @Test
+  fun `test non-ASCII fields round trip`() {
+    val fields = fieldsOfSerializedLength(300)
+    fields["receiver_account_number"] = "José Ñandú 東京都 \uD83D\uDE80 ".repeat(20)
+
+    val posted = postWithFields(fields)
+
+    assertEquals(fields, platformApiClient.getTransaction(posted.id).fields)
   }
 
   @Test
