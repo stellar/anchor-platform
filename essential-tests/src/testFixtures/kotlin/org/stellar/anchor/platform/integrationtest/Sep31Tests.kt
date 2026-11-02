@@ -14,6 +14,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode.LENIENT
 import org.skyscreamer.jsonassert.comparator.CustomComparator
 import org.springframework.data.domain.Sort.Direction
 import org.springframework.data.domain.Sort.Direction.DESC
+import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepNotFoundException
@@ -499,7 +500,11 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
   // event/observer, racing this PATCH into the same OptimisticLockingFailureException
   // TransactionService throws as "Transaction was modified by another request. Please re-read
   // the transaction state and retry if appropriate." — so retry on that exact message.
-  private fun requestInfoUpdate(txId: String, vararg fieldNames: String) {
+  private fun requestInfoUpdate(
+    txId: String,
+    vararg fieldNames: String,
+    fieldMetadata: Map<String, AssetInfo.Field>? = null
+  ) {
     val request =
       PatchTransactionsRequest.builder()
         .records(
@@ -509,6 +514,7 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
                 .id(txId)
                 .status(PENDING_TRANSACTION_INFO_UPDATE)
                 .requiredInfoUpdates(fieldNames.toList())
+                .requiredInfoUpdatesFields(fieldMetadata)
                 .build()
             )
           )
@@ -721,13 +727,25 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
   fun `test required_info_updates past 255 characters persist`() {
     val (senderCustomer, receiverCustomer) = mkCustomers()
     val posted = createTx(senderCustomer, receiverCustomer)
-    val requested = (1..10).map { "receiver_bank_account_holder_name_$it" }
+    val requested =
+      (1..10).associate {
+        "receiver_bank_account_holder_name_$it" to
+          AssetInfo.Field.builder()
+            .description("Description $it of the field the receiving bank asks for again")
+            .choices(if (it % 2 == 0) listOf("first", "second") else null)
+            .optional(it % 3 == 0)
+            .build()
+      }
 
-    requestInfoUpdate(posted.id, *requested.toTypedArray())
+    requestInfoUpdate(posted.id, *requested.keys.toTypedArray(), fieldMetadata = requested)
 
     val stored = platformApiClient.getTransaction(posted.id).requiredInfoUpdatesFields
-    assertEquals(requested.toSet(), stored.keys)
-    stored.values.forEach { assertFalse(it.description.isNullOrBlank()) }
+    assertEquals(requested.keys, stored.keys)
+    requested.forEach { (name, expected) ->
+      assertEquals(expected.description, stored[name]!!.description, "$name description")
+      assertEquals(expected.choices, stored[name]!!.choices, "$name choices")
+      assertEquals(expected.isOptional, stored[name]!!.isOptional, "$name optional")
+    }
   }
 
   @Test
