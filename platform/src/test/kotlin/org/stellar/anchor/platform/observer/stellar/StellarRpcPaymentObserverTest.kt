@@ -19,7 +19,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.asset.StellarAssetInfo
+import org.stellar.anchor.api.platform.HealthCheckStatus
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.ledger.LedgerClientHelper
 import org.stellar.anchor.ledger.LedgerTransaction
@@ -37,6 +39,7 @@ import org.stellar.sdk.MuxedAccount
 import org.stellar.sdk.SorobanServer
 import org.stellar.sdk.TOID
 import org.stellar.sdk.exception.NetworkException
+import org.stellar.sdk.exception.SorobanRpcException
 import org.stellar.sdk.requests.sorobanrpc.EventFilterType
 import org.stellar.sdk.requests.sorobanrpc.GetEventsRequest
 import org.stellar.sdk.responses.sorobanrpc.GetEventsResponse
@@ -1291,6 +1294,264 @@ class StellarRpcPaymentObserverTest {
     every { response.latestLedger } returns 777L
     every { response.cursor } returns "POISON_CUR"
     return response
+  }
+
+  @Test
+  fun `fetchEvents holds the cursor when the observing account lookup fails`() {
+    setupTransferEvent(
+      KeyPair.random().accountId,
+      KeyPair.random().accountId,
+      BigInteger.valueOf(1_000_000L),
+      "txHashLookupFails",
+      operationIndex = 0L,
+    )
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } throws
+      RuntimeException("store unavailable")
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    observer.fetchEvents()
+
+    verify(exactly = 0) { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+    assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
+  }
+
+  private fun rejection() = SorobanRpcException(-32602, "too many filters", null)
+
+  private fun emptyResponse(cursor: String): GetEventsResponse {
+    val response = mockk<GetEventsResponse>()
+    every { response.events } returns emptyList()
+    every { response.latestLedger } returns 100L
+    every { response.cursor } returns cursor
+    return response
+  }
+
+  private fun newStartingObserver() =
+    spyk(
+      StellarRpcPaymentObserver(
+        stellarRpc,
+        config,
+        paymentListeners,
+        paymentObservingAccountsManager,
+        paymentStreamerCursorStore,
+        sacToAssetMapper,
+        assetService,
+      ),
+      recordPrivateCalls = true,
+    )
+
+  @Test
+  fun `fetchEvents arms lastActivityTime on the first poll even when getEvents is rejected`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    observer.cursor = "0001"
+    assertNull(observer.lastActivityTime)
+
+    observer.fetchEvents()
+    val armed = observer.lastActivityTime
+    assertNotNull(armed)
+
+    Thread.sleep(5)
+    observer.fetchEvents()
+    assertEquals(armed, observer.lastActivityTime)
+  }
+
+  @Test
+  fun `a backend that never completes a poll trips the silence detector`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws NetworkException(503, "outage")
+    observer.cursor = "0001"
+
+    observer.fetchEvents()
+    observer.lastActivityTime = java.time.Instant.now().minusSeconds(config.silenceTimeout + 1L)
+    observer.checkSilence()
+
+    assertEquals(ObserverStatus.SILENCE_ERROR, observer.getStatus())
+  }
+
+  @Test
+  fun `fetchEvents leaves lastActivityTime alone during an outage`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws NetworkException(503, "outage")
+    observer.cursor = "0001"
+    val old = java.time.Instant.now().minusSeconds(60)
+    observer.lastActivityTime = old
+
+    observer.fetchEvents()
+
+    assertEquals(old, observer.lastActivityTime)
+  }
+
+  @Test
+  fun `fetchEvents sets STREAM_ERROR after 5 consecutive rejected polls and not before`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    observer.cursor = "0001"
+
+    repeat(4) { observer.fetchEvents() }
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+
+    observer.fetchEvents()
+    assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
+  }
+
+  @Test
+  fun `processEvents propagates an observing account lookup failure`() {
+    val event =
+      setupTransferEvent(
+        KeyPair.random().accountId,
+        KeyPair.random().accountId,
+        BigInteger.valueOf(1_000_000L),
+        "txHashLookupFails",
+        operationIndex = 0L,
+      )
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } throws
+      RuntimeException("store unavailable")
+
+    assertThrows<RuntimeException> { observer.processEvents(listOf(event), "END") }
+  }
+
+  @Test
+  fun `processEvents skips an event that cannot be decoded without consulting the observing accounts`() {
+    val event = eventWithId("e1")
+    every { event.topic } returns listOf("not-xdr", "not-xdr", "not-xdr", "not-xdr")
+
+    assertEquals("END", observer.processEvents(listOf(event), "END"))
+    verify(exactly = 0) { paymentObservingAccountsManager.lookupAndUpdate(any()) }
+    verify(exactly = 0) { observer.processTransferEvent(any()) }
+  }
+
+  @Test
+  fun `fetchEvents resets the consecutive rejection count after a successful poll`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    observer.cursor = "0001"
+    justRun { paymentStreamerCursorStore.saveStellarRpcCursor(any()) }
+
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    repeat(4) { observer.fetchEvents() }
+    every { sorobanServer.getEvents(any()) } returns emptyResponse("0002")
+    observer.fetchEvents()
+    assertEquals(0, observer.consecutiveFailedPolls)
+
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    repeat(4) { observer.fetchEvents() }
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+  }
+
+  @Test
+  fun `an outage between rejections leaves the rejection count as it was`() {
+    every { observer.buildEventRequest(any()) } returns mockk<GetEventsRequest>()
+    observer.cursor = "0001"
+
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    repeat(3) { observer.fetchEvents() }
+    assertEquals(3, observer.consecutiveFailedPolls)
+
+    every { sorobanServer.getEvents(any()) } throws NetworkException(503, "outage")
+    repeat(4) { observer.fetchEvents() }
+    assertEquals(3, observer.consecutiveFailedPolls)
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+
+    every { sorobanServer.getEvents(any()) } throws rejection()
+    observer.fetchEvents()
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+    observer.fetchEvents()
+    assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
+  }
+
+  @Test
+  fun `a failed latest-ledger lookup while building the request does not stop the observer`() {
+    every { observer.buildEventRequest(any()) } throws IOException("cannot build")
+
+    repeat(10) { observer.fetchEvents() }
+
+    assertEquals(ObserverStatus.RUNNING, observer.getStatus())
+  }
+
+  @Test
+  fun `startInternal resets the consecutive rejection count so each restart gets a fresh budget`() {
+    observer.consecutiveFailedPolls = 4
+
+    observer.startInternal()
+
+    assertEquals(0, observer.consecutiveFailedPolls)
+    observer.shutdownInternal()
+  }
+
+  @Test
+  fun `check reports YELLOW while STARTING`() {
+    val starting = newStartingObserver()
+    assertEquals(ObserverStatus.STARTING, starting.getStatus())
+    assertEquals(HealthCheckStatus.YELLOW, starting.check().status)
+    starting.setStatus(ObserverStatus.RUNNING)
+    assertEquals(ObserverStatus.RUNNING, starting.getStatus())
+  }
+
+  @Test
+  fun `check reports GREEN while RUNNING`() {
+    assertEquals(HealthCheckStatus.GREEN, observer.check().status)
+  }
+
+  @Test
+  fun `check reports RED once setStatus moves the observer into an error state`() {
+    for (status in
+      listOf(
+        ObserverStatus.STREAM_ERROR,
+        ObserverStatus.DATABASE_ERROR,
+        ObserverStatus.SILENCE_ERROR,
+        ObserverStatus.PUBLISHER_ERROR,
+        ObserverStatus.NEEDS_SHUTDOWN,
+        ObserverStatus.SHUTDOWN,
+      )) {
+      observer.status = ObserverStatus.RUNNING
+      observer.setStatus(status)
+      assertEquals(HealthCheckStatus.RED, observer.check().status, "status=$status")
+    }
+  }
+
+  @Test
+  fun `shutdownInternal does not move the status out of the supervisor's hands`() {
+    observer.startInternal()
+    observer.setStatus(ObserverStatus.STREAM_ERROR)
+
+    observer.shutdownInternal()
+
+    assertEquals(ObserverStatus.STREAM_ERROR, observer.getStatus())
+  }
+
+  @Test
+  fun `start promotes a STARTING observer to RUNNING`() {
+    val starting = newStartingObserver()
+    justRun { starting.startInternal() }
+
+    starting.start()
+
+    assertEquals(ObserverStatus.RUNNING, starting.getStatus())
+    starting.silenceWatcher.shutdownNow()
+    starting.statusWatcher.shutdownNow()
+  }
+
+  @Test
+  fun `start does not overwrite an error status set while startInternal ran`() {
+    val starting = newStartingObserver()
+    every { starting.startInternal() } answers { starting.setStatus(ObserverStatus.DATABASE_ERROR) }
+
+    starting.start()
+
+    assertEquals(ObserverStatus.DATABASE_ERROR, starting.getStatus())
+    starting.silenceWatcher.shutdownNow()
+    starting.statusWatcher.shutdownNow()
+  }
+
+  @Test
+  fun `promoteIfUnchanged sets RUNNING only when the status did not move`() {
+    val unchanged = newStartingObserver()
+    unchanged.promoteIfUnchanged(ObserverStatus.STARTING)
+    assertEquals(ObserverStatus.RUNNING, unchanged.getStatus())
+
+    val failed = newStartingObserver()
+    failed.setStatus(ObserverStatus.STREAM_ERROR)
+    failed.promoteIfUnchanged(ObserverStatus.STARTING)
+    assertEquals(ObserverStatus.STREAM_ERROR, failed.getStatus())
   }
 }
 

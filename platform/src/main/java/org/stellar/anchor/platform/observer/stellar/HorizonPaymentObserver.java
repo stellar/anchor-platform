@@ -51,6 +51,9 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
   /** The minimum number of results the Stellar Blockchain can return. */
   private static final int MIN_RESULTS = 1;
 
+  /** Horizon cursor value that streams from the current tip of the ledger. */
+  static final String NOW_CURSOR = "now";
+
   final Horizon horizon;
   SSEStream<OperationResponse> stream;
 
@@ -147,7 +150,8 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
    * already stored in the database, that value will be returned. Otherwise, this method will fetch
    * the most recent cursor from the Network and use that as a starting point.
    *
-   * @return the starting point to start streaming from.
+   * @return the starting point to start streaming from. Never null.
+   * @throws NetworkException if the latest cursor cannot be fetched from the network.
    */
   String fetchStreamingCursor() {
     // Use database value, if any.
@@ -158,6 +162,10 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
       info("No last stored cursor, so use the latest cursor");
       return strLatestFromNetwork;
     }
+    if (NOW_CURSOR.equals(strLatestFromNetwork)) {
+      info("The network has no payments, so stream from the tip");
+      return NOW_CURSOR;
+    }
     long lastStored = Long.parseLong(strLastStored);
     long latest = Long.parseLong(strLatestFromNetwork);
     if (lastStored >= latest) {
@@ -166,7 +174,40 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
           strLatestFromNetwork);
       return String.valueOf(latest);
     }
+    verifyCursorWithinRetention(lastStored);
     return strLastStored;
+  }
+
+  /**
+   * Horizon silently moves an ascending query whose cursor is older than its retention window to
+   * the oldest retained ledger, so the observer would skip every payment in between and persist the
+   * advanced position. Reject such a cursor instead. The condition is Horizon's own definition of
+   * "before history": {@code cursor <= toid(historyElderLedger, 0, 0)}.
+   *
+   * @throws IllegalStateException if the stored cursor is older than the retained history.
+   * @throws NetworkException if the root resource cannot be fetched.
+   */
+  void verifyCursorWithinRetention(long storedCursor) {
+    Long elderLedger;
+    try {
+      elderLedger = horizon.getServer().root().execute().getHistoryElderLedger();
+    } catch (NetworkException e) {
+      Log.errorEx("Error fetching the Horizon root resource.", e);
+      throw e;
+    }
+    if (elderLedger == null) {
+      warn(
+          "The Horizon root resource has no history_elder_ledger. Cannot verify the stored cursor.");
+      return;
+    }
+    if (storedCursor <= (elderLedger << 32)) {
+      throw new IllegalStateException(
+          String.format(
+              "The stored cursor %d is older than the history retained by Horizon (elder ledger %d). "
+                  + "Horizon would skip the payments in between. Reset the stored cursor and "
+                  + "reprocess from a Horizon or history archive that still has them.",
+              storedCursor, elderLedger));
+    }
   }
 
   String fetchLatestCursorFromHorizon() {
@@ -182,15 +223,17 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
               .limit(MIN_RESULTS)
               .execute();
     } catch (NetworkException e) {
+      // Never fall back to a null cursor: the stream would start from the oldest ledger. The
+      // exception sends the observer to STREAM_ERROR, where the status watcher retries.
       Log.errorEx("Error fetching the latest /payments result.", e);
-      return null;
+      throw e;
     }
 
     if (pageOpResponse == null
         || pageOpResponse.getRecords() == null
         || pageOpResponse.getRecords().isEmpty()) {
       info("No payments found.");
-      return null;
+      return NOW_CURSOR;
     }
     String token = pageOpResponse.getRecords().get(0).getPagingToken();
     infoF("The latest cursor fetched from Stellar network is: {}", token);

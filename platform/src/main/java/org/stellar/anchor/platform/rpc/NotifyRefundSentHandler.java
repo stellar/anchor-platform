@@ -294,8 +294,10 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
         }
         break;
       case SEP_31:
-        supportedStatuses.add(PENDING_STELLAR);
-        supportedStatuses.add(PENDING_RECEIVER);
+        if (areFundsReceived(txn)) {
+          supportedStatuses.add(PENDING_STELLAR);
+          supportedStatuses.add(PENDING_RECEIVER);
+        }
     }
 
     return supportedStatuses;

@@ -255,6 +255,7 @@ class RefundPrecisionTest {
   fun `sep31 refund with a fee persists the exact fee and total and reaches refunded`() {
     val txn = JdbcSep31Transaction()
     txn.status = PENDING_RECEIVER.toString()
+    txn.transferReceivedAt = Instant.now()
     txn.amountIn = "10.1234567"
     txn.amountInAsset = NATIVE
     txn.amountFee = "0"

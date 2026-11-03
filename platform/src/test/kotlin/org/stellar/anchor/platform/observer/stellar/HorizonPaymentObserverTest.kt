@@ -323,6 +323,22 @@ class HorizonPaymentObserverTest {
   }
 
   @Test
+  fun `processOperation holds the cursor when the observing account lookup fails`() {
+    val op = mockk<PaymentOperationResponse>()
+    every { op.to } returns "toAccount"
+    every { op.from } returns "fromAccount"
+    every { op.pagingToken } returns "cursor-1"
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } throws
+      RuntimeException("store unavailable")
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    observer.processOperation(op)
+
+    verify(exactly = 0) { paymentStreamerCursorStore.saveHorizonCursor(any()) }
+    assertEquals(ObserverStatus.PUBLISHER_ERROR, observer.getStatus())
+  }
+
+  @Test
   fun `processOperation keeps the cursor and goes to PUBLISHER_ERROR when a listener throws IOException`() {
     val listener = mockk<PaymentListener>()
     every { listener.onReceived(any()) } throws IOException("lookup failed")

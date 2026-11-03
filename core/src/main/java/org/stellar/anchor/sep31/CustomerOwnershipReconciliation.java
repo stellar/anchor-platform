@@ -12,6 +12,7 @@ public final class CustomerOwnershipReconciliation {
 
   public static boolean tryReconcile(
       Sep31CustomerIdOwnerStore store,
+      OwnerKeyResolver ownerKeyResolver,
       CustomerIntegration customerIntegration,
       String customerId,
       WebAuthJwt token,
@@ -42,6 +43,6 @@ public final class CustomerOwnershipReconciliation {
 
     String legacyMemo = store.getCreatorMemo(customerId);
     return store.reconcileLegacyKey(
-        customerId, clientName, legacyMemo, token.getOwnerKey(), token.getOwnerMemo());
+        customerId, clientName, legacyMemo, ownerKeyResolver.ownerKey(token), token.getOwnerMemo());
   }
 }

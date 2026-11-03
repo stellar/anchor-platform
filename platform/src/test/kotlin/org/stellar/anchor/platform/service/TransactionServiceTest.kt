@@ -40,6 +40,8 @@ import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.sep6.Sep6DepositInfoGenerator
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.MemoHelper
+import org.stellar.sdk.Memo
 
 @Suppress("unused")
 class TransactionServiceTest {
@@ -1830,5 +1832,171 @@ class TransactionServiceTest {
       }
     assertInstanceOf(BadRequestException::class.java, ex)
     assertEquals("Transaction is missing.", ex.message)
+  }
+
+  private fun patchSep24Withdrawal(
+    tx: JdbcSep24Transaction,
+    memo: String?,
+    memoType: String?
+  ): JdbcSep24Transaction {
+    tx.status = SepTransactionStatus.INCOMPLETE.toString()
+    tx.kind = "withdrawal"
+    val data = PlatformTransactionData()
+    data.id = "testTxId"
+    data.memo = memo
+    data.memoType = memoType
+    data.status = SepTransactionStatus.PENDING_ANCHOR
+    val request =
+      PatchTransactionsRequest.builder().records(listOf(PatchTransactionRequest(data))).build()
+
+    every { sep31TransactionStore.findByTransactionId(any()) } returns null
+    every { sep6TransactionStore.findByTransactionId(any()) } returns null
+    every { sep24TransactionStore.findByTransactionId(any()) } returns tx
+
+    transactionService.patchTransactions(request)
+    return tx
+  }
+
+  @Test
+  fun `test patchTransactions stores a SEP-24 hash memo as hex, the form the observer looks up`() {
+    val tx =
+      patchSep24Withdrawal(
+        JdbcSep24Transaction(),
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+        "hash"
+      )
+
+    assertEquals("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", tx.memo)
+    assertEquals("hash", tx.memoType)
+    // The observer looks a withdrawal up by memoAsString of the on-chain memo.
+    assertEquals(MemoHelper.memoAsString(Memo.hash(ByteArray(32) { it.toByte() })), tx.memo)
+    verify(exactly = 1) { sep24TransactionStore.save(tx) }
+  }
+
+  @ParameterizedTest
+  @CsvSource("007,7", "+7,7", "0,0", "12345,12345", "18446744073709551615,18446744073709551615")
+  fun `test patchTransactions stores a SEP-24 id memo in its canonical decimal form`(
+    input: String,
+    expected: String
+  ) {
+    val tx = patchSep24Withdrawal(JdbcSep24Transaction(), input, "id")
+
+    assertEquals(expected, tx.memo)
+    assertEquals("id", tx.memoType)
+    assertEquals(MemoHelper.memoAsString(MemoHelper.makeMemo(tx.memo, tx.memoType)), tx.memo)
+  }
+
+  @Test
+  fun `test patchTransactions stores a SEP-24 text memo unchanged`() {
+    val tx = patchSep24Withdrawal(JdbcSep24Transaction(), "my-memo", "text")
+
+    assertEquals("my-memo", tx.memo)
+    assertEquals("text", tx.memoType)
+  }
+
+  @Test
+  fun `test patchTransactions leaves the SEP-24 memo untouched when the patch has no memo`() {
+    val existing = JdbcSep24Transaction()
+    existing.memo = "99"
+    existing.memoType = "id"
+
+    val tx = patchSep24Withdrawal(existing, null, null)
+
+    assertEquals("99", tx.memo)
+    assertEquals("id", tx.memoType)
+  }
+
+  @Test
+  fun `test patchTransactions leaves the SEP-24 memo untouched when the patch has a type and an empty memo`() {
+    val existing = JdbcSep24Transaction()
+    existing.memo = "99"
+    existing.memoType = "id"
+
+    val tx = patchSep24Withdrawal(existing, "", "hash")
+
+    assertEquals("99", tx.memo)
+    assertEquals("id", tx.memoType)
+  }
+
+  @ParameterizedTest
+  @CsvSource("abc,id", "-1,id")
+  fun `test patchTransactions rejects an unparsable SEP-24 id memo and writes nothing`(
+    memo: String,
+    memoType: String
+  ) {
+    val tx = JdbcSep24Transaction()
+
+    assertThrows<AnchorException> { patchSep24Withdrawal(tx, memo, memoType) }
+
+    assertNull(tx.memo)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun `test patchTransactions rejects a SEP-24 hash memo that is not base64 and writes nothing`() {
+    val tx = JdbcSep24Transaction()
+
+    assertThrows<IllegalArgumentException> { patchSep24Withdrawal(tx, "not base64!", "hash") }
+
+    assertNull(tx.memo)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun `test patchTransactions stores non-ASCII decimal digits of a SEP-24 id memo as ASCII`() {
+    val tx = patchSep24Withdrawal(JdbcSep24Transaction(), "\u0661\u0662\u0663", "id")
+
+    assertEquals("123", tx.memo)
+  }
+
+  @Test
+  fun `test patchTransactions rejects a SEP-24 id memo above the uint64 maximum`() {
+    val tx = JdbcSep24Transaction()
+
+    assertThrows<AnchorException> { patchSep24Withdrawal(tx, "18446744073709551616", "id") }
+
+    assertNull(tx.memo)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun `test patchTransactions rejects a SEP-24 return-hash memo type`() {
+    val tx = JdbcSep24Transaction()
+
+    val ex =
+      assertThrows<AnchorException> {
+        patchSep24Withdrawal(tx, "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", "return")
+      }
+
+    assertEquals("Unsupported value: return", ex.message)
+    assertNull(tx.memo)
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun `test patchTransactions does not touch updatedAt when the SEP-24 memo is already canonical`() {
+    val updatedAt = java.time.Instant.parse("2026-01-01T00:00:00Z")
+    val tx = JdbcSep24Transaction()
+    tx.status = SepTransactionStatus.PENDING_ANCHOR.toString()
+    tx.kind = "withdrawal"
+    tx.memo = "7"
+    tx.memoType = "id"
+    tx.updatedAt = updatedAt
+    val data = PlatformTransactionData()
+    data.id = "testTxId"
+    data.memo = "7"
+    data.memoType = "id"
+    data.status = SepTransactionStatus.PENDING_ANCHOR
+    val request =
+      PatchTransactionsRequest.builder().records(listOf(PatchTransactionRequest(data))).build()
+
+    every { sep31TransactionStore.findByTransactionId(any()) } returns null
+    every { sep6TransactionStore.findByTransactionId(any()) } returns null
+    every { sep24TransactionStore.findByTransactionId(any()) } returns tx
+
+    transactionService.patchTransactions(request)
+
+    assertEquals("7", tx.memo)
+    assertEquals(updatedAt, tx.updatedAt)
   }
 }

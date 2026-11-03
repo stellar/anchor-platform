@@ -132,6 +132,8 @@ public abstract class RpcTransactionStatusHandler<T extends RpcMethodParamsReque
   protected abstract void updateTransactionWithRpcRequest(JdbcSepTransaction txn, T request)
       throws AnchorException;
 
+  protected void beforeTransactionSaved(JdbcSepTransaction txn, T request) throws AnchorException {}
+
   protected void afterTransactionSaved(JdbcSepTransaction txn, T request) throws AnchorException {}
 
   protected JdbcSepTransaction getTransaction(String transactionId) throws AnchorException {
@@ -187,6 +189,8 @@ public abstract class RpcTransactionStatusHandler<T extends RpcMethodParamsReque
     if (isFinalStatus(nextStatus)) {
       txn.setCompletedAt(Instant.now());
     }
+
+    beforeTransactionSaved(txn, request);
 
     switch (Sep.from(txn.getProtocol())) {
       case SEP_6:
