@@ -115,4 +115,19 @@ class SecretStoreChartTest {
     assertEquals(platform["CALLBACK_API_AUTH_SECRET"], reference["PLATFORM_ANCHOR_SECRET"])
     assertEquals(platform["PLATFORM_API_AUTH_SECRET"], reference["ANCHOR_PLATFORM_SECRET"])
   }
+
+  @Test
+  fun `test README documents every secret value`() {
+    val readme = File("../helm-charts/README.md").readText()
+    assertTrue(
+      readme.contains("openssl rand -hex 32"),
+      "the README must show how to generate a value"
+    )
+    platformSecrets.keys.forEach {
+      assertTrue(
+        readme.contains("--set $it="),
+        "the README must pass $it to helm upgrade --install"
+      )
+    }
+  }
 }
