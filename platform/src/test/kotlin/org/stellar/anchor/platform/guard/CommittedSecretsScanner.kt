@@ -39,7 +39,7 @@ object CommittedSecretsScanner {
     val files =
       listed?.asSequence()
         ?: dir.walkTopDown().onEnter { it.name !in SKIPPED_DIRECTORIES }.filter { it.isFile }
-    return files.filter { it.isFile && !isBinary(it) }
+    return files.filter { it.isFile }
   }
 
   private fun gitFiles(root: File, dir: File): List<File>? =
@@ -66,9 +66,6 @@ object CommittedSecretsScanner {
     } catch (e: java.io.IOException) {
       null
     }
-
-  private fun isBinary(file: File): Boolean =
-    file.inputStream().use { input -> input.readNBytes(8192).any { it == 0.toByte() } }
 
   fun scan(root: File): List<String> {
     val findings = mutableListOf<String>()

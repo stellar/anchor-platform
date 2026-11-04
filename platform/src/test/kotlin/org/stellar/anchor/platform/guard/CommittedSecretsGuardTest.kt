@@ -88,6 +88,37 @@ class CommittedSecretsGuardTest {
   }
 
   @Test
+  fun `test a token with characters outside base32 is not flagged`() {
+    val seed = newSeed()
+    val tokens =
+      listOf(
+        seed.replaceRange(5, 6, "0"),
+        seed.replaceRange(6, 7, "1"),
+        seed.replaceRange(7, 8, "8"),
+        seed.replaceRange(8, 9, "9"),
+        seed.replaceRange(9, 10, "a"),
+        seed.lowercase(),
+      )
+    tokens.forEach { assertEquals(56, it.length) }
+    write("service/src/main/resources/f.txt", tokens.joinToString("\n") { "k=$it" } + "\n")
+
+    assertEquals(emptyList(), scan())
+  }
+
+  @Test
+  fun `test a file with NUL bytes is still scanned`() {
+    val seed = newSeed()
+    File(tmp.toFile(), "service/src/main/resources").mkdirs()
+    File(tmp.toFile(), "service/src/main/resources/blob.bin")
+      .writeBytes(byteArrayOf(0, 1, 2) + "\nk=$seed\n".toByteArray())
+
+    assertEquals(
+      listOf("service/src/main/resources/blob.bin:2: a Stellar secret seed is committed"),
+      scan(),
+    )
+  }
+
+  @Test
   fun `test a literal secret in the secret store chart is flagged`() {
     val path = "helm-charts/secret-store/templates/store.yaml"
     write(
