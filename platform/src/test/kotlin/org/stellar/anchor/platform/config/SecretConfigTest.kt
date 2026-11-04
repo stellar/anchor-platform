@@ -13,6 +13,9 @@ import org.junit.jupiter.api.Test
 import org.springframework.validation.BindException
 import org.springframework.validation.Errors
 import org.stellar.anchor.platform.configurator.SecretManager
+import org.stellar.anchor.platform.utils.PublishedLiterals
+import org.stellar.anchor.util.Log
+import org.stellar.sdk.KeyPair
 
 class SecretConfigTest {
   lateinit var config: PropertySecretConfig
@@ -90,5 +93,91 @@ class SecretConfigTest {
     config.validate(config, errors)
 
     assertFalse(errors.hasErrors())
+  }
+
+  private fun validateWith(vararg secrets: Pair<String, String>): Errors {
+    every { secretManager.get(any()) } returns null
+    secrets.forEach { (property, value) -> every { secretManager.get(property) } returns value }
+    val errs = BindException(config, "config")
+    config.validate(config, errs)
+    return errs
+  }
+
+  private val freshSecrets =
+    PublishedLiterals.secretsByProperty.keys.mapIndexed { i, property ->
+      property to "fresh_secret_${i}_" + "0123456789abcdef".repeat(3)
+    }
+
+  @Test
+  fun `test published secret is rejected under its own property`() {
+    PublishedLiterals.secretsByProperty.forEach { (property, value) ->
+      val errs = validateWith(property to value)
+      assertEquals(1, errs.errorCount, property)
+      assertEquals("secret-published", errs.allErrors[0].code, property)
+    }
+  }
+
+  @Test
+  fun `test published secret is rejected under another property`() {
+    val entries = PublishedLiterals.secretsByProperty.entries.toList()
+    entries.forEachIndexed { i, (_, value) ->
+      val otherProperty = entries[(i + 1) % entries.size].key
+      val errs = validateWith(otherProperty to value)
+      assertEquals(1, errs.errorCount, otherProperty)
+      assertEquals("secret-published", errs.allErrors[0].code, otherProperty)
+      assertTrue(errs.allErrors[0].defaultMessage!!.contains(otherProperty))
+    }
+  }
+
+  @Test
+  fun `test a published value shared by two properties is reported per property and as a collision`() {
+    val (first, second) = PublishedLiterals.secretsByProperty.keys.toList()
+    val value = PublishedLiterals.secretsByProperty.getValue(first)
+    val errs = validateWith(first to value, second to value)
+    assertEquals(3, errs.errorCount)
+    assertEquals(2, errs.allErrors.count { it.code == "secret-published" })
+    assertEquals(1, errs.allErrors.count { it.code == "secrets.jwt.must_be_unique" })
+  }
+
+  @Test
+  fun `test fresh secrets and near misses are not reported as published`() {
+    assertFalse(validateWith(*freshSecrets.toTypedArray()).hasErrors())
+    PublishedLiterals.secretsByProperty.forEach { (property, value) ->
+      assertFalse(validateWith(property to (value + "x")).hasErrors(), "$property plus a character")
+      assertFalse(validateWith(property to "").hasErrors(), "$property empty")
+    }
+  }
+
+  @Test
+  fun `test published secret error names the property and not the value`() {
+    PublishedLiterals.secretsByProperty.forEach { (property, value) ->
+      val errs = validateWith(property to value)
+      val message = errs.allErrors[0].defaultMessage!!
+      assertTrue(message.contains(property), message)
+      PublishedLiterals.secretsByProperty.values.forEach { assertFalse(message.contains(it)) }
+    }
+  }
+
+  @Test
+  fun `test published signing seed logs a warning and adds no error`() {
+    mockkStatic(Log::class)
+    val warning = mutableListOf<String>()
+    every { Log.warn(any<String>()) } answers
+      {
+        warning.add(firstArg())
+        Unit
+      }
+    PublishedLiterals.signingSeeds.forEach { seed ->
+      warning.clear()
+      val errs = validateWith(PropertySecretConfig.SECRET_SEP_10_SIGNING_SEED to seed)
+      assertFalse(errs.hasErrors(), "a published seed is a warning, not an error")
+      assertEquals(1, warning.size)
+      assertTrue(warning[0].contains(PropertySecretConfig.SECRET_SEP_10_SIGNING_SEED))
+      assertFalse(warning[0].contains(seed))
+    }
+    warning.clear()
+    val fresh = String(KeyPair.random().secretSeed)
+    assertFalse(validateWith(PropertySecretConfig.SECRET_SEP_10_SIGNING_SEED to fresh).hasErrors())
+    assertTrue(warning.isEmpty())
   }
 }
