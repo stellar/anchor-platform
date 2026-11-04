@@ -97,6 +97,11 @@ the project. This file contains the secrets and configurations needed to run the
 cp .env.example .env
 ```
 
+`SECRET_SEP10_SIGNING_SEED` must be set in this file (or in your environment) for every local run, test profiles
+included: the repository ships no signing seed, because it is public. Use the seed of a Stellar testnet account you own.
+Without it the platform fails at startup with `Please set the secret.sep10.signing_seed or the SECRET_SEP10_SIGNING_SEED
+environment variable`.
+
 ## Build the Project with Gradle
 
 This project is wrapped with Gradle version `8.2.1`. You can use the Gradle wrapper to build the project.
