@@ -144,6 +144,8 @@ class SecretConfigTest {
     assertFalse(validateWith(*freshSecrets.toTypedArray()).hasErrors())
     PublishedLiterals.secretsByProperty.forEach { (property, value) ->
       assertFalse(validateWith(property to (value + "x")).hasErrors(), "$property plus a character")
+      assertFalse(validateWith(property to " $value").hasErrors(), "$property leading space")
+      assertFalse(validateWith(property to "$value\n").hasErrors(), "$property trailing newline")
       assertFalse(validateWith(property to "").hasErrors(), "$property empty")
     }
   }
@@ -174,6 +176,15 @@ class SecretConfigTest {
       assertEquals(1, warning.size)
       assertTrue(warning[0].contains(PropertySecretConfig.SECRET_SEP_10_SIGNING_SEED))
       assertFalse(warning[0].contains(seed))
+    }
+    warning.clear()
+    listOf(" ", "\n").forEach { extra ->
+      warning.clear()
+      validateWith(
+        PropertySecretConfig.SECRET_SEP_10_SIGNING_SEED to
+          (PublishedLiterals.signingSeeds[0] + extra)
+      )
+      assertTrue(warning.isEmpty(), "a seed with a trailing character is a different seed")
     }
     warning.clear()
     val fresh = String(KeyPair.random().secretSeed)

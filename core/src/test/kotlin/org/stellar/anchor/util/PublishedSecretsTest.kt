@@ -48,6 +48,8 @@ class PublishedSecretsTest {
   fun `test a one character variation of a published value is not published`() {
     publishedSecrets.forEach { (name, value) ->
       assertFalse(PublishedSecrets.isPublishedSecret(value + "x"), "$name plus a character")
+      assertFalse(PublishedSecrets.isPublishedSecret(" $value"), "$name leading space")
+      assertFalse(PublishedSecrets.isPublishedSecret("$value\n"), "$name trailing newline")
       assertFalse(PublishedSecrets.isPublishedSecret(value.dropLast(1)), "$name minus a character")
       assertFalse(PublishedSecrets.isPublishedSecret(value.uppercase()), "$name uppercased")
     }
