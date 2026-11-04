@@ -18,6 +18,7 @@ import org.stellar.sdk.TransactionBuilder
 import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.requests.TransactionsRequestBuilder
 import org.stellar.sdk.responses.TransactionResponse
+import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse
 import org.stellar.sdk.xdr.CryptoKeyType
 import org.stellar.sdk.xdr.EnvelopeType
 import org.stellar.sdk.xdr.FeeBumpTransaction
@@ -178,5 +179,32 @@ class MuxedTransactionSourceTest {
       )
 
     assertSinglePaymentFromSource(txn)
+  }
+
+  private fun rpcResponseFor(envelope: TransactionEnvelope): GetTransactionResponse {
+    val response = mockk<GetTransactionResponse>()
+    every { response.envelopeXdr } returns envelope.toXdrBase64()
+    every { response.txHash } returns txHash
+    every { response.applicationOrder } returns 1
+    every { response.ledger } returns 100L
+    every { response.createdAt } returns 1_790_000_000L
+    every { response.parseResultXdr() } returns successResult()
+    return response
+  }
+
+  @Test
+  fun `StellarRpc fromGetTransactionResponse returns a transaction whose V1 source is muxed`() {
+    val txn = StellarRpc.fromGetTransactionResponse(rpcResponseFor(muxedV1Envelope()))
+
+    assertSinglePaymentFromSource(txn)
+    assertEquals(source, txn.sourceAccount)
+  }
+
+  @Test
+  fun `StellarRpc fromGetTransactionResponse returns a transaction whose fee bump inner source is muxed`() {
+    val txn = StellarRpc.fromGetTransactionResponse(rpcResponseFor(muxedFeeBumpEnvelope()))
+
+    assertSinglePaymentFromSource(txn)
+    assertEquals(source, txn.sourceAccount)
   }
 }
