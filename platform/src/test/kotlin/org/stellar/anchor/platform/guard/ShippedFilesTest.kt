@@ -25,4 +25,23 @@ class ShippedFilesTest {
       assertFalse(profile.contains(it), "a published signing seed is still in the default profile")
     }
   }
+
+  @Test
+  fun `test the shipped examples carry no published signing key or seed`() {
+    listOf(
+        "helm-charts/sep-service/values.yaml",
+        "docs/resources/deployment-examples/example-fargate/example_config/stellar.toml",
+        "docs/resources/deployment-examples/example-k8s/anchor-platform-dev/sep-server-config-map.yaml",
+      )
+      .forEach { path ->
+        val text = shipped(path)
+        assertFalse(
+          text.contains(PublishedLiterals.SIGNING_KEY),
+          "$path advertises the published key"
+        )
+        PublishedLiterals.signingSeeds.forEach {
+          assertFalse(text.contains(it), "$path carries a published signing seed")
+        }
+      }
+  }
 }
