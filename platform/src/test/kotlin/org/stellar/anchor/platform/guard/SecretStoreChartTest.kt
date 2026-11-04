@@ -44,7 +44,7 @@ class SecretStoreChartTest {
     val command = mutableListOf("helm", "template", "secret-store", chartDir.path)
     values.forEach { (name, value) ->
       command += "--set-string"
-      command += "$name=$value"
+      command += "$name=${value.replace("\\", "\\\\").replace(",", "\\,")}"
     }
     val process = ProcessBuilder(command).start()
     val stdout = process.inputStream.readBytes().toString(Charsets.UTF_8)
@@ -92,6 +92,11 @@ class SecretStoreChartTest {
         "the error must name $missing: ${rendered.stderr}"
       )
     }
+    platformSecrets.keys.forEach { blank ->
+      val rendered = render(freshValues + (blank to "  "))
+      assertNotEquals(0, rendered.exitCode, "a whitespace-only $blank must count as missing")
+      assertTrue(rendered.stderr.contains(blank), "the error must name $blank: ${rendered.stderr}")
+    }
   }
 
   @Test
@@ -100,6 +105,16 @@ class SecretStoreChartTest {
     val platform = documents.getValue("anchor-platform-secrets")
     platformSecrets.forEach { (name, key) ->
       assertEquals(freshValues.getValue(name), platform[key], key)
+    }
+
+    val awkward = platformSecrets.keys.associateWith { """quote"back\slash,comma<tag>&$it""" }
+    val awkwardPlatform = renderedDocuments(awkward).getValue("anchor-platform-secrets")
+    platformSecrets.forEach { (name, key) ->
+      assertEquals(
+        awkward.getValue(name),
+        awkwardPlatform[key],
+        "$key keeps quotes and backslashes"
+      )
     }
   }
 
@@ -125,8 +140,8 @@ class SecretStoreChartTest {
     )
     platformSecrets.keys.forEach {
       assertTrue(
-        readme.contains("--set $it="),
-        "the README must pass $it to helm upgrade --install"
+        readme.contains("--set $it=$(openssl rand -hex 32)"),
+        "the README must generate $it with openssl and pass it to helm upgrade --install",
       )
     }
   }
