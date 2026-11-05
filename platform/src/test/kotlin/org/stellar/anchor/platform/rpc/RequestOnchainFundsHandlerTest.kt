@@ -2598,8 +2598,11 @@ class RequestOnchainFundsHandlerTest {
     for ((target, pendingProtocol, memo) in
       listOf(
         Triple("24", "6", ID_MEMO),
+        Triple("24", "6", "0$ID_MEMO"),
+        Triple("6", "31", ID_MEMO),
         Triple("6", "31", "0$ID_MEMO"),
         Triple("31", "24", ID_MEMO),
+        Triple("31", "24", "0$ID_MEMO"),
       )) {
       resetRecordedCalls()
       val txn = newWithdrawal(target)
