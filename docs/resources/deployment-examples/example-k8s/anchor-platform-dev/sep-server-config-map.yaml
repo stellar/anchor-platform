@@ -55,7 +55,7 @@ data:
         # clientAttributionDenyList: # use this if we want to black list.
         authTimeout: 900
         jwtTimeout: 86400
-        signingSeed: SBTBRGMPWNLXOZQQQXXZRJKCZPYTAZT5FC4VEAECF2HOBCONTSH4EXKS
+        signingSeed: REPLACE_WITH_YOUR_SEP10_SIGNING_SEED
 
       # sep-12
       sep12:
