@@ -494,7 +494,7 @@ class Sep31ServiceTest {
 
     every { txnStore.findByTransactionId("not_found") } returns null
     val ex = assertThrows<NotFoundException> { sep31Service.getTransaction(token, "not_found") }
-    assertEquals("transaction (id=not_found) not found", ex.message)
+    assertEquals("transaction not found", ex.message)
 
     every { txnStore.findByTransactionId("other_account") } returns txn
     txn.creator = StellarId.builder().account("GOTHERACCOUNT").memo(null).build()
@@ -696,7 +696,7 @@ class Sep31ServiceTest {
 
     every { txnStore.findByTransactionId(any()) } returns null
     val ex3 = assertThrows<NotFoundException> { sep31Service.patchTransaction(token, patchRequest) }
-    assertEquals("transaction (id=${patchRequest.id}) not found", ex3.message)
+    assertEquals("transaction not found", ex3.message)
 
     txn.creator = StellarId.builder().account("GOTHERACCOUNT").memo(null).build()
     every { txnStore.findByTransactionId(any()) } returns txn
