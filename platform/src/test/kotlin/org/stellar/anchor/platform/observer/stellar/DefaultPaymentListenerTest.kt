@@ -2291,6 +2291,87 @@ class DefaultPaymentListenerTest {
     verify(exactly = 0) { paymentListener.handleSep31Transaction(any(), any(), any()) }
   }
 
+  private val muxedBaseAccount = "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
+
+  private fun eventToMuxedDestination(): PaymentTransferEvent {
+    val event = eventWithMemo("my_memo_5")
+    event.ledgerTransaction.operations[0].paymentOperation.to =
+      MuxedAccount(muxedBaseAccount, BigInteger.valueOf(42)).address
+    return event
+  }
+
+  @Test
+  fun `test a payment to a muxed destination reaches the SEP-6 row held under its base account and muxed id`() {
+    val event = eventToMuxedDestination()
+    val victimRow = pendingSep6("V-VICTIM-SEP6")
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns emptyList()
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } answers
+      {
+        if (
+          firstArg<String>() == muxedBaseAccount &&
+            secondArg<String>() == "42" &&
+            thirdArg<String>() == "pending_user_transfer_start"
+        )
+          listOf(victimRow)
+        else emptyList()
+      }
+    stubRoutingHandlers()
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 1) {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+        muxedBaseAccount,
+        "42",
+        "pending_user_transfer_start",
+      )
+    }
+    verify(exactly = 1) { paymentListener.handleSep6Transaction(any(), any(), victimRow) }
+    verify(exactly = 0) { paymentListener.handleSep24Transaction(any(), any(), any()) }
+    verify(exactly = 0) { paymentListener.handleSep31Transaction(any(), any(), any()) }
+  }
+
+  @Test
+  fun `test a SEP-24 and a SEP-6 row on the same muxed id count the cross tag and credit neither`() {
+    val event = eventToMuxedDestination()
+    fun heldUnderMuxedId(account: String, memo: String, status: String) =
+      account == muxedBaseAccount && memo == "42" && status == "pending_user_transfer_start"
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } answers
+      {
+        if (heldUnderMuxedId(firstArg(), secondArg(), thirdArg())) listOf(pendingSep24("sep24-id"))
+        else emptyList()
+      }
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } answers
+      {
+        if (heldUnderMuxedId(firstArg(), secondArg(), thirdArg())) listOf(pendingSep6("sep6-id"))
+        else emptyList()
+      }
+    stubRoutingHandlers()
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      verifyNoCredit()
+      assertEquals(1.0, crossCount(registry))
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
   @Test
   fun `test the cross-protocol refusal does not depend on which row was created first`() {
     val earlier = java.time.Instant.parse("2026-11-01T10:00:00Z")
