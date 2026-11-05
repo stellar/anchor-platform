@@ -23,6 +23,7 @@ import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.TransactionException;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
@@ -248,114 +249,190 @@ public class DefaultPaymentListener implements PaymentListener {
       memo = Memo.fromXdr(ledgerTransaction.getMemo());
     }
 
+    // SEP-24 and SEP-6 receive on the same account, so one (account, memo) pair must match the rows
+    // of one protocol at most. Both are looked up before either is handled, because crediting the
+    // first match would take the payment from the other row's owner.
+    final String routingAccount = toAccount;
+    final String routingMemo;
     try {
-      List<JdbcSep24Transaction> sep24Txns =
-          lookup(
-              "24",
-              ledgerTransaction,
-              ledgerPayment,
-              sep24TransactionStore::findAllByWithdrawAnchorAccountAndMemoAndStatus,
-              toAccount,
-              memoAsString(memo),
-              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
-      if (sep24Txns.isEmpty() && toAccount.startsWith("M")) {
-        MuxedAccount muxedAccount = new MuxedAccount(toAccount);
-        sep24Txns =
-            lookup(
-                "24",
-                ledgerTransaction,
-                ledgerPayment,
-                sep24TransactionStore::findAllByWithdrawAnchorAccountAndMemoAndStatus,
-                muxedAccount.getAccountId(),
-                String.valueOf(muxedAccount.getMuxedId()),
-                SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
-      }
-      if (sep24Txns.size() > 1) {
-        List<String> ids = sep24Txns.stream().map(JdbcSep24Transaction::getId).toList();
-        errorF(
-            "Ambiguous SEP-24 payment routing: paymentId={}, txHash={}, toAccount={}, memo={}, status={}, matchedIds={}",
-            ledgerPayment.getId(),
-            ledgerTransaction.getHash(),
-            toAccount,
-            memoAsString(memo),
-            SepTransactionStatus.PENDING_USR_TRANSFER_START,
-            ids);
-        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "24")
-            .increment();
-        return;
-      }
-      if (!sep24Txns.isEmpty()) {
-        JdbcSep24Transaction sep24Txn = sep24Txns.get(0);
-        try {
-          handleSep24Transaction(ledgerTransaction, ledgerPayment, sep24Txn);
-          return;
-        } catch (AnchorException aex) {
-          warnF("Error handling the SEP24 transaction id={}.", sep24Txn.getId());
-          errorEx(aex);
-        }
-      }
-    } catch (IOException ioex) {
-      throw ioex;
-    } catch (LookupSkippedException skipped) {
-      // Already logged and counted by lookup(); fall through to the next protocol.
-    } catch (Exception ex) {
+      routingMemo = memoAsString(memo);
+    } catch (SepException ex) {
       errorEx(ex);
       Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+      return;
+    }
+    List<JdbcSep24Transaction> sep24Txns =
+        collectMatches(
+            () -> {
+              List<JdbcSep24Transaction> found =
+                  lookup(
+                      "24",
+                      ledgerTransaction,
+                      ledgerPayment,
+                      sep24TransactionStore::findAllByWithdrawAnchorAccountAndMemoAndStatus,
+                      routingAccount,
+                      routingMemo,
+                      SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+              if (found.isEmpty() && routingAccount.startsWith("M")) {
+                MuxedAccount muxedAccount = new MuxedAccount(routingAccount);
+                found =
+                    lookup(
+                        "24",
+                        ledgerTransaction,
+                        ledgerPayment,
+                        sep24TransactionStore::findAllByWithdrawAnchorAccountAndMemoAndStatus,
+                        muxedAccount.getAccountId(),
+                        String.valueOf(muxedAccount.getMuxedId()),
+                        SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+              }
+              return found;
+            });
+    List<JdbcSep6Transaction> sep6Txns =
+        collectMatches(
+            () -> {
+              List<JdbcSep6Transaction> found =
+                  lookup(
+                      "6",
+                      ledgerTransaction,
+                      ledgerPayment,
+                      sep6TransactionStore::findAllByWithdrawAnchorAccountAndMemoAndStatus,
+                      routingAccount,
+                      routingMemo,
+                      SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+              if (found.isEmpty() && routingAccount.startsWith("M")) {
+                MuxedAccount muxedAccount = new MuxedAccount(routingAccount);
+                found =
+                    lookup(
+                        "6",
+                        ledgerTransaction,
+                        ledgerPayment,
+                        sep6TransactionStore::findAllByWithdrawAnchorAccountAndMemoAndStatus,
+                        muxedAccount.getAccountId(),
+                        String.valueOf(muxedAccount.getMuxedId()),
+                        SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
+              }
+              return found;
+            });
+
+    if (!sep24Txns.isEmpty() && !sep6Txns.isEmpty()) {
+      refuseCrossProtocolMatch(
+          ledgerTransaction,
+          ledgerPayment,
+          routingAccount,
+          routingMemo,
+          java.util.stream.Stream.concat(
+                  sep24Txns.stream().map(t -> "SEP-24:" + t.getId()),
+                  sep6Txns.stream().map(t -> "SEP-6:" + t.getId()))
+              .toList());
+      return;
     }
 
+    if (sep24Txns.size() > 1) {
+      List<String> ids = sep24Txns.stream().map(JdbcSep24Transaction::getId).toList();
+      errorF(
+          "Ambiguous SEP-24 payment routing: paymentId={}, txHash={}, toAccount={}, memo={}, status={}, matchedIds={}",
+          ledgerPayment.getId(),
+          ledgerTransaction.getHash(),
+          routingAccount,
+          routingMemo,
+          SepTransactionStatus.PENDING_USR_TRANSFER_START,
+          ids);
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "24")
+          .increment();
+      return;
+    }
+    if (!sep24Txns.isEmpty()) {
+      JdbcSep24Transaction sep24Txn = sep24Txns.get(0);
+      try {
+        handleSep24Transaction(ledgerTransaction, ledgerPayment, sep24Txn);
+      } catch (IOException ioex) {
+        throw ioex;
+      } catch (AnchorException aex) {
+        warnF("Error handling the SEP24 transaction id={}.", sep24Txn.getId());
+        errorEx(aex);
+      } catch (Exception ex) {
+        errorEx(ex);
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+      }
+      return;
+    }
+
+    if (sep6Txns.size() > 1) {
+      List<String> ids = sep6Txns.stream().map(JdbcSep6Transaction::getId).toList();
+      errorF(
+          "Ambiguous SEP-6 payment routing: paymentId={}, txHash={}, toAccount={}, memo={}, status={}, matchedIds={}",
+          ledgerPayment.getId(),
+          ledgerTransaction.getHash(),
+          routingAccount,
+          routingMemo,
+          SepTransactionStatus.PENDING_USR_TRANSFER_START,
+          ids);
+      Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "6")
+          .increment();
+      return;
+    }
+    if (!sep6Txns.isEmpty()) {
+      JdbcSep6Transaction sep6Txn = sep6Txns.get(0);
+      try {
+        handleSep6Transaction(ledgerTransaction, ledgerPayment, sep6Txn);
+      } catch (IOException ioex) {
+        throw ioex;
+      } catch (AnchorException aex) {
+        warnF("Error handling the SEP6 transaction id={}.", sep6Txn.getId());
+        errorEx(aex);
+      } catch (Exception ex) {
+        errorEx(ex);
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+      }
+    }
+  }
+
+  /** A memo lookup that may fail; see {@link #collectMatches}. */
+  @FunctionalInterface
+  private interface MatchLookup<T> {
+    List<T> find() throws Exception;
+  }
+
+  /**
+   * Runs a lookup for one protocol and returns its matches. A database failure is rethrown so the
+   * payment is retried; a lookup skipped or failed for this payment only counts as no match, as
+   * before, so the payment can still reach another protocol.
+   */
+  private <T> List<T> collectMatches(MatchLookup<T> lookup) throws IOException {
     try {
-      List<JdbcSep6Transaction> sep6Txns =
-          lookup(
-              "6",
-              ledgerTransaction,
-              ledgerPayment,
-              sep6TransactionStore::findAllByWithdrawAnchorAccountAndMemoAndStatus,
-              toAccount,
-              memoAsString(memo),
-              SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
-      if (sep6Txns.isEmpty() && toAccount.startsWith("M")) {
-        MuxedAccount muxedAccount = new MuxedAccount(toAccount);
-        sep6Txns =
-            lookup(
-                "6",
-                ledgerTransaction,
-                ledgerPayment,
-                sep6TransactionStore::findAllByWithdrawAnchorAccountAndMemoAndStatus,
-                muxedAccount.getAccountId(),
-                String.valueOf(muxedAccount.getMuxedId()),
-                SepTransactionStatus.PENDING_USR_TRANSFER_START.toString());
-      }
-      if (sep6Txns.size() > 1) {
-        List<String> ids = sep6Txns.stream().map(JdbcSep6Transaction::getId).toList();
-        errorF(
-            "Ambiguous SEP-6 payment routing: paymentId={}, txHash={}, toAccount={}, memo={}, status={}, matchedIds={}",
-            ledgerPayment.getId(),
-            ledgerTransaction.getHash(),
-            toAccount,
-            memoAsString(memo),
-            SepTransactionStatus.PENDING_USR_TRANSFER_START,
-            ids);
-        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "6")
-            .increment();
-        return;
-      }
-      if (!sep6Txns.isEmpty()) {
-        JdbcSep6Transaction sep6Txn = sep6Txns.get(0);
-        try {
-          handleSep6Transaction(ledgerTransaction, ledgerPayment, sep6Txn);
-        } catch (AnchorException aex) {
-          warnF("Error handling the SEP6 transaction id={}.", sep6Txn.getId());
-          errorEx(aex);
-        }
-      }
+      return lookup.find();
     } catch (IOException ioex) {
       throw ioex;
     } catch (LookupSkippedException skipped) {
-      // Already logged and counted by lookup(); fall through to the next protocol.
+      // Already logged and counted by lookup(); treated as no match.
+      return List.of();
     } catch (Exception ex) {
       errorEx(ex);
       Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).increment();
+      return List.of();
     }
+  }
+
+  /**
+   * One payment matched the pending rows of more than one protocol on the same account and memo.
+   * Any of them could be the payer's, so none is credited: the payment is logged and counted for an
+   * operator to reconcile, like a same-protocol ambiguity.
+   */
+  private void refuseCrossProtocolMatch(
+      LedgerTransaction ledgerTransaction,
+      LedgerPayment ledgerPayment,
+      String account,
+      String memo,
+      List<String> ids) {
+    errorF(
+        "Ambiguous payment routing across protocols: paymentId={}, txHash={}, toAccount={}, memo={}, matchedIds={}",
+        ledgerPayment.getId(),
+        ledgerTransaction.getHash(),
+        account,
+        memo,
+        ids);
+    Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "cross")
+        .increment();
   }
 
   @FunctionalInterface
