@@ -179,7 +179,9 @@ public class Sep24Service {
       withdrawRequest.put("client_domain", token.getClientDomain());
     else withdrawRequest.remove("client_domain");
 
-    Memo memo = makeMemo(withdrawRequest.get("memo"), withdrawRequest.get("memo_type"));
+    // The memo of a withdrawal request is validated but not stored: the memo the user pays with is
+    // the one the anchor assigns in request_onchain_funds, never one the client chose.
+    makeMemo(withdrawRequest.get("memo"), withdrawRequest.get("memo_type"));
     Memo refundMemo =
         makeMemo(withdrawRequest.get("refund_memo"), withdrawRequest.get("refund_memo_type"));
     String txnId = UUID.randomUUID().toString();
@@ -202,13 +204,6 @@ public class Sep24Service {
             .clientDomain(token.getClientDomain())
             .clientName(token.getClientName())
             .requestClientIpAddress(withdrawRequest.get("clientIpAddress"));
-
-    if (memo != null) {
-      debug("transaction memo detected.", memo);
-      debug("Set the transaction memo.", memo);
-      builder.memo(memo.toString());
-      builder.memoType(memoTypeString(memoType(memo)));
-    }
 
     if (refundMemo != null) {
       debug("refund memo detected.", refundMemo);

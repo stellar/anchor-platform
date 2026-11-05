@@ -32,6 +32,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_TRANSACTION_ID_1
 import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.exception.*
+import org.stellar.anchor.api.sep.sep24.DepositTransactionResponse
 import org.stellar.anchor.api.sep.sep24.GetTransactionRequest
 import org.stellar.anchor.api.sep.sep24.GetTransactionsRequest
 import org.stellar.anchor.api.shared.FeeDescription
@@ -316,6 +317,64 @@ internal class Sep24ServiceTest {
     assertEquals(TEST_CLIENT_DOMAIN, slotTxn.captured.clientDomain)
     assertEquals(TEST_CLIENT_NAME, slotTxn.captured.clientName)
     assertNull(slotTxn.captured.withdrawAnchorAccount)
+  }
+
+  @Test
+  fun `test withdraw ignores the client memo and stores none`() {
+    val slotTxn = slot<Sep24Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    val request = createTestTransactionRequest()
+    request["memo"] = "77713371337"
+    request["memo_type"] = "id"
+
+    sep24Service.withdraw(createTestWebAuthJwt(), request)
+
+    verify(exactly = 1) { txnStore.save(any()) }
+    assertNull(slotTxn.captured.memo)
+    assertNull(slotTxn.captured.memoType)
+    val response = Sep24Helper.fromWithdrawTxn(slotTxn.captured, moreInfoUrlConstructor, "en")
+    assertNull(response.withdrawMemo)
+    assertNull(response.withdrawMemoType)
+  }
+
+  @Test
+  fun `test deposit still stores the client memo as the deposit memo`() {
+    val slotTxn = slot<Sep24Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    val request = createTestTransactionRequest()
+    request["memo"] = "77713371337"
+    request["memo_type"] = "id"
+
+    sep24Service.deposit(createTestWebAuthJwt(), request)
+
+    assertEquals("77713371337", slotTxn.captured.memo)
+    assertEquals("id", slotTxn.captured.memoType)
+    val response = Sep24Helper.fromDepositTxn(slotTxn.captured, moreInfoUrlConstructor, "en")
+    val deposit = response as DepositTransactionResponse
+    assertEquals("77713371337", deposit.depositMemo)
+    assertEquals("id", deposit.depositMemoType)
+  }
+
+  @Test
+  fun `test withdraw still rejects an invalid memo with 400`() {
+    val missingType = createTestTransactionRequest()
+    missingType["memo"] = "77713371337"
+    val missingTypeEx =
+      assertThrows<SepValidationException> {
+        sep24Service.withdraw(createTestWebAuthJwt(), missingType)
+      }
+    assertEquals("memo_type is required if memo is specified", missingTypeEx.message)
+
+    val notANumber = createTestTransactionRequest()
+    notANumber["memo"] = "not-a-number"
+    notANumber["memo_type"] = "id"
+    val notANumberEx =
+      assertThrows<SepValidationException> {
+        sep24Service.withdraw(createTestWebAuthJwt(), notANumber)
+      }
+    assertEquals("Invalid memo not-a-number of type: MEMO_ID", notANumberEx.message)
+
+    verify(exactly = 0) { txnStore.save(any()) }
   }
 
   @Test
