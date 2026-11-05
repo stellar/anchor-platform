@@ -1,6 +1,7 @@
 package org.stellar.anchor.api.sep.sep10;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.gson.annotations.SerializedName;
 import lombok.Builder;
 import lombok.Data;
 
@@ -17,8 +18,10 @@ public class ChallengeRequest {
   String memo;
 
   @JsonProperty("home_domain")
+  @SerializedName("home_domain")
   String homeDomain;
 
   @JsonProperty("client_domain")
+  @SerializedName("client_domain")
   String clientDomain;
 }

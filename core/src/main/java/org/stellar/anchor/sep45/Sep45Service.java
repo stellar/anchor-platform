@@ -190,7 +190,8 @@ public class Sep45Service {
     SorobanAuthorizationEntries authEntries;
     try {
       authEntries = SorobanAuthorizationEntries.fromXdrBase64(request.getAuthorizationEntries());
-    } catch (IOException e) {
+    } catch (IOException | IllegalArgumentException e) {
+      // a value that is not base64 at all fails with IllegalArgumentException, not IOException
       throw new BadRequestException("Failed to decode auth entries");
     }
     SorobanAuthorizationEntry[] entries = authEntries.getSorobanAuthorizationEntries();
