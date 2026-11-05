@@ -5,6 +5,7 @@ import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import java.time.Instant
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -38,6 +39,7 @@ import org.stellar.anchor.metrics.MetricsService
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep31Transaction
 import org.stellar.anchor.platform.data.JdbcSep6Transaction
+import org.stellar.anchor.platform.data.JdbcSepTransaction
 import org.stellar.anchor.platform.observer.stellar.PaymentObservingAccountsManager
 import org.stellar.anchor.platform.service.*
 import org.stellar.anchor.platform.utils.toRate
@@ -2293,5 +2295,365 @@ class RequestOnchainFundsHandlerTest {
       MemoHelper.memoAsString(MemoHelper.makeMemo(captured.captured.stellarMemo, ID_MEMO_TYPE)),
       captured.captured.stellarMemo,
     )
+  }
+
+  // --- A memo is never assigned twice across SEP-6, SEP-24 and SEP-31 (ANCHOR-1323) ---
+
+  private val memoInUseMessage =
+    "memo_in_use: the requested memo and destination account are already assigned to a pending transaction"
+
+  private fun pendingStatusOf(protocol: String) =
+    if (protocol == "31") PENDING_SENDER.toString() else PENDING_USR_TRANSFER_START.toString()
+
+  private fun selfGeneratorHandler(): RequestOnchainFundsHandler {
+    val depositInfo = SepDepositInfo(DESTINATION_ACCOUNT_2, ID_MEMO)
+    val generator6: Sep6DepositInfoSelfGenerator = mockk()
+    val generator24: Sep24DepositInfoSelfGenerator = mockk()
+    val generator31: Sep31DepositInfoSelfGenerator = mockk()
+    every { generator6.generate(ofType(Sep6Transaction::class)) } returns depositInfo
+    every { generator24.generate(ofType(Sep24Transaction::class)) } returns depositInfo
+    every { generator31.generate(ofType(Sep31Transaction::class)) } returns depositInfo
+    return RequestOnchainFundsHandler(
+      txn6Store,
+      txn24Store,
+      txn31Store,
+      requestValidator,
+      assetService,
+      generator6,
+      generator24,
+      generator31,
+      paymentObservingAccountsManager,
+      eventService,
+      metricsService,
+      sepRequestValidator,
+    )
+  }
+
+  private fun selfGeneratorRequest(transactionId: String = TX_ID) =
+    RequestOnchainFundsRequest.builder()
+      .transactionId(transactionId)
+      .amountIn(AmountAssetRequest("1", STELLAR_USDC))
+      .amountOut(AmountAssetRequest("0.9", FIAT_USD))
+      .feeDetails(FeeDetails("0.1", STELLAR_USDC))
+      .amountExpected(AmountRequest("1"))
+      .build()
+
+  private fun businessServerMemoRequest(memo: String) =
+    RequestOnchainFundsRequest.builder()
+      .transactionId(TX_ID)
+      .amountIn(AmountAssetRequest("1", STELLAR_USDC))
+      .amountOut(AmountAssetRequest("0.9", FIAT_USD))
+      .feeDetails(FeeDetails("0.1", STELLAR_USDC))
+      .memo(memo)
+      .destinationAccount(DESTINATION_ACCOUNT_2)
+      .build()
+
+  /** A withdrawal (a receive for SEP-31) that has no memo yet and waits for its deposit info. */
+  private fun newWithdrawal(protocol: String, id: String = TX_ID): JdbcSepTransaction =
+    when (protocol) {
+      "6" ->
+        JdbcSep6Transaction().also {
+          it.id = id
+          it.status = INCOMPLETE.toString()
+          it.kind = "withdrawal"
+          it.requestAssetCode = STELLAR_USDC_CODE
+          it.requestAssetIssuer = STELLAR_USDC_ISSUER
+        }
+      "24" ->
+        JdbcSep24Transaction().also {
+          it.id = id
+          it.status = INCOMPLETE.toString()
+          it.kind = WITHDRAWAL.kind
+          it.requestAssetCode = STELLAR_USDC_CODE
+          it.requestAssetIssuer = STELLAR_USDC_ISSUER
+        }
+      else ->
+        JdbcSep31Transaction().also {
+          it.id = id
+          it.status = PENDING_RECEIVER.toString()
+        }
+    }
+
+  /** A transaction that already waits for a payment to DESTINATION_ACCOUNT_2 with ID_MEMO. */
+  private fun pendingRow(protocol: String, id: String): JdbcSepTransaction =
+    when (protocol) {
+      "6" ->
+        JdbcSep6Transaction().also {
+          it.id = id
+          it.status = PENDING_USR_TRANSFER_START.toString()
+          it.kind = "withdrawal"
+          it.withdrawAnchorAccount = DESTINATION_ACCOUNT_2
+          it.memo = ID_MEMO
+          it.memoType = ID_MEMO_TYPE
+        }
+      "24" ->
+        JdbcSep24Transaction().also {
+          it.id = id
+          it.status = PENDING_USR_TRANSFER_START.toString()
+          it.kind = WITHDRAWAL.kind
+          it.withdrawAnchorAccount = DESTINATION_ACCOUNT_2
+          it.memo = ID_MEMO
+          it.memoType = ID_MEMO_TYPE
+        }
+      else ->
+        JdbcSep31Transaction().also {
+          it.id = id
+          it.status = PENDING_SENDER.toString()
+          it.toAccount = DESTINATION_ACCOUNT_2
+          it.stellarMemo = ID_MEMO
+          it.stellarMemoType = ID_MEMO_TYPE
+        }
+    }
+
+  private fun serveTransaction(protocol: String, txn: JdbcSepTransaction) {
+    every { txn6Store.findByTransactionId(any()) } returns
+      (if (protocol == "6") txn as JdbcSep6Transaction else null)
+    every { txn24Store.findByTransactionId(any()) } returns
+      (if (protocol == "24") txn as JdbcSep24Transaction else null)
+    every { txn31Store.findByTransactionId(any()) } returns
+      (if (protocol == "31") txn as JdbcSep31Transaction else null)
+  }
+
+  /**
+   * Makes the memo lookups of each protocol return its row, but only when the lookup asks for the
+   * status in [servedStatus] (the pending status of the protocol by default) and for
+   * DESTINATION_ACCOUNT_2 with ID_MEMO.
+   */
+  private fun stubPendingRows(
+    rows: Map<String, JdbcSepTransaction>,
+    servedStatus: (String) -> String = { pendingStatusOf(it) },
+  ) {
+    fun matches(protocol: String, account: String, memo: String, status: String) =
+      rows.containsKey(protocol) &&
+        account == DESTINATION_ACCOUNT_2 &&
+        memo == ID_MEMO &&
+        status == servedStatus(protocol)
+    every { txn6Store.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any()) } answers
+      {
+        if (matches("6", arg(0), arg(1), arg(2))) listOf(rows["6"] as JdbcSep6Transaction)
+        else emptyList()
+      }
+    every { txn24Store.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any()) } answers
+      {
+        if (matches("24", arg(0), arg(1), arg(2))) listOf(rows["24"] as JdbcSep24Transaction)
+        else emptyList()
+      }
+    every { txn31Store.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } answers
+      {
+        if (matches("31", arg(0), arg(1), arg(2))) listOf(rows["31"] as JdbcSep31Transaction)
+        else emptyList()
+      }
+  }
+
+  private fun resetRecordedCalls() {
+    clearMocks(
+      txn6Store,
+      txn24Store,
+      txn31Store,
+      eventSession,
+      paymentObservingAccountsManager,
+      answers = false,
+    )
+  }
+
+  private fun memoOf(txn: JdbcSepTransaction): String? =
+    when (txn) {
+      is JdbcSep6Transaction -> txn.memo
+      is JdbcSep24Transaction -> txn.memo
+      is JdbcSep31Transaction -> txn.stellarMemo
+      else -> null
+    }
+
+  private fun accountOf(txn: JdbcSepTransaction): String? =
+    when (txn) {
+      is JdbcSep6Transaction -> txn.withdrawAnchorAccount
+      is JdbcSep24Transaction -> txn.withdrawAnchorAccount
+      is JdbcSep31Transaction -> txn.toAccount
+      else -> null
+    }
+
+  private fun assertNothingSaved() {
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+  }
+
+  private fun assertRefused(target: String, pendingProtocol: String) {
+    resetRecordedCalls()
+    val txn = newWithdrawal(target)
+    serveTransaction(target, txn)
+    stubPendingRows(mapOf(pendingProtocol to pendingRow(pendingProtocol, "other-row")))
+
+    val ex =
+      assertThrows<BadRequestException> { selfGeneratorHandler().handle(selfGeneratorRequest()) }
+
+    assertEquals(
+      memoInUseMessage,
+      ex.message,
+      "SEP-$target assignment vs pending SEP-$pendingProtocol"
+    )
+    assertNothingSaved()
+  }
+
+  @Test
+  fun test_handle_refuses_a_memo_pending_on_a_sep24_row() {
+    assertRefused("24", "24")
+    assertRefused("6", "24")
+  }
+
+  @Test
+  fun test_handle_refuses_a_memo_pending_in_another_protocol() {
+    assertRefused("24", "6")
+    assertRefused("6", "24")
+    assertRefused("24", "31")
+    assertRefused("6", "31")
+    assertRefused("31", "6")
+    assertRefused("31", "24")
+  }
+
+  @Test
+  fun test_handle_accepts_a_memo_held_only_by_the_updated_row() {
+    for (target in listOf("24", "6", "31")) {
+      resetRecordedCalls()
+      val txn = newWithdrawal(target)
+      serveTransaction(target, txn)
+      stubPendingRows(mapOf(target to pendingRow(target, TX_ID)))
+
+      selfGeneratorHandler().handle(selfGeneratorRequest())
+
+      assertEquals(ID_MEMO, memoOf(txn), "SEP-$target memo")
+      assertEquals(DESTINATION_ACCOUNT_2, accountOf(txn), "SEP-$target account")
+      when (target) {
+        "6" -> verify(exactly = 1) { txn6Store.save(any()) }
+        "24" -> verify(exactly = 1) { txn24Store.save(any()) }
+        else -> verify(exactly = 1) { txn31Store.save(any()) }
+      }
+    }
+  }
+
+  @Test
+  fun test_handle_accepts_a_memo_held_by_rows_in_other_statuses() {
+    for (target in listOf("24", "6", "31")) {
+      resetRecordedCalls()
+      val txn = newWithdrawal(target)
+      serveTransaction(target, txn)
+      // Every protocol holds a row for the memo, but only under a status that is not pending.
+      stubPendingRows(
+        mapOf(
+          "6" to pendingRow("6", "row-6"),
+          "24" to pendingRow("24", "row-24"),
+          "31" to pendingRow("31", "row-31"),
+        )
+      ) {
+        "expired"
+      }
+
+      selfGeneratorHandler().handle(selfGeneratorRequest())
+
+      assertEquals(ID_MEMO, memoOf(txn), "SEP-$target memo")
+      verify {
+        txn24Store.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+          DESTINATION_ACCOUNT_2,
+          ID_MEMO,
+          "pending_user_transfer_start",
+        )
+        txn6Store.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+          DESTINATION_ACCOUNT_2,
+          ID_MEMO,
+          "pending_user_transfer_start",
+        )
+        txn31Store.findAllByToAccountAndMemoAndStatus(
+          DESTINATION_ACCOUNT_2,
+          ID_MEMO,
+          "pending_sender",
+        )
+      }
+    }
+  }
+
+  @Test
+  fun test_handle_refusal_leaves_the_transaction_unsaved() {
+    for ((target, pendingProtocol) in listOf("24" to "6", "31" to "24", "6" to "31")) {
+      resetRecordedCalls()
+      val txn = newWithdrawal(target)
+      val statusBefore = txn.status
+      serveTransaction(target, txn)
+      stubPendingRows(mapOf(pendingProtocol to pendingRow(pendingProtocol, "other-row")))
+
+      assertThrows<BadRequestException> { selfGeneratorHandler().handle(selfGeneratorRequest()) }
+
+      assertEquals(statusBefore, txn.status, "SEP-$target status")
+      assertNull(memoOf(txn), "SEP-$target memo")
+      assertNull(accountOf(txn), "SEP-$target account")
+      assertNothingSaved()
+      verify(exactly = 0) { eventSession.publish(any()) }
+      verify(exactly = 0) { paymentObservingAccountsManager.upsertOrThrow(any(), any()) }
+    }
+  }
+
+  @Test
+  fun test_handle_refuses_a_business_server_memo_pending_elsewhere() {
+    // The `none` generator handler of setup(): the business server supplies memo and account.
+    // A memo written with a leading zero is the same memo, so the check must use the canonical one.
+    for ((target, pendingProtocol, memo) in
+      listOf(
+        Triple("24", "6", ID_MEMO),
+        Triple("24", "6", "0$ID_MEMO"),
+        Triple("6", "31", ID_MEMO),
+        Triple("6", "31", "0$ID_MEMO"),
+        Triple("31", "24", ID_MEMO),
+        Triple("31", "24", "0$ID_MEMO"),
+      )) {
+      resetRecordedCalls()
+      val txn = newWithdrawal(target)
+      serveTransaction(target, txn)
+      stubPendingRows(mapOf(pendingProtocol to pendingRow(pendingProtocol, "other-row")))
+
+      val ex = assertThrows<BadRequestException> { handler.handle(businessServerMemoRequest(memo)) }
+
+      assertEquals(memoInUseMessage, ex.message, "SEP-$target vs pending SEP-$pendingProtocol")
+      assertNull(memoOf(txn), "SEP-$target memo")
+      assertNothingSaved()
+    }
+  }
+
+  @Test
+  fun test_handle_refuses_the_second_assignment_of_a_memo_without_any_database_constraint() {
+    // Stores that remember what was saved and enforce no unique constraint of their own.
+    val saved = mutableListOf<JdbcSep24Transaction>()
+    val first = newWithdrawal("24", "tx-first") as JdbcSep24Transaction
+    val second = newWithdrawal("24", "tx-second") as JdbcSep24Transaction
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(any()) } answers
+      {
+        listOf(first, second).first { it.id == arg<String>(0) }
+      }
+    every { txn24Store.save(any()) } answers
+      {
+        saved.add(firstArg())
+        null
+      }
+    every { txn24Store.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any()) } answers
+      {
+        saved.filter {
+          it.withdrawAnchorAccount == arg<String>(0) &&
+            it.memo == arg<String>(1) &&
+            it.status == arg<String>(2)
+        }
+      }
+    every { txn6Store.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every { txn31Store.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns emptyList()
+    val handler = selfGeneratorHandler()
+
+    handler.handle(selfGeneratorRequest("tx-first"))
+    val ex = assertThrows<BadRequestException> { handler.handle(selfGeneratorRequest("tx-second")) }
+
+    assertEquals(memoInUseMessage, ex.message)
+    assertEquals(listOf("tx-first"), saved.map { it.id })
+    assertEquals(PENDING_USR_TRANSFER_START.toString(), first.status)
+    assertEquals(INCOMPLETE.toString(), second.status)
+    assertNull(second.memo)
   }
 }
