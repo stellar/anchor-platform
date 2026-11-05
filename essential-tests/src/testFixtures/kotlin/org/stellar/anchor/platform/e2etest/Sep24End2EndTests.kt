@@ -26,6 +26,7 @@ import org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_CREATED
 import org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.sep24.Sep24GetTransactionResponse
+import org.stellar.anchor.api.sep.sep24.WithdrawTransactionResponse
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.auth.Sep24InteractiveUrlJwt
 import org.stellar.anchor.client.Sep24Client
@@ -338,10 +339,14 @@ open class Sep24End2EndTests : IntegrationTestBase(TestConfig()) {
       wallet.sep24,
     )
 
-    // Submit transfer transaction
+    // Submit transfer transaction. The memo is assigned by the anchor; the memo the wallet asked
+    // for is ignored, so the wallet pays the withdraw_memo read back from the transaction.
     val withdrawTxn = wallet.sep24.getTransaction(response.id, "USDC")
+    val withdrawal = withdrawTxn.transaction as WithdrawTransactionResponse
+    assertNotNull(withdrawal.withdrawMemo)
+    assertNotEquals(memo, withdrawal.withdrawMemo)
     transactionWithRetry {
-      wallet.send(withdrawTxn.transaction.to, Asset.create(USDC.id), "1", memo)
+      wallet.send(withdrawTxn.transaction.to, Asset.create(USDC.id), "1", withdrawal.withdrawMemo)
     }
 
     // Wait for the status to change to COMPLETED
