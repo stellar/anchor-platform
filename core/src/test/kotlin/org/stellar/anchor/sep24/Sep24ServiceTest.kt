@@ -321,20 +321,29 @@ internal class Sep24ServiceTest {
 
   @Test
   fun `test withdraw ignores the client memo and stores none`() {
-    val slotTxn = slot<Sep24Transaction>()
-    every { txnStore.save(capture(slotTxn)) } returns null
-    val request = createTestTransactionRequest()
-    request["memo"] = "77713371337"
-    request["memo_type"] = "id"
+    // A valid memo of each type the request accepts: none of them reaches the stored row.
+    val memos =
+      listOf(
+        "77713371337" to "id",
+        "client memo" to "text",
+        "MTIzZTQ1NjctZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc=" to "hash",
+      )
+    for ((memo, memoType) in memos) {
+      val slotTxn = slot<Sep24Transaction>()
+      every { txnStore.save(capture(slotTxn)) } returns null
+      val request = createTestTransactionRequest()
+      request["memo"] = memo
+      request["memo_type"] = memoType
 
-    sep24Service.withdraw(createTestWebAuthJwt(), request)
+      sep24Service.withdraw(createTestWebAuthJwt(), request)
 
-    verify(exactly = 1) { txnStore.save(any()) }
-    assertNull(slotTxn.captured.memo)
-    assertNull(slotTxn.captured.memoType)
-    val response = Sep24Helper.fromWithdrawTxn(slotTxn.captured, moreInfoUrlConstructor, "en")
-    assertNull(response.withdrawMemo)
-    assertNull(response.withdrawMemoType)
+      assertNull(slotTxn.captured.memo, "memo of type $memoType")
+      assertNull(slotTxn.captured.memoType, "memo_type of type $memoType")
+      val response = Sep24Helper.fromWithdrawTxn(slotTxn.captured, moreInfoUrlConstructor, "en")
+      assertNull(response.withdrawMemo, "withdraw_memo of type $memoType")
+      assertNull(response.withdrawMemoType, "withdraw_memo_type of type $memoType")
+    }
+    verify(exactly = memos.size) { txnStore.save(any()) }
   }
 
   @Test
