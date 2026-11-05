@@ -2128,6 +2128,66 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
+  fun `test cross-protocol ambiguity involving SEP-31 credits none and counts the cross tag`() {
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    mockkStatic(Log::class)
+    try {
+      every { Log.debugF(any(), *anyVararg()) } just Runs
+      every { Log.errorF(any(), *anyVararg()) } just Runs
+      stubRoutingHandlers()
+      val event = eventWithMemo("shared_memo")
+
+      // SEP-31 and SEP-24
+      every {
+        sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any())
+      } returns listOf(JdbcSep31Transaction().apply { id = "sep31-id" })
+      every {
+        sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns listOf(pendingSep24("sep24-id"))
+      every {
+        sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns emptyList()
+      paymentListener.onReceived(event)
+
+      // SEP-31 and SEP-6
+      every {
+        sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns emptyList()
+      every {
+        sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns listOf(pendingSep6("sep6-id"))
+      paymentListener.onReceived(event)
+
+      verifyNoCredit()
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("across protocols") },
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep31-id") && it.toString().contains("sep24-id") },
+        )
+      }
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("across protocols") },
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep31-id") && it.toString().contains("sep6-id") },
+        )
+      }
+      assertEquals(2.0, crossCount(registry))
+    } finally {
+      Metrics.removeRegistry(registry)
+      unmockkStatic(Log::class)
+    }
+  }
+
+  @Test
   fun `test a single match in any one protocol credits it and counts no ambiguity`() {
     val registry = SimpleMeterRegistry()
     Metrics.addRegistry(registry)
