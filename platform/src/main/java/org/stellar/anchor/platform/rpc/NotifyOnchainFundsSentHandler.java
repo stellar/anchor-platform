@@ -6,6 +6,7 @@ import static org.stellar.anchor.api.rpc.method.RpcMethod.NOTIFY_ONCHAIN_FUNDS_S
 import static org.stellar.anchor.api.sep.SepTransactionStatus.COMPLETED;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_ANCHOR;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.PENDING_STELLAR;
+import static org.stellar.anchor.platform.utils.LedgerPaymentMatcher.requirePayment;
 import static org.stellar.anchor.platform.utils.PaymentHelper.addStellarTransaction;
 import static org.stellar.anchor.util.Log.errorEx;
 
@@ -15,6 +16,7 @@ import java.util.HashSet;
 import java.util.Set;
 import org.stellar.anchor.api.exception.LedgerException;
 import org.stellar.anchor.api.exception.rpc.InternalErrorException;
+import org.stellar.anchor.api.exception.rpc.InvalidParamsException;
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep;
@@ -31,6 +33,7 @@ import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
 import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
+import org.stellar.anchor.platform.utils.LedgerPaymentMatcher.ExpectedPayment;
 import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
@@ -105,15 +108,31 @@ public class NotifyOnchainFundsSentHandler
     return supportedStatuses;
   }
 
+  /** What the deposit pays out: its recipient account in the amount-out asset, any memo. */
+  private static ExpectedPayment expectedPayout(JdbcSepTransaction txn) {
+    String toAccount =
+        switch (Sep.from(txn.getProtocol())) {
+          case SEP_6 -> ((JdbcSep6Transaction) txn).getToAccount();
+          case SEP_24 -> ((JdbcSep24Transaction) txn).getToAccount();
+          default -> throw new IllegalStateException("Unsupported protocol: " + txn.getProtocol());
+        };
+    return new ExpectedPayment(toAccount, null, null, txn.getAmountOutAsset(), true);
+  }
+
   @Override
   protected void updateTransactionWithRpcRequest(
-      JdbcSepTransaction txn, NotifyOnchainFundsSentRequest request) throws InternalErrorException {
+      JdbcSepTransaction txn, NotifyOnchainFundsSentRequest request)
+      throws InternalErrorException, InvalidParamsException {
     Instant transferReceivedAt = txn.getTransferReceivedAt();
 
     String stellarTxnId = request.getStellarTransactionId();
     try {
       LedgerTransaction ledgerTxn =
           LedgerClientHelper.waitForTransactionAvailable(ledgerClient, stellarTxnId);
+      // The hash is recorded as the payout only when it holds a payment to the deposit's recipient
+      // in the payout asset. The memo is not compared: payouts do not have to carry the deposit's
+      // memo.
+      requirePayment(sacToAssetMapper, ledgerTxn, expectedPayout(txn));
       addStellarTransaction(sacToAssetMapper, ledgerTxn, txn);
     } catch (LedgerException ex) {
       errorEx(String.format("Failed to retrieve stellar transaction by ID[%s]", stellarTxnId), ex);
