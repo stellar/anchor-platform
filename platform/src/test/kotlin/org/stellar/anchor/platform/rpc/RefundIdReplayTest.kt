@@ -1,0 +1,319 @@
+package org.stellar.anchor.platform.rpc
+
+import io.micrometer.core.instrument.Counter
+import io.mockk.*
+import io.mockk.impl.annotations.MockK
+import java.math.BigDecimal
+import java.time.Instant
+import kotlin.test.assertEquals
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import org.stellar.anchor.api.event.AnchorEvent
+import org.stellar.anchor.api.exception.rpc.InvalidParamsException
+import org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*
+import org.stellar.anchor.api.rpc.method.AmountAssetRequest
+import org.stellar.anchor.api.rpc.method.NotifyRefundSentRequest
+import org.stellar.anchor.api.sep.SepTransactionStatus
+import org.stellar.anchor.api.sep.SepTransactionStatus.*
+import org.stellar.anchor.asset.DefaultAssetService
+import org.stellar.anchor.event.EventService
+import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
+import org.stellar.anchor.event.EventService.Session
+import org.stellar.anchor.metrics.MetricsService
+import org.stellar.anchor.platform.data.*
+import org.stellar.anchor.platform.validator.RequestValidator
+import org.stellar.anchor.sep24.Sep24TransactionStore
+import org.stellar.anchor.sep31.Sep31TransactionStore
+import org.stellar.anchor.sep6.Sep6TransactionStore
+
+/**
+ * HackerOne #4028479 and #4141638 (ANCHOR-1329): a repeated refund.id is checked and stored with
+ * the same replace-by-id arithmetic in notify_refund_sent and notify_refund_pending. Test names
+ * start with the spec requirement id (rrNN) so a check selects them with `rrNN_*`.
+ */
+class RefundIdReplayTest {
+  companion object {
+    private const val TX_ID = "testId"
+    private const val NATIVE = "stellar:native"
+    private const val CAP_MESSAGE = "Refund amount exceeds amount_in"
+  }
+
+  /** A refund already stored on the transaction. */
+  private data class Stored(val id: String, val amount: String, val fee: String = "0")
+
+  @MockK(relaxed = true) private lateinit var txn6Store: Sep6TransactionStore
+  @MockK(relaxed = true) private lateinit var txn24Store: Sep24TransactionStore
+  @MockK(relaxed = true) private lateinit var txn31Store: Sep31TransactionStore
+  @MockK(relaxed = true) private lateinit var requestValidator: RequestValidator
+  @MockK(relaxed = true) private lateinit var eventService: EventService
+  @MockK(relaxed = true) private lateinit var metricsService: MetricsService
+  @MockK(relaxed = true) private lateinit var eventSession: Session
+  @MockK(relaxed = true) private lateinit var counter: Counter
+
+  private lateinit var sentHandler: NotifyRefundSentHandler
+
+  @BeforeEach
+  fun setup() {
+    MockKAnnotations.init(this, relaxUnitFun = true)
+    every { eventService.createSession(any(), TRANSACTION) } returns eventSession
+    every { eventSession.publish(any<AnchorEvent>()) } just Runs
+    every { metricsService.counter(any(), any(), any()) } returns counter
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+    val assetService = DefaultAssetService.fromJsonResource("test_assets_native_7_decimals.json")
+    sentHandler =
+      NotifyRefundSentHandler(
+        txn6Store,
+        txn24Store,
+        txn31Store,
+        requestValidator,
+        assetService,
+        eventService,
+        metricsService
+      )
+  }
+
+  private fun sentRequest(id: String, amount: String, fee: String = "0") =
+    NotifyRefundSentRequest.builder()
+      .transactionId(TX_ID)
+      .refund(
+        NotifyRefundSentRequest.Refund.builder()
+          .id(id)
+          .amount(AmountAssetRequest(amount, NATIVE))
+          .amountFee(AmountAssetRequest(fee, NATIVE))
+          .build()
+      )
+      .build()
+
+  private fun total(stored: List<Stored>) =
+    stored.fold(BigDecimal.ZERO) { acc, s -> acc + BigDecimal(s.amount) + BigDecimal(s.fee) }
+
+  private fun feeTotal(stored: List<Stored>) =
+    stored.fold(BigDecimal.ZERO) { acc, s -> acc + BigDecimal(s.fee) }
+
+  /** A funded SEP-24 deposit whose stored refunds are exactly [stored] (null when empty). */
+  private fun sep24Txn(
+    amountIn: String = "100",
+    stored: List<Stored> = emptyList(),
+    status: SepTransactionStatus = PENDING_ANCHOR
+  ): JdbcSep24Transaction {
+    val txn = JdbcSep24Transaction()
+    txn.status = status.toString()
+    txn.kind = DEPOSIT.kind
+    txn.transferReceivedAt = Instant.now()
+    txn.amountIn = amountIn
+    txn.amountInAsset = NATIVE
+    txn.amountFee = "0"
+    txn.amountFeeAsset = NATIVE
+    if (stored.isNotEmpty()) {
+      val refunds = JdbcSep24Refunds()
+      refunds.payments =
+        stored.map {
+          JdbcSep24RefundPayment.builder()
+            .id(it.id)
+            .idType("EXTERNAL")
+            .amount(it.amount)
+            .fee(it.fee)
+            .build()
+        }
+      refunds.amountRefunded = total(stored).toPlainString()
+      refunds.amountFee = feeTotal(stored).toPlainString()
+      txn.refunds = refunds
+    }
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn
+    return txn
+  }
+
+  private fun assertSep24Refunds(
+    txn: JdbcSep24Transaction,
+    amountRefunded: String,
+    amountFee: String,
+    ids: List<String>
+  ) {
+    assertEquals(amountRefunded, txn.refunds.amountRefunded)
+    assertEquals(amountFee, txn.refunds.amountFee)
+    assertEquals(ids, txn.refunds.refundPayments.map { it.id })
+  }
+
+  // ---- notify_refund_sent from pending_anchor, SEP-24 (RR-01 to RR-13, RR-24, RR-25) ----
+
+  @Test
+  fun rr01_sep24_replayOfStoredIdIsAcceptedAndTotalStays() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "40")))
+
+    sentHandler.handle(sentRequest("A", "40"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "40", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr02_sep24_replayRepeated25TimesIsAcceptedEveryTime() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "40")))
+
+    repeat(25) { sentHandler.handle(sentRequest("A", "40")) }
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "40", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr03_sep24_replayOfHalfAmountInDoesNotFlipToRefunded() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "50")))
+
+    sentHandler.handle(sentRequest("A", "50"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "50", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr04_sep24_replayWithFeeCountsTheFeeOnce() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "40", "10")))
+
+    sentHandler.handle(sentRequest("A", "40", "10"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "50", "10", listOf("A"))
+  }
+
+  @Test
+  fun rr05_sep24_replacementAboveAmountInIsRejectedAndUnchanged() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "40")))
+
+    val ex = assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("A", "101")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "40", "0", listOf("A"))
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
+  @Test
+  fun rr06_sep24_correctingStoredIdFrom60To70IsAccepted() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    sentHandler.handle(sentRequest("A", "70"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "70", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr07_sep24_newIdAboveRemainingAmountInIsRejectedAndUnchanged() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    val ex = assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("B", "50")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "60", "0", listOf("A"))
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
+  @Test
+  fun rr08_sep24_newIdFillingAmountInSetsRefundedWithTwoPayments() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    sentHandler.handle(sentRequest("B", "40"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep24Refunds(txn, "100", "0", listOf("A", "B"))
+  }
+
+  @Test
+  fun rr09_sep24_replacingStoredIdUpToAmountInSetsRefunded() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    sentHandler.handle(sentRequest("A", "100"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep24Refunds(txn, "100", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr10_sep24_firstRefundOfAmountInSetsRefunded() {
+    val txn = sep24Txn()
+
+    sentHandler.handle(sentRequest("A", "100"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep24Refunds(txn, "100", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr11_sep24_firstRefundAboveAmountInIsRejected() {
+    val txn = sep24Txn()
+
+    val ex = assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("A", "101")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
+  @Test
+  fun rr12_sep24_storedListHoldingTheIdTwiceCollapsesToOnePayment() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60"), Stored("A", "60")))
+
+    sentHandler.handle(sentRequest("A", "70"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "70", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr13_sep24_replacementEqualToAmountInAtSeventhDecimalSetsRefunded() {
+    val txn = sep24Txn(amountIn = "12.3456789", stored = listOf(Stored("A", "12.3456788")))
+
+    sentHandler.handle(sentRequest("A", "12.3456789"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep24Refunds(txn, "12.3456789", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr13_sep24_replacementAboveAmountInAtSeventhDecimalIsRejected() {
+    val txn = sep24Txn(amountIn = "12.3456789", stored = listOf(Stored("A", "12.3456788")))
+
+    val ex =
+      assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("A", "12.3456790")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertSep24Refunds(txn, "12.3456788", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr24_sep24_cappedCallLeavesRefundsStatusAndStoreUntouched() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60", "5")))
+
+    assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("B", "40", "5")) }
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "65", "5", listOf("A"))
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
+  @Test
+  fun rr25_sep24_unannouncedIdIsRejectedOutsidePendingAnchor() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")), status = PENDING_EXTERNAL)
+
+    val ex = assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("B", "10")) }
+
+    assertEquals("Invalid refund id", ex.message)
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep24Refunds(txn, "60", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr25_sep24_announcedIdKeepsReplaceByIdTotalOutsidePendingAnchor() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")), status = PENDING_EXTERNAL)
+
+    sentHandler.handle(sentRequest("A", "70"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "70", "0", listOf("A"))
+  }
+}
