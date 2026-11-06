@@ -4,6 +4,7 @@ import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHD
 import static org.stellar.anchor.api.platform.PlatformTransactionData.Kind.WITHDRAWAL_EXCHANGE;
 import static org.stellar.anchor.api.rpc.method.RpcMethod.NOTIFY_ONCHAIN_FUNDS_RECEIVED;
 import static org.stellar.anchor.api.sep.SepTransactionStatus.*;
+import static org.stellar.anchor.platform.utils.LedgerPaymentMatcher.requirePayment;
 import static org.stellar.anchor.platform.utils.PaymentHelper.addStellarTransaction;
 import static org.stellar.anchor.platform.utils.PaymentHelper.getLedgerPayment;
 
@@ -36,6 +37,7 @@ import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
 import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
 import org.stellar.anchor.platform.utils.AssetValidationUtils;
+import org.stellar.anchor.platform.utils.LedgerPaymentMatcher.ExpectedPayment;
 import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
@@ -158,6 +160,38 @@ public class NotifyOnchainFundsReceivedHandler
     return supportedStatuses;
   }
 
+  /** What the transaction expects to receive: its receiving account, memo and amount-in asset. */
+  private static ExpectedPayment expectedPayment(JdbcSepTransaction txn) {
+    switch (Sep.from(txn.getProtocol())) {
+      case SEP_6:
+        JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
+        return new ExpectedPayment(
+            txn6.getWithdrawAnchorAccount(),
+            txn6.getMemo(),
+            txn6.getMemoType(),
+            txn6.getAmountInAsset(),
+            false);
+      case SEP_24:
+        JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
+        return new ExpectedPayment(
+            txn24.getWithdrawAnchorAccount(),
+            txn24.getMemo(),
+            txn24.getMemoType(),
+            txn24.getAmountInAsset(),
+            false);
+      case SEP_31:
+        JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
+        return new ExpectedPayment(
+            txn31.getToAccount(),
+            txn31.getStellarMemo(),
+            txn31.getStellarMemoType(),
+            txn31.getAmountInAsset(),
+            true);
+      default:
+        throw new IllegalStateException("Unsupported protocol: " + txn.getProtocol());
+    }
+  }
+
   @Override
   protected void updateTransactionWithRpcRequest(
       JdbcSepTransaction txn, NotifyOnchainFundsReceivedRequest request) throws AnchorException {
@@ -165,6 +199,8 @@ public class NotifyOnchainFundsReceivedHandler
     try {
       LedgerTransaction ledgerTxn =
           LedgerClientHelper.waitForTransactionAvailable(ledgerClient, stellarTxnId);
+      // The hash is recorded as the received payment only when it holds one for this transaction.
+      requirePayment(sacToAssetMapper, ledgerTxn, expectedPayment(txn));
       addStellarTransaction(sacToAssetMapper, ledgerTxn, txn);
 
       if (Sep.SEP_31.equals(Sep.from(txn.getProtocol()))) {
