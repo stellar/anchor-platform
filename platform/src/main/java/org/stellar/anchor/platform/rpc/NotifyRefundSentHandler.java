@@ -82,15 +82,14 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
           throw new InvalidParamsException("refund is required");
         }
 
-        if (PENDING_RECEIVER == currentStatus) {
-          if (sep31Refunds != null
-              && sep31Refunds.getRefundPayments() != null
-              && !sep31Refunds.getRefundPayments().isEmpty()) {
-            throw new InvalidRequestException(
-                String.format(
-                    "Multiple refunds aren't supported for kind[%s], protocol[%s] and action[%s]",
-                    RECEIVE, txn.getProtocol(), getRpcMethod()));
-          }
+        // SEP-31 keeps a single refund, in every status the method accepts.
+        if (sep31Refunds != null
+            && sep31Refunds.getRefundPayments() != null
+            && !sep31Refunds.getRefundPayments().isEmpty()) {
+          throw new InvalidRequestException(
+              String.format(
+                  "Multiple refunds aren't supported for kind[%s], protocol[%s] and action[%s]",
+                  RECEIVE, txn.getProtocol(), getRpcMethod()));
         }
     }
 
@@ -145,12 +144,23 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
               sum(assetInfo, refund.getAmount().getAmount(), refund.getAmountFee().getAmount());
         } else {
           if (PENDING_ANCHOR == SepTransactionStatus.from(txn.getStatus())) {
+            // Same replace-by-id arithmetic updateTransactionWithRpcRequest persists with: a
+            // stored payment with the request's id is replaced, any other id is added.
             totalRefunded =
-                sum(
-                    assetInfo,
-                    refunds.getAmountRefunded().getAmount(),
-                    refund.getAmount().getAmount(),
-                    refund.getAmountFee().getAmount());
+                Arrays.stream(refunds.getPayments())
+                    .filter(payment -> !payment.getId().equals(refund.getId()))
+                    .map(
+                        payment ->
+                            sum(
+                                assetInfo,
+                                payment.getAmount().getAmount(),
+                                payment.getFee().getAmount()))
+                    .reduce(
+                        sum(
+                            assetInfo,
+                            refund.getAmount().getAmount(),
+                            refund.getAmountFee().getAmount()),
+                        BigDecimal::add);
           } else {
             if (refund == null) {
               totalRefunded = decimal(refunds.getAmountRefunded().getAmount(), assetInfo);
@@ -194,12 +204,18 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
               sum(assetInfo, refund.getAmount().getAmount(), refund.getAmountFee().getAmount());
         } else {
           if (PENDING_ANCHOR == SepTransactionStatus.from(txn.getStatus())) {
+            // Same replace-by-id arithmetic updateTransactionWithRpcRequest persists with: a
+            // stored payment with the request's id is replaced, any other id is added.
             totalRefunded =
-                sum(
-                    assetInfo,
-                    sep24Refunds.getAmountRefunded(),
-                    refund.getAmount().getAmount(),
-                    refund.getAmountFee().getAmount());
+                sep24Refunds.getRefundPayments().stream()
+                    .filter(payment -> !payment.getId().equals(refund.getId()))
+                    .map(payment -> sum(assetInfo, payment.getAmount(), payment.getFee()))
+                    .reduce(
+                        sum(
+                            assetInfo,
+                            refund.getAmount().getAmount(),
+                            refund.getAmountFee().getAmount()),
+                        BigDecimal::add);
           } else {
             if (refund == null) {
               totalRefunded = decimal(sep24Refunds.getAmountRefunded(), assetInfo);
