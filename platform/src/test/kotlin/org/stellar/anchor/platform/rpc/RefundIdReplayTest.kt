@@ -429,7 +429,7 @@ class RefundIdReplayTest {
   // ---- notify_refund_sent from pending_anchor, SEP-6 (RR-01 to RR-13, RR-24, RR-25) ----
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr01_sep6_replayOfStoredIdIsAcceptedAndTotalStays(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "40")))
 
@@ -440,7 +440,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr02_sep6_replayRepeated25TimesIsAcceptedEveryTime(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "40")))
 
@@ -451,7 +451,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr03_sep6_replayOfHalfAmountInDoesNotFlipToRefunded(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "50")))
 
@@ -462,7 +462,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr04_sep6_replayWithFeeCountsTheFeeOnce(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "40", "10")))
 
@@ -473,7 +473,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr05_sep6_replacementAboveAmountInIsRejectedAndUnchanged(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "40")))
 
@@ -486,7 +486,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr06_sep6_correctingStoredIdFrom60To70IsAccepted(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
 
@@ -497,7 +497,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr07_sep6_newIdAboveRemainingAmountInIsRejectedAndUnchanged(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
 
@@ -510,7 +510,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr08_sep6_newIdFillingAmountInSetsRefundedWithTwoPayments(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
 
@@ -521,7 +521,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr09_sep6_replacingStoredIdUpToAmountInSetsRefunded(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
 
@@ -532,7 +532,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr10_sep6_firstRefundOfAmountInSetsRefunded(kind: String) {
     val txn = sep6Txn(kind)
 
@@ -543,7 +543,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr11_sep6_firstRefundAboveAmountInIsRejected(kind: String) {
     val txn = sep6Txn(kind)
 
@@ -555,7 +555,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr12_sep6_storedListHoldingTheIdTwiceCollapsesToOnePayment(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "60"), Stored("A", "60")))
 
@@ -566,7 +566,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr13_sep6_replacementEqualToAmountInAtSeventhDecimalSetsRefunded(kind: String) {
     val txn = sep6Txn(kind, "12.3456789", listOf(Stored("A", "12.3456788")))
 
@@ -577,7 +577,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr13_sep6_replacementAboveAmountInAtSeventhDecimalIsRejected(kind: String) {
     val txn = sep6Txn(kind, "12.3456789", listOf(Stored("A", "12.3456788")))
 
@@ -589,7 +589,7 @@ class RefundIdReplayTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = ["deposit", "withdrawal"])
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
   fun rr24_sep6_cappedCallLeavesRefundsStatusAndStoreUntouched(kind: String) {
     val txn = sep6Txn(kind, stored = listOf(Stored("A", "60", "5")))
 
@@ -753,6 +753,245 @@ class RefundIdReplayTest {
     assertEquals(PENDING_ANCHOR.toString(), txn.status)
     assertSep6Refunds(txn, "65", "5", listOf("A"))
     verify(exactly = 0) { txn6Store.save(any()) }
+  }
+
+  // ---- fees and bounds the cap must count, on both handlers (RR-04, RR-09, RR-12, RR-13, RR-17,
+  // RR-18, RR-24) ----
+
+  private val mixedFees = listOf(Stored("A", "20"), Stored("B", "30", "5"), Stored("C", "25", "3"))
+
+  @Test
+  fun rr04_sep24_feeOfNewIdCountsTowardTheCapAtTheBound() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    sentHandler.handle(sentRequest("B", "35", "5"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep24Refunds(txn, "100", "5", listOf("A", "B"))
+  }
+
+  @Test
+  fun rr04_sep24_feeOfNewIdOneAboveTheBoundIsRejected() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    val ex =
+      assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("B", "36", "5")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertSep24Refunds(txn, "60", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
+  fun rr04_sep6_feeOfNewIdCountsTowardTheCapAtTheBound(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
+
+    sentHandler.handle(sentRequest("B", "35", "5"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep6Refunds(txn, "100", "5", listOf("A", "B"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
+  fun rr04_sep6_feeOfNewIdOneAboveTheBoundIsRejected(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
+
+    val ex =
+      assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("B", "36", "5")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertSep6Refunds(txn, "60", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr09_sep24_replacingTheMiddleOfStoredRefundsCountsTheOtherFees() {
+    val txn = sep24Txn(stored = mixedFees)
+
+    sentHandler.handle(sentRequest("B", "47", "5"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep24Refunds(txn, "100", "8", listOf("A", "C", "B"))
+  }
+
+  @Test
+  fun rr24_sep24_replacingTheMiddleOneAboveAmountInIsRejectedAndUnchanged() {
+    val txn = sep24Txn(stored = mixedFees)
+
+    val ex =
+      assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("B", "48", "5")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "83", "8", listOf("A", "B", "C"))
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
+  fun rr09_sep6_replacingTheMiddleOfStoredRefundsCountsTheOtherFees(kind: String) {
+    val txn = sep6Txn(kind, stored = mixedFees)
+
+    sentHandler.handle(sentRequest("B", "47", "5"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep6Refunds(txn, "100", "8", listOf("A", "C", "B"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
+  fun rr24_sep6_replacingTheMiddleOneAboveAmountInIsRejectedAndUnchanged(kind: String) {
+    val txn = sep6Txn(kind, stored = mixedFees)
+
+    val ex =
+      assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("B", "48", "5")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "83", "8", listOf("A", "B", "C"))
+    verify(exactly = 0) { txn6Store.save(any()) }
+  }
+
+  @Test
+  fun rr13_sep24_newIdWithSeventhDecimalFeesFillingAmountInSetsRefunded() {
+    val txn =
+      sep24Txn(amountIn = "12.3456789", stored = listOf(Stored("A", "1.1111111", "0.0000001")))
+
+    sentHandler.handle(sentRequest("B", "11.2345676", "0.0000001"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep24Refunds(txn, "12.3456789", "0.0000002", listOf("A", "B"))
+  }
+
+  @Test
+  fun rr13_sep24_newIdWithSeventhDecimalFeesOneUnitAboveIsRejected() {
+    val txn =
+      sep24Txn(amountIn = "12.3456789", stored = listOf(Stored("A", "1.1111111", "0.0000001")))
+
+    val ex =
+      assertThrows<InvalidParamsException> {
+        sentHandler.handle(sentRequest("B", "11.2345677", "0.0000001"))
+      }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertSep24Refunds(txn, "1.1111112", "0.0000001", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
+  fun rr13_sep6_newIdWithSeventhDecimalFeesFillingAmountInSetsRefunded(kind: String) {
+    val txn = sep6Txn(kind, "12.3456789", listOf(Stored("A", "1.1111111", "0.0000001")))
+
+    sentHandler.handle(sentRequest("B", "11.2345676", "0.0000001"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep6Refunds(txn, "12.3456789", "0.0000002", listOf("A", "B"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal", "deposit-exchange", "withdrawal-exchange"])
+  fun rr13_sep6_newIdWithSeventhDecimalFeesOneUnitAboveIsRejected(kind: String) {
+    val txn = sep6Txn(kind, "12.3456789", listOf(Stored("A", "1.1111111", "0.0000001")))
+
+    val ex =
+      assertThrows<InvalidParamsException> {
+        sentHandler.handle(sentRequest("B", "11.2345677", "0.0000001"))
+      }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertSep6Refunds(txn, "1.1111112", "0.0000001", listOf("A"))
+  }
+
+  @Test
+  fun rr18_sep24_pendingNewIdWithFeeFillingAmountInIsAccepted() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    pendingHandler.handle(pendingRequest("B", "35", "5"))
+
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep24Refunds(txn, "100", "5", listOf("A", "B"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "deposit-exchange"])
+  fun rr18_sep6_pendingNewIdWithFeeFillingAmountInIsAccepted(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
+
+    pendingHandler.handle(pendingRequest("B", "35", "5"))
+
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep6Refunds(txn, "100", "5", listOf("A", "B"))
+  }
+
+  @Test
+  fun rr17_sep24_pendingNewIdWithFeeOneAboveAmountInIsRejected() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    val ex =
+      assertThrows<InvalidParamsException> { pendingHandler.handle(pendingRequest("B", "36", "5")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertSep24Refunds(txn, "60", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "deposit-exchange"])
+  fun rr17_sep6_pendingNewIdWithFeeOneAboveAmountInIsRejected(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
+
+    val ex =
+      assertThrows<InvalidParamsException> { pendingHandler.handle(pendingRequest("B", "36", "5")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertSep6Refunds(txn, "60", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr13_sep24_pendingSeventhDecimalFeesFillingAmountInIsAcceptedAndOneUnitAboveRejected() {
+    val txn =
+      sep24Txn(amountIn = "12.3456789", stored = listOf(Stored("A", "1.1111111", "0.0000001")))
+
+    assertThrows<InvalidParamsException> {
+      pendingHandler.handle(pendingRequest("B", "11.2345677", "0.0000001"))
+    }
+    assertSep24Refunds(txn, "1.1111112", "0.0000001", listOf("A"))
+    pendingHandler.handle(pendingRequest("B", "11.2345676", "0.0000001"))
+
+    assertSep24Refunds(txn, "12.3456789", "0.0000002", listOf("A", "B"))
+  }
+
+  @Test
+  fun rr13_sep6_pendingSeventhDecimalFeesFillingAmountInIsAcceptedAndOneUnitAboveRejected() {
+    val txn = sep6Txn(DEPOSIT.kind, "12.3456789", listOf(Stored("A", "1.1111111", "0.0000001")))
+
+    assertThrows<InvalidParamsException> {
+      pendingHandler.handle(pendingRequest("B", "11.2345677", "0.0000001"))
+    }
+    assertSep6Refunds(txn, "1.1111112", "0.0000001", listOf("A"))
+    pendingHandler.handle(pendingRequest("B", "11.2345676", "0.0000001"))
+
+    assertSep6Refunds(txn, "12.3456789", "0.0000002", listOf("A", "B"))
+  }
+
+  @Test
+  fun rr12_sep24_pendingStoredListHoldingTheIdTwiceCollapsesToOnePayment() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60"), Stored("A", "60")))
+
+    pendingHandler.handle(pendingRequest("A", "70"))
+
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep24Refunds(txn, "70", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "deposit-exchange"])
+  fun rr12_sep6_pendingStoredListHoldingTheIdTwiceCollapsesToOnePayment(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60"), Stored("A", "60")))
+
+    pendingHandler.handle(pendingRequest("A", "70"))
+
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep6Refunds(txn, "70", "0", listOf("A"))
   }
 
   // ---- pending, sent, pending sequence through both handlers (RR-19) ----
