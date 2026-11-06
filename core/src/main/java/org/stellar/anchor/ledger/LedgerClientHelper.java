@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.stellar.anchor.api.exception.LedgerException;
+import org.stellar.sdk.Address;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.TOID;
 import org.stellar.sdk.exception.BadRequestException;
@@ -306,6 +307,7 @@ public class LedgerClientHelper {
         BigInteger muxedId = ma.getId().getUint64().getNumber();
         yield new org.stellar.sdk.MuxedAccount(accountId, muxedId).getAddress();
       }
+      case SC_ADDRESS_TYPE_MUXED_CONTRACT -> Address.fromSCAddress(address).toString();
       case SC_ADDRESS_TYPE_CLAIMABLE_BALANCE, SC_ADDRESS_TYPE_LIQUIDITY_POOL -> null;
     };
   }
