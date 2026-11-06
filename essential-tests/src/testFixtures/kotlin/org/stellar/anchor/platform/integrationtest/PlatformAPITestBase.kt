@@ -143,28 +143,58 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     return builder.build()
   }
 
+  /** The shared payment of the class: the fixed destination and memo, in Circle's testnet USDC. */
   private fun sendTestPayment(ledgerClient: LedgerClient): LedgerTransaction? {
-    val destAccount = TEST_PAYMENT_DEST_ACCOUNT
     val usdcAsset =
       Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
         as AssetTypeCreditAlphaNum
+    return sendPayment(
+      ledgerClient,
+      TEST_PAYMENT_DEST_ACCOUNT,
+      Memo.text(TEST_PAYMENT_MEMO),
+      usdcAsset
+    )
+  }
+
+  /** The ledger client of the configured network: Stellar RPC when set, otherwise Horizon. */
+  protected fun testLedgerClient(): LedgerClient =
+    if (isNotEmpty(config.get("stellar_network.rpc_url"))) {
+      StellarRpc(config.get("stellar_network.rpc_url")!!)
+    } else if (isNotEmpty(config.get("stellar_network.horizon_url"))) {
+      Horizon(config.get("stellar_network.horizon_url")!!)
+    } else {
+      throw Exception("None of stellar_network.rpc_url or stellar_network.horizon_url is not set")
+    }
+
+  /**
+   * Sends a payment of 0.0002 of [asset] from the payment signing account to [destination], with
+   * [memo] when given, and returns the confirmed ledger transaction.
+   */
+  protected fun sendPayment(
+    ledgerClient: LedgerClient,
+    destination: String,
+    memo: Memo?,
+    asset: Asset,
+  ): LedgerTransaction {
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
     val accountId = sourceKey.accountId
 
     for (attempt in 1..5) {
       info("sendTestPayment attempt $attempt/5 (class=${this::class.java.simpleName})")
       val account = ledgerClient.getAccount(accountId)
-      val txn =
+      val builder =
         TransactionBuilder(Account(accountId, account.sequenceNumber), Network.TESTNET)
           .addOperation(
             PaymentOperation.builder()
               .sourceAccount(sourceKey.accountId)
-              .destination(destAccount)
-              .asset(usdcAsset)
+              .destination(destination)
+              .asset(asset)
               .amount(BigDecimal("0.0002"))
               .build()
           )
-          .addMemo(Memo.text(TEST_PAYMENT_MEMO))
+      if (memo != null) builder.addMemo(memo)
+      val txn =
+        builder
           .addPreconditions(
             TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(180)).build()
           )
