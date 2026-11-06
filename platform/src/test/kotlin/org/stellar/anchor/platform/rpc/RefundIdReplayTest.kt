@@ -13,6 +13,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException
+import org.stellar.anchor.api.exception.rpc.InvalidRequestException
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*
 import org.stellar.anchor.api.rpc.method.AmountAssetRequest
 import org.stellar.anchor.api.rpc.method.NotifyRefundPendingRequest
@@ -42,6 +43,8 @@ class RefundIdReplayTest {
     private const val TX_ID = "testId"
     private const val NATIVE = "stellar:native"
     private const val CAP_MESSAGE = "Refund amount exceeds amount_in"
+    private const val SEP31_MULTIPLE_MESSAGE =
+      "Multiple refunds aren't supported for kind[RECEIVE], protocol[31] and action[notify_refund_sent]"
   }
 
   /** A refund already stored on the transaction. */
@@ -210,6 +213,37 @@ class RefundIdReplayTest {
     assertEquals(amountRefunded, txn.refunds.amountRefunded.amount)
     assertEquals(amountFee, txn.refunds.amountFee.amount)
     assertEquals(ids, txn.refunds.payments.map { it.id })
+  }
+
+  /** A funded SEP-31 transaction whose stored refunds are exactly [stored] (null when empty). */
+  private fun sep31Txn(
+    status: SepTransactionStatus,
+    amountIn: String = "100",
+    stored: List<Stored> = emptyList()
+  ): JdbcSep31Transaction {
+    val txn = JdbcSep31Transaction()
+    txn.status = status.toString()
+    txn.transferReceivedAt = Instant.now()
+    txn.amountIn = amountIn
+    txn.amountInAsset = NATIVE
+    txn.amountFee = "0"
+    txn.amountFeeAsset = NATIVE
+    if (stored.isNotEmpty()) {
+      val refunds = JdbcSep31Refunds()
+      refunds.payments =
+        stored.map {
+          val payment = JdbcSep31RefundPayment()
+          payment.id = it.id
+          payment.amount = it.amount
+          payment.fee = it.fee
+          payment
+        }
+      refunds.amountRefunded = total(stored).toPlainString()
+      refunds.amountFee = feeTotal(stored).toPlainString()
+      txn.refunds = refunds
+    }
+    every { txn31Store.findByTransactionId(TX_ID) } returns txn
+    return txn
   }
 
   // ---- notify_refund_sent from pending_anchor, SEP-24 (RR-01 to RR-13, RR-24, RR-25) ----
@@ -749,5 +783,69 @@ class RefundIdReplayTest {
 
     assertEquals(PENDING_EXTERNAL.toString(), txn.status)
     assertSep6Refunds(txn, "30", "0", listOf("A"))
+  }
+
+  // ---- SEP-31 accepts one refund in every supported status (RR-20 to RR-23) ----
+
+  @ParameterizedTest
+  @ValueSource(strings = ["pending_stellar", "pending_receiver"])
+  fun rr20_21_sep31_secondRefundIsRejectedAndTransactionUnchanged(status: String) {
+    val txn = sep31Txn(SepTransactionStatus.from(status), stored = listOf(Stored("A", "40")))
+
+    val ex = assertThrows<InvalidRequestException> { sentHandler.handle(sentRequest("B", "10")) }
+
+    assertEquals(SEP31_MULTIPLE_MESSAGE, ex.message)
+    assertEquals(status, txn.status)
+    assertEquals(listOf("A"), txn.refunds.refundPayments.map { it.id })
+    assertEquals("40", txn.refunds.amountRefunded)
+    verify(exactly = 0) { txn31Store.save(any()) }
+  }
+
+  @Test
+  fun rr20_sep31_pendingStellarReplayOfStoredIdIsRejectedAndUnchanged() {
+    val txn = sep31Txn(PENDING_STELLAR, stored = listOf(Stored("A", "40")))
+
+    val ex = assertThrows<InvalidRequestException> { sentHandler.handle(sentRequest("A", "40")) }
+
+    assertEquals(SEP31_MULTIPLE_MESSAGE, ex.message)
+    assertEquals(PENDING_STELLAR.toString(), txn.status)
+    assertEquals(listOf("A"), txn.refunds.refundPayments.map { it.id })
+    verify(exactly = 0) { txn31Store.save(any()) }
+  }
+
+  @Test
+  fun rr21_sep31_pendingReceiverReplayOfStoredIdIsRejectedAndUnchanged() {
+    val txn = sep31Txn(PENDING_RECEIVER, stored = listOf(Stored("A", "40")))
+
+    val ex = assertThrows<InvalidRequestException> { sentHandler.handle(sentRequest("A", "40")) }
+
+    assertEquals(SEP31_MULTIPLE_MESSAGE, ex.message)
+    assertEquals(PENDING_RECEIVER.toString(), txn.status)
+    assertEquals(listOf("A"), txn.refunds.refundPayments.map { it.id })
+    verify(exactly = 0) { txn31Store.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["pending_stellar", "pending_receiver"])
+  fun rr22_sep31_fullRefundWithNoStoredRefundSetsRefunded(status: String) {
+    val txn = sep31Txn(SepTransactionStatus.from(status))
+
+    sentHandler.handle(sentRequest("A", "100"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertEquals("100", txn.refunds.amountRefunded)
+    assertEquals(listOf("A"), txn.refunds.refundPayments.map { it.id })
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["pending_stellar", "pending_receiver"])
+  fun rr23_sep31_partialRefundWithNoStoredRefundSetsPendingAnchor(status: String) {
+    val txn = sep31Txn(SepTransactionStatus.from(status))
+
+    sentHandler.handle(sentRequest("A", "40"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertEquals("40", txn.refunds.amountRefunded)
+    assertEquals(listOf("A"), txn.refunds.refundPayments.map { it.id })
   }
 }

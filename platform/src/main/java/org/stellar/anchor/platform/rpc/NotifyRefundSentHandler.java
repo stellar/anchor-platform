@@ -82,15 +82,14 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
           throw new InvalidParamsException("refund is required");
         }
 
-        if (PENDING_RECEIVER == currentStatus) {
-          if (sep31Refunds != null
-              && sep31Refunds.getRefundPayments() != null
-              && !sep31Refunds.getRefundPayments().isEmpty()) {
-            throw new InvalidRequestException(
-                String.format(
-                    "Multiple refunds aren't supported for kind[%s], protocol[%s] and action[%s]",
-                    RECEIVE, txn.getProtocol(), getRpcMethod()));
-          }
+        // SEP-31 keeps a single refund, in every status the method accepts.
+        if (sep31Refunds != null
+            && sep31Refunds.getRefundPayments() != null
+            && !sep31Refunds.getRefundPayments().isEmpty()) {
+          throw new InvalidRequestException(
+              String.format(
+                  "Multiple refunds aren't supported for kind[%s], protocol[%s] and action[%s]",
+                  RECEIVE, txn.getProtocol(), getRpcMethod()));
         }
     }
 
