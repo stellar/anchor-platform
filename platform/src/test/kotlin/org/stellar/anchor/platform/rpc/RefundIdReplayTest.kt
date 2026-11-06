@@ -650,4 +650,74 @@ class RefundIdReplayTest {
 
     assertSep6Refunds(txn, "90", "0", listOf("A", "B"))
   }
+
+  // ---- notify_refund_pending cap check over the replaced list (RR-16, RR-17, RR-24) ----
+
+  @Test
+  fun rr16_sep24_pendingCorrectingStoredIdFrom60To70IsAccepted() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    pendingHandler.handle(pendingRequest("A", "70"))
+
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep24Refunds(txn, "70", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr16_sep6_pendingCorrectingStoredIdFrom60To70IsAccepted() {
+    val txn = sep6Txn(DEPOSIT.kind, stored = listOf(Stored("A", "60")))
+
+    pendingHandler.handle(pendingRequest("A", "70"))
+
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep6Refunds(txn, "70", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr17_sep24_pendingNewIdAboveRemainingAmountInIsRejectedAndUnchanged() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    val ex =
+      assertThrows<InvalidParamsException> { pendingHandler.handle(pendingRequest("B", "50")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "60", "0", listOf("A"))
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
+  @Test
+  fun rr17_sep6_pendingNewIdAboveRemainingAmountInIsRejectedAndUnchanged() {
+    val txn = sep6Txn(DEPOSIT.kind, stored = listOf(Stored("A", "60")))
+
+    val ex =
+      assertThrows<InvalidParamsException> { pendingHandler.handle(pendingRequest("B", "50")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "60", "0", listOf("A"))
+    verify(exactly = 0) { txn6Store.save(any()) }
+  }
+
+  @Test
+  fun rr24_sep24_pendingCappedCallLeavesRefundsStatusAndStoreUntouched() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60", "5")))
+
+    assertThrows<InvalidParamsException> { pendingHandler.handle(pendingRequest("B", "40", "5")) }
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep24Refunds(txn, "65", "5", listOf("A"))
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
+  @Test
+  fun rr24_sep6_pendingCappedCallLeavesRefundsStatusAndStoreUntouched() {
+    val txn = sep6Txn(DEPOSIT.kind, stored = listOf(Stored("A", "60", "5")))
+
+    assertThrows<InvalidParamsException> { pendingHandler.handle(pendingRequest("B", "40", "5")) }
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "65", "5", listOf("A"))
+    verify(exactly = 0) { txn6Store.save(any()) }
+  }
 }

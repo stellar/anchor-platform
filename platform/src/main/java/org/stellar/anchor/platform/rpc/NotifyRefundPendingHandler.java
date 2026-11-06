@@ -120,15 +120,28 @@ public class NotifyRefundPendingHandler
       var amount = request.getRefund().getAmount().getAmount();
       var amountFee = request.getRefund().getAmountFee().getAmount();
 
-      BigDecimal totalRefunded;
-      if (refunds == null || !refunds.hasRefundPayments()) {
-        totalRefunded = sum(assetInfo, amount, amountFee);
-      } else {
-        var amountRefunded =
+      BigDecimal totalRefunded = sum(assetInfo, amount, amountFee);
+      if (refunds != null && refunds.hasRefundPayments()) {
+        // Same replace-by-id arithmetic updateTransactionWithRpcRequest persists with: a stored
+        // payment with the request's id is replaced, any other id is added.
+        String requestRefundId = request.getRefund().getId();
+        BigDecimal otherPayments =
             refunds instanceof Refunds
-                ? ((Refunds) refunds).getAmountRefunded().getAmount()
-                : ((Sep24Refunds) refunds).getAmountRefunded();
-        totalRefunded = sum(assetInfo, amountRefunded, amount, amountFee);
+                ? Arrays.stream(((Refunds) refunds).getPayments())
+                    .filter(payment -> !payment.getId().equals(requestRefundId))
+                    .map(
+                        payment ->
+                            sum(
+                                assetInfo,
+                                payment.getAmount().getAmount(),
+                                payment.getFee().getAmount()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                : ((Sep24Refunds) refunds)
+                    .getRefundPayments().stream()
+                        .filter(payment -> !payment.getId().equals(requestRefundId))
+                        .map(payment -> sum(assetInfo, payment.getAmount(), payment.getFee()))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+        totalRefunded = totalRefunded.add(otherPayments);
       }
 
       BigDecimal amountIn = decimal(txn.getAmountIn(), assetInfo);
