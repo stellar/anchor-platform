@@ -9,6 +9,8 @@ import kotlin.test.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*
@@ -16,6 +18,8 @@ import org.stellar.anchor.api.rpc.method.AmountAssetRequest
 import org.stellar.anchor.api.rpc.method.NotifyRefundSentRequest
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
+import org.stellar.anchor.api.shared.Amount
+import org.stellar.anchor.api.shared.Refunds
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
@@ -135,6 +139,53 @@ class RefundIdReplayTest {
     assertEquals(amountRefunded, txn.refunds.amountRefunded)
     assertEquals(amountFee, txn.refunds.amountFee)
     assertEquals(ids, txn.refunds.refundPayments.map { it.id })
+  }
+
+  /** A funded SEP-6 transaction of [kind] whose stored refunds are exactly [stored]. */
+  private fun sep6Txn(
+    kind: String,
+    amountIn: String = "100",
+    stored: List<Stored> = emptyList(),
+    status: SepTransactionStatus = PENDING_ANCHOR
+  ): JdbcSep6Transaction {
+    val txn = JdbcSep6Transaction()
+    txn.status = status.toString()
+    txn.kind = kind
+    txn.transferReceivedAt = Instant.now()
+    txn.amountIn = amountIn
+    txn.amountInAsset = NATIVE
+    txn.amountFee = "0"
+    txn.amountFeeAsset = NATIVE
+    if (stored.isNotEmpty()) {
+      val refunds = Refunds()
+      refunds.payments =
+        stored
+          .map {
+            org.stellar.anchor.api.shared.RefundPayment.builder()
+              .id(it.id)
+              .idType(org.stellar.anchor.api.shared.RefundPayment.IdType.EXTERNAL)
+              .amount(Amount(it.amount, NATIVE))
+              .fee(Amount(it.fee, NATIVE))
+              .build()
+          }
+          .toTypedArray()
+      refunds.amountRefunded = Amount(total(stored).toPlainString(), NATIVE)
+      refunds.amountFee = Amount(feeTotal(stored).toPlainString(), NATIVE)
+      txn.refunds = refunds
+    }
+    every { txn6Store.findByTransactionId(TX_ID) } returns txn
+    return txn
+  }
+
+  private fun assertSep6Refunds(
+    txn: JdbcSep6Transaction,
+    amountRefunded: String,
+    amountFee: String,
+    ids: List<String>
+  ) {
+    assertEquals(amountRefunded, txn.refunds.amountRefunded.amount)
+    assertEquals(amountFee, txn.refunds.amountFee.amount)
+    assertEquals(ids, txn.refunds.payments.map { it.id })
   }
 
   // ---- notify_refund_sent from pending_anchor, SEP-24 (RR-01 to RR-13, RR-24, RR-25) ----
@@ -315,5 +366,200 @@ class RefundIdReplayTest {
 
     assertEquals(PENDING_ANCHOR.toString(), txn.status)
     assertSep24Refunds(txn, "70", "0", listOf("A"))
+  }
+
+  // ---- notify_refund_sent from pending_anchor, SEP-6 (RR-01 to RR-13, RR-24, RR-25) ----
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr01_sep6_replayOfStoredIdIsAcceptedAndTotalStays(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "40")))
+
+    sentHandler.handle(sentRequest("A", "40"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "40", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr02_sep6_replayRepeated25TimesIsAcceptedEveryTime(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "40")))
+
+    repeat(25) { sentHandler.handle(sentRequest("A", "40")) }
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "40", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr03_sep6_replayOfHalfAmountInDoesNotFlipToRefunded(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "50")))
+
+    sentHandler.handle(sentRequest("A", "50"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "50", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr04_sep6_replayWithFeeCountsTheFeeOnce(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "40", "10")))
+
+    sentHandler.handle(sentRequest("A", "40", "10"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "50", "10", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr05_sep6_replacementAboveAmountInIsRejectedAndUnchanged(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "40")))
+
+    val ex = assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("A", "101")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "40", "0", listOf("A"))
+    verify(exactly = 0) { txn6Store.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr06_sep6_correctingStoredIdFrom60To70IsAccepted(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
+
+    sentHandler.handle(sentRequest("A", "70"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "70", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr07_sep6_newIdAboveRemainingAmountInIsRejectedAndUnchanged(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
+
+    val ex = assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("B", "50")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "60", "0", listOf("A"))
+    verify(exactly = 0) { txn6Store.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr08_sep6_newIdFillingAmountInSetsRefundedWithTwoPayments(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
+
+    sentHandler.handle(sentRequest("B", "40"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep6Refunds(txn, "100", "0", listOf("A", "B"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr09_sep6_replacingStoredIdUpToAmountInSetsRefunded(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60")))
+
+    sentHandler.handle(sentRequest("A", "100"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep6Refunds(txn, "100", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr10_sep6_firstRefundOfAmountInSetsRefunded(kind: String) {
+    val txn = sep6Txn(kind)
+
+    sentHandler.handle(sentRequest("A", "100"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep6Refunds(txn, "100", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr11_sep6_firstRefundAboveAmountInIsRejected(kind: String) {
+    val txn = sep6Txn(kind)
+
+    val ex = assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("A", "101")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    verify(exactly = 0) { txn6Store.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr12_sep6_storedListHoldingTheIdTwiceCollapsesToOnePayment(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60"), Stored("A", "60")))
+
+    sentHandler.handle(sentRequest("A", "70"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "70", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr13_sep6_replacementEqualToAmountInAtSeventhDecimalSetsRefunded(kind: String) {
+    val txn = sep6Txn(kind, "12.3456789", listOf(Stored("A", "12.3456788")))
+
+    sentHandler.handle(sentRequest("A", "12.3456789"))
+
+    assertEquals(REFUNDED.toString(), txn.status)
+    assertSep6Refunds(txn, "12.3456789", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr13_sep6_replacementAboveAmountInAtSeventhDecimalIsRejected(kind: String) {
+    val txn = sep6Txn(kind, "12.3456789", listOf(Stored("A", "12.3456788")))
+
+    val ex =
+      assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("A", "12.3456790")) }
+
+    assertEquals(CAP_MESSAGE, ex.message)
+    assertSep6Refunds(txn, "12.3456788", "0", listOf("A"))
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["deposit", "withdrawal"])
+  fun rr24_sep6_cappedCallLeavesRefundsStatusAndStoreUntouched(kind: String) {
+    val txn = sep6Txn(kind, stored = listOf(Stored("A", "60", "5")))
+
+    assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("B", "40", "5")) }
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "65", "5", listOf("A"))
+    verify(exactly = 0) { txn6Store.save(any()) }
+  }
+
+  @Test
+  fun rr25_sep6_unannouncedIdIsRejectedOutsidePendingAnchor() {
+    val txn = sep6Txn(DEPOSIT.kind, stored = listOf(Stored("A", "60")), status = PENDING_EXTERNAL)
+
+    val ex = assertThrows<InvalidParamsException> { sentHandler.handle(sentRequest("B", "10")) }
+
+    assertEquals("Invalid refund id", ex.message)
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep6Refunds(txn, "60", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr25_sep6_announcedIdKeepsReplaceByIdTotalOutsidePendingAnchor() {
+    val txn = sep6Txn(DEPOSIT.kind, stored = listOf(Stored("A", "60")), status = PENDING_EXTERNAL)
+
+    sentHandler.handle(sentRequest("A", "70"))
+
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    assertSep6Refunds(txn, "70", "0", listOf("A"))
   }
 }

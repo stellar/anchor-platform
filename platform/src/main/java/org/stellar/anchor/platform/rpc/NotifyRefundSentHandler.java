@@ -145,12 +145,23 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
               sum(assetInfo, refund.getAmount().getAmount(), refund.getAmountFee().getAmount());
         } else {
           if (PENDING_ANCHOR == SepTransactionStatus.from(txn.getStatus())) {
+            // Same replace-by-id arithmetic updateTransactionWithRpcRequest persists with: a
+            // stored payment with the request's id is replaced, any other id is added.
             totalRefunded =
-                sum(
-                    assetInfo,
-                    refunds.getAmountRefunded().getAmount(),
-                    refund.getAmount().getAmount(),
-                    refund.getAmountFee().getAmount());
+                Arrays.stream(refunds.getPayments())
+                    .filter(payment -> !payment.getId().equals(refund.getId()))
+                    .map(
+                        payment ->
+                            sum(
+                                assetInfo,
+                                payment.getAmount().getAmount(),
+                                payment.getFee().getAmount()))
+                    .reduce(
+                        sum(
+                            assetInfo,
+                            refund.getAmount().getAmount(),
+                            refund.getAmountFee().getAmount()),
+                        BigDecimal::add);
           } else {
             if (refund == null) {
               totalRefunded = decimal(refunds.getAmountRefunded().getAmount(), assetInfo);
