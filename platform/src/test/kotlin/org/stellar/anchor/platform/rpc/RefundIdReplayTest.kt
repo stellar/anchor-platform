@@ -720,4 +720,34 @@ class RefundIdReplayTest {
     assertSep6Refunds(txn, "65", "5", listOf("A"))
     verify(exactly = 0) { txn6Store.save(any()) }
   }
+
+  // ---- pending, sent, pending sequence through both handlers (RR-19) ----
+
+  @Test
+  fun rr19_sep24_pendingSentPendingSequenceLeavesTheIdOnce() {
+    val txn = sep24Txn()
+
+    pendingHandler.handle(pendingRequest("A", "30"))
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    sentHandler.handle(sentRequest("A", "30"))
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    pendingHandler.handle(pendingRequest("A", "30"))
+
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep24Refunds(txn, "30", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr19_sep6_pendingSentPendingSequenceLeavesTheIdOnce() {
+    val txn = sep6Txn(DEPOSIT.kind)
+
+    pendingHandler.handle(pendingRequest("A", "30"))
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    sentHandler.handle(sentRequest("A", "30"))
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+    pendingHandler.handle(pendingRequest("A", "30"))
+
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep6Refunds(txn, "30", "0", listOf("A"))
+  }
 }
