@@ -222,6 +222,8 @@ public class NotifyRefundPendingHandler
         }
         List<RefundPayment> sep6RefundPayments =
             new ArrayList<>(Arrays.asList(refunds.getPayments()));
+        // A repeated refund id replaces the stored payment, as notify_refund_sent does.
+        sep6RefundPayments.removeIf(payment -> payment.getId().equals(requestRefund.getId()));
         sep6RefundPayments.add(requestPayment);
         refunds.setPayments(sep6RefundPayments.toArray(new RefundPayment[0]));
 
@@ -278,6 +280,8 @@ public class NotifyRefundPendingHandler
           sep24Refunds.setRefundPayments(List.of());
         }
         List<Sep24RefundPayment> sep24RefundPayments = sep24Refunds.getRefundPayments();
+        // A repeated refund id replaces the stored payment, as notify_refund_sent does.
+        sep24RefundPayments.removeIf(payment -> payment.getId().equals(requestRefund.getId()));
         sep24RefundPayments.add(refundPayment);
         sep24Refunds.setRefundPayments(sep24RefundPayments);
 

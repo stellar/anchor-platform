@@ -15,6 +15,7 @@ import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind.*
 import org.stellar.anchor.api.rpc.method.AmountAssetRequest
+import org.stellar.anchor.api.rpc.method.NotifyRefundPendingRequest
 import org.stellar.anchor.api.rpc.method.NotifyRefundSentRequest
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
@@ -55,6 +56,7 @@ class RefundIdReplayTest {
   @MockK(relaxed = true) private lateinit var eventSession: Session
   @MockK(relaxed = true) private lateinit var counter: Counter
 
+  private lateinit var pendingHandler: NotifyRefundPendingHandler
   private lateinit var sentHandler: NotifyRefundSentHandler
 
   @BeforeEach
@@ -67,6 +69,16 @@ class RefundIdReplayTest {
     every { txn24Store.findByTransactionId(any()) } returns null
     every { txn31Store.findByTransactionId(any()) } returns null
     val assetService = DefaultAssetService.fromJsonResource("test_assets_native_7_decimals.json")
+    pendingHandler =
+      NotifyRefundPendingHandler(
+        txn6Store,
+        txn24Store,
+        txn31Store,
+        requestValidator,
+        assetService,
+        eventService,
+        metricsService
+      )
     sentHandler =
       NotifyRefundSentHandler(
         txn6Store,
@@ -87,6 +99,18 @@ class RefundIdReplayTest {
           .id(id)
           .amount(AmountAssetRequest(amount, NATIVE))
           .amountFee(AmountAssetRequest(fee, NATIVE))
+          .build()
+      )
+      .build()
+
+  private fun pendingRequest(id: String, amount: String, fee: String = "0") =
+    NotifyRefundPendingRequest.builder()
+      .transactionId(TX_ID)
+      .refund(
+        NotifyRefundPendingRequest.Refund.builder()
+          .id(id)
+          .amountFee(AmountAssetRequest(fee, NATIVE))
+          .amount(AmountAssetRequest(amount, NATIVE))
           .build()
       )
       .build()
@@ -561,5 +585,69 @@ class RefundIdReplayTest {
 
     assertEquals(PENDING_ANCHOR.toString(), txn.status)
     assertSep6Refunds(txn, "70", "0", listOf("A"))
+  }
+
+  // ---- notify_refund_pending replaces a repeated refund id (RR-14, RR-15, RR-18) ----
+
+  @Test
+  fun rr14_sep24_pendingWithStoredIdReplacesItAndListsItOnce() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "30")))
+
+    pendingHandler.handle(pendingRequest("A", "20"))
+
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep24Refunds(txn, "20", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr14_sep6_pendingWithStoredIdReplacesItAndListsItOnce() {
+    val txn = sep6Txn(DEPOSIT.kind, stored = listOf(Stored("A", "30")))
+
+    pendingHandler.handle(pendingRequest("A", "20"))
+
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    assertSep6Refunds(txn, "20", "0", listOf("A"))
+  }
+
+  @Test
+  fun rr15_sep24_replayedPendingKeepsOneRefundWorthOfAmounts() {
+    val txn = sep24Txn(amountIn = "1")
+
+    pendingHandler.handle(pendingRequest("A", "0.4", "0.01"))
+    assertSep24Refunds(txn, "0.41", "0.01", listOf("A"))
+    txn.status = PENDING_ANCHOR.toString()
+    pendingHandler.handle(pendingRequest("A", "0.4", "0.01"))
+
+    assertSep24Refunds(txn, "0.41", "0.01", listOf("A"))
+  }
+
+  @Test
+  fun rr15_sep6_replayedPendingKeepsOneRefundWorthOfAmounts() {
+    val txn = sep6Txn(DEPOSIT.kind, amountIn = "1")
+
+    pendingHandler.handle(pendingRequest("A", "0.4", "0.01"))
+    assertSep6Refunds(txn, "0.41", "0.01", listOf("A"))
+    txn.status = PENDING_ANCHOR.toString()
+    pendingHandler.handle(pendingRequest("A", "0.4", "0.01"))
+
+    assertSep6Refunds(txn, "0.41", "0.01", listOf("A"))
+  }
+
+  @Test
+  fun rr18_sep24_pendingWithNewIdIsAppendedBesideTheStoredOne() {
+    val txn = sep24Txn(stored = listOf(Stored("A", "60")))
+
+    pendingHandler.handle(pendingRequest("B", "30"))
+
+    assertSep24Refunds(txn, "90", "0", listOf("A", "B"))
+  }
+
+  @Test
+  fun rr18_sep6_pendingWithNewIdIsAppendedBesideTheStoredOne() {
+    val txn = sep6Txn(DEPOSIT.kind, stored = listOf(Stored("A", "60")))
+
+    pendingHandler.handle(pendingRequest("B", "30"))
+
+    assertSep6Refunds(txn, "90", "0", listOf("A", "B"))
   }
 }
