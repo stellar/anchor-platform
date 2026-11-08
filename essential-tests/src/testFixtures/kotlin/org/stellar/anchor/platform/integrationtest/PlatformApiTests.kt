@@ -1,6 +1,9 @@
 package org.stellar.anchor.platform.integrationtest
 
 import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import org.apache.hc.core5.http.HttpStatus.SC_OK
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -266,6 +269,11 @@ abstract class PlatformApiTests : PlatformAPITestBase(TestConfig()) {
   val sep38Client = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), token.token)
 
   fun `test flow`(txId: String, actionRequests: String, actionResponses: String) {
+    if (actionRequests.contains(TEST_PAYMENT_HASH_KEY)) {
+      `test flow with a payment for the transaction`(txId, actionRequests, actionResponses)
+      return
+    }
+
     val rpcActionRequestsType = object : TypeToken<List<RpcRequest>>() {}.type
     val rpcActionRequests: List<RpcRequest> =
       gson.fromJson(inject(actionRequests, TX_ID_KEY to txId), rpcActionRequestsType)
@@ -277,9 +285,59 @@ abstract class PlatformApiTests : PlatformAPITestBase(TestConfig()) {
 
     val expectedResult = inject(actionResponses, TX_ID_KEY to txId)
     val actualResult = rpcActionResponses.body?.string()?.trimIndent()
+    assertRpcResponses(expectedResult, actualResult)
+  }
+
+  /**
+   * The RPC records a hash only when it holds a payment for the transaction, so a flow that gives
+   * it one pays the transaction itself: the requests before the first one that carries the hash run
+   * first (they set the destination and memo), then one payment is sent to what the transaction
+   * waits for, then the rest run with that payment's values.
+   */
+  private fun `test flow with a payment for the transaction`(
+    txId: String,
+    actionRequests: String,
+    actionResponses: String,
+  ) {
+    val requests =
+      JsonParser.parseString(injectWith(actionRequests, emptyList(), TX_ID_KEY to txId))
+        .asJsonArray
+        .toList()
+    val firstWithHash = requests.indexOfFirst { it.toString().contains(TEST_PAYMENT_HASH_KEY) }
+
+    val txnResponse = platformApiClient.getTransactionByRpc(txId)
+    assertEquals("127.0.0.1", txnResponse.requestClientIpAddress)
+
+    val actual = JsonArray()
+    if (firstWithHash > 0) {
+      sendRpcBatch(requests.subList(0, firstWithHash)).forEach { actual.add(it) }
+    }
+
+    val paymentValues =
+      testPaymentValuesOf(sendPaymentFor(platformApiClient.getTransactionByRpc(txId)))!!
+    val rest =
+      JsonArray().apply { requests.subList(firstWithHash, requests.size).forEach { add(it) } }
+    sendRpcBatch(
+        JsonParser.parseString(injectWith(rest.toString(), paymentValues)).asJsonArray.toList()
+      )
+      .forEach { actual.add(it) }
+
+    assertRpcResponses(
+      injectWith(actionResponses, paymentValues, TX_ID_KEY to txId),
+      actual.toString(),
+    )
+  }
+
+  private fun sendRpcBatch(requests: List<JsonElement>): List<JsonElement> {
+    val rpcRequests = requests.map { gson.fromJson(it, RpcRequest::class.java) }
+    val body = platformApiClient.sendRpcRequest(rpcRequests).body?.string()
+    return JsonParser.parseString(body).asJsonArray.toList()
+  }
+
+  private fun assertRpcResponses(expected: String, actual: String?) {
     JSONAssert.assertEquals(
-      expectedResult,
-      actualResult,
+      expected,
+      actual,
       CustomComparator(
         JSONCompareMode.LENIENT,
         Customization("[*].result.transfer_received_at") { _, _ -> true },
@@ -294,6 +352,8 @@ abstract class PlatformApiTests : PlatformAPITestBase(TestConfig()) {
 }
 
 const val CUSTOMER_ID_KEY = "CUSTOMER_ID"
+
+private const val TEST_PAYMENT_HASH_KEY = "%TESTPAYMENT_TXN_HASH%"
 
 private const val RPC_DEPOSIT_REQUEST =
   """{
