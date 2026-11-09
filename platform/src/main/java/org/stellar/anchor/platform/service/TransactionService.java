@@ -684,6 +684,14 @@ public class TransactionService {
         throw new BadRequestException("transaction.amount_in_asset != quote.sell_asset");
       }
 
+      // A quote that carries no buy delivery method, or a transaction with no funding method, is
+      // not bound to one.
+      if (StringHelper.isNotEmpty(quote.getBuyDeliveryMethod())
+          && StringHelper.isNotEmpty(txn.getFundingMethod())
+          && !quote.getBuyDeliveryMethod().equals(txn.getFundingMethod())) {
+        throw new BadRequestException("transaction.funding_method != quote.buy_delivery_method");
+      }
+
       if (!equalsAsDecimals(txn.getAmountIn(), quote.getSellAmount())) {
         throw new BadRequestException("transaction.amount_in != quote.sell_amount");
       }
