@@ -2048,7 +2048,9 @@ class TransactionServiceTest {
 
   @Test
   fun `test updateSepTransaction rejects a SEP-31 funding method conflicting with the quote`() {
-    for ((txnMethod, quoteMethod) in listOf("SWIFT" to "SEPA", "SEPA" to "SWIFT")) {
+    // the last pair differs by case only: the comparison is exact
+    for ((txnMethod, quoteMethod) in
+      listOf("SWIFT" to "SEPA", "SEPA" to "SWIFT", "SEPA" to "sepa")) {
       val txn = quoteBackedSep31(txnMethod, quoteMethod)
 
       val ex =

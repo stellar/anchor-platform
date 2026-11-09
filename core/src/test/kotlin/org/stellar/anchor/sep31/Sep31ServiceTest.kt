@@ -2619,4 +2619,17 @@ class Sep31ServiceTest {
     verify(exactly = 0) { txnStore.save(any()) }
     verify(exactly = 0) { eventSession.publish(any()) }
   }
+
+  @Test
+  fun `test POST transaction compares the funding method case-sensitively`() {
+    // the asset lists `SEPA`; a quote priced for `sepa` is another method, not the same one
+    every { quoteStore.findByQuoteId("q1") } returns methodQuote("q1", "sepa")
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(TestHelper.createWebAuthJwt(), methodRequest("q1", "SEPA"))
+      }
+
+    assertEquals("funding_method(SEPA) does not match quote buy delivery method(sepa)", ex.message)
+  }
 }
