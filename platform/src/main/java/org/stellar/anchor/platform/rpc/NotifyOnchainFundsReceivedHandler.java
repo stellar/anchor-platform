@@ -170,7 +170,7 @@ public class NotifyOnchainFundsReceivedHandler
             txn6.getMemo(),
             txn6.getMemoType(),
             txn6.getAmountInAsset(),
-            false);
+            true);
       case SEP_24:
         JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
         return new ExpectedPayment(
@@ -178,7 +178,7 @@ public class NotifyOnchainFundsReceivedHandler
             txn24.getMemo(),
             txn24.getMemoType(),
             txn24.getAmountInAsset(),
-            false);
+            true);
       case SEP_31:
         JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
         return new ExpectedPayment(

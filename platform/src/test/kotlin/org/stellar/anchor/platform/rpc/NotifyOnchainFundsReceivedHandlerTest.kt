@@ -1533,30 +1533,69 @@ class NotifyOnchainFundsReceivedHandlerTest {
     val account = "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
     val muxed = org.stellar.sdk.MuxedAccount(account, BigInteger.valueOf(12345)).address
 
-    // SEP-31: a muxed destination counts from any sender.
     val txn31 = stubTransaction("31", account)
     accept(ledgerOf(null, payment(to = muxed)))
     assertEquals(PENDING_RECEIVER.toString(), txn31.status)
 
-    // SEP-6 and SEP-24: only a contract paying a muxed address counts.
     val contract = org.stellar.sdk.StrKey.encodeContract(ByteArray(32))
     val txn24 = stubTransaction("24", account)
     accept(ledgerOf(null, payment(to = muxed, from = contract)))
     assertEquals(PENDING_ANCHOR.toString(), txn24.status)
-
-    val classicSender = stubTransaction("24", account)
-    val ex = rejection(ledgerOf(null, payment(to = muxed)))
-    assertContains(ex.message!!, "destination")
-    assertEquals(PENDING_USR_TRANSFER_START.toString(), classicSender.status)
   }
 
   @CsvSource(value = ["24", "6", "31"])
   @ParameterizedTest
-  fun test_handle_rejection_changes_nothing(protocol: String) {
+  fun test_handle_accepts_muxed_destination_from_a_classic_sender(protocol: String) {
+    val account = "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
+    val muxed = org.stellar.sdk.MuxedAccount(account, BigInteger.valueOf(12345)).address
+    val txn = stubTransaction(protocol, account)
+
+    accept(ledgerOf(null, payment(to = muxed)))
+
+    assertEquals(
+      if (protocol == "31") PENDING_RECEIVER.toString() else PENDING_ANCHOR.toString(),
+      txn.status
+    )
+
+    // A muxed id that is not the stored memo is still refused.
+    val untouched = stubTransaction(protocol, account)
+    val otherId = org.stellar.sdk.MuxedAccount(account, BigInteger.valueOf(99)).address
+    val ex = rejection(ledgerOf(null, payment(to = otherId)))
+    assertContains(ex.message!!, "destination")
+    assertNull(untouched.transferReceivedAt)
+  }
+
+  private fun rejectedLedger(cause: String): LedgerTransaction =
+    when (cause) {
+      "destination" -> ledgerOf(Memo.id(12345), payment(to = "someoneElse"))
+      "memo" -> ledgerOf(Memo.id(54321), payment())
+      "asset" -> ledgerOf(Memo.id(12345), payment(asset = eurcXdr))
+      else -> ledgerOf(Memo.id(12345), payment(amount = 0))
+    }
+
+  @CsvSource(
+    value =
+      [
+        "24,destination",
+        "24,memo",
+        "24,asset",
+        "24,amount",
+        "6,destination",
+        "6,memo",
+        "6,asset",
+        "6,amount",
+        "31,destination",
+        "31,memo",
+        "31,asset",
+        "31,amount"
+      ]
+  )
+  @ParameterizedTest
+  fun test_handle_rejection_changes_nothing(protocol: String, cause: String) {
     val txn = stubTransaction(protocol)
     val before = gson.toJson(txn)
 
-    rejection(ledgerOf(Memo.id(12345), payment(to = "someoneElse")))
+    rejection(rejectedLedger(cause))
 
     assertEquals(before, gson.toJson(txn))
     verify(exactly = 0) { txn6Store.save(any()) }
@@ -1566,15 +1605,18 @@ class NotifyOnchainFundsReceivedHandlerTest {
     verify(exactly = 0) { eventSession.publish(any()) }
   }
 
-  @CsvSource(value = ["24", "6", "31"])
-  @ParameterizedTest
-  fun test_handle_accepts_the_payment_the_observer_forwards(protocol: String) {
-    val account = "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
-    val sender = "GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5"
-    val txn = stubTransaction(protocol, account)
-    val ledgerTxn = ledgerOf(Memo.id(12345), payment(to = account, from = sender))
-
-    // The payment observer routes the payment to the transaction and calls the RPC ...
+  /**
+   * Hands the payment to the payment observer, with the stores answering the lookup it makes for
+   * the transaction, and returns the hash the observer sent to the RPC.
+   */
+  private fun forwardedByObserver(
+    protocol: String,
+    txn: JdbcSepTransaction,
+    account: String,
+    sender: String,
+    ledgerTxn: LedgerTransaction,
+    destination: String,
+  ): String {
     val sep31Store = mockk<JdbcSep31TransactionStore>(relaxed = true)
     val sep24Store = mockk<JdbcSep24TransactionStore>(relaxed = true)
     val sep6Store = mockk<JdbcSep6TransactionStore>(relaxed = true)
@@ -1618,7 +1660,7 @@ class NotifyOnchainFundsReceivedHandlerTest {
     observer.onReceived(
       PaymentTransferEvent.builder()
         .from(sender)
-        .to(account)
+        .to(destination)
         .amount(BigInteger.valueOf(150000000))
         .sep11Asset(USDC_CODE_ISSUER)
         .txHash(STELLAR_TX_ID)
@@ -1630,15 +1672,63 @@ class NotifyOnchainFundsReceivedHandlerTest {
     verify(exactly = 1) {
       platformApiClient.notifyOnchainFundsReceived(TX_ID, capture(forwardedHash), any(), any())
     }
+    return forwardedHash.captured
+  }
 
-    // ... and the RPC accepts the hash the observer forwarded.
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_accepts_the_payment_the_observer_forwards(protocol: String) {
+    val account = "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
+    val sender = "GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5"
+    val txn = stubTransaction(protocol, account)
+    val ledgerTxn = ledgerOf(Memo.id(12345), payment(to = account, from = sender))
+
+    val forwardedHash = forwardedByObserver(protocol, txn, account, sender, ledgerTxn, account)
     accept(ledgerTxn)
 
-    assertEquals(STELLAR_TX_ID, forwardedHash.captured)
+    assertEquals(STELLAR_TX_ID, forwardedHash)
     assertEquals(
       if (protocol == "31") PENDING_RECEIVER.toString() else PENDING_ANCHOR.toString(),
       txn.status
     )
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_accepts_the_muxed_payment_the_observer_forwards(protocol: String) {
+    val account = "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
+    val sender = "GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5"
+    val muxed = org.stellar.sdk.MuxedAccount(account, BigInteger.valueOf(12345)).address
+    val txn = stubTransaction(protocol, account)
+    val ledgerTxn = ledgerOf(Memo.none(), payment(to = muxed, from = sender))
+
+    val forwardedHash = forwardedByObserver(protocol, txn, account, sender, ledgerTxn, muxed)
+    accept(ledgerTxn)
+
+    assertEquals(STELLAR_TX_ID, forwardedHash)
+    assertEquals(
+      if (protocol == "31") PENDING_RECEIVER.toString() else PENDING_ANCHOR.toString(),
+      txn.status
+    )
+  }
+
+  /**
+   * The observer looks a memo up by value only, so it forwards a text memo whose digits equal the
+   * stored id memo; the RPC compares the memo type too (spec FGATE-02) and refuses it.
+   */
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_rejects_a_memo_of_another_type_the_observer_routes_by_value(protocol: String) {
+    val account = "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
+    val sender = "GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5"
+    val txn = stubTransaction(protocol, account)
+    val ledgerTxn = ledgerOf(Memo.text("12345"), payment(to = account, from = sender))
+
+    forwardedByObserver(protocol, txn, account, sender, ledgerTxn, account)
+    val ex = rejection(ledgerTxn)
+
+    assertContains(ex.message!!, "memo")
+    assertNull(txn.transferReceivedAt)
   }
 
   @CsvSource(value = ["24", "6"])

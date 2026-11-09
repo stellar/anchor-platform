@@ -247,6 +247,21 @@ class LedgerPaymentMatcherTest {
   }
 
   @Test
+  fun `a muxed id only stands in for a stored memo of type id`() {
+    val muxed = MuxedAccount(ACCOUNT, BigInteger.valueOf(12345)).address
+    val txn = ledgerTxn(null, payment(to = muxed))
+
+    // The id equals the stored digits, but the stored memo is a text or hash memo, or has no type.
+    for (memoType in listOf("text", "hash", null)) {
+      val message =
+        rejectionMessage(txn, expected(memoType = memoType, muxedIdFromAnySender = true))
+
+      assertContains(message, "destination")
+    }
+    assertAccepted(txn, expected(memoType = "id", muxedIdFromAnySender = true))
+  }
+
+  @Test
   fun `a muxed destination on another account is rejected`() {
     val muxed = MuxedAccount(OTHER_ACCOUNT, BigInteger.valueOf(12345)).address
 

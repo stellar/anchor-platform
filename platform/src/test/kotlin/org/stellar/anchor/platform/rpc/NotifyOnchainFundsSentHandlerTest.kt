@@ -704,13 +704,33 @@ class NotifyOnchainFundsSentHandlerTest {
     assertEquals(COMPLETED.toString(), toMuxed.status)
   }
 
-  @CsvSource(value = ["24,deposit", "6,deposit", "6,deposit-exchange"])
+  private fun rejectedPayout(cause: String): LedgerTransaction =
+    when (cause) {
+      "destination" -> ledgerOf(null, payout(to = "someoneElse"))
+      "asset" -> ledgerOf(null, payout(asset = eurcXdr))
+      else -> ledgerOf(null, payout(amount = 0))
+    }
+
+  @CsvSource(
+    value =
+      [
+        "24,deposit,destination",
+        "24,deposit,asset",
+        "24,deposit,amount",
+        "6,deposit,destination",
+        "6,deposit,asset",
+        "6,deposit,amount",
+        "6,deposit-exchange,destination",
+        "6,deposit-exchange,asset",
+        "6,deposit-exchange,amount"
+      ]
+  )
   @ParameterizedTest
-  fun test_handle_rejected_payout_changes_nothing(protocol: String, kind: String) {
+  fun test_handle_rejected_payout_changes_nothing(protocol: String, kind: String, cause: String) {
     val txn = stubDeposit(protocol, kind)
     val before = gson.toJson(txn)
 
-    rejection(ledgerOf(null, payout(to = "someoneElse")))
+    rejection(rejectedPayout(cause))
 
     assertEquals(before, gson.toJson(txn))
     verify(exactly = 0) { txn6Store.save(any()) }
