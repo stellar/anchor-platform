@@ -2459,4 +2459,164 @@ class Sep31ServiceTest {
 
     assertEquals("quote(id=q1) has expired at 2030-01-01T00:00:00Z", ex.message)
   }
+
+  // --- funding_method must agree with the quote's buy_delivery_method (ANCHOR-1341) ---
+
+  private fun methodQuote(id: String, buyDeliveryMethod: String?) =
+    ownedQuote(id).apply {
+      buyAsset = stellarJPYC
+      buyAmount = "12500"
+      this.buyDeliveryMethod = buyDeliveryMethod
+    }
+
+  private fun methodRequest(quoteId: String, fundingMethod: String) =
+    quoteStepRequest(quoteId).apply {
+      this.fundingMethod = fundingMethod
+      assetIssuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"
+      receiverId = "137938d4-43a7-4252-a452-842adcee474c"
+    }
+
+  private fun stubSuccessfulPost() {
+    every { sep31DepositInfoGenerator.generate(any()) } answers
+      {
+        SepDepositInfo(firstArg<Sep31Transaction>().toAccount, "12345")
+      }
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().id = "ABC-123"
+        firstArg()
+      }
+  }
+
+  @Test
+  fun `test POST transaction rejects a SEPA quote spent as SWIFT`() {
+    every { quoteStore.findByQuoteId("q1") } returns methodQuote("q1", "SEPA")
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(TestHelper.createWebAuthJwt(), methodRequest("q1", "SWIFT"))
+      }
+
+    assertEquals("funding_method(SWIFT) does not match quote buy delivery method(SEPA)", ex.message)
+  }
+
+  @Test
+  fun `test POST transaction rejects a SWIFT quote spent as SEPA`() {
+    every { quoteStore.findByQuoteId("q1") } returns methodQuote("q1", "SWIFT")
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(TestHelper.createWebAuthJwt(), methodRequest("q1", "SEPA"))
+      }
+
+    assertEquals("funding_method(SEPA) does not match quote buy delivery method(SWIFT)", ex.message)
+  }
+
+  @Test
+  fun `test POST transaction with matching funding method accepts the quote and keeps its amounts`() {
+    stubSuccessfulPost()
+    for (method in listOf("SEPA", "SWIFT")) {
+      every { quoteStore.findByQuoteId("q-$method") } returns methodQuote("q-$method", method)
+      val saved = slot<Sep31Transaction>()
+      every { txnStore.save(capture(saved)) } answers
+        {
+          firstArg<Sep31Transaction>().id = "ABC-123"
+          firstArg()
+        }
+
+      val response =
+        sep31Service.postTransaction(
+          TestHelper.createWebAuthJwt(),
+          methodRequest("q-$method", method)
+        )
+
+      assertEquals("ABC-123", response.id)
+      assertEquals(method, saved.captured.fundingMethod)
+      assertEquals("q-$method", saved.captured.quoteId)
+      assertEquals("100", saved.captured.amountIn)
+      assertEquals("12500", saved.captured.amountOut)
+    }
+  }
+
+  @Test
+  fun `test POST transaction with a quote without a buy delivery method accepts any funding method`() {
+    stubSuccessfulPost()
+    for (quoteMethod in listOf(null, "")) {
+      for (method in listOf("SEPA", "SWIFT")) {
+        val quoteId = "q-${quoteMethod ?: "null"}-$method"
+        every { quoteStore.findByQuoteId(quoteId) } returns methodQuote(quoteId, quoteMethod)
+
+        val response =
+          sep31Service.postTransaction(
+            TestHelper.createWebAuthJwt(),
+            methodRequest(quoteId, method)
+          )
+
+        assertEquals("ABC-123", response.id)
+      }
+    }
+  }
+
+  @Test
+  fun `test POST transaction earlier quote check wins over the funding method`() {
+    // every quote below is priced for SEPA and spent as SWIFT, and also fails an earlier check
+    val cases =
+      listOf<Triple<String, (PojoSep38Quote) -> Unit, String>>(
+        Triple(
+          "used",
+          { it.transactionId = "existing-txn-id" },
+          "quote(id=q1) has already been used"
+        ),
+        Triple(
+          "expired",
+          { it.expiresAt = Instant.parse("2000-01-01T00:00:00Z") },
+          "quote(id=q1) has expired at 2000-01-01T00:00:00Z"
+        ),
+        Triple(
+          "wrong amount",
+          { it.sellAmount = "50" },
+          "Quote sell amount [50] is different from the SEP-31 transaction amount [100]"
+        ),
+        Triple(
+          "wrong asset",
+          { it.sellAsset = stellarJPYC },
+          "Quote sell asset [$stellarJPYC] is different from the SEP-31 transaction asset [$stellarUSDC]"
+        ),
+      )
+    for ((label, breakQuote, wantMessage) in cases) {
+      every { quoteStore.findByQuoteId("q1") } returns
+        methodQuote("q1", "SEPA").also { breakQuote(it) }
+
+      val ex =
+        assertThrows<BadRequestException>(label) {
+          sep31Service.postTransaction(TestHelper.createWebAuthJwt(), methodRequest("q1", "SWIFT"))
+        }
+
+      assertEquals(wantMessage, ex.message, label)
+    }
+
+    // a quote created by another identity is reported as not found, before anything else
+    every { quoteStore.findByQuoteId("q1") } returns methodQuote("q1", "SEPA")
+    val foreign =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(otherIdentityJwt(), methodRequest("q1", "SWIFT"))
+      }
+    assertEquals("quote(id=q1) was not found.", foreign.message)
+  }
+
+  @Test
+  fun `test POST transaction method rejection leaves the quote unbound`() {
+    val quote = methodQuote("q1", "SEPA")
+    every { quoteStore.findByQuoteId("q1") } returns quote
+
+    assertThrows<BadRequestException> {
+      sep31Service.postTransaction(TestHelper.createWebAuthJwt(), methodRequest("q1", "SWIFT"))
+    }
+
+    assertNull(quote.transactionId)
+    verify(exactly = 0) { exchangeAmountsCalculator.bindQuoteToTransaction(any(), any()) }
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
 }
