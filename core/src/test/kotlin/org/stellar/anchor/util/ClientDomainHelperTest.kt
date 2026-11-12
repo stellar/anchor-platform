@@ -329,4 +329,79 @@ class ClientDomainHelperTest {
       ClientDomainHelper.isDomainNameMatch(listOf("*.example.com:8080"), "a.example.com:8080")
     )
   }
+
+  /** A host of exactly [length] characters made of labels of at most 63, ending in [suffix]. */
+  private fun hostOfLength(length: Int, suffix: String): String {
+    val labels = mutableListOf<String>()
+    var remaining = length - suffix.length
+    while (remaining > 0) {
+      val take = minOf(63, remaining)
+      labels += "a".repeat(take)
+      remaining -= take + 1
+    }
+    val host = labels.joinToString(".") + suffix
+    assertEquals(length, host.length)
+    return host
+  }
+
+  @Test
+  fun `isDomainNameMatch rejects a wildcard label longer than 63 characters`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf("a".repeat(64) + ".sdp.stellar.org", "a." + "a".repeat(64) + ".sdp.stellar.org")
+      .forEach {
+        assertFalse(ClientDomainHelper.isDomainNameMatch(patterns, it), "should reject: $it")
+      }
+  }
+
+  @Test
+  fun `isDomainNameMatch accepts a wildcard label of exactly 63 characters`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf("a".repeat(63) + ".sdp.stellar.org", "a." + "a".repeat(63) + ".sdp.stellar.org")
+      .forEach {
+        assertTrue(ClientDomainHelper.isDomainNameMatch(patterns, it), "should accept: $it")
+      }
+  }
+
+  @Test
+  fun `isDomainNameMatch rejects a wildcard host longer than 253 characters`() {
+    val host = hostOfLength(254, ".sdp.stellar.org")
+    assertFalse(ClientDomainHelper.isDomainNameMatch(listOf("*.sdp.stellar.org"), host))
+  }
+
+  @Test
+  fun `isDomainNameMatch accepts a wildcard host of exactly 253 characters`() {
+    val host = hostOfLength(253, ".sdp.stellar.org")
+    assertTrue(ClientDomainHelper.isDomainNameMatch(listOf("*.sdp.stellar.org"), host))
+  }
+
+  @Test
+  fun `isDomainNameMatch measures the wildcard host length without the port`() {
+    val patterns = listOf("*.example.com:8080")
+    assertTrue(
+      ClientDomainHelper.isDomainNameMatch(patterns, hostOfLength(253, ".example.com") + ":8080")
+    )
+    assertFalse(
+      ClientDomainHelper.isDomainNameMatch(patterns, hostOfLength(254, ".example.com") + ":8080")
+    )
+  }
+
+  @Test
+  fun `isDomainNameMatch rejects a value breaking a length limit and a label rule together`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf(
+        "-" + "a".repeat(63) + ".sdp.stellar.org",
+        "." + hostOfLength(253, ".sdp.stellar.org"),
+      )
+      .forEach {
+        assertFalse(ClientDomainHelper.isDomainNameMatch(patterns, it), "should reject: $it")
+      }
+  }
+
+  @Test
+  fun `isDomainNameMatch keeps exact matching free of length rules`() {
+    val longLabel = "a".repeat(64) + ".example.com"
+    val longHost = hostOfLength(254, ".example.com")
+    assertTrue(ClientDomainHelper.isDomainNameMatch(listOf(longLabel), longLabel))
+    assertTrue(ClientDomainHelper.isDomainNameMatch(listOf(longHost), longHost))
+  }
 }

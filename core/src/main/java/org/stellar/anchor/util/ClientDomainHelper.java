@@ -37,6 +37,9 @@ public class ClientDomainHelper {
           new ClientDomainThreadFactory(),
           new ThreadPoolExecutor.AbortPolicy());
 
+  private static final int MAX_LABEL_LENGTH = 63;
+  private static final int MAX_HOST_LENGTH = 253;
+
   private static final long BOUNDED_FETCH_TIMEOUT_MS = 2_500;
   private static final long FETCH_CALL_TIMEOUT_MS = 1_000;
   private static final OkHttpClient FETCH_CLIENT = OkHttpUtil.buildClient(FETCH_CALL_TIMEOUT_MS);
@@ -174,12 +177,12 @@ public class ClientDomainHelper {
   }
 
   /**
-   * Checks that the host part of a domain name (without a trailing port) is made of non-empty
-   * labels that neither start nor end with a hyphen, so a wildcard cannot expand to something that
-   * is not a host name.
+   * Checks that the host part of a domain name (without a trailing port) is at most 253 characters
+   * long and made of non-empty labels of at most 63 characters that neither start nor end with a
+   * hyphen, so a wildcard cannot expand to something that is not a host name.
    *
    * @param domainName The domain name, optionally followed by ":port".
-   * @return true if every label of the host part is well formed, false otherwise.
+   * @return true if the host part is well formed, false otherwise.
    */
   private static boolean hasValidHostLabels(String domainName) {
     String host = domainName;
@@ -187,8 +190,14 @@ public class ClientDomainHelper {
     if (portSeparator >= 0) {
       host = host.substring(0, portSeparator);
     }
+    if (host.length() > MAX_HOST_LENGTH) {
+      return false;
+    }
     for (String label : host.split("\\.", -1)) {
-      if (label.isEmpty() || label.startsWith("-") || label.endsWith("-")) {
+      if (label.isEmpty()
+          || label.length() > MAX_LABEL_LENGTH
+          || label.startsWith("-")
+          || label.endsWith("-")) {
         return false;
       }
     }
