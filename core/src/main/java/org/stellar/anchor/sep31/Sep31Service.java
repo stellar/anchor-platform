@@ -63,6 +63,7 @@ import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.util.ExchangeAmountsCalculator;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.SepRequestValidator;
+import org.stellar.anchor.util.StringHelper;
 import org.stellar.anchor.util.TransactionMapper;
 
 public class Sep31Service {
@@ -770,6 +771,21 @@ public class Sep31Service {
           String.format(
               "Quote sell asset [%s] is different from the SEP-31 transaction asset [%s]",
               quote.getSellAsset(), assetName));
+    }
+
+    // Check quote delivery method: `post_transaction.funding_method == quote.buy_delivery_method`.
+    // A quote that carries no buy delivery method is not bound to one.
+    String quoteMethod = quote.getBuyDeliveryMethod();
+    if (!StringHelper.isEmpty(quoteMethod) && !quoteMethod.equals(request.getFundingMethod())) {
+      infoF(
+          "Quote ({}) - buyDeliveryMethod ({}) is different from the SEP-31 funding method ({})",
+          request.getQuoteId(),
+          quoteMethod,
+          request.getFundingMethod());
+      throw new BadRequestException(
+          String.format(
+              "funding_method(%s) does not match quote buy delivery method(%s)",
+              request.getFundingMethod(), quoteMethod));
     }
 
     Context.get().setQuote(quote);
