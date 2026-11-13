@@ -48,6 +48,25 @@ class ConfigManagerTest {
   }
 
   @Test
+  fun `test sep_server trusted_proxies is accepted as an indexed list`() {
+    val file = ClassPathResource("config/test_anchor_config_trusted_proxies_list.yaml")
+    every { configManager.getConfigFileAsResource(any()) } returns file
+
+    val config = configManager.processConfigurations(null)
+    assertEquals("10.0.0.0/8", config.get("sep_server.trusted_proxies[0]").value)
+    assertEquals("2001:db8::/32", config.get("sep_server.trusted_proxies[1]").value)
+  }
+
+  @Test
+  fun `test sep_server trusted_proxies is accepted as a comma-separated value`() {
+    val file = ClassPathResource("config/test_anchor_config_trusted_proxies_csv.yaml")
+    every { configManager.getConfigFileAsResource(any()) } returns file
+
+    val config = configManager.processConfigurations(null)
+    assertEquals("10.0.0.0/8,2001:db8::/32", config.get("sep_server.trusted_proxies").value)
+  }
+
+  @Test
   fun `test reading a file missing version throws an exception`() {
     val testingConfigFile = ClassPathResource("config/test_anchor_config_missing_version.yaml")
     every { configManager.getConfigFileAsResource(any()) } returns testingConfigFile

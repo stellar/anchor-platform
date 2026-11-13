@@ -2,11 +2,14 @@ package org.stellar.anchor.platform.configurator;
 
 import static org.stellar.anchor.util.Log.info;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import lombok.SneakyThrows;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.stellar.anchor.api.exception.InvalidConfigException;
+import org.stellar.anchor.platform.utils.TrustedProxies;
 
 public class SepConfigManager extends ConfigManager {
   private static final SepConfigManager sepConfigManager = new SepConfigManager();
@@ -57,6 +60,18 @@ class SepServerConfigAdapter extends SpringConfigAdapter {
 
   @Override
   void validate(ConfigMap config) throws InvalidConfigException {
-    // noop
+    TrustedProxies.parse(trustedProxyEntries(config));
+  }
+
+  /** The entries in either spelling: a comma-separated value or an indexed list. */
+  static List<String> trustedProxyEntries(ConfigMap config) {
+    String key = "sep_server.trusted_proxies";
+    List<String> entries = new ArrayList<>();
+    for (String name : config.names()) {
+      if (name.equals(key) || name.startsWith(key + "[")) {
+        entries.addAll(Arrays.asList(config.getString(name).split(",")));
+      }
+    }
+    return entries;
   }
 }
