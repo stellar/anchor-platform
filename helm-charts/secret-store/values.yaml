@@ -1,1 +1,11 @@
 namespace: default
+
+# Required secrets: no default is committed, `helm template` fails until each is set.
+# Generate each one with `openssl rand -hex 32` and pass it with `--set`.
+sep10_jwt_secret: ""
+sep24_interactive_url_jwt_secret: ""
+sep24_more_info_url_jwt_secret: ""
+sep6_more_info_url_jwt_secret: ""
+sep45_jwt_secret: ""
+callback_api_auth_secret: ""
+platform_api_auth_secret: ""

@@ -510,7 +510,11 @@ class Sep1TomlRulesTests {
       ]
   )
   fun `test a TOML shipped for operators follows every rule`(relative: String) {
-    val toml = Files.readString(repoFile(relative))
+    // An example TOML carries a placeholder where the operator puts their own key; every other rule
+    // is still checked on the file as shipped.
+    val toml =
+      Files.readString(repoFile(relative))
+        .replace("REPLACE_WITH_THE_PUBLIC_KEY_OF_YOUR_SEP10_SIGNING_SEED", signingKey)
     val servedFrom = URI(Toml().read(toml).getString("WEB_AUTH_ENDPOINT")).host
 
     assertEquals(emptyList<String>(), violations(toml, servedFrom), relative)
