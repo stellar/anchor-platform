@@ -87,6 +87,20 @@ class ClientDomainHelperTest {
   }
 
   @Test
+  fun `test bracketed public IPv6 address is accepted`() {
+    // The bracketed form is the only one that also succeeds in the real stellar.toml fetch, since
+    // OkHttp's request builder (unlike this validation's bare-IPv6 fallback) requires brackets.
+    assertDoesNotThrow {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("[2001:4860:4860::8888]")
+    }
+  }
+
+  @Test
+  fun `test extractHostname with bare (unbracketed) IPv6 falls back to the bracketed parse`() {
+    assertEquals("::1", ClientDomainHelper.extractHostname("::1"))
+  }
+
+  @Test
   fun `test carrier-grade NAT address is rejected`() {
     assertThrows(SepException::class.java) {
       ClientDomainHelper.validateDomainNotPrivateNetwork("100.64.0.1")
@@ -243,5 +257,81 @@ class ClientDomainHelperTest {
   @Test
   fun `test extractHostname with bracketed IPv6 and port`() {
     assertEquals("::1", ClientDomainHelper.extractHostname("[::1]:8080"))
+  }
+
+  @Test
+  fun `test extractHostname with backslash stops at the private IP instead of the raw string`() {
+    assertEquals(
+      "10.0.0.5",
+      ClientDomainHelper.extractHostname("10.0.0.5\\x.attacker.example"),
+    )
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork rejects a private IP hidden behind a backslash`() {
+    val ex =
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.validateDomainNotPrivateNetwork("10.0.0.5\\x.attacker.example")
+      }
+    assertEquals("client_domain resolves to a non-public address", ex.message)
+  }
+
+  @Test
+  fun `test extractHostname with unparsable client_domain fails closed instead of returning the raw string`() {
+    val ex = assertThrows(SepException::class.java) { ClientDomainHelper.extractHostname("") }
+    assertEquals("client_domain could not be resolved", ex.message)
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork rejects an unparsable client_domain`() {
+    val ex =
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.validateDomainNotPrivateNetwork("")
+      }
+    assertEquals("client_domain could not be resolved", ex.message)
+  }
+
+  @Test
+  fun `test extractHostname with backslash does not throw when the resolved host is itself public`() {
+    assertEquals(
+      "example.com",
+      ClientDomainHelper.extractHostname("example.com\\x.attacker.example")
+    )
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork does not throw when a backslash resolves to a public host`() {
+    assertDoesNotThrow {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("example.com\\x.attacker.example")
+    }
+  }
+
+  @Test
+  fun `test extractHostname with trailing whitespace fails closed instead of silently trimming`() {
+    // Pins the decision to parse the exact request URL (scheme, authority, AND the stellar.toml
+    // path) rather than just "https://" + clientDomain: the trailing space is only invalid once a
+    // path follows it, so a prefix-only parse would wrongly accept this as host "example.com".
+    assertThrows(SepException::class.java) { ClientDomainHelper.extractHostname("example.com ") }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain on mainnet is blocked from reaching a loopback server via backslash`() {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/.well-known/stellar.toml") { exchange ->
+      val body = "SIGNING_KEY=\"GABC\"".toByteArray()
+      exchange.sendResponseHeaders(200, body.size.toLong())
+      exchange.responseBody.use { it.write(body) }
+    }
+    server.start()
+    try {
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.fetchSigningKeyFromClientDomain(
+          "127.0.0.1:${server.address.port}\\x.attacker.invalid",
+          false,
+        )
+      }
+    } finally {
+      server.stop(0)
+    }
   }
 }

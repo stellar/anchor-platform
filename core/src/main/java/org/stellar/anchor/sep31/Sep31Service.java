@@ -623,7 +623,7 @@ public class Sep31Service {
     Sep31Transaction txn = sep31TransactionStore.findByTransactionId(id);
     if (txn == null) {
       infoF("Transaction ({}) not found", id);
-      throw new NotFoundException(String.format("transaction (id=%s) not found", id));
+      throw new NotFoundException("transaction not found");
     }
 
     StellarId creator = txn.getCreator();
