@@ -1292,6 +1292,151 @@ class NotifyOnchainFundsReceivedHandlerTest {
     verify(exactly = 0) { txn31Store.save(any()) }
     verify(exactly = 0) { sepTransactionCounter.increment() }
   }
+  /** The entry an underpayment recorded earlier left in `stellar_transactions`. */
+  private fun recordedStellarTransactions(): MutableList<StellarTransaction> =
+    gson
+      .fromJson<List<StellarTransaction>>(
+        gson.toJson(stellarTransactions),
+        object : TypeToken<List<StellarTransaction>>() {}.type
+      )
+      .toMutableList()
+
+  @Test
+  fun test_handle_sep31_credits_a_recorded_underpayment_with_one_entry() {
+    val request =
+      NotifyOnchainFundsReceivedRequest.builder()
+        .transactionId(TX_ID)
+        .amountIn(AmountRequest("99"))
+        .stellarTransactionId(STELLAR_TX_ID)
+        .build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_SENDER.toString()
+    txn31.toAccount = "testTo"
+    txn31.amountInAsset = STELLAR_USDC
+    txn31.stellarTransactions = recordedStellarTransactions()
+    val sep31TxnCapture = slot<JdbcSep31Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(TX_ID) } returns txn31
+    every { txn31Store.save(capture(sep31TxnCapture)) } returns null
+    every { ledgerClient.getTransaction(STELLAR_TX_ID) } returns testLedgerTxn
+    every { metricsService.counter(PLATFORM_RPC_TRANSACTION, "SEP", "sep31") } returns
+      sepTransactionCounter
+
+    handler.handle(request)
+
+    val saved = sep31TxnCapture.captured
+    assertEquals(PENDING_RECEIVER.toString(), saved.status)
+    assertEquals("99", saved.amountIn)
+    JSONAssert.assertEquals(
+      gson.toJson(stellarTransactions),
+      gson.toJson(saved.stellarTransactions),
+      JSONCompareMode.STRICT
+    )
+  }
+
+  @Test
+  fun test_handle_sep24_withdrawal_credits_a_recorded_underpayment_with_one_entry() {
+    val request =
+      NotifyOnchainFundsReceivedRequest.builder()
+        .transactionId(TX_ID)
+        .amountIn(AmountRequest("99"))
+        .stellarTransactionId(STELLAR_TX_ID)
+        .build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = PENDING_USR_TRANSFER_START.toString()
+    txn24.kind = WITHDRAWAL.kind
+    txn24.requestAssetCode = FIAT_USD_CODE
+    txn24.amountInAsset = FIAT_USD
+    txn24.stellarTransactions = recordedStellarTransactions()
+    val sep24TxnCapture = slot<JdbcSep24Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn24Store.save(capture(sep24TxnCapture)) } returns null
+    every { ledgerClient.getTransaction(STELLAR_TX_ID) } returns testLedgerTxn
+    every { metricsService.counter(PLATFORM_RPC_TRANSACTION, "SEP", "sep24") } returns
+      sepTransactionCounter
+
+    handler.handle(request)
+
+    val saved = sep24TxnCapture.captured
+    assertEquals(PENDING_ANCHOR.toString(), saved.status)
+    assertEquals("99", saved.amountIn)
+    JSONAssert.assertEquals(
+      gson.toJson(stellarTransactions),
+      gson.toJson(saved.stellarTransactions),
+      JSONCompareMode.STRICT
+    )
+  }
+
+  @Test
+  fun test_handle_sep6_withdrawal_credits_a_recorded_underpayment_with_one_entry() {
+    val request =
+      NotifyOnchainFundsReceivedRequest.builder()
+        .transactionId(TX_ID)
+        .amountIn(AmountRequest("99"))
+        .stellarTransactionId(STELLAR_TX_ID)
+        .build()
+    val txn6 = JdbcSep6Transaction()
+    txn6.status = PENDING_USR_TRANSFER_START.toString()
+    txn6.kind = WITHDRAWAL.kind
+    txn6.requestAssetCode = FIAT_USD_CODE
+    txn6.amountInAsset = FIAT_USD
+    txn6.stellarTransactions = recordedStellarTransactions()
+    val sep6TxnCapture = slot<JdbcSep6Transaction>()
+
+    every { txn6Store.findByTransactionId(TX_ID) } returns txn6
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn6Store.save(capture(sep6TxnCapture)) } returns null
+    every { ledgerClient.getTransaction(STELLAR_TX_ID) } returns testLedgerTxn
+    every { metricsService.counter(PLATFORM_RPC_TRANSACTION, "SEP", "sep6") } returns
+      sepTransactionCounter
+
+    handler.handle(request)
+
+    val saved = sep6TxnCapture.captured
+    assertEquals(PENDING_ANCHOR.toString(), saved.status)
+    assertEquals("99", saved.amountIn)
+    JSONAssert.assertEquals(
+      gson.toJson(stellarTransactions),
+      gson.toJson(saved.stellarTransactions),
+      JSONCompareMode.STRICT
+    )
+  }
+
+  @Test
+  fun test_handle_credit_sets_transfer_fields_of_a_recorded_payment() {
+    val request =
+      NotifyOnchainFundsReceivedRequest.builder()
+        .transactionId(TX_ID)
+        .amountIn(AmountRequest("99"))
+        .stellarTransactionId(STELLAR_TX_ID)
+        .build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = PENDING_USR_TRANSFER_START.toString()
+    txn24.kind = WITHDRAWAL.kind
+    txn24.requestAssetCode = FIAT_USD_CODE
+    txn24.amountInAsset = FIAT_USD
+    txn24.stellarTransactions = recordedStellarTransactions()
+    val sep24TxnCapture = slot<JdbcSep24Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { txn24Store.save(capture(sep24TxnCapture)) } returns null
+    every { ledgerClient.getTransaction(STELLAR_TX_ID) } returns testLedgerTxn
+    every { metricsService.counter(PLATFORM_RPC_TRANSACTION, "SEP", "sep24") } returns
+      sepTransactionCounter
+
+    handler.handle(request)
+
+    assertEquals(Instant.parse(STELLAR_PAYMENT_DATE), sep24TxnCapture.captured.transferReceivedAt)
+    assertEquals(STELLAR_TX_ID, sep24TxnCapture.captured.stellarTransactionId)
+  }
 }
 
 private const val stellarTransactionRecord =
