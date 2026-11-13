@@ -127,6 +127,35 @@ class ClientsDbAttributionTests : IntegrationTestBase(TestConfig()) {
   }
 
   @Test
+  fun `test SEP-10 leaves client_name unset for the signing key of a noncustodial client`() {
+    val name = uniqueClientName()
+    val keypair = KeyPair.random()
+    val createJson =
+      gson.toJson(
+        mapOf(
+          "type" to "noncustodial",
+          "domains" to listOf("$name.example.com"),
+          "signingKeys" to listOf(keypair.accountId),
+          "allowAnyDestination" to true,
+        )
+      )
+
+    try {
+      assertEquals(
+        200,
+        httpClient
+          .newCall(OkHttpUtil.buildJsonPutRequest("$clientsUrl/$name", createJson))
+          .execute()
+          .code,
+      )
+
+      assertNull(authenticate(keypair).clientName)
+    } finally {
+      delete(name)
+    }
+  }
+
+  @Test
   fun `test SEP-10 no longer attributes client_name after the client is deleted`() {
     val name = uniqueClientName()
     val keypair = KeyPair.random()
