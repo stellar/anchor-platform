@@ -1444,11 +1444,9 @@ class NotifyOnchainFundsReceivedHandlerTest {
     stubTransaction(protocol)
 
     val otherValue = rejection(ledgerOf(Memo.id(54321), payment()))
-    val otherType = rejection(ledgerOf(Memo.text("12345"), payment()))
 
     assertContains(otherValue.message!!, "memo")
     assertContains(otherValue.message!!, STELLAR_TX_ID)
-    assertContains(otherType.message!!, "memo")
   }
 
   @CsvSource(value = ["24", "6", "31"])
@@ -1714,21 +1712,25 @@ class NotifyOnchainFundsReceivedHandlerTest {
 
   /**
    * The observer looks a memo up by value only, so it forwards a text memo whose digits equal the
-   * stored id memo; the RPC compares the memo type too (spec FGATE-02) and refuses it.
+   * stored id memo; the RPC compares the memo by value too and accepts it (spec FGATE-13), so the
+   * two never disagree on a payment.
    */
   @CsvSource(value = ["24", "6", "31"])
   @ParameterizedTest
-  fun test_handle_rejects_a_memo_of_another_type_the_observer_routes_by_value(protocol: String) {
+  fun test_handle_accepts_a_memo_of_another_type_the_observer_routes_by_value(protocol: String) {
     val account = "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
     val sender = "GBT7YF22QEVUDUTBUIS2OWLTZMP7Z4J4ON6DCSHR3JXYTZRKCPXVV5J5"
     val txn = stubTransaction(protocol, account)
     val ledgerTxn = ledgerOf(Memo.text("12345"), payment(to = account, from = sender))
 
-    forwardedByObserver(protocol, txn, account, sender, ledgerTxn, account)
-    val ex = rejection(ledgerTxn)
+    val forwardedHash = forwardedByObserver(protocol, txn, account, sender, ledgerTxn, account)
+    accept(ledgerTxn)
 
-    assertContains(ex.message!!, "memo")
-    assertNull(txn.transferReceivedAt)
+    assertEquals(STELLAR_TX_ID, forwardedHash)
+    assertEquals(
+      if (protocol == "31") PENDING_RECEIVER.toString() else PENDING_ANCHOR.toString(),
+      txn.status
+    )
   }
 
   @CsvSource(value = ["24", "6"])

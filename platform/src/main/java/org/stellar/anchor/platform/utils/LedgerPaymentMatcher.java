@@ -29,15 +29,14 @@ public final class LedgerPaymentMatcher {
    * What the SEP transaction expects to receive.
    *
    * @param account the receiving account
-   * @param memo the stored memo, or null when none is stored and none is compared
-   * @param memoType the stored memo type ({@code id}, {@code text}, {@code hash}), or null when it
-   *     is not stored and only the value is compared
+   * @param memo the stored memo, or null when none is stored and none is compared; it is compared
+   *     by value, as the payment observer routes it, whatever the memo type
    * @param asset the asset as stored, for example {@code stellar:USDC:G...}
    * @param muxedIdFromAnySender whether a payment to a muxed address of {@code account} counts when
    *     its sender is not a contract
    */
   public record ExpectedPayment(
-      String account, String memo, String memoType, String asset, boolean muxedIdFromAnySender) {}
+      String account, String memo, String asset, boolean muxedIdFromAnySender) {}
 
   private static final String[] STAGES = {"destination", "memo", "asset", "amount"};
   private static final int MATCHED = STAGES.length;
@@ -132,9 +131,7 @@ public final class LedgerPaymentMatcher {
       return Destination.MUXED_ACCOUNT;
     }
     boolean idIsTheStoredMemo =
-        "id".equalsIgnoreCase(expected.memoType())
-            && muxed.getMuxedId() != null
-            && muxed.getMuxedId().toString().equals(expected.memo());
+        muxed.getMuxedId() != null && muxed.getMuxedId().toString().equals(expected.memo());
     return idIsTheStoredMemo ? Destination.MUXED_ACCOUNT : Destination.NONE;
   }
 
@@ -148,12 +145,6 @@ public final class LedgerPaymentMatcher {
       return true;
     }
     if (ledgerMemo == null || ledgerMemo.getDiscriminant() == MemoType.MEMO_NONE) {
-      return false;
-    }
-    String type = expected.memoType();
-    if (type != null
-        && !type.isEmpty()
-        && !type.equalsIgnoreCase(MemoHelper.memoTypeAsString(ledgerMemo.getDiscriminant()))) {
       return false;
     }
     // SEP-6 and SEP-24 transactions store a hash memo as hex, SEP-31 transactions as base64; the

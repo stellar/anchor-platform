@@ -166,27 +166,15 @@ public class NotifyOnchainFundsReceivedHandler
       case SEP_6:
         JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
         return new ExpectedPayment(
-            txn6.getWithdrawAnchorAccount(),
-            txn6.getMemo(),
-            txn6.getMemoType(),
-            txn6.getAmountInAsset(),
-            true);
+            txn6.getWithdrawAnchorAccount(), txn6.getMemo(), txn6.getAmountInAsset(), true);
       case SEP_24:
         JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
         return new ExpectedPayment(
-            txn24.getWithdrawAnchorAccount(),
-            txn24.getMemo(),
-            txn24.getMemoType(),
-            txn24.getAmountInAsset(),
-            true);
+            txn24.getWithdrawAnchorAccount(), txn24.getMemo(), txn24.getAmountInAsset(), true);
       case SEP_31:
         JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
         return new ExpectedPayment(
-            txn31.getToAccount(),
-            txn31.getStellarMemo(),
-            txn31.getStellarMemoType(),
-            txn31.getAmountInAsset(),
-            true);
+            txn31.getToAccount(), txn31.getStellarMemo(), txn31.getAmountInAsset(), true);
       default:
         throw new IllegalStateException("Unsupported protocol: " + txn.getProtocol());
     }

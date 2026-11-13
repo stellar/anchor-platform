@@ -116,7 +116,7 @@ public class NotifyOnchainFundsSentHandler
           case SEP_24 -> ((JdbcSep24Transaction) txn).getToAccount();
           default -> throw new IllegalStateException("Unsupported protocol: " + txn.getProtocol());
         };
-    return new ExpectedPayment(toAccount, null, null, txn.getAmountOutAsset(), true);
+    return new ExpectedPayment(toAccount, null, txn.getAmountOutAsset(), true);
   }
 
   @Override

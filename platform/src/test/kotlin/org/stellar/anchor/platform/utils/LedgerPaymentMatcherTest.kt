@@ -75,10 +75,9 @@ class LedgerPaymentMatcherTest {
   private fun expected(
     account: String = ACCOUNT,
     memo: String? = "12345",
-    memoType: String? = "id",
     asset: String = USDC_ID,
     muxedIdFromAnySender: Boolean = false,
-  ) = ExpectedPayment(account, memo, memoType, asset, muxedIdFromAnySender)
+  ) = ExpectedPayment(account, memo, asset, muxedIdFromAnySender)
 
   private fun rejectionMessage(txn: LedgerTransaction, expected: ExpectedPayment): String =
     assertFailsWith<InvalidParamsException> {
@@ -115,10 +114,10 @@ class LedgerPaymentMatcherTest {
   }
 
   @Test
-  fun `the same memo digits in another memo type name the memo`() {
-    val message = rejectionMessage(ledgerTxn(Memo.text("12345"), payment()), expected())
-
-    assertContains(message, "memo")
+  fun `the same memo digits in another memo type are accepted`() {
+    // The payment observer routes a memo by value, so the RPC compares it by value too.
+    assertAccepted(ledgerTxn(Memo.text("12345"), payment()), expected())
+    assertAccepted(ledgerTxn(Memo.id(12345), payment()), expected(memo = "12345"))
   }
 
   @Test
@@ -185,45 +184,22 @@ class LedgerPaymentMatcherTest {
   @Test
   fun `no memo is compared when none is stored`() {
     assertAccepted(ledgerTxn(Memo.text("anything"), payment()), expected(memo = null))
-    assertAccepted(ledgerTxn(null, payment()), expected(memo = null, memoType = null))
-  }
-
-  @Test
-  fun `a stored memo without a type is compared by value`() {
-    assertAccepted(ledgerTxn(Memo.id(12345), payment()), expected(memoType = null))
-    assertAccepted(ledgerTxn(Memo.text("12345"), payment()), expected(memoType = null))
+    assertAccepted(ledgerTxn(null, payment()), expected(memo = null))
   }
 
   @Test
   fun `text id and hash memos are accepted`() {
-    assertAccepted(
-      ledgerTxn(Memo.text("deposit-1"), payment()),
-      expected(memo = "deposit-1", memoType = "text")
-    )
+    assertAccepted(ledgerTxn(Memo.text("deposit-1"), payment()), expected(memo = "deposit-1"))
     assertAccepted(ledgerTxn(Memo.id(12345), payment()), expected())
-    assertAccepted(
-      ledgerTxn(Memo.hash(HASH_MEMO_HEX), payment()),
-      expected(memo = HASH_MEMO_HEX, memoType = "hash")
-    )
+    assertAccepted(ledgerTxn(Memo.hash(HASH_MEMO_HEX), payment()), expected(memo = HASH_MEMO_HEX))
   }
 
   @Test
   fun `a hash memo stored in base64 is accepted`() {
     assertAccepted(
       ledgerTxn(Memo.hash(HASH_MEMO_HEX), payment()),
-      expected(memo = MemoHelper.convertHexToBase64(HASH_MEMO_HEX), memoType = "hash")
+      expected(memo = MemoHelper.convertHexToBase64(HASH_MEMO_HEX))
     )
-  }
-
-  @Test
-  fun `the memo type is compared when one is stored`() {
-    val message =
-      rejectionMessage(
-        ledgerTxn(Memo.hash(HASH_MEMO_HEX), payment()),
-        expected(memo = HASH_MEMO_HEX, memoType = "text")
-      )
-
-    assertContains(message, "memo")
   }
 
   @Test
@@ -247,18 +223,15 @@ class LedgerPaymentMatcherTest {
   }
 
   @Test
-  fun `a muxed id only stands in for a stored memo of type id`() {
+  fun `a muxed id stands in for a stored memo with the same digits whatever its type`() {
     val muxed = MuxedAccount(ACCOUNT, BigInteger.valueOf(12345)).address
     val txn = ledgerTxn(null, payment(to = muxed))
 
-    // The id equals the stored digits, but the stored memo is a text or hash memo, or has no type.
-    for (memoType in listOf("text", "hash", null)) {
-      val message =
-        rejectionMessage(txn, expected(memoType = memoType, muxedIdFromAnySender = true))
-
-      assertContains(message, "destination")
-    }
-    assertAccepted(txn, expected(memoType = "id", muxedIdFromAnySender = true))
+    assertAccepted(txn, expected(memo = "12345", muxedIdFromAnySender = true))
+    assertContains(
+      rejectionMessage(txn, expected(memo = "12346", muxedIdFromAnySender = true)),
+      "destination"
+    )
   }
 
   @Test
@@ -297,7 +270,7 @@ class LedgerPaymentMatcherTest {
 
     assertAccepted(
       ledgerTxn(null, payment(to = muxed)),
-      expected(memo = null, memoType = null, muxedIdFromAnySender = true)
+      expected(memo = null, muxedIdFromAnySender = true)
     )
   }
 
@@ -305,10 +278,7 @@ class LedgerPaymentMatcherTest {
   fun `an expected muxed account is matched by equality`() {
     val muxed = MuxedAccount(ACCOUNT, BigInteger.valueOf(7)).address
 
-    assertAccepted(
-      ledgerTxn(null, payment(to = muxed)),
-      expected(account = muxed, memo = null, memoType = null)
-    )
+    assertAccepted(ledgerTxn(null, payment(to = muxed)), expected(account = muxed, memo = null))
   }
 
   @Test
