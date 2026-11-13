@@ -23,17 +23,18 @@ import org.stellar.anchor.util.Log;
 public class RequestLoggerFilter extends OncePerRequestFilter {
   public static final String ATTRIBUTE_CLIENT_IP_ADDRESS = "clientIpAddress";
   private final AppLoggingConfig appLoggingConfig;
+  private final ClientIpResolver clientIpResolver;
 
-  public RequestLoggerFilter(AppLoggingConfig appLoggingConfig) {
+  public RequestLoggerFilter(AppLoggingConfig appLoggingConfig, ClientIpResolver clientIpResolver) {
     this.appLoggingConfig = appLoggingConfig;
+    this.clientIpResolver = clientIpResolver;
   }
 
   public void doFilterWithLogging(
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws IOException, ServletException {
     long startTime = System.currentTimeMillis();
-    String clientIpAddress = getClientIpAddress(request);
-    request.setAttribute(ATTRIBUTE_CLIENT_IP_ADDRESS, clientIpAddress);
+    String clientIpAddress = (String) request.getAttribute(ATTRIBUTE_CLIENT_IP_ADDRESS);
 
     // ========= Log request and response payload ("body") ========
     // We CANNOT simply read the request payload here, because then the InputStream would be
@@ -69,7 +70,7 @@ public class RequestLoggerFilter extends OncePerRequestFilter {
 
     Log.infoF(
         " {} - {} {} {}",
-        getClientIpAddress(request),
+        clientIpAddress,
         request.getMethod(),
         request.getRequestURI(),
         response.getStatus());
@@ -86,6 +87,9 @@ public class RequestLoggerFilter extends OncePerRequestFilter {
       @NotNull HttpServletResponse response,
       @NotNull FilterChain filterChain)
       throws ServletException, IOException {
+    // The SEP controllers read the client IP from this attribute, so it is set whether or not the
+    // request logger is enabled.
+    request.setAttribute(ATTRIBUTE_CLIENT_IP_ADDRESS, clientIpResolver.resolve(request));
 
     if (!appLoggingConfig.isRequestLoggerEnabled()) {
       filterChain.doFilter(request, response);
@@ -115,39 +119,5 @@ public class RequestLoggerFilter extends OncePerRequestFilter {
     } catch (UnsupportedEncodingException ex) {
       return "Unsupported Encoding";
     }
-  }
-
-  private static String getClientIpAddress(HttpServletRequest request) {
-    final String[] IP_HEADER_CANDIDATES = {
-      "X-Forwarded-For",
-      "X-Real-IP",
-      "Proxy-Client-IP",
-      "WL-Proxy-Client-IP",
-      "HTTP_X_FORWARDED_FOR",
-      "HTTP_X_FORWARDED",
-      "HTTP_X_CLUSTER_CLIENT_IP",
-      "HTTP_CLIENT_IP",
-      "HTTP_FORWARDED_FOR",
-      "HTTP_FORWARDED",
-      "HTTP_VIA",
-      "REMOTE_ADDR"
-    };
-
-    String ip = request.getRemoteAddr();
-
-    for (String headerName : IP_HEADER_CANDIDATES) {
-      String headerValue = request.getHeader(headerName);
-      if (headerValue != null
-          && headerValue.length() != 0
-          && !"unknown".equalsIgnoreCase(headerValue)) {
-        ip = headerValue.split(",")[0];
-        break;
-      }
-    }
-
-    if (ip.equals("0:0:0:0:0:0:0:1")) {
-      ip = "127.0.0.1";
-    }
-    return ip;
   }
 }
