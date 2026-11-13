@@ -37,6 +37,9 @@ public class ClientDomainHelper {
           new ClientDomainThreadFactory(),
           new ThreadPoolExecutor.AbortPolicy());
 
+  private static final int MAX_LABEL_LENGTH = 63;
+  private static final int MAX_HOST_LENGTH = 253;
+
   private static final long BOUNDED_FETCH_TIMEOUT_MS = 2_500;
   private static final long FETCH_CALL_TIMEOUT_MS = 1_000;
   private static final OkHttpClient FETCH_CLIENT = OkHttpUtil.buildClient(FETCH_CALL_TIMEOUT_MS);
@@ -155,11 +158,12 @@ public class ClientDomainHelper {
     for (String patternOrDomain : patternsAndDomains) {
       if (patternOrDomain.contains("*")) {
         // wildcard domain
-        // Escape special characters in the pattern and replace '*' with '.*'
-        String regex = patternOrDomain.replace(".", "\\.").replace("*", ".*");
+        // Escape special characters in the pattern and let '*' span only host-name characters, so
+        // it can never match '/', '?', '#', '@', '\', ':' or whitespace.
+        String regex = patternOrDomain.replace(".", "\\.").replace("*", "[A-Za-z0-9_.-]*");
         Pattern patternObject = Pattern.compile(regex);
         Matcher matcher = patternObject.matcher(domainName);
-        if (matcher.matches()) {
+        if (matcher.matches() && hasValidHostLabels(domainName)) {
           return true;
         }
       } else {
@@ -170,6 +174,34 @@ public class ClientDomainHelper {
       }
     }
     return false;
+  }
+
+  /**
+   * Checks that the host part of a domain name (without a trailing port) is at most 253 characters
+   * long and made of non-empty labels of at most 63 characters that neither start nor end with a
+   * hyphen, so a wildcard cannot expand to something that is not a host name.
+   *
+   * @param domainName The domain name, optionally followed by ":port".
+   * @return true if the host part is well formed, false otherwise.
+   */
+  private static boolean hasValidHostLabels(String domainName) {
+    String host = domainName;
+    int portSeparator = host.lastIndexOf(':');
+    if (portSeparator >= 0) {
+      host = host.substring(0, portSeparator);
+    }
+    if (host.length() > MAX_HOST_LENGTH) {
+      return false;
+    }
+    for (String label : host.split("\\.", -1)) {
+      if (label.isEmpty()
+          || label.length() > MAX_LABEL_LENGTH
+          || label.startsWith("-")
+          || label.endsWith("-")) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
