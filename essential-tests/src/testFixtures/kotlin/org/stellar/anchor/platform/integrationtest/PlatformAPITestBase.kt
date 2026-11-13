@@ -3,6 +3,8 @@ package org.stellar.anchor.platform.integrationtest
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import org.stellar.anchor.api.platform.GetTransactionResponse
+import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.ledger.LedgerClientHelper.waitForTransactionAvailable
@@ -143,28 +145,58 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     return builder.build()
   }
 
+  /** The shared payment of the class: the fixed destination and memo, in Circle's testnet USDC. */
   private fun sendTestPayment(ledgerClient: LedgerClient): LedgerTransaction? {
-    val destAccount = TEST_PAYMENT_DEST_ACCOUNT
     val usdcAsset =
       Asset.create(null, "USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
         as AssetTypeCreditAlphaNum
+    return sendPayment(
+      ledgerClient,
+      TEST_PAYMENT_DEST_ACCOUNT,
+      Memo.text(TEST_PAYMENT_MEMO),
+      usdcAsset
+    )
+  }
+
+  /** The ledger client of the configured network: Stellar RPC when set, otherwise Horizon. */
+  protected fun testLedgerClient(): LedgerClient =
+    if (isNotEmpty(config.get("stellar_network.rpc_url"))) {
+      StellarRpc(config.get("stellar_network.rpc_url")!!)
+    } else if (isNotEmpty(config.get("stellar_network.horizon_url"))) {
+      Horizon(config.get("stellar_network.horizon_url")!!)
+    } else {
+      throw Exception("None of stellar_network.rpc_url or stellar_network.horizon_url is not set")
+    }
+
+  /**
+   * Sends a payment of 0.0002 of [asset] from the payment signing account to [destination], with
+   * [memo] when given, and returns the confirmed ledger transaction.
+   */
+  protected fun sendPayment(
+    ledgerClient: LedgerClient,
+    destination: String,
+    memo: Memo?,
+    asset: Asset,
+  ): LedgerTransaction {
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
     val accountId = sourceKey.accountId
 
     for (attempt in 1..5) {
       info("sendTestPayment attempt $attempt/5 (class=${this::class.java.simpleName})")
       val account = ledgerClient.getAccount(accountId)
-      val txn =
+      val builder =
         TransactionBuilder(Account(accountId, account.sequenceNumber), Network.TESTNET)
           .addOperation(
             PaymentOperation.builder()
               .sourceAccount(sourceKey.accountId)
-              .destination(destAccount)
-              .asset(usdcAsset)
+              .destination(destination)
+              .asset(asset)
               .amount(BigDecimal("0.0002"))
               .build()
           )
-          .addMemo(Memo.text(TEST_PAYMENT_MEMO))
+      if (memo != null) builder.addMemo(memo)
+      val txn =
+        builder
           .addPreconditions(
             TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(180)).build()
           )
@@ -198,25 +230,63 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
   }
 
   private fun setTestPaymentsValues(key: String, ledgerTxn: LedgerTransaction) {
+    testPaymentValuesOf(ledgerTxn)?.let { paymentValuesByClass[key] = it }
+  }
+
+  /** The `%TESTPAYMENT_*%` values of a ledger transaction holding one payment operation. */
+  protected fun testPaymentValuesOf(ledgerTxn: LedgerTransaction): List<Pair<String, String>>? {
     val txnEnv = TransactionEnvelope.fromXdrBase64(ledgerTxn.envelopeXdr)
-    val paymentOp = txnEnv.v1.tx.operations[0].body.paymentOp
-    if (paymentOp != null) {
-      paymentValuesByClass[key] =
-        listOf(
-          Pair(
-            "%TESTPAYMENT_ID%",
-            TOID(ledgerTxn.ledger.toInt(), ledgerTxn.applicationOrder, 1).toInt64().toString(),
-          ),
-          Pair("%TESTPAYMENT_AMOUNT%", fromXdrAmount(paymentOp.amount.int64).toString()),
-          Pair("%TESTPAYMENT_TXN_HASH%", ledgerTxn.hash),
-          Pair("%TESTPAYMENT_SRC_ACCOUNT%", ledgerTxn.operations[0].paymentOperation.from),
-          Pair(
-            "%TESTPAYMENT_DEST_ACCOUNT%",
-            StrKey.encodeEd25519PublicKey(paymentOp.destination.ed25519.uint256),
-          ),
-          Pair("%TESTPAYMENT_ASSET_CIRCLE_USDC%", TEST_PAYMENT_ASSET_CIRCLE_USDC),
-        )
+    val paymentOp = txnEnv.v1.tx.operations[0].body.paymentOp ?: return null
+    return listOf(
+      Pair(
+        "%TESTPAYMENT_ID%",
+        TOID(ledgerTxn.ledger.toInt(), ledgerTxn.applicationOrder, 1).toInt64().toString(),
+      ),
+      Pair("%TESTPAYMENT_AMOUNT%", fromXdrAmount(paymentOp.amount.int64).toString()),
+      Pair("%TESTPAYMENT_TXN_HASH%", ledgerTxn.hash),
+      Pair("%TESTPAYMENT_SRC_ACCOUNT%", ledgerTxn.operations[0].paymentOperation.from),
+      Pair(
+        "%TESTPAYMENT_DEST_ACCOUNT%",
+        StrKey.encodeEd25519PublicKey(paymentOp.destination.ed25519.uint256),
+      ),
+      Pair("%TESTPAYMENT_ASSET_CIRCLE_USDC%", AssetHelper.getSep11AssetName(paymentOp.asset)),
+    )
+  }
+
+  /**
+   * Like [inject], with the payment values of one transaction's own payment in place of the shared
+   * payment of the class.
+   */
+  fun injectWith(
+    target: String,
+    paymentValues: List<Pair<String, String>>,
+    vararg replacements: Pair<String, String>,
+  ): String {
+    var result = target
+    for ((search, replace) in replacements) {
+      result = result.replace(search, replace)
     }
+    for ((search, replace) in paymentValues) {
+      result = result.replace(search, replace)
+    }
+    return result.trimIndent()
+  }
+
+  /**
+   * Pays what the transaction waits for, so the RPC can record the payment: a withdrawal or SEP-31
+   * transaction gets its amount-in asset at its destination account with its memo; a deposit gets
+   * its amount-out asset at its recipient (a payout does not have to carry the deposit's memo).
+   */
+  protected fun sendPaymentFor(txn: GetTransactionResponse): LedgerTransaction {
+    val isDeposit = txn.kind == Kind.DEPOSIT || txn.kind == Kind.DEPOSIT_EXCHANGE
+    val assetId = (if (isDeposit) txn.amountOut else txn.amountIn).asset
+    val memo = if (isDeposit) null else MemoHelper.makeMemo(txn.memo, txn.memoType)
+    return sendPayment(
+      testLedgerClient(),
+      txn.destinationAccount,
+      memo,
+      Asset.create(assetId.removePrefix("stellar:")),
+    )
   }
 
   private fun fetchTestPaymentFromHorizon(horizonServer: Server): OperationResponse? {
