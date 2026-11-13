@@ -87,6 +87,20 @@ class ClientDomainHelperTest {
   }
 
   @Test
+  fun `test bracketed public IPv6 address is accepted`() {
+    // The bracketed form is the only one that also succeeds in the real stellar.toml fetch, since
+    // OkHttp's request builder (unlike this validation's bare-IPv6 fallback) requires brackets.
+    assertDoesNotThrow {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("[2001:4860:4860::8888]")
+    }
+  }
+
+  @Test
+  fun `test extractHostname with bare (unbracketed) IPv6 falls back to the bracketed parse`() {
+    assertEquals("::1", ClientDomainHelper.extractHostname("::1"))
+  }
+
+  @Test
   fun `test carrier-grade NAT address is rejected`() {
     assertThrows(SepException::class.java) {
       ClientDomainHelper.validateDomainNotPrivateNetwork("100.64.0.1")
@@ -243,5 +257,241 @@ class ClientDomainHelperTest {
   @Test
   fun `test extractHostname with bracketed IPv6 and port`() {
     assertEquals("::1", ClientDomainHelper.extractHostname("[::1]:8080"))
+  }
+
+  @Test
+  fun `isDomainNameMatch accepts a multi-level wildcard subdomain`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    assertTrue(ClientDomainHelper.isDomainNameMatch(patterns, "foo.sdp.stellar.org"))
+    assertTrue(ClientDomainHelper.isDomainNameMatch(patterns, "a.b.sdp.stellar.org"))
+  }
+
+  @Test
+  fun `isDomainNameMatch rejects structural characters spanned by a wildcard`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf(
+        "evil.example/x.sdp.stellar.org",
+        "evil.example?.sdp.stellar.org",
+        "evil.example#.sdp.stellar.org",
+        "u@evil.example.sdp.stellar.org",
+        "evil.example\\x.sdp.stellar.org",
+        "evil.example:80.sdp.stellar.org",
+        "a b.sdp.stellar.org",
+        "fóo.sdp.stellar.org",
+      )
+      .forEach {
+        assertFalse(ClientDomainHelper.isDomainNameMatch(patterns, it), "should reject: $it")
+      }
+  }
+
+  @Test
+  fun `isDomainNameMatch keeps matching plain exact and wildcard hostnames`() {
+    assertTrue(ClientDomainHelper.isDomainNameMatch(listOf("localhost:8080"), "localhost:8080"))
+    assertFalse(ClientDomainHelper.isDomainNameMatch(listOf("localhost:8080"), "localhost:8081"))
+    assertFalse(ClientDomainHelper.isDomainNameMatch(listOf("stellar.org"), "foo.stellar.org"))
+    assertTrue(
+      ClientDomainHelper.isDomainNameMatch(listOf("*.stellar.org"), "foo_bar-1.stellar.org")
+    )
+    assertTrue(
+      ClientDomainHelper.isDomainNameMatch(listOf("*.example.com:8080"), "a.example.com:8080")
+    )
+    assertFalse(
+      ClientDomainHelper.isDomainNameMatch(listOf("*.example.com:8080"), "a.example.com:9090")
+    )
+    assertTrue(
+      ClientDomainHelper.isDomainNameMatch(
+        listOf("localhost:8080", "*.stellar.org"),
+        "x.stellar.org"
+      )
+    )
+  }
+
+  @Test
+  fun `isDomainNameMatch rejects a wildcard match with an empty or hyphen-edged label`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf(
+        ".sdp.stellar.org",
+        "..sdp.stellar.org",
+        "...........sdp.stellar.org",
+        "-.sdp.stellar.org",
+        "-a.sdp.stellar.org",
+        "a-.sdp.stellar.org",
+      )
+      .forEach {
+        assertFalse(ClientDomainHelper.isDomainNameMatch(patterns, it), "should reject: $it")
+      }
+    assertFalse(
+      ClientDomainHelper.isDomainNameMatch(listOf("*.example.com:8080"), ".example.com:8080")
+    )
+  }
+
+  @Test
+  fun `isDomainNameMatch accepts valid host labels under a wildcard`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf(
+        "foo-bar.sdp.stellar.org",
+        "a--b.sdp.stellar.org",
+        "xn--abc.sdp.stellar.org",
+        "_.sdp.stellar.org",
+        "foo_bar-1.sdp.stellar.org",
+        "a.b.sdp.stellar.org",
+      )
+      .forEach {
+        assertTrue(ClientDomainHelper.isDomainNameMatch(patterns, it), "should accept: $it")
+      }
+    assertTrue(
+      ClientDomainHelper.isDomainNameMatch(listOf("*.example.com:8080"), "a.example.com:8080")
+    )
+  }
+
+  /** A host of exactly [length] characters made of labels of at most 63, ending in [suffix]. */
+  private fun hostOfLength(length: Int, suffix: String): String {
+    val labels = mutableListOf<String>()
+    var remaining = length - suffix.length
+    while (remaining > 0) {
+      val take = minOf(63, remaining)
+      labels += "a".repeat(take)
+      remaining -= take + 1
+    }
+    val host = labels.joinToString(".") + suffix
+    assertEquals(length, host.length)
+    return host
+  }
+
+  @Test
+  fun `isDomainNameMatch rejects a wildcard label longer than 63 characters`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf("a".repeat(64) + ".sdp.stellar.org", "a." + "a".repeat(64) + ".sdp.stellar.org")
+      .forEach {
+        assertFalse(ClientDomainHelper.isDomainNameMatch(patterns, it), "should reject: $it")
+      }
+  }
+
+  @Test
+  fun `isDomainNameMatch accepts a wildcard label of exactly 63 characters`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf("a".repeat(63) + ".sdp.stellar.org", "a." + "a".repeat(63) + ".sdp.stellar.org")
+      .forEach {
+        assertTrue(ClientDomainHelper.isDomainNameMatch(patterns, it), "should accept: $it")
+      }
+  }
+
+  @Test
+  fun `isDomainNameMatch rejects a wildcard host longer than 253 characters`() {
+    val host = hostOfLength(254, ".sdp.stellar.org")
+    assertFalse(ClientDomainHelper.isDomainNameMatch(listOf("*.sdp.stellar.org"), host))
+  }
+
+  @Test
+  fun `isDomainNameMatch accepts a wildcard host of exactly 253 characters`() {
+    val host = hostOfLength(253, ".sdp.stellar.org")
+    assertTrue(ClientDomainHelper.isDomainNameMatch(listOf("*.sdp.stellar.org"), host))
+  }
+
+  @Test
+  fun `isDomainNameMatch measures the wildcard host length without the port`() {
+    val patterns = listOf("*.example.com:8080")
+    assertTrue(
+      ClientDomainHelper.isDomainNameMatch(patterns, hostOfLength(253, ".example.com") + ":8080")
+    )
+    assertFalse(
+      ClientDomainHelper.isDomainNameMatch(patterns, hostOfLength(254, ".example.com") + ":8080")
+    )
+  }
+
+  @Test
+  fun `isDomainNameMatch rejects a value breaking a length limit and a label rule together`() {
+    val patterns = listOf("*.sdp.stellar.org")
+    listOf(
+        "-" + "a".repeat(63) + ".sdp.stellar.org",
+        "." + hostOfLength(253, ".sdp.stellar.org"),
+      )
+      .forEach {
+        assertFalse(ClientDomainHelper.isDomainNameMatch(patterns, it), "should reject: $it")
+      }
+  }
+
+  @Test
+  fun `isDomainNameMatch keeps exact matching free of length rules`() {
+    val longLabel = "a".repeat(64) + ".example.com"
+    val longHost = hostOfLength(254, ".example.com")
+    assertTrue(ClientDomainHelper.isDomainNameMatch(listOf(longLabel), longLabel))
+    assertTrue(ClientDomainHelper.isDomainNameMatch(listOf(longHost), longHost))
+  }
+
+  @Test
+  fun `test extractHostname with backslash stops at the private IP instead of the raw string`() {
+    assertEquals(
+      "10.0.0.5",
+      ClientDomainHelper.extractHostname("10.0.0.5\\x.attacker.example"),
+    )
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork rejects a private IP hidden behind a backslash`() {
+    val ex =
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.validateDomainNotPrivateNetwork("10.0.0.5\\x.attacker.example")
+      }
+    assertEquals("client_domain resolves to a non-public address", ex.message)
+  }
+
+  @Test
+  fun `test extractHostname with unparsable client_domain fails closed instead of returning the raw string`() {
+    val ex = assertThrows(SepException::class.java) { ClientDomainHelper.extractHostname("") }
+    assertEquals("client_domain could not be resolved", ex.message)
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork rejects an unparsable client_domain`() {
+    val ex =
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.validateDomainNotPrivateNetwork("")
+      }
+    assertEquals("client_domain could not be resolved", ex.message)
+  }
+
+  @Test
+  fun `test extractHostname with backslash does not throw when the resolved host is itself public`() {
+    assertEquals(
+      "example.com",
+      ClientDomainHelper.extractHostname("example.com\\x.attacker.example")
+    )
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork does not throw when a backslash resolves to a public host`() {
+    assertDoesNotThrow {
+      ClientDomainHelper.validateDomainNotPrivateNetwork("example.com\\x.attacker.example")
+    }
+  }
+
+  @Test
+  fun `test extractHostname with trailing whitespace fails closed instead of silently trimming`() {
+    // Pins the decision to parse the exact request URL (scheme, authority, AND the stellar.toml
+    // path) rather than just "https://" + clientDomain: the trailing space is only invalid once a
+    // path follows it, so a prefix-only parse would wrongly accept this as host "example.com".
+    assertThrows(SepException::class.java) { ClientDomainHelper.extractHostname("example.com ") }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain on mainnet is blocked from reaching a loopback server via backslash`() {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/.well-known/stellar.toml") { exchange ->
+      val body = "SIGNING_KEY=\"GABC\"".toByteArray()
+      exchange.sendResponseHeaders(200, body.size.toLong())
+      exchange.responseBody.use { it.write(body) }
+    }
+    server.start()
+    try {
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.fetchSigningKeyFromClientDomain(
+          "127.0.0.1:${server.address.port}\\x.attacker.invalid",
+          false,
+        )
+      }
+    } finally {
+      server.stop(0)
+    }
   }
 }

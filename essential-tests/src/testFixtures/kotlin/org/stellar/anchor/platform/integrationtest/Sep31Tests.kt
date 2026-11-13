@@ -14,6 +14,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode.LENIENT
 import org.skyscreamer.jsonassert.comparator.CustomComparator
 import org.springframework.data.domain.Sort.Direction
 import org.springframework.data.domain.Sort.Direction.DESC
+import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.exception.SepNotFoundException
@@ -354,7 +355,8 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
 
   fun createTx(
     senderCustomer: Sep12PutCustomerResponse,
-    receiverCustomer: Sep12PutCustomerResponse
+    receiverCustomer: Sep12PutCustomerResponse,
+    fields: HashMap<String, String>? = null
   ): Sep31PostTransactionResponse {
     // Create asset quote
     val quote =
@@ -369,6 +371,7 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
     txnRequest.senderId = senderCustomer.id
     txnRequest.receiverId = receiverCustomer.id
     txnRequest.quoteId = quote.id
+    if (fields != null) txnRequest.fields = Sep31TxnFields(fields)
     val postTxResponse = sep31Client.postTransaction(txnRequest)
     return postTxResponse
   }
@@ -497,7 +500,11 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
   // event/observer, racing this PATCH into the same OptimisticLockingFailureException
   // TransactionService throws as "Transaction was modified by another request. Please re-read
   // the transaction state and retry if appropriate." — so retry on that exact message.
-  private fun requestInfoUpdate(txId: String, vararg fieldNames: String) {
+  private fun requestInfoUpdate(
+    txId: String,
+    vararg fieldNames: String,
+    fieldMetadata: Map<String, AssetInfo.Field>? = null
+  ) {
     val request =
       PatchTransactionsRequest.builder()
         .records(
@@ -507,6 +514,7 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
                 .id(txId)
                 .status(PENDING_TRANSACTION_INFO_UPDATE)
                 .requiredInfoUpdates(fieldNames.toList())
+                .requiredInfoUpdatesFields(fieldMetadata)
                 .build()
             )
           )
@@ -611,6 +619,132 @@ class Sep31Tests : IntegrationTestBase(TestConfig()) {
           .fields(Sep31TxnFields(hashMapOf("receiver_account_number" to "a9999")))
           .build()
       )
+    }
+  }
+
+  // The configured required fields with `receiver_account_number` padded so the serialized map has
+  // exactly `serializedLength` characters.
+  private fun fieldsOfSerializedLength(serializedLength: Int): HashMap<String, String> {
+    val fields =
+      hashMapOf(
+        "receiver_routing_number" to "r0123",
+        "receiver_account_number" to "",
+        "type" to "SWIFT"
+      )
+    val padding = serializedLength - GsonUtils.getInstance().toJson(fields).length
+    check(padding >= 0) { "$serializedLength is shorter than the required fields" }
+    fields["receiver_account_number"] = "a".repeat(padding)
+    assertEquals(serializedLength, GsonUtils.getInstance().toJson(fields).length)
+    return fields
+  }
+
+  private fun postWithFields(fields: HashMap<String, String>): Sep31PostTransactionResponse {
+    val (senderCustomer, receiverCustomer) = mkCustomers()
+    return createTx(senderCustomer, receiverCustomer, fields)
+  }
+
+  @Test
+  fun `test POST sep31 transactions persists fields longer than 255 characters`() {
+    // The PoC of HackerOne #4113076: a 300-character value used to answer 500 with the INSERT text.
+    val fields =
+      hashMapOf(
+        "receiver_routing_number" to "r0123",
+        "receiver_account_number" to "a".repeat(300),
+        "type" to "SWIFT"
+      )
+
+    val posted = postWithFields(fields)
+
+    assertFalse(posted.id.isNullOrBlank())
+    assertEquals(PENDING_RECEIVER.status, platformApiClient.getTransaction(posted.id).status.status)
+  }
+
+  @Test
+  fun `test POST sep31 transactions persists fields of exactly 255 characters`() {
+    val fields = fieldsOfSerializedLength(255)
+
+    val posted = postWithFields(fields)
+
+    assertFalse(posted.id.isNullOrBlank())
+    assertEquals(fields, platformApiClient.getTransaction(posted.id).fields)
+  }
+
+  @Test
+  fun `test POST sep31 transactions persists fields of exactly 256 characters`() {
+    val fields = fieldsOfSerializedLength(256)
+
+    val posted = postWithFields(fields)
+
+    assertFalse(posted.id.isNullOrBlank())
+    assertEquals(fields, platformApiClient.getTransaction(posted.id).fields)
+  }
+
+  @Test
+  fun `test long fields read back through the Platform API`() {
+    val fields = fieldsOfSerializedLength(600)
+
+    val posted = postWithFields(fields)
+
+    val stored = platformApiClient.getTransaction(posted.id).fields
+    assertEquals(fields.keys, stored.keys)
+    fields.forEach { (name, value) -> assertEquals(value, stored[name], name) }
+  }
+
+  @Test
+  fun `test non-ASCII fields round trip`() {
+    val fields = fieldsOfSerializedLength(300)
+    fields["receiver_account_number"] = "José Ñandú 東京都 \uD83D\uDE80 ".repeat(20)
+
+    val posted = postWithFields(fields)
+
+    assertEquals(fields, platformApiClient.getTransaction(posted.id).fields)
+  }
+
+  @Test
+  fun `test PATCH sep31 transactions merges fields past 255 characters`() {
+    val (senderCustomer, receiverCustomer) = mkCustomers()
+    val posted = createTx(senderCustomer, receiverCustomer)
+    requestInfoUpdate(posted.id, "receiver_account_number")
+    val longValue = "a".repeat(300)
+
+    val patched =
+      sep31Client.patchTransaction(
+        posted.id,
+        Sep31PatchTransactionRequest.builder()
+          .fields(Sep31TxnFields(hashMapOf("receiver_account_number" to longValue)))
+          .build()
+      )
+
+    assertEquals(PENDING_RECEIVER.status, patched.transaction.status)
+    val stored = platformApiClient.getTransaction(posted.id).fields
+    assertEquals(longValue, stored["receiver_account_number"])
+    // The merge keeps the fields the PATCH did not mention.
+    assertEquals("r0123", stored["receiver_routing_number"])
+    assertEquals("SWIFT", stored["type"])
+  }
+
+  @Test
+  fun `test required_info_updates past 255 characters persist`() {
+    val (senderCustomer, receiverCustomer) = mkCustomers()
+    val posted = createTx(senderCustomer, receiverCustomer)
+    val requested =
+      (1..10).associate {
+        "receiver_bank_account_holder_name_$it" to
+          AssetInfo.Field.builder()
+            .description("Description $it of the field the receiving bank asks for again")
+            .choices(if (it % 2 == 0) listOf("first", "second") else null)
+            .optional(it % 3 == 0)
+            .build()
+      }
+
+    requestInfoUpdate(posted.id, *requested.keys.toTypedArray(), fieldMetadata = requested)
+
+    val stored = platformApiClient.getTransaction(posted.id).requiredInfoUpdatesFields
+    assertEquals(requested.keys, stored.keys)
+    requested.forEach { (name, expected) ->
+      assertEquals(expected.description, stored[name]!!.description, "$name description")
+      assertEquals(expected.choices, stored[name]!!.choices, "$name choices")
+      assertEquals(expected.isOptional, stored[name]!!.isOptional, "$name optional")
     }
   }
 

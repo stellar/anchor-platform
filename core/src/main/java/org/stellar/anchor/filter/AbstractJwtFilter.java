@@ -44,10 +44,9 @@ public abstract class AbstractJwtFilter implements Filter {
     HttpServletRequest request = (HttpServletRequest) servletRequest;
     HttpServletResponse response = (HttpServletResponse) servletResponse;
     Log.infoF(
-        "Applying JwtTokenFilter on request {} {}?{}",
+        "Applying JwtTokenFilter on request {} {}",
         request.getMethod(),
-        request.getRequestURL().toString(),
-        request.getQueryString());
+        request.getRequestURL().toString());
 
     if (shouldSkip(request)) {
       filterChain.doFilter(servletRequest, servletResponse);
