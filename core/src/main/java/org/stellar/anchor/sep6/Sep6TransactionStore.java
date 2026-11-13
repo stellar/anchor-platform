@@ -26,4 +26,11 @@ public interface Sep6TransactionStore {
   Sep6Transaction save(Sep6Transaction sep6Transaction) throws SepException;
 
   List<? extends Sep6Transaction> findTransactions(TransactionsParams params) throws SepException;
+
+  /**
+   * Find the withdrawals that wait for a payment to the given account with the given memo, in the
+   * given status. Used to tell whether a memo is already assigned and to route an incoming payment.
+   */
+  List<? extends Sep6Transaction> findAllByWithdrawAnchorAccountAndMemoAndStatus(
+      String withdrawAnchorAccount, String memo, String status);
 }

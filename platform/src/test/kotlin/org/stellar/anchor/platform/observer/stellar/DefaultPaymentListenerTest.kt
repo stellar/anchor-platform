@@ -2688,6 +2688,371 @@ class DefaultPaymentListenerTest {
     }
   }
 
+  // ---- ANCHOR-1323: one payment is never credited to a row of another protocol ----
+
+  private fun eventWithMemo(memo: String): PaymentTransferEvent {
+    val event = createTestTransferEvent()
+    xdrMemoText.text = XdrString(memo)
+    event.ledgerTransaction.memo = xdrMemoText
+    return event
+  }
+
+  private fun pendingSep24(id: String, startedAt: java.time.Instant? = null) =
+    JdbcSep24Transaction().apply {
+      this.id = id
+      this.status = "pending_user_transfer_start"
+      this.startedAt = startedAt
+    }
+
+  private fun pendingSep6(id: String, startedAt: java.time.Instant? = null) =
+    JdbcSep6Transaction().apply {
+      this.id = id
+      this.status = "pending_user_transfer_start"
+      this.startedAt = startedAt
+    }
+
+  private fun crossCount(registry: SimpleMeterRegistry) =
+    registry
+      .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", "cross")
+      .count()
+
+  private fun stubRoutingHandlers() {
+    every { paymentListener.handleSep31Transaction(any(), any(), any()) } answers {}
+    every { paymentListener.handleSep24Transaction(any(), any(), any()) } answers {}
+    every { paymentListener.handleSep6Transaction(any(), any(), any()) } answers {}
+  }
+
+  private fun verifyNoCredit() {
+    verify(exactly = 0) { paymentListener.handleSep31Transaction(any(), any(), any()) }
+    verify(exactly = 0) { paymentListener.handleSep24Transaction(any(), any(), any()) }
+    verify(exactly = 0) { paymentListener.handleSep6Transaction(any(), any(), any()) }
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+  }
+
+  @Test
+  fun `test cross-protocol ambiguity between SEP-24 and SEP-6 credits neither and counts the cross tag`() {
+    val event = eventWithMemo("shared_memo")
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(pendingSep24("sep24-id"))
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(pendingSep6("sep6-id"))
+    stubRoutingHandlers()
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    mockkStatic(Log::class)
+    try {
+      every { Log.debugF(any(), *anyVararg()) } just Runs
+      every { Log.errorF(any(), *anyVararg()) } just Runs
+
+      paymentListener.onReceived(event)
+
+      verifyNoCredit()
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("across protocols") },
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep24-id") && it.toString().contains("sep6-id") },
+        )
+      }
+      assertEquals(1.0, crossCount(registry))
+      for (sep in listOf("24", "6", "31")) {
+        assertEquals(
+          0.0,
+          registry
+            .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", sep)
+            .count(),
+          "same-protocol counter for SEP-$sep",
+        )
+      }
+    } finally {
+      Metrics.removeRegistry(registry)
+      unmockkStatic(Log::class)
+    }
+  }
+
+  @Test
+  fun `test cross-protocol ambiguity involving SEP-31 credits none and counts the cross tag`() {
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    mockkStatic(Log::class)
+    try {
+      every { Log.debugF(any(), *anyVararg()) } just Runs
+      every { Log.errorF(any(), *anyVararg()) } just Runs
+      stubRoutingHandlers()
+      val event = eventWithMemo("shared_memo")
+
+      // SEP-31 and SEP-24
+      every {
+        sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any())
+      } returns listOf(JdbcSep31Transaction().apply { id = "sep31-id" })
+      every {
+        sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns listOf(pendingSep24("sep24-id"))
+      every {
+        sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns emptyList()
+      paymentListener.onReceived(event)
+
+      // SEP-31 and SEP-6
+      every {
+        sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns emptyList()
+      every {
+        sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns listOf(pendingSep6("sep6-id"))
+      paymentListener.onReceived(event)
+
+      verifyNoCredit()
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("across protocols") },
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep31-id") && it.toString().contains("sep24-id") },
+        )
+      }
+      verify(exactly = 1) {
+        Log.errorF(
+          match { it.contains("across protocols") },
+          any(),
+          any(),
+          any(),
+          any(),
+          match { it.toString().contains("sep31-id") && it.toString().contains("sep6-id") },
+        )
+      }
+      assertEquals(2.0, crossCount(registry))
+    } finally {
+      Metrics.removeRegistry(registry)
+      unmockkStatic(Log::class)
+    }
+  }
+
+  @Test
+  fun `test a single match in any one protocol credits it and counts no ambiguity`() {
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      stubRoutingHandlers()
+      val event = eventWithMemo("single_memo")
+
+      // SEP-31 only
+      every {
+        sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any())
+      } returns listOf(JdbcSep31Transaction().apply { id = "sep31-only" })
+      every {
+        sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns emptyList()
+      every {
+        sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns emptyList()
+      paymentListener.onReceived(event)
+
+      // SEP-24 only
+      every {
+        sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any())
+      } returns emptyList()
+      every {
+        sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns listOf(pendingSep24("sep24-only"))
+      paymentListener.onReceived(event)
+
+      // SEP-6 only
+      every {
+        sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns emptyList()
+      every {
+        sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+      } returns listOf(pendingSep6("sep6-only"))
+      paymentListener.onReceived(event)
+
+      verify(exactly = 1) { paymentListener.handleSep31Transaction(any(), any(), any()) }
+      verify(exactly = 1) { paymentListener.handleSep24Transaction(any(), any(), any()) }
+      verify(exactly = 1) { paymentListener.handleSep6Transaction(any(), any(), any()) }
+      assertEquals(0.0, crossCount(registry))
+      for (sep in listOf("24", "6", "31")) {
+        assertEquals(
+          0.0,
+          registry
+            .counter(AnchorMetrics.PAYMENT_OBSERVER_AMBIGUOUS_ROUTING.toString(), "sep", sep)
+            .count(),
+          "same-protocol counter for SEP-$sep",
+        )
+      }
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test the attacker SEP-24 row cannot take a payment matching the victim SEP-6 memo`() {
+    // The attacker's SEP-24 withdrawal declares the memo of the victim's pending SEP-6 withdrawal;
+    // the victim then pays the memo the anchor gave them.
+    val event = eventWithMemo("victim_memo")
+    val attackerRow = pendingSep24("A-ATTACKER-SEP24").apply { webAuthAccount = "GATTACKER" }
+    val victimRow = pendingSep6("V-VICTIM-SEP6").apply { webAuthAccount = "GVICTIM" }
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(attackerRow)
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns listOf(victimRow)
+    stubRoutingHandlers()
+
+    paymentListener.onReceived(event)
+
+    verifyNoCredit()
+    assertEquals("pending_user_transfer_start", victimRow.status)
+    assertEquals("pending_user_transfer_start", attackerRow.status)
+    assertEquals(null, attackerRow.amountIn)
+  }
+
+  @Test
+  fun `test a SEP-24 row with a different memo leaves the SEP-6 row to be credited`() {
+    val event = eventWithMemo("victim_memo")
+    val attackerRow = pendingSep24("A-ATTACKER-SEP24")
+    val victimRow = pendingSep6("V-VICTIM-SEP6")
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    // The attacker holds another memo, so a lookup for the victim's memo finds only the victim.
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } answers { if (secondArg<String>() == "attacker_memo") listOf(attackerRow) else emptyList() }
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } answers { if (secondArg<String>() == "victim_memo") listOf(victimRow) else emptyList() }
+    stubRoutingHandlers()
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 1) { paymentListener.handleSep6Transaction(any(), any(), victimRow) }
+    verify(exactly = 0) { paymentListener.handleSep24Transaction(any(), any(), any()) }
+    verify(exactly = 0) { paymentListener.handleSep31Transaction(any(), any(), any()) }
+  }
+
+  private val muxedBaseAccount = "GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
+
+  private fun eventToMuxedDestination(): PaymentTransferEvent {
+    val event = eventWithMemo("my_memo_5")
+    event.ledgerTransaction.operations[0].paymentOperation.to =
+      MuxedAccount(muxedBaseAccount, BigInteger.valueOf(42)).address
+    return event
+  }
+
+  @Test
+  fun `test a payment to a muxed destination reaches the SEP-6 row held under its base account and muxed id`() {
+    val event = eventToMuxedDestination()
+    val victimRow = pendingSep6("V-VICTIM-SEP6")
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } returns emptyList()
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } answers
+      {
+        if (
+          firstArg<String>() == muxedBaseAccount &&
+            secondArg<String>() == "42" &&
+            thirdArg<String>() == "pending_user_transfer_start"
+        )
+          listOf(victimRow)
+        else emptyList()
+      }
+    stubRoutingHandlers()
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 1) {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+        muxedBaseAccount,
+        "42",
+        "pending_user_transfer_start",
+      )
+    }
+    verify(exactly = 1) { paymentListener.handleSep6Transaction(any(), any(), victimRow) }
+    verify(exactly = 0) { paymentListener.handleSep24Transaction(any(), any(), any()) }
+    verify(exactly = 0) { paymentListener.handleSep31Transaction(any(), any(), any()) }
+  }
+
+  @Test
+  fun `test a SEP-24 and a SEP-6 row on the same muxed id count the cross tag and credit neither`() {
+    val event = eventToMuxedDestination()
+    fun heldUnderMuxedId(account: String, memo: String, status: String) =
+      account == muxedBaseAccount && memo == "42" && status == "pending_user_transfer_start"
+    every { sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any()) } returns
+      emptyList()
+    every {
+      sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } answers
+      {
+        if (heldUnderMuxedId(firstArg(), secondArg(), thirdArg())) listOf(pendingSep24("sep24-id"))
+        else emptyList()
+      }
+    every {
+      sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+    } answers
+      {
+        if (heldUnderMuxedId(firstArg(), secondArg(), thirdArg())) listOf(pendingSep6("sep6-id"))
+        else emptyList()
+      }
+    stubRoutingHandlers()
+
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      paymentListener.onReceived(event)
+
+      verifyNoCredit()
+      assertEquals(1.0, crossCount(registry))
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
+  @Test
+  fun `test the cross-protocol refusal does not depend on which row was created first`() {
+    val earlier = java.time.Instant.parse("2026-11-01T10:00:00Z")
+    val later = java.time.Instant.parse("2026-11-01T10:05:00Z")
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      stubRoutingHandlers()
+      every {
+        sep31TransactionStore.findAllByToAccountAndMemoAndStatus(any(), any(), any())
+      } returns emptyList()
+
+      for ((sep24StartedAt, sep6StartedAt) in listOf(earlier to later, later to earlier)) {
+        every {
+          sep24TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+        } returns listOf(pendingSep24("sep24-id", sep24StartedAt))
+        every {
+          sep6TransactionStore.findAllByWithdrawAnchorAccountAndMemoAndStatus(any(), any(), any())
+        } returns listOf(pendingSep6("sep6-id", sep6StartedAt))
+
+        paymentListener.onReceived(eventWithMemo("shared_memo"))
+      }
+
+      verifyNoCredit()
+      assertEquals(2.0, crossCount(registry))
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+  }
+
   // ---- ANCHOR-1364: credit payments finer than the asset's significant_decimals ----
 
   private val fooAssetId = "stellar:FOO:GBZ4HPSEHKEEJ6MOZBSVV2B3LE27EZLV6LJY55G47V7BGBODWUXQM364"
