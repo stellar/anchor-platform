@@ -1,7 +1,6 @@
 package org.stellar.anchor.platform.data;
 
 import com.google.gson.annotations.SerializedName;
-import com.google.gson.reflect.TypeToken;
 import jakarta.persistence.*;
 import java.util.Map;
 import lombok.Getter;
@@ -86,39 +85,15 @@ public class JdbcSep31Transaction extends JdbcSepTransaction implements Sep31Tra
   @Column(name = "funding_method")
   String fundingMethod;
 
-  // Ignored by JPA and Gson
   @SerializedName("fields")
-  @Transient
+  @Column(name = "fields")
+  @JdbcTypeCode(SqlTypes.JSON)
   Map<String, String> fields;
 
-  @Access(AccessType.PROPERTY)
-  @Column(name = "fields")
-  public String getFieldsJson() {
-    return gson.toJson(this.fields);
-  }
-
-  public void setFieldsJson(String fieldsJson) {
-    if (fieldsJson != null) {
-      this.fields = gson.fromJson(fieldsJson, new TypeToken<Map<String, String>>() {}.getType());
-    }
-  }
-
-  // Ignored by JPA and Gson
   @SerializedName("required_info_updates")
-  @Transient
+  @Column(name = "required_info_updates")
+  @JdbcTypeCode(SqlTypes.JSON)
   Sep31Info.Fields requiredInfoUpdates;
-
-  @Access(AccessType.PROPERTY)
-  @Column(name = "requiredInfoUpdates")
-  public String getRequiredInfoUpdatesJson() {
-    return gson.toJson(this.requiredInfoUpdates);
-  }
-
-  public void setRequiredInfoUpdatesJson(String requiredInfoUpdatesJson) {
-    if (requiredInfoUpdatesJson != null) {
-      this.requiredInfoUpdates = gson.fromJson(requiredInfoUpdatesJson, Sep31Info.Fields.class);
-    }
-  }
 
   Boolean refunded;
 

@@ -4,10 +4,17 @@ import static io.sentry.Sentry.*;
 import static org.stellar.anchor.util.Log.*;
 
 import io.sentry.SentryLevel;
+import jakarta.persistence.PersistenceException;
 import jakarta.transaction.NotSupportedException;
+import java.sql.SQLException;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -18,6 +25,8 @@ import org.stellar.anchor.api.sep.SepExceptionResponse;
 import org.stellar.anchor.platform.utils.RequestBodySizeLimitFilter;
 
 public abstract class AbstractControllerExceptionHandler {
+  static final String INTERNAL_ERROR_MESSAGE = "An internal error occurred.";
+
   @ResponseStatus(HttpStatus.BAD_REQUEST)
   @ExceptionHandler({SepValidationException.class, BadRequestException.class})
   public SepExceptionResponse handleBadRequest(AnchorException ex) {
@@ -104,6 +113,25 @@ public abstract class AbstractControllerExceptionHandler {
   public SepExceptionResponse handleInternalError(Exception ex) {
     errorEx(ex);
     captureException(ex);
+    // A persistence failure's message carries the driver error and the SQL statement. The
+    // operator keeps it in the log and in Sentry; the caller gets a fixed text.
+    if (hasPersistenceCause(ex)) {
+      return new SepExceptionResponse(INTERNAL_ERROR_MESSAGE);
+    }
     return new SepExceptionResponse(ex.getMessage());
+  }
+
+  private static boolean hasPersistenceCause(Throwable ex) {
+    // The visited set ends the walk on a cyclic cause chain, which `initCause` can build.
+    Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+    for (Throwable cause = ex; cause != null && visited.add(cause); cause = cause.getCause()) {
+      if (cause instanceof DataAccessException
+          || cause instanceof TransactionException
+          || cause instanceof PersistenceException
+          || cause instanceof SQLException) {
+        return true;
+      }
+    }
+    return false;
   }
 }
