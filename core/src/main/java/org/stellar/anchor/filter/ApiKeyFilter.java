@@ -42,10 +42,9 @@ public class ApiKeyFilter implements Filter {
     }
 
     Log.infoF(
-        "Applying ApiKeyFilter on request {} {}?{}",
+        "Applying ApiKeyFilter on request {} {}",
         request.getMethod(),
-        request.getRequestURL().toString(),
-        request.getQueryString());
+        request.getRequestURL().toString());
 
     if (shouldSkip(request)) {
       filterChain.doFilter(servletRequest, servletResponse);

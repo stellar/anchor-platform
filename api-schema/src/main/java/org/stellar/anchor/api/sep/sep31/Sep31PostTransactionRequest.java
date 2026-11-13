@@ -4,6 +4,7 @@ import com.google.gson.annotations.SerializedName;
 import java.util.HashMap;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import org.stellar.anchor.config.PII;
 
 /**
  * The request sent to the POST /transactions endpoint of SEP-31.
@@ -34,7 +35,7 @@ public class Sep31PostTransactionRequest {
   @SerializedName("receiver_id")
   String receiverId;
 
-  @Deprecated Sep31TxnFields fields;
+  @Deprecated @PII Sep31TxnFields fields;
 
   String lang;
 
@@ -48,7 +49,7 @@ public class Sep31PostTransactionRequest {
   String refundMemoType;
 
   /** The request client IP address. */
-  String requestClientIpAddress;
+  @PII String requestClientIpAddress;
 
   @Data
   @AllArgsConstructor
