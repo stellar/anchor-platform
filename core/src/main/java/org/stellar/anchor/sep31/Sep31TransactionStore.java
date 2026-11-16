@@ -60,4 +60,11 @@ public interface Sep31TransactionStore {
    * @return list of transactions
    */
   List<? extends Sep31Transaction> findTransactions(TransactionsParams params);
+
+  /**
+   * Find the transactions that wait for a payment to the given account with the given memo, in the
+   * given status. Used to tell whether a memo is already assigned and to route an incoming payment.
+   */
+  List<? extends Sep31Transaction> findAllByToAccountAndMemoAndStatus(
+      String toAccount, String memo, String status);
 }
