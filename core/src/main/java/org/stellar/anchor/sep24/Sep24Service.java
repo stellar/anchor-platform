@@ -139,7 +139,9 @@ public class Sep24Service {
     }
 
     infoF(
-        "Sep24.withdraw. account={}, memo={}", shorter(token.getAccount()), token.getAccountMemo());
+        "Sep24.withdraw. account={}, memo={}",
+        shorter(token.getAccount()),
+        shorter(token.getAccountMemo()));
     String assetCode = withdrawRequest.get("asset_code");
     String assetIssuer = withdrawRequest.get("asset_issuer");
     String sourceAccount = withdrawRequest.get("account");
@@ -286,7 +288,9 @@ public class Sep24Service {
     }
 
     infoF(
-        "Sep24.deposit. account={}, memo={}", shorter(token.getAccount()), token.getAccountMemo());
+        "Sep24.deposit. account={}, memo={}",
+        shorter(token.getAccount()),
+        shorter(token.getAccountMemo()));
     String assetCode = depositRequest.get("asset_code");
     String assetIssuer = depositRequest.get("asset_issuer");
     String destinationAccount = depositRequest.get("account");
@@ -500,7 +504,10 @@ public class Sep24Service {
       infoF("stellarTransactionId={}", shorter(txReq.getStellarTransactionId()));
       txn = txnStore.findByStellarTransactionId(txReq.getStellarTransactionId());
     } else if (txReq.getExternalTransactionId() != null) {
-      infoF("externalTransactionId={}", shorter(txReq.getExternalTransactionId()));
+      // Logged like `id` above, not via shorter(): it's a caller-assigned reference, not an
+      // account, and shorter() cannot usefully redact values this short without masking them
+      // entirely -- it is not relied on for protection here.
+      infoF("externalTransactionId={}", txReq.getExternalTransactionId());
       txn = txnStore.findByExternalTransactionId(txReq.getExternalTransactionId());
     } else {
       throw new SepValidationException(
