@@ -21,6 +21,7 @@ dependencies {
   implementation(libs.commons.beanutils)
   implementation(libs.commons.codec)
   implementation(libs.commons.io)
+  implementation(libs.dnsjava)
   implementation(libs.google.gson)
   implementation(libs.httpclient)
   implementation(libs.jakarta.annotation.api)
