@@ -823,15 +823,19 @@ public class DefaultPaymentListener implements PaymentListener {
         && accountType(ledgerPayment.getTo()) == Muxed;
   }
 
+  private static BigDecimal storedAmount(String amount) {
+    return isEmpty(amount) ? null : decimal(amount);
+  }
+
   boolean checkAssetAmountSufficient(
       LedgerTransaction ledgerTransaction,
       LedgerPayment ledgerPayment,
       JdbcSepTransaction sepTransaction,
-      boolean enforceAssetMatch)
+      boolean incomingPayment)
       throws IOException {
     String paymentAssetName = "stellar:" + getSep11AssetName(ledgerPayment.getAsset());
     if (!sepTransaction.getAmountInAsset().equals(paymentAssetName)) {
-      if (enforceAssetMatch) {
+      if (incomingPayment) {
         errorF(
             "Rejecting incoming payment for SEP-{} transaction: asset did not match. "
                 + "sepTxn.id={}, ledgerTxn.id={}, expected={}, received={}",
@@ -850,7 +854,20 @@ public class DefaultPaymentListener implements PaymentListener {
           sepTransaction.getAmountInAsset());
     }
 
-    BigDecimal expectedAmount = decimal(sepTransaction.getAmountExpected());
+    BigDecimal expectedAmount = storedAmount(sepTransaction.getAmountExpected());
+    if (expectedAmount == null && incomingPayment) {
+      expectedAmount = storedAmount(sepTransaction.getAmountIn());
+      if (expectedAmount == null) {
+        errorF(
+            "Rejecting incoming payment for SEP-{} transaction: neither amount_expected nor "
+                + "amount_in is set. sepTxn.id={}, ledgerTxn.id={}",
+            sepTransaction.getProtocol(),
+            sepTransaction.getId(),
+            ledgerTransaction.getHash());
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_AMOUNT_INSUFFICIENT.toString()).increment();
+        return false;
+      }
+    }
     BigDecimal gotAmount = decimal(AssetHelper.fromXdrAmount(ledgerPayment.getAmount()));
     if (expectedAmount != null && gotAmount.compareTo(expectedAmount) < 0) {
       errorF(
