@@ -1,10 +1,10 @@
 package org.stellar.anchor.api.platform;
 
+import com.google.gson.annotations.SerializedName;
 import java.util.Map;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
-import org.stellar.anchor.api.asset.AssetInfo;
 
 /**
  * The response body of the GET /transactions/{id} endpoint of the Platform API.
@@ -17,6 +17,7 @@ import org.stellar.anchor.api.asset.AssetInfo;
 @SuperBuilder
 @NoArgsConstructor
 public class GetTransactionResponse extends PlatformTransactionData {
+  @SerializedName("funding_method")
   String fundingMethod;
 
   /**
@@ -26,13 +27,4 @@ public class GetTransactionResponse extends PlatformTransactionData {
    * cross-reference {@link PlatformTransactionData#getRequiredInfoUpdates()}.
    */
   Map<String, String> fields;
-
-  /**
-   * The real per-field metadata (description/choices/optional) backing {@link
-   * PlatformTransactionData#getRequiredInfoUpdates()}, keyed by field name -- populated from the
-   * transaction's own stored Sep31Info.Fields, so a status callback or client status API consumer
-   * gets the actual metadata instead of one synthesized from the field name. Currently only
-   * populated for SEP-31.
-   */
-  Map<String, AssetInfo.Field> requiredInfoUpdatesFields;
 }

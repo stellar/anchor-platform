@@ -410,10 +410,16 @@ class NotifyRefundPendingHandlerTest {
     val sep24TxnCapture = slot<JdbcSep24Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
     val payment = JdbcSep24RefundPayment()
-    payment.id = request.refund.id
+    // The stored first refund has its own id; the request announces a second refund.
+    payment.id = "0"
     payment.idType = RefundPayment.IdType.EXTERNAL.toString()
     payment.amount = request.refund.amount.amount
     payment.fee = request.refund.amountFee.amount
+    val secondPayment = JdbcSep24RefundPayment()
+    secondPayment.id = request.refund.id
+    secondPayment.idType = RefundPayment.IdType.EXTERNAL.toString()
+    secondPayment.amount = request.refund.amount.amount
+    secondPayment.fee = request.refund.amountFee.amount
     val refunds = JdbcSep24Refunds()
     refunds.amountRefunded = "1"
     refunds.amountFee = "0.1"
@@ -449,7 +455,7 @@ class NotifyRefundPendingHandlerTest {
     val expectedRefunds = JdbcSep24Refunds()
     expectedRefunds.amountRefunded = "2.2"
     expectedRefunds.amountFee = "0.2"
-    expectedRefunds.payments = listOf(payment, payment)
+    expectedRefunds.payments = listOf(payment, secondPayment)
     expectedSep24Txn.refunds = expectedRefunds
 
     JSONAssert.assertEquals(
@@ -469,11 +475,17 @@ class NotifyRefundPendingHandlerTest {
     val refundPayment = RefundPayment()
     refundPayment.amount = Amount("1", txn24.amountInAsset)
     refundPayment.fee = Amount("0.1", txn24.amountInAsset)
-    refundPayment.id = request.refund.id
+    refundPayment.id = "0"
     refundPayment.idType = RefundPayment.IdType.STELLAR
+    val secondRefundPayment = RefundPayment()
+    secondRefundPayment.amount = Amount("1", txn24.amountInAsset)
+    secondRefundPayment.fee = Amount("0.1", txn24.amountInAsset)
+    secondRefundPayment.id = request.refund.id
+    secondRefundPayment.idType = RefundPayment.IdType.STELLAR
     val refunded = Amount("2.2", txn24.amountInAsset)
     val refundedFee = Amount("0.2", txn24.amountInAsset)
-    expectedResponse.refunds = Refunds(refunded, refundedFee, arrayOf(refundPayment, refundPayment))
+    expectedResponse.refunds =
+      Refunds(refunded, refundedFee, arrayOf(refundPayment, secondRefundPayment))
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
     expectedResponse.creator = StellarId(null, null, null)
 
@@ -817,12 +829,18 @@ class NotifyRefundPendingHandlerTest {
     val sep6TxnCapture = slot<JdbcSep6Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
     val payment = RefundPayment()
-    payment.id = request.refund.id
+    payment.id = "0"
     payment.amount = Amount("1", STELLAR_USDC)
     payment.fee = Amount("0.1", FIAT_USD)
     val refunds = Refunds()
-    payment.id = request.refund.id
+    // The stored first refund has its own id; the request announces a second refund.
+    payment.id = "0"
     payment.idType = RefundPayment.IdType.EXTERNAL
+    val secondPayment = RefundPayment()
+    secondPayment.id = request.refund.id
+    secondPayment.idType = RefundPayment.IdType.EXTERNAL
+    secondPayment.amount = Amount("1", STELLAR_USDC)
+    secondPayment.fee = Amount("0.1", FIAT_USD)
     refunds.amountRefunded = Amount("1", STELLAR_USDC)
     refunds.amountFee = Amount("0.1", STELLAR_USDC)
     refunds.payments = arrayOf(payment)
@@ -857,7 +875,7 @@ class NotifyRefundPendingHandlerTest {
     val expectedRefunds = Refunds()
     expectedRefunds.amountRefunded = Amount("2.2", STELLAR_USDC)
     expectedRefunds.amountFee = Amount("0.2", FIAT_USD)
-    expectedRefunds.payments = arrayOf(payment, payment)
+    expectedRefunds.payments = arrayOf(payment, secondPayment)
     expectedSep6Txn.refunds = expectedRefunds
 
     JSONAssert.assertEquals(
@@ -879,11 +897,17 @@ class NotifyRefundPendingHandlerTest {
     val refundPayment = RefundPayment()
     refundPayment.amount = Amount("1", txn6.amountInAsset)
     refundPayment.fee = Amount("0.1", txn6.amountFeeAsset)
-    refundPayment.id = request.refund.id
+    refundPayment.id = "0"
     refundPayment.idType = RefundPayment.IdType.EXTERNAL
+    val secondRefundPayment = RefundPayment()
+    secondRefundPayment.amount = Amount("1", txn6.amountInAsset)
+    secondRefundPayment.fee = Amount("0.1", txn6.amountFeeAsset)
+    secondRefundPayment.id = request.refund.id
+    secondRefundPayment.idType = RefundPayment.IdType.EXTERNAL
     val refunded = Amount("2.2", txn6.amountInAsset)
     val refundedFee = Amount("0.2", txn6.amountFeeAsset)
-    expectedResponse.refunds = Refunds(refunded, refundedFee, arrayOf(refundPayment, refundPayment))
+    expectedResponse.refunds =
+      Refunds(refunded, refundedFee, arrayOf(refundPayment, secondRefundPayment))
     expectedResponse.customers = Customers(StellarId(null, null, null), StellarId(null, null, null))
     expectedResponse.creator = StellarId(null, null, null)
 

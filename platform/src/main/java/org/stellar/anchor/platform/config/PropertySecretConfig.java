@@ -12,6 +12,8 @@ import org.springframework.validation.Validator;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.platform.configurator.SecretManager;
 import org.stellar.anchor.util.KeyUtil;
+import org.stellar.anchor.util.Log;
+import org.stellar.anchor.util.PublishedSecrets;
 
 public class PropertySecretConfig implements SecretConfig, Validator {
 
@@ -124,6 +126,30 @@ public class PropertySecretConfig implements SecretConfig, Validator {
         jwtSecrets, SECRET_SEP_24_MORE_INFO_URL_JWT_SECRET, config.getSep24MoreInfoUrlJwtSecret());
     addSecretIfPresent(
         jwtSecrets, SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET, config.getSep6MoreInfoUrlJwtSecret());
+
+    // The secrets the Helm secret store used to publish are public: anyone can forge tokens with
+    // them.
+    jwtSecrets.forEach(
+        (name, value) -> {
+          if (PublishedSecrets.isPublishedSecret(value)) {
+            errors.reject(
+                "secret-published",
+                String.format(
+                    "%s is set to a value that this repository has published, so it protects"
+                        + " nothing. Generate a new secret.",
+                    name));
+          }
+        });
+
+    // CI and the test profiles still run on the published signing seed until it is rotated, so it
+    // is a warning, not an error.
+    if (PublishedSecrets.isPublishedSigningSeed(config.getSep10SigningSeed())) {
+      Log.warn(
+          SECRET_SEP_10_SIGNING_SEED
+              + " is set to a signing seed that this repository has published. Anyone can sign as"
+              + " this account. Use it only for local testing and generate a new seed for any"
+              + " deployment.");
+    }
 
     List<String> keys = new ArrayList<>(jwtSecrets.keySet());
     for (int i = 0; i < keys.size(); i++) {
