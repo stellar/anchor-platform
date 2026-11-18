@@ -497,4 +497,39 @@ class JdbcSep24TransactionStoreTest {
 
     assertPagingRejected("GACCOUNT", null)
   }
+
+  @Test
+  fun `findTransactions with paging_id rejects a memo-less row of the same account for a memo caller`() {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns pagingTxn("GACCOUNT", null)
+
+    assertPagingRejected("GACCOUNT", "12345")
+  }
+
+  @Test
+  fun `findTransactions with paging_id rejects a legacy account-memo row that also has a memo column`() {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns
+      pagingTxn("GACCOUNT:12345", "99999")
+
+    assertPagingRejected("GACCOUNT", "12345")
+  }
+
+  @Test
+  fun `findTransactions with paging_id rejects a legacy account-memo row of another memo`() {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns
+      pagingTxn("GACCOUNT:99999", null)
+    assertPagingRejected("GACCOUNT", "12345")
+
+    // a memo that is only a prefix of the caller's memo is still another memo
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns
+      pagingTxn("GACCOUNT:1234", null)
+    assertPagingRejected("GACCOUNT", "12345")
+  }
+
+  @Test
+  fun `findTransactions with paging_id rejects a row without an owner`() {
+    every { txnRepo.findOneByTransactionId("paging-txn-id") } returns pagingTxn(null, null)
+
+    assertPagingRejected("GACCOUNT", null)
+    assertPagingRejected("GACCOUNT", "12345")
+  }
 }
