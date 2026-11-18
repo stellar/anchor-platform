@@ -4,14 +4,32 @@ import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import java.io.FileNotFoundException
 import java.io.IOException
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.SepException
+import org.stellar.anchor.api.platform.GetTransactionResponse
+import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
+import org.stellar.anchor.api.platform.PlatformTransactionData.Sep.SEP_24
+import org.stellar.anchor.api.sep.SepTransactionStatus.COMPLETED
+import org.stellar.anchor.api.shared.Amount
+import org.stellar.anchor.api.shared.RefundPayment
+import org.stellar.anchor.api.shared.Refunds
+import org.stellar.anchor.asset.AssetService
+import org.stellar.anchor.client.ClientConfig.CallbackUrls
+import org.stellar.anchor.client.CustodialClient
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue
+import org.stellar.anchor.platform.config.PropertySecretConfig
+import org.stellar.anchor.platform.service.Sep24MoreInfoUrlConstructor
+import org.stellar.anchor.platform.service.Sep6MoreInfoUrlConstructor
+import org.stellar.anchor.platform.utils.setupMock
 import org.stellar.anchor.util.ExponentialBackoffTimer
 
 class ClientStatusCallbackProcessorTest {
@@ -120,5 +138,88 @@ class ClientStatusCallbackProcessorTest {
     verify(exactly = 0) { httpErrorBackoffTimer.backoff() }
     // Make sure the metric does not show it passes
     verify(exactly = 0) { eventProcessor.incrementProcessedCounter() }
+  }
+
+  @Test
+  fun `redirect failure is retried three times and then skipped`() {
+    val assetInfo = mockk<AssetInfo>()
+    every { assetInfo.significantDecimals } returns 7
+    val assetService = mockk<AssetService>()
+    every { assetService.getAsset(any(), any()) } returns assetInfo
+    val sep6MoreInfoUrlConstructor = mockk<Sep6MoreInfoUrlConstructor>()
+    val sep24MoreInfoUrlConstructor = mockk<Sep24MoreInfoUrlConstructor>()
+    every { sep6MoreInfoUrlConstructor.construct(any(), any()) } returns "https://example.com"
+    every { sep24MoreInfoUrlConstructor.construct(any(), any()) } returns "https://example.com"
+    val secretConfig = mockk<PropertySecretConfig>()
+    secretConfig.setupMock()
+
+    val server = MockWebServer()
+    server.start()
+    try {
+      repeat(3) { server.enqueue(MockResponse().setResponseCode(302)) }
+      val client =
+        CustodialClient.builder()
+          .name("circle")
+          .signingKeys(setOf("GBI2IWJGR4UQPBIKPP6WG76X5PHSD2QTEBGIP6AZ3ZXWV46ZUSGNEGN2"))
+          .callbackUrls(
+            CallbackUrls.builder().sep24(server.url("/callback/sep24").toString()).build()
+          )
+          .allowAnyDestination(false)
+          .destinationAccounts(emptySet())
+          .build()
+      val realHandler =
+        ClientStatusCallbackHandler(
+          secretConfig,
+          client,
+          assetService,
+          sep6MoreInfoUrlConstructor,
+          sep24MoreInfoUrlConstructor
+        )
+      val processor =
+        spyk(
+          ClientStatusCallbackProcessor(
+            "TEST PROCESSOR",
+            EventQueue.TRANSACTION,
+            eventService,
+            realHandler
+          )
+        )
+      every { processor.httpErrorBackoffTimer } returns httpErrorBackoffTimer
+      every { processor.networkBackoffTimer } returns networkErrorBackoffTimer
+      val redirectedEvent =
+        AnchorEvent().apply {
+          transaction =
+            GetTransactionResponse().apply {
+              id = "redirected"
+              sep = SEP_24
+              kind = Kind.WITHDRAWAL
+              status = COMPLETED
+              clientName = "circle"
+              refunds =
+                Refunds.builder()
+                  .amountRefunded(Amount("1", "USD"))
+                  .amountFee(Amount("0", "USD"))
+                  .payments(
+                    arrayOf(
+                      RefundPayment.builder()
+                        .id("refund-redirected")
+                        .idType(RefundPayment.IdType.EXTERNAL)
+                        .amount(Amount("1", "USD"))
+                        .fee(Amount("0", "USD"))
+                        .build()
+                    )
+                  )
+                  .build()
+            }
+        }
+
+      processor.handleEventWithRetry(redirectedEvent)
+
+      assertEquals(3, server.requestCount)
+      verify(exactly = 2) { httpErrorBackoffTimer.backoff() }
+      verify(exactly = 1) { processor.incrementProcessedCounter() }
+    } finally {
+      server.shutdown()
+    }
   }
 }
