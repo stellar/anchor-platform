@@ -11,6 +11,7 @@ import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.Address
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.StrKey
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus.*
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.*
@@ -346,6 +347,31 @@ internal class LedgerClientHelperTest {
     assertEquals(fromAccount, ledgerOperation.invokeHostFunctionOperation.from)
     assertEquals(toAccount, ledgerOperation.invokeHostFunctionOperation.to)
     assertEquals(BigInteger.valueOf(500L), ledgerOperation.invokeHostFunctionOperation.amount)
+  }
+
+  @Test
+  fun `test convert() with invoke host function transfer to a muxed contract returns W-address`() {
+    val fromAccount = KeyPair.random().accountId
+    val contractId = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
+    val muxedContract =
+      StrKey.encodeMuxedContract(StrKey.decodeContract(contractId) + ByteArray(8) { it.toByte() })
+    val operation =
+      buildInvokeHostFunctionOperation(contractId, "transfer", fromAccount, muxedContract, 500L)
+
+    val ledgerOperation =
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        null,
+      )
+
+    assertEquals(OperationType.INVOKE_HOST_FUNCTION, ledgerOperation.type)
+    assertEquals(fromAccount, ledgerOperation.invokeHostFunctionOperation.from)
+    assertEquals(muxedContract, ledgerOperation.invokeHostFunctionOperation.to)
+    assertTrue(ledgerOperation.invokeHostFunctionOperation.to.startsWith("W"))
   }
 
   @Test
