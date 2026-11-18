@@ -77,6 +77,8 @@ public class StellarRpc implements LedgerClient {
                 })
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(40, TimeUnit.SECONDS)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .retryOnConnectionFailure(true)
             .build());
   }
