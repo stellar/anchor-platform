@@ -1,5 +1,6 @@
 package org.stellar.reference
 
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
@@ -9,6 +10,24 @@ import kotlinx.coroutines.sync.withLock
 
 // This is to make sure transaction submission is mutual exclusive to avoid failures
 internal val submissionLock = Mutex()
+
+suspend fun retryOnException(
+  maxAttempts: Int = 5,
+  delaySeconds: Int = 5,
+  block: suspend () -> Unit,
+) =
+  flow<Unit> { block() }
+    .retryWhen { cause, attempt ->
+      if (cause is CancellationException) {
+        false
+      } else if (attempt < maxAttempts) {
+        delay(delaySeconds.seconds)
+        true
+      } else {
+        false
+      }
+    }
+    .collect {}
 
 suspend fun transactionWithRetry(
   maxAttempts: Int = 5,
