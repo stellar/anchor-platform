@@ -15,11 +15,11 @@ public class ClientStatusCallbackProcessor extends EventProcessor {
   private final long NETWORK_INITIAL_BACKOFF_TIME_SECONDS = 1;
   // The maximum backoff time for connection error.
   private final long NETWORK_MAX_BACKOFF_TIME_SECONDS = 30;
-  // The initial backoff time for HTTP status code other than 200s or 300s.
+  // The initial backoff time for HTTP status code other than 2xx.
   private final long HTTP_STATUS_INITIAL_BACKOFF_TIME_SECONDS = 1;
-  // The maximum backoff time for HTTP status code other than 200s or 300s.
+  // The maximum backoff time for HTTP status code other than 2xx.
   private final long HTTP_STATUS_MAX_BACKOFF_TIME_SECONDS = 5;
-  // The maximum number of retries for HTTP status code other than 200s or 300s.
+  // The maximum number of retries for HTTP status code other than 2xx.
   private final long MAX_RETRIES = 3;
   private final ExponentialBackoffTimer networkBackoffTimer =
       new ExponentialBackoffTimer(
@@ -52,7 +52,7 @@ public class ClientStatusCallbackProcessor extends EventProcessor {
           isProcessed = true;
           incrementProcessedCounter();
         } else {
-          // ***** Error #2. HTTP status code other than 200s or 300s
+          // ***** Error #2. HTTP status code other than 2xx
           if (++retryAttempts < MAX_RETRIES) {
             // retry.
             try {
