@@ -181,8 +181,10 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
     val sourceKey = KeyPair.fromSecretSeed(config.get("app..payment.signing.seed"))
     val accountId = sourceKey.accountId
 
-    for (attempt in 1..5) {
-      info("sendTestPayment attempt $attempt/5 (class=${this::class.java.simpleName})")
+    val maxAttempts = 12
+    val surgeBaseFee = 100_000L
+    for (attempt in 1..maxAttempts) {
+      info("sendTestPayment attempt $attempt/$maxAttempts (class=${this::class.java.simpleName})")
       val account = ledgerClient.getAccount(accountId)
       val builder =
         TransactionBuilder(Account(accountId, account.sequenceNumber), Network.TESTNET)
@@ -200,7 +202,7 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
           .addPreconditions(
             TransactionPreconditions.builder().timeBounds(TimeBounds.expiresAfter(180)).build()
           )
-          .setBaseFee(Transaction.MIN_BASE_FEE)
+          .setBaseFee(surgeBaseFee)
           .build()
       txn.sign(sourceKey)
 
@@ -212,20 +214,19 @@ open class PlatformAPITestBase(config: TestConfig) : IntegrationTestBase(config)
         try {
           return waitForTransactionAvailable(ledgerClient, response.hash, 60, 60)
         } catch (e: Exception) {
-          info(
-            "sendTestPayment attempt $attempt: transaction not confirmed within timeout." +
-              " Retrying in 3s..."
-          )
+          info("sendTestPayment attempt $attempt: transaction not confirmed within timeout.")
         }
       } else {
-        info(
-          "sendTestPayment attempt $attempt rejected (status=${response.status}). Retrying in 3s..."
-        )
+        info("sendTestPayment attempt $attempt rejected (status=${response.status}).")
       }
-      Thread.sleep(3000)
+      if (attempt < maxAttempts) {
+        val backoffSeconds = minOf(attempt * 5L, 30L)
+        info("Retrying sendTestPayment in ${backoffSeconds}s...")
+        Thread.sleep(backoffSeconds * 1000)
+      }
     }
     throw Exception(
-      "sendTestPayment failed after 5 attempts (class=${this::class.java.simpleName})"
+      "sendTestPayment failed after $maxAttempts attempts (class=${this::class.java.simpleName})"
     )
   }
 

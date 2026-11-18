@@ -37,12 +37,22 @@ fun isPortActive(host: String = "localhost", port: Int): Boolean {
   }
 }
 
+tasks.register("resolveTestDependencies") {
+  group = "github"
+  description = "Download the runtime dependencies of the essential and extended tests."
+  doLast {
+    listOf(":essential-tests", ":extended-tests").forEach {
+      project(it).configurations.getByName("testRuntimeClasspath").resolve()
+    }
+  }
+}
+
 // The build task executed at GitHub Actions. This task is used to build the project and run the
 // unit tests.
 tasks.register("runBuild") {
   group = "github"
   description = "Build the project, and skip specific tasks."
-  dependsOn("clean", "build")
+  dependsOn("clean", "build", "resolveTestDependencies")
   subprojects {
     if (name == "essential-tests" || name == "extended-tests") {
       tasks.named("test") { enabled = false }
