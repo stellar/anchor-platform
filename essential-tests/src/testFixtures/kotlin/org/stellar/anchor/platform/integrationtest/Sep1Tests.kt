@@ -17,6 +17,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.platform.Sep1TomlRules
 import org.stellar.anchor.platform.TestConfig
+import org.stellar.anchor.platform.TestSecrets
 import org.stellar.sdk.KeyPair
 
 /**
@@ -145,7 +146,7 @@ class Sep1Tests {
   @Test
   fun `test the TOML SIGNING_KEY is the account of the SEP-10 signing seed`() {
     val signingKey = Toml().read(servedToml()).getString("SIGNING_KEY")
-    val seedAccount = KeyPair.fromSecretSeed(config.env["secret.sep10.signing_seed"]!!).accountId
+    val seedAccount = KeyPair.fromSecretSeed(TestSecrets.SEP10_SIGNING_SEED).accountId
 
     assertEquals(seedAccount, signingKey)
   }

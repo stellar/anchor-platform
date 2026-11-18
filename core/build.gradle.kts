@@ -39,6 +39,7 @@ dependencies {
   implementation(project(":lib-util"))
 
   testImplementation(libs.coroutines.core)
+  testImplementation(libs.jackson.annotations)
   testImplementation(libs.okhttp3.mockserver)
   testImplementation(libs.servlet.api)
   testImplementation(libs.slf4j.api)

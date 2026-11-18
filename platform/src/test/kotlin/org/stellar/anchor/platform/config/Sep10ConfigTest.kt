@@ -43,6 +43,18 @@ class Sep10ConfigTest {
   }
 
   @Test
+  fun `test missing signing seed is rejected as sep10-signing-seed-empty`() {
+    listOf(null, "").forEach { seed ->
+      every { secretConfig.sep10SigningSeed } returns seed
+      val errs = BindException(config, "config")
+
+      config.validateConfig(errs)
+
+      assertEquals(listOf("sep10-signing-seed-empty"), errs.allErrors.map { it.code }, "seed=$seed")
+    }
+  }
+
+  @Test
   fun `test client attribution and lists`() {
     config.isClientAttributionRequired = true
     config.validateClientAttribution(errors)
