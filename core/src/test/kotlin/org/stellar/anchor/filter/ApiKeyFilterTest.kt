@@ -10,10 +10,15 @@ import jakarta.servlet.http.HttpServletResponse
 import org.apache.hc.core5.http.HttpStatus
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.filter.WebAuthJwtFilter.APPLICATION_JSON_VALUE
+import org.stellar.anchor.util.Log
 
+@ExtendWith(LockAndMockTest::class)
 internal class ApiKeyFilterTest {
   companion object {
     private const val API_KEY = "MY_API_KEY"
@@ -140,5 +145,28 @@ internal class ApiKeyFilterTest {
       response.contentType = APPLICATION_JSON_VALUE
     }
     verify { filterChain wasNot Called }
+  }
+
+  // ANCHOR-1395 (HackerOne #4107899): the raw query string must never reach the per-request log
+  // line -- the same fix AbstractJwtFilter already got.
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test the per-request log line does not include the raw query string`() {
+    every { Log.infoF(any(), *anyVararg()) } just Runs
+
+    every { request.method } returns "GET"
+    every { request.requestURL } returns StringBuffer("https://anchor.example.com/transactions")
+    every { request.queryString } returns "email_address=secret@example.com&api_key=abc123"
+    every { request.getHeader("X-Api-Key") } returns API_KEY
+
+    apiKeyFilter.doFilter(request, response, mockFilterChain)
+
+    verify(exactly = 1) {
+      Log.infoF(
+        "Applying ApiKeyFilter on request {} {}",
+        "GET",
+        "https://anchor.example.com/transactions",
+      )
+    }
   }
 }
