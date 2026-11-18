@@ -80,4 +80,16 @@ public interface Sep24TransactionStore {
    * @return list of transactions
    */
   List<? extends Sep24Transaction> findTransactions(TransactionsParams params);
+
+  /**
+   * Find the withdrawals that wait for a payment to the given account with the given memo, in the
+   * given status. Used to tell whether a memo is already assigned and to route an incoming payment.
+   *
+   * @param withdrawAnchorAccount The account the user pays.
+   * @param memo The memo the user pays with.
+   * @param status The status the withdrawal must be in.
+   * @return The matching transactions, empty if none.
+   */
+  List<? extends Sep24Transaction> findAllByWithdrawAnchorAccountAndMemoAndStatus(
+      String withdrawAnchorAccount, String memo, String status);
 }

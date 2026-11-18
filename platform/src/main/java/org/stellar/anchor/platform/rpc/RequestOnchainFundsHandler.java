@@ -14,6 +14,7 @@ import static org.stellar.sdk.xdr.MemoType.MEMO_ID;
 import com.google.common.collect.ImmutableSet;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -55,6 +56,9 @@ import org.stellar.sdk.Memo;
 public class RequestOnchainFundsHandler
     extends RpcTransactionStatusHandler<RequestOnchainFundsRequest> {
 
+  private static final String MEMO_IN_USE_MESSAGE =
+      "memo_in_use: the requested memo and destination account are already assigned to a pending transaction";
+
   private final Sep6DepositInfoGenerator sep6DepositInfoGenerator;
   private final Sep24DepositInfoGenerator sep24DepositInfoGenerator;
   private final Sep31DepositInfoGenerator sep31DepositInfoGenerator;
@@ -95,8 +99,7 @@ public class RequestOnchainFundsHandler
     try {
       return super.handle(requestParams);
     } catch (DataIntegrityViolationException ex) {
-      throw new BadRequestException(
-          "memo_in_use: the requested memo and destination account are already assigned to a pending transaction");
+      throw new BadRequestException(MEMO_IN_USE_MESSAGE);
     }
   }
 
@@ -288,6 +291,7 @@ public class RequestOnchainFundsHandler
 
         if (sep6DepositInfoGenerator instanceof Sep6DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          assertMemoNotPending(txn6, request.getDestinationAccount(), memoAsString(memo));
           txn6.setMemo(memoAsString(memo));
           txn6.setMemoType(memoTypeString(memoType(memo)));
           sepRequestValidator.validateDestinationAccount(
@@ -296,6 +300,8 @@ public class RequestOnchainFundsHandler
           txn6.setToAccount(request.getDestinationAccount());
         } else {
           SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(txn6);
+          assertMemoNotPending(
+              txn6, sep6DepositInfo.getStellarAddress(), sep6DepositInfo.getMemo());
           txn6.setToAccount(sep6DepositInfo.getStellarAddress());
           txn6.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
           txn6.setMemo(sep6DepositInfo.getMemo());
@@ -313,12 +319,15 @@ public class RequestOnchainFundsHandler
 
         if (sep24DepositInfoGenerator instanceof Sep24DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          assertMemoNotPending(txn24, request.getDestinationAccount(), memoAsString(memo));
           txn24.setMemo(memoAsString(memo));
           txn24.setMemoType(memoTypeString(memoType(memo)));
           txn24.setWithdrawAnchorAccount(request.getDestinationAccount());
           txn24.setToAccount(request.getDestinationAccount());
         } else {
           SepDepositInfo sep24DepositInfo = sep24DepositInfoGenerator.generate(txn24);
+          assertMemoNotPending(
+              txn24, sep24DepositInfo.getStellarAddress(), sep24DepositInfo.getMemo());
           txn24.setToAccount(sep24DepositInfo.getStellarAddress());
           txn24.setWithdrawAnchorAccount(sep24DepositInfo.getStellarAddress());
           txn24.setMemo(sep24DepositInfo.getMemo());
@@ -336,11 +345,14 @@ public class RequestOnchainFundsHandler
 
         if (sep31DepositInfoGenerator instanceof Sep31DepositInfoNoneGenerator) {
           Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          assertMemoNotPending(txn31, request.getDestinationAccount(), memoAsString(memo));
           txn31.setStellarMemo(memoAsString(memo));
           txn31.setStellarMemoType(memoTypeString(memoType(memo)));
           txn31.setToAccount(request.getDestinationAccount());
         } else {
           SepDepositInfo sep31DepositInfo = sep31DepositInfoGenerator.generate(txn31);
+          assertMemoNotPending(
+              txn31, sep31DepositInfo.getStellarAddress(), sep31DepositInfo.getMemo());
           txn31.setToAccount(sep31DepositInfo.getStellarAddress());
           txn31.setStellarMemo(sep31DepositInfo.getMemo());
           txn31.setStellarMemoType("id");
@@ -351,6 +363,43 @@ public class RequestOnchainFundsHandler
       default:
         break;
     }
+  }
+
+  /**
+   * Refuses a memo that another transaction already waits on. SEP-6, SEP-24 and SEP-31 receive on
+   * the same account, so one (account, memo) pair identifies one payer only if no protocol holds it
+   * twice. Only the pending rows count, the ones the payment observer routes to, and the row being
+   * updated does not count against itself. Runs before any field of the transaction is changed.
+   */
+  private void assertMemoNotPending(JdbcSepTransaction txn, String account, String memo)
+      throws BadRequestException {
+    if (account == null || memo == null) {
+      return;
+    }
+    String waitingForPayment = PENDING_USR_TRANSFER_START.toString();
+    if (heldByAnotherRow(
+            txn,
+            txn24Store.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+                account, memo, waitingForPayment))
+        || heldByAnotherRow(
+            txn,
+            txn6Store.findAllByWithdrawAnchorAccountAndMemoAndStatus(
+                account, memo, waitingForPayment))
+        || heldByAnotherRow(
+            txn,
+            txn31Store.findAllByToAccountAndMemoAndStatus(
+                account, memo, PENDING_SENDER.toString()))) {
+      throw new BadRequestException(MEMO_IN_USE_MESSAGE);
+    }
+  }
+
+  private static boolean heldByAnotherRow(JdbcSepTransaction txn, List<?> rows) {
+    return rows.stream()
+        .anyMatch(
+            row ->
+                !(row instanceof JdbcSepTransaction found)
+                    || txn.getId() == null
+                    || !txn.getId().equals(found.getId()));
   }
 
   /**
