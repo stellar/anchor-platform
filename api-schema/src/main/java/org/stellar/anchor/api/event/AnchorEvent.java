@@ -18,8 +18,13 @@ public class AnchorEvent {
   Type type;
   String id;
   String sep;
+
+  @SerializedName("client_name")
   String clientName;
+
+  @SerializedName("client_domain")
   String clientDomain;
+
   GetTransactionResponse transaction;
   GetQuoteResponse quote;
   Sep12GetCustomerResponse customer;

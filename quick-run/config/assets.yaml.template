@@ -61,11 +61,15 @@ items:
       country_codes:
         - US
       sell_delivery_methods:
-        - name: WIRE
-          description: Send USD directly to the Anchor's bank account.
+        - name: SEPA
+          description: Send USD to the Anchor's bank account by SEPA transfer.
+        - name: SWIFT
+          description: Send USD to the Anchor's bank account by SWIFT transfer.
       buy_delivery_methods:
-        - name: WIRE
-          description: Have USD sent directly to your bank account.
+        - name: SEPA
+          description: Have USD sent to your bank account by SEPA transfer.
+        - name: SWIFT
+          description: Have USD sent to your bank account by SWIFT transfer.
   - id: iso4217:CAD
     significant_decimals: 4
     sep31:
@@ -83,9 +87,13 @@ items:
       country_codes:
         - CA
       sell_delivery_methods:
-        - name: WIRE
-          description: Send CAD directly to the Anchor's bank account.
+        - name: SEPA
+          description: Send CAD to the Anchor's bank account by SEPA transfer.
+        - name: SWIFT
+          description: Send CAD to the Anchor's bank account by SWIFT transfer.
       buy_delivery_methods:
-        - name: WIRE
-          description: Have CAD sent directly to your bank account.
+        - name: SEPA
+          description: Have CAD sent to your bank account by SEPA transfer.
+        - name: SWIFT
+          description: Have CAD sent to your bank account by SWIFT transfer.
 
