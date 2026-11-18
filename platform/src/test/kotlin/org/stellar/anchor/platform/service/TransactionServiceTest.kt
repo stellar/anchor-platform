@@ -445,6 +445,30 @@ class TransactionServiceTest {
     }
   }
 
+  @Test
+  fun `patch refreshes amount_expected from amount_in once ready for user transfer`() {
+    val txn =
+      JdbcSep24Transaction().apply {
+        kind = "withdrawal"
+        status = SepTransactionStatus.PENDING_USR_TRANSFER_START.toString()
+        memo = "123"
+        amountExpected = "1"
+        amountIn = "1"
+        amountInAsset = "stellar:USDC:GISSUER"
+      }
+    val patch =
+      PlatformTransactionData().apply {
+        id = "testTxId"
+        status = SepTransactionStatus.PENDING_USR_TRANSFER_START
+        amountIn = Amount("1000", "stellar:USDC:GISSUER")
+      }
+
+    transactionService.updateSepTransaction(patch, txn)
+
+    assertEquals("1000", txn.amountIn)
+    assertEquals("1000", txn.amountExpected)
+  }
+
   private fun refundsWith(
     amountRefunded: String = "1",
     amountFee: String = "0.1",

@@ -405,6 +405,16 @@ public class TransactionService {
     // update amount_out
     txnUpdated = updateField(patch, "amountOut.amount", txn, "amountOut", txnUpdated);
     txnUpdated = updateField(patch, "amountOut.asset", txn, "amountOutAsset", txnUpdated);
+    if (PENDING_USR_TRANSFER_START.toString().equals(txn.getStatus())) {
+      if (patch.getAmountExpected() != null
+          && !StringHelper.isEmpty(patch.getAmountExpected().getAmount())) {
+        txn.setAmountExpected(patch.getAmountExpected().getAmount());
+        txnUpdated = true;
+      } else if (!StringHelper.isEmpty(txn.getAmountIn())) {
+        txn.setAmountExpected(txn.getAmountIn());
+        txnUpdated = true;
+      }
+    }
     // update started_at, completed_at, updated_at, transferReceivedAt
     txnUpdated = updateField(patch, txn, "startedAt", txnUpdated);
     txnUpdated = updateField(patch, txn, "updatedAt", txnUpdated);

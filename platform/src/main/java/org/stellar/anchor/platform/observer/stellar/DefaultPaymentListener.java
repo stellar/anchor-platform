@@ -834,7 +834,7 @@ public class DefaultPaymentListener implements PaymentListener {
       boolean incomingPayment)
       throws IOException {
     String paymentAssetName = "stellar:" + getSep11AssetName(ledgerPayment.getAsset());
-    if (!sepTransaction.getAmountInAsset().equals(paymentAssetName)) {
+    if (!paymentAssetName.equals(sepTransaction.getAmountInAsset())) {
       if (incomingPayment) {
         errorF(
             "Rejecting incoming payment for SEP-{} transaction: asset did not match. "
