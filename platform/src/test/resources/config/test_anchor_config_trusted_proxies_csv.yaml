@@ -1,0 +1,5 @@
+# This is used by ConfigManagerTest.kt
+version: 1
+
+sep_server:
+  trusted_proxies: 10.0.0.0/8,2001:db8::/32
