@@ -8,6 +8,8 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
@@ -90,6 +92,10 @@ class BoundedDnsResolver {
   private final long negativeTtlNanos;
   private final LongSupplier nanoClock;
 
+  /** Lookups that have started and not yet returned, so concurrent callers share one. */
+  private final ConcurrentHashMap<String, FutureTask<List<InetAddress>>> inFlight =
+      new ConcurrentHashMap<>();
+
   /** Host name to the clock reading at which its lookup timed out. Guarded by itself. */
   private final Map<String, Long> timedOut;
 
@@ -145,15 +151,29 @@ class BoundedDnsResolver {
 
     FutureTask<List<InetAddress>> task =
         new FutureTask<>(() -> Arrays.asList(lookup.lookup(hostname)));
-    try {
-      executor.execute(task);
-    } catch (RejectedExecutionException e) {
-      infoF("client_domain DNS lookup for {} rejected: resolver pool saturated", hostname);
-      throw new ResolutionUnavailableException();
+    FutureTask<List<InetAddress>> existing = inFlight.putIfAbsent(hostname, task);
+    if (existing == null) {
+      try {
+        // The entry is removed when the lookup itself returns, not when a caller gives up, so a
+        // stuck lookup keeps absorbing repeat requests for its name instead of taking more workers.
+        executor.execute(
+            () -> {
+              try {
+                task.run();
+              } finally {
+                inFlight.remove(hostname, task);
+              }
+            });
+      } catch (RejectedExecutionException e) {
+        inFlight.remove(hostname, task);
+        task.cancel(false); // releases callers that joined this lookup
+        infoF("client_domain DNS lookup for {} rejected: resolver pool saturated", hostname);
+        throw new ResolutionUnavailableException();
+      }
     }
 
     try {
-      return task.get(timeoutMs, TimeUnit.MILLISECONDS);
+      return (existing != null ? existing : task).get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (TimeoutException e) {
       infoF("client_domain DNS lookup for {} timed out after {} ms", hostname, timeoutMs);
       recordTimeout(hostname);
@@ -164,6 +184,8 @@ class BoundedDnsResolver {
         throw (UnknownHostException) cause;
       }
       infoF("client_domain DNS lookup for {} failed unexpectedly", hostname);
+      throw new ResolutionUnavailableException();
+    } catch (CancellationException e) {
       throw new ResolutionUnavailableException();
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();

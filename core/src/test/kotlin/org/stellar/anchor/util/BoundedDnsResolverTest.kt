@@ -4,6 +4,7 @@ import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -272,7 +273,20 @@ class BoundedDnsResolverTest {
       }
       assertEquals(4, lookup.invocations.size, "b, c and d are still rejected without lookups")
 
-      assertThrows<ResolutionUnavailableException> { resolver.resolve("a.example.com") }
+      // Let the stuck lookups return, so a repeat is judged by the record alone and does not join
+      // a lookup that is still in flight.
+      release.countDown()
+      listOf("b.example.com", "c.example.com", "d.example.com").forEach {
+        assertThrows<ResolutionUnavailableException> { resolver.resolve(it) }
+      }
+      assertEquals(4, lookup.invocations.size, "the record still rejects b, c and d")
+
+      // a was evicted, so once its old lookup is gone it gets a new lookup and an answer.
+      val deadline = System.nanoTime() + ms(2_000)
+      while (lookup.invocations.size < 5 && System.nanoTime() < deadline) {
+        assertEquals(listOf(publicAddress), resolver.resolve("a.example.com"))
+        Thread.sleep(10)
+      }
       assertEquals(5, lookup.invocations.size, "a was evicted, so it gets a new lookup")
       assertEquals("a.example.com", lookup.invocations.last())
     } finally {
@@ -345,5 +359,80 @@ class BoundedDnsResolverTest {
     assertThrows<ResolutionUnavailableException> { resolver.resolve("boom.example.com") }
 
     assertEquals(2, calls.get())
+  }
+
+  @Test
+  fun `concurrent resolutions of one name share a single lookup and its result`() {
+    val release = CountDownLatch(1)
+    val lookup = CountingLookup(release, setOf("shared.example.com")) { arrayOf(publicAddress) }
+    val resolver = BoundedDnsResolver(lookup, 8, 5_000, 30_000, 1_024, LongSupplier { 0 })
+    val callers = Executors.newFixedThreadPool(8)
+    try {
+      val results =
+        (1..8).map { callers.submit<List<InetAddress>> { resolver.resolve("shared.example.com") } }
+      Thread.sleep(300)
+      release.countDown()
+
+      results.forEach { assertEquals(listOf(publicAddress), it.get(2, TimeUnit.SECONDS)) }
+      assertEquals(1, lookup.invocations.size, "8 concurrent callers must start exactly one lookup")
+    } finally {
+      release.countDown()
+      callers.shutdownNow()
+    }
+  }
+
+  @Test
+  fun `concurrent resolutions of one stuck name occupy exactly one resolver worker`() {
+    val release = CountDownLatch(1)
+    val lookup = CountingLookup(release, setOf("stuck.example.com")) { arrayOf(publicAddress) }
+    val resolver = BoundedDnsResolver(lookup, 2, 300, 30_000, 1_024, LongSupplier { 0 })
+    val callers = Executors.newFixedThreadPool(8)
+    try {
+      val results =
+        (1..8).map {
+          callers.submit<Throwable?> {
+            try {
+              resolver.resolve("stuck.example.com")
+              null
+            } catch (t: Throwable) {
+              t
+            }
+          }
+        }
+      results.forEach {
+        assertInstanceOf(ResolutionUnavailableException::class.java, it.get(3, TimeUnit.SECONDS))
+      }
+      assertEquals(1, lookup.invocations.size, "8 callers, one lookup")
+
+      // the pool has 2 workers; the stuck name holds one, so another name still gets the other
+      assertEquals(listOf(publicAddress), resolver.resolve("other.example.com"))
+    } finally {
+      release.countDown()
+      callers.shutdownNow()
+    }
+  }
+
+  @Test
+  fun `a lookup that finishes after its callers gave up is not shared once the record expires`() {
+    val release = CountDownLatch(1)
+    val clock = AtomicLong()
+    val lookup = CountingLookup(release, setOf("late.example.com")) { arrayOf(publicAddress) }
+    val resolver = BoundedDnsResolver(lookup, 4, 200, 30_000, 1_024, LongSupplier { clock.get() })
+    try {
+      assertThrows<ResolutionUnavailableException> { resolver.resolve("late.example.com") }
+      release.countDown()
+      clock.set(ms(30_000))
+
+      // The in-flight entry is removed just after the stuck lookup returns, so allow a moment.
+      val deadline = System.nanoTime() + ms(2_000)
+      while (lookup.invocations.size < 2 && System.nanoTime() < deadline) {
+        resolver.resolve("late.example.com")
+        Thread.sleep(10)
+      }
+
+      assertEquals(2, lookup.invocations.size, "a fresh lookup starts once the old one finished")
+    } finally {
+      release.countDown()
+    }
   }
 }
