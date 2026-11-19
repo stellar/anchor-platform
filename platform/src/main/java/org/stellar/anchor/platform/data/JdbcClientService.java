@@ -44,13 +44,17 @@ public class JdbcClientService implements ClientService {
   @Override
   public CustodialClient getClientConfigBySigningKey(String signingKey) {
     JdbcClientConfig found = repo.findBySigningKey(signingKey);
-    return found == null ? null : toCustodialClient(found);
+    return found != null && found.getType() == ClientType.CUSTODIAL
+        ? toCustodialClient(found)
+        : null;
   }
 
   @Override
   public NonCustodialClient getClientConfigByDomain(String domain) {
     JdbcClientConfig found = repo.findByDomain(domain);
-    return found == null ? null : toNonCustodialClient(found);
+    return found != null && found.getType() == ClientType.NONCUSTODIAL
+        ? toNonCustodialClient(found)
+        : null;
   }
 
   @Override

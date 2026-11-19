@@ -1999,4 +1999,87 @@ class TransactionServiceTest {
     assertEquals("7", tx.memo)
     assertEquals(updatedAt, tx.updatedAt)
   }
+
+  // --- funding_method must agree with the quote's buy_delivery_method (ANCHOR-1341) ---
+
+  private fun quoteBackedSep31(fundingMethod: String?, quoteMethod: String?): JdbcSep31Transaction {
+    val quote =
+      JdbcSep38Quote().apply {
+        id = "my-quote-id"
+        sellAmount = "100"
+        sellAsset = fiatUSD
+        buyAmount = "98"
+        buyAsset = stellarUSDC
+        fee = FeeDetails("2", fiatUSD)
+        buyDeliveryMethod = quoteMethod
+      }
+    every { sep38QuoteStore.findByQuoteId("my-quote-id") } returns quote
+    this.assetService = DefaultAssetService.fromJsonResource("test_assets.json")
+    transactionService =
+      TransactionService(
+        sep6TransactionStore,
+        sep24TransactionStore,
+        sep31TransactionStore,
+        sep38QuoteStore,
+        assetService,
+        eventService,
+        sep6DepositInfoGenerator,
+        sep24DepositInfoGenerator,
+      )
+    return JdbcSep31Transaction().apply {
+      id = "my-tx-id"
+      quoteId = "my-quote-id"
+      this.fundingMethod = fundingMethod
+      amountIn = "100"
+      amountInAsset = fiatUSD
+      amountOut = "98"
+      amountOutAsset = stellarUSDC
+      amountFee = "2"
+      amountFeeAsset = fiatUSD
+      transferReceivedAt = java.time.Instant.parse("2023-01-19T01:51:47.648850500Z")
+    }
+  }
+
+  private val externalIdPatch =
+    PlatformTransactionData().apply {
+      status = SepTransactionStatus.COMPLETED
+      externalTransactionId = "external-id"
+    }
+
+  @Test
+  fun `test updateSepTransaction rejects a SEP-31 funding method conflicting with the quote`() {
+    // the last pair differs by case only: the comparison is exact
+    for ((txnMethod, quoteMethod) in
+      listOf("SWIFT" to "SEPA", "SEPA" to "SWIFT", "SEPA" to "sepa")) {
+      val txn = quoteBackedSep31(txnMethod, quoteMethod)
+
+      val ex =
+        assertThrows<BadRequestException> {
+          transactionService.updateSepTransaction(externalIdPatch, txn)
+        }
+
+      assertEquals("transaction.funding_method != quote.buy_delivery_method", ex.message)
+    }
+  }
+
+  @Test
+  fun `test updateSepTransaction accepts a SEP-31 funding method consistent with the quote`() {
+    val consistent =
+      listOf(
+        "SEPA" to "SEPA", // equal
+        "SWIFT" to "SWIFT", // equal
+        "SWIFT" to null, // quote carries no method
+        "SWIFT" to "", // quote carries an empty method
+        null to "SEPA", // transaction carries no method
+      )
+    for ((txnMethod, quoteMethod) in consistent) {
+      val txn = quoteBackedSep31(txnMethod, quoteMethod)
+
+      assertDoesNotThrow { transactionService.updateSepTransaction(externalIdPatch, txn) }
+    }
+
+    // without a quote_id there is no quote to compare with
+    val noQuote = quoteBackedSep31("SWIFT", "SEPA").apply { quoteId = null }
+    assertDoesNotThrow { transactionService.updateSepTransaction(externalIdPatch, noQuote) }
+  }
 }

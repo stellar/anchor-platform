@@ -21,6 +21,10 @@ public class PaymentObservingAccountStore {
     return paymentObservingAccounts;
   }
 
+  PaymentObservingAccount find(String account) {
+    return repo.findByAccount(account);
+  }
+
   void upsert(String account, Instant lastObserved) {
     Log.infoF("Upserting account[{}, {}]", account, lastObserved);
     PaymentObservingAccount poa = repo.findByAccount(account);

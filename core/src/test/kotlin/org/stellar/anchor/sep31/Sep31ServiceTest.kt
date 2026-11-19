@@ -15,7 +15,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.extension.ExtendWith
 import org.skyscreamer.jsonassert.JSONAssert
+import org.slf4j.Logger
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.asset.AssetInfo.Field
@@ -38,6 +42,8 @@ import org.stellar.anchor.api.shared.StellarId
 import org.stellar.anchor.asset.AssetService
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.JwtService
+import org.stellar.anchor.client.ClientService
+import org.stellar.anchor.client.CustodialClient
 import org.stellar.anchor.config.*
 import org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_RECEIVE
 import org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_SEND
@@ -50,8 +56,10 @@ import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.ExchangeAmountsCalculator
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.Log
 
 @Order(13)
+@ExtendWith(LockAndMockTest::class)
 class Sep31ServiceTest {
   companion object {
     val gson: Gson = GsonUtils.getInstance()
@@ -231,8 +239,10 @@ class Sep31ServiceTest {
   @MockK(relaxed = true) lateinit var rateIntegration: RateIntegration
   @MockK(relaxed = true) lateinit var customerIntegration: CustomerIntegration
   @MockK(relaxed = true) lateinit var customerIdOwnerStore: Sep31CustomerIdOwnerStore
+  @MockK(relaxed = true) lateinit var clientService: ClientService
   @MockK(relaxed = true) lateinit var eventService: EventService
   @MockK(relaxed = true) lateinit var eventSession: Session
+  @MockK(relaxed = true) lateinit var logger: Logger
 
   private lateinit var jwtService: JwtService
   private lateinit var sep31Service: Sep31Service
@@ -271,6 +281,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
 
     request = gson.fromJson(requestJson, Sep31PostTransactionRequest::class.java)
@@ -435,6 +446,43 @@ class Sep31ServiceTest {
   }
 
   @Test
+  @LockAndMockStatic([Log::class])
+  fun `test updateFee does not log client IP or bank fields`() {
+    every { Log.getLogger() } returns logger
+    val loggedLines = mutableListOf<String>()
+    every { logger.info(capture(loggedLines)) } answers {}
+
+    Context.reset()
+    request.requestClientIpAddress = "203.0.113.5"
+    request.destinationAsset = stellarJPYC
+    request.quoteId = "7a1e2b3c-0000-4000-8000-000000000001"
+    Context.get().request = request
+    Context.get().webAuthJwt = TestHelper.createWebAuthJwt()
+    Context.get().asset = asset
+    every { sep31Config.paymentType } returns STRICT_SEND
+    every { rateIntegration.getRate(any()) } returns
+      GetRateResponse(GetRateResponse.Rate.builder().fee(fee).build())
+
+    sep31Service.updateFee()
+
+    assertEquals(2, loggedLines.size)
+    val allLogged = loggedLines.joinToString("\n")
+    // PII/secret carriers never appear.
+    assertFalse(allLogged.contains("203.0.113.5"))
+    assertFalse(allLogged.contains("receiver_account_number"))
+    assertFalse(allLogged.contains("receiver_routing_number"))
+    assertFalse(allLogged.contains("SWIFT"))
+    // Non-PII diagnostics remain visible (AC2: asset code, destination asset, amount, quote id).
+    assertTrue(allLogged.contains(request.assetCode))
+    assertTrue(allLogged.contains(request.senderId))
+    assertTrue(allLogged.contains(request.receiverId))
+    assertTrue(allLogged.contains(request.amount))
+    assertTrue(allLogged.contains(request.destinationAsset))
+    assertTrue(allLogged.contains(request.quoteId))
+    assertTrue(allLogged.contains("GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"))
+  }
+
+  @Test
   fun `test quotes supported and required validation`() {
     val ex: AnchorException = assertThrows {
       DefaultAssetService.fromJsonResource("test_assets.json.quotes_required_but_not_supported")
@@ -490,7 +538,7 @@ class Sep31ServiceTest {
 
     every { txnStore.findByTransactionId("not_found") } returns null
     val ex = assertThrows<NotFoundException> { sep31Service.getTransaction(token, "not_found") }
-    assertEquals("transaction (id=not_found) not found", ex.message)
+    assertEquals("transaction not found", ex.message)
 
     every { txnStore.findByTransactionId("other_account") } returns txn
     txn.creator = StellarId.builder().account("GOTHERACCOUNT").memo(null).build()
@@ -692,7 +740,7 @@ class Sep31ServiceTest {
 
     every { txnStore.findByTransactionId(any()) } returns null
     val ex3 = assertThrows<NotFoundException> { sep31Service.patchTransaction(token, patchRequest) }
-    assertEquals("transaction (id=${patchRequest.id}) not found", ex3.message)
+    assertEquals("transaction not found", ex3.message)
 
     txn.creator = StellarId.builder().account("GOTHERACCOUNT").memo(null).build()
     every { txnStore.findByTransactionId(any()) } returns txn
@@ -1009,6 +1057,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
     every { rateIntegration.getRate(any()) } returns
       GetRateResponse(
@@ -1054,6 +1103,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
     every { rateIntegration.getRate(any()) } returns
       GetRateResponse(
@@ -1200,6 +1250,39 @@ class Sep31ServiceTest {
         null,
         true,
       )
+    }
+  }
+
+  @Test
+  fun `test postTransaction claims and verifies a custodial client under the client name for every signing key`() {
+    useQuotesNotSupportedAssetService()
+    val secondSigningKey = "GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"
+    every { clientService.getClientConfigByName("vibrant") } returns
+      CustodialClient.builder()
+        .name("vibrant")
+        .signingKeys(setOf(TestHelper.TEST_ACCOUNT, secondSigningKey))
+        .build()
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+
+    for (account in listOf(TestHelper.TEST_ACCOUNT, secondSigningKey)) {
+      val jwtToken = TestHelper.createWebAuthJwt(account = account)
+      jwtToken.clientName = "vibrant"
+      assertDoesNotThrow {
+        sep31Service.postTransaction(
+          jwtToken,
+          ownershipTestRequest(senderId = "generic-sender", receiverId = "shared-receiver-id"),
+        )
+      }
+    }
+
+    verify(exactly = 2) {
+      customerIdOwnerStore.verifyOrClaim("shared-receiver-id", "vibrant", null, true)
+    }
+    verify(exactly = 0) {
+      customerIdOwnerStore.verifyOrClaim(any(), match { it.startsWith("vibrant:") }, any(), any())
     }
   }
 
@@ -1870,6 +1953,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
 
     val senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"
@@ -1992,6 +2076,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
 
     val sep12 = infoOnlyService.info.receive["USDC"]!!.sep12
@@ -2044,6 +2129,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
 
     val fields = infoOnlyService.info.receive["USDC"]!!.fields
@@ -2162,8 +2248,15 @@ class Sep31ServiceTest {
   }
 
   @Test
+  @LockAndMockStatic([Log::class])
   fun `test validate required fields`() {
+    every { Log.getLogger() } returns logger
+    val loggedLines = mutableListOf<String>()
+    every { logger.info(capture(loggedLines)) } answers {}
+
     Context.reset()
+    request.requestClientIpAddress = "203.0.113.7"
+    Context.get().request = request
     val ex1 = assertThrows<BadRequestException> { sep31Service.validateRequiredFields() }
     assertEquals("Missing asset information.", ex1.message)
 
@@ -2212,6 +2305,19 @@ class Sep31ServiceTest {
         "type" to "SWIFT"
       )
     assertDoesNotThrow { sep31Service.validateRequiredFields() }
+
+    // ANCHOR-1395 (HackerOne #4107899): every failure path above logs the request at INFO; none
+    // of them may carry the client IP or the deprecated bank/routing fields. The field *names*
+    // ("receiver_account_number" etc.) legitimately still appear via `missingFields.keySet()` on
+    // the last path (ex4-ex6) -- that is the schema label, not submitted data -- so the exclusion
+    // is checked by the absence of the serialized `fields`/`requestClientIpAddress` keys and the
+    // IP's literal value, not by the field names.
+    assertTrue(loggedLines.isNotEmpty())
+    val allLogged = loggedLines.joinToString("\n")
+    assertFalse(allLogged.contains("203.0.113.7"))
+    assertFalse(allLogged.contains("requestClientIpAddress"))
+    assertFalse(allLogged.contains("\"transaction\""))
+    assertTrue(allLogged.contains(request.assetCode))
   }
 
   @Test
@@ -2406,6 +2512,7 @@ class Sep31ServiceTest {
         exchangeAmountsCalculator,
         customerIdOwnerStore,
         customerIntegration,
+        clientService,
       )
     every { quoteStore.findByQuoteId("q1") } returns ownedQuote("q1").apply { expiresAt = now }
 
@@ -2415,5 +2522,178 @@ class Sep31ServiceTest {
       }
 
     assertEquals("quote(id=q1) has expired at 2030-01-01T00:00:00Z", ex.message)
+  }
+
+  // --- funding_method must agree with the quote's buy_delivery_method (ANCHOR-1341) ---
+
+  private fun methodQuote(id: String, buyDeliveryMethod: String?) =
+    ownedQuote(id).apply {
+      buyAsset = stellarJPYC
+      buyAmount = "12500"
+      this.buyDeliveryMethod = buyDeliveryMethod
+    }
+
+  private fun methodRequest(quoteId: String, fundingMethod: String) =
+    quoteStepRequest(quoteId).apply {
+      this.fundingMethod = fundingMethod
+      assetIssuer = "GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
+      senderId = "d2bd1412-e2f6-4047-ad70-a1a2f133b25c"
+      receiverId = "137938d4-43a7-4252-a452-842adcee474c"
+    }
+
+  private fun stubSuccessfulPost() {
+    every { sep31DepositInfoGenerator.generate(any()) } answers
+      {
+        SepDepositInfo(firstArg<Sep31Transaction>().toAccount, "12345")
+      }
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().id = "ABC-123"
+        firstArg()
+      }
+  }
+
+  @Test
+  fun `test POST transaction rejects a SEPA quote spent as SWIFT`() {
+    every { quoteStore.findByQuoteId("q1") } returns methodQuote("q1", "SEPA")
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(TestHelper.createWebAuthJwt(), methodRequest("q1", "SWIFT"))
+      }
+
+    assertEquals("funding_method(SWIFT) does not match quote buy delivery method(SEPA)", ex.message)
+  }
+
+  @Test
+  fun `test POST transaction rejects a SWIFT quote spent as SEPA`() {
+    every { quoteStore.findByQuoteId("q1") } returns methodQuote("q1", "SWIFT")
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(TestHelper.createWebAuthJwt(), methodRequest("q1", "SEPA"))
+      }
+
+    assertEquals("funding_method(SEPA) does not match quote buy delivery method(SWIFT)", ex.message)
+  }
+
+  @Test
+  fun `test POST transaction with matching funding method accepts the quote and keeps its amounts`() {
+    stubSuccessfulPost()
+    for (method in listOf("SEPA", "SWIFT")) {
+      every { quoteStore.findByQuoteId("q-$method") } returns methodQuote("q-$method", method)
+      val saved = slot<Sep31Transaction>()
+      every { txnStore.save(capture(saved)) } answers
+        {
+          firstArg<Sep31Transaction>().id = "ABC-123"
+          firstArg()
+        }
+
+      val response =
+        sep31Service.postTransaction(
+          TestHelper.createWebAuthJwt(),
+          methodRequest("q-$method", method)
+        )
+
+      assertEquals("ABC-123", response.id)
+      assertEquals(method, saved.captured.fundingMethod)
+      assertEquals("q-$method", saved.captured.quoteId)
+      assertEquals("100", saved.captured.amountIn)
+      assertEquals("12500", saved.captured.amountOut)
+    }
+  }
+
+  @Test
+  fun `test POST transaction with a quote without a buy delivery method accepts any funding method`() {
+    stubSuccessfulPost()
+    for (quoteMethod in listOf(null, "")) {
+      for (method in listOf("SEPA", "SWIFT")) {
+        val quoteId = "q-${quoteMethod ?: "null"}-$method"
+        every { quoteStore.findByQuoteId(quoteId) } returns methodQuote(quoteId, quoteMethod)
+
+        val response =
+          sep31Service.postTransaction(
+            TestHelper.createWebAuthJwt(),
+            methodRequest(quoteId, method)
+          )
+
+        assertEquals("ABC-123", response.id)
+      }
+    }
+  }
+
+  @Test
+  fun `test POST transaction earlier quote check wins over the funding method`() {
+    // every quote below is priced for SEPA and spent as SWIFT, and also fails an earlier check
+    val cases =
+      listOf<Triple<String, (PojoSep38Quote) -> Unit, String>>(
+        Triple(
+          "used",
+          { it.transactionId = "existing-txn-id" },
+          "quote(id=q1) has already been used"
+        ),
+        Triple(
+          "expired",
+          { it.expiresAt = Instant.parse("2000-01-01T00:00:00Z") },
+          "quote(id=q1) has expired at 2000-01-01T00:00:00Z"
+        ),
+        Triple(
+          "wrong amount",
+          { it.sellAmount = "50" },
+          "Quote sell amount [50] is different from the SEP-31 transaction amount [100]"
+        ),
+        Triple(
+          "wrong asset",
+          { it.sellAsset = stellarJPYC },
+          "Quote sell asset [$stellarJPYC] is different from the SEP-31 transaction asset [$stellarUSDC]"
+        ),
+      )
+    for ((label, breakQuote, wantMessage) in cases) {
+      every { quoteStore.findByQuoteId("q1") } returns
+        methodQuote("q1", "SEPA").also { breakQuote(it) }
+
+      val ex =
+        assertThrows<BadRequestException>(label) {
+          sep31Service.postTransaction(TestHelper.createWebAuthJwt(), methodRequest("q1", "SWIFT"))
+        }
+
+      assertEquals(wantMessage, ex.message, label)
+    }
+
+    // a quote created by another identity is reported as not found, before anything else
+    every { quoteStore.findByQuoteId("q1") } returns methodQuote("q1", "SEPA")
+    val foreign =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(otherIdentityJwt(), methodRequest("q1", "SWIFT"))
+      }
+    assertEquals("quote(id=q1) was not found.", foreign.message)
+  }
+
+  @Test
+  fun `test POST transaction method rejection leaves the quote unbound`() {
+    val quote = methodQuote("q1", "SEPA")
+    every { quoteStore.findByQuoteId("q1") } returns quote
+
+    assertThrows<BadRequestException> {
+      sep31Service.postTransaction(TestHelper.createWebAuthJwt(), methodRequest("q1", "SWIFT"))
+    }
+
+    assertNull(quote.transactionId)
+    verify(exactly = 0) { exchangeAmountsCalculator.bindQuoteToTransaction(any(), any()) }
+    verify(exactly = 0) { txnStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test POST transaction compares the funding method case-sensitively`() {
+    // the asset lists `SEPA`; a quote priced for `sepa` is another method, not the same one
+    every { quoteStore.findByQuoteId("q1") } returns methodQuote("q1", "sepa")
+
+    val ex =
+      assertThrows<BadRequestException> {
+        sep31Service.postTransaction(TestHelper.createWebAuthJwt(), methodRequest("q1", "SEPA"))
+      }
+
+    assertEquals("funding_method(SEPA) does not match quote buy delivery method(sepa)", ex.message)
   }
 }

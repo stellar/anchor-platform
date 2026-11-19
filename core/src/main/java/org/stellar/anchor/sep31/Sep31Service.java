@@ -53,6 +53,7 @@ import org.stellar.anchor.api.shared.FeeDetails;
 import org.stellar.anchor.api.shared.StellarId;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.WebAuthJwt;
+import org.stellar.anchor.client.ClientService;
 import org.stellar.anchor.config.LanguageConfig;
 import org.stellar.anchor.config.Sep31Config;
 import org.stellar.anchor.event.EventService;
@@ -62,6 +63,7 @@ import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.util.ExchangeAmountsCalculator;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.SepRequestValidator;
+import org.stellar.anchor.util.StringHelper;
 import org.stellar.anchor.util.TransactionMapper;
 
 public class Sep31Service {
@@ -79,6 +81,7 @@ public class Sep31Service {
   final ExchangeAmountsCalculator exchangeAmountsCalculator;
   private final Sep31CustomerIdOwnerStore customerIdOwnerStore;
   private final CustomerIntegration customerIntegration;
+  private final OwnerKeyResolver ownerKeyResolver;
 
   public Sep31Service(
       LanguageConfig languageConfig,
@@ -91,7 +94,8 @@ public class Sep31Service {
       Clock clock,
       ExchangeAmountsCalculator exchangeAmountsCalculator,
       Sep31CustomerIdOwnerStore customerIdOwnerStore,
-      CustomerIntegration customerIntegration) {
+      CustomerIntegration customerIntegration,
+      ClientService clientService) {
     debug("sep31Config:", sep31Config);
     this.languageConfig = languageConfig;
     this.sep31Config = sep31Config;
@@ -103,6 +107,7 @@ public class Sep31Service {
     this.exchangeAmountsCalculator = exchangeAmountsCalculator;
     this.customerIdOwnerStore = customerIdOwnerStore;
     this.customerIntegration = customerIntegration;
+    this.ownerKeyResolver = new OwnerKeyResolver(clientService);
     this.eventSession = eventService.createSession(this.getClass().getName(), TRANSACTION);
     this.infoResponse = sep31InfoResponseFromAssetInfoList(assetService.getAssets());
     Log.info("Sep31Service initialized.");
@@ -195,7 +200,7 @@ public class Sep31Service {
             .memo(webAuthJwt.getAccountMemo())
             .build();
 
-    String ownerAccount = webAuthJwt.getOwnerKey();
+    String ownerAccount = ownerKeyResolver.ownerKey(webAuthJwt);
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
     Sep31Info.Sep12Info sep12Config = assetInfo.getSep31().getSep12();
@@ -370,7 +375,12 @@ public class Sep31Service {
 
     if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo, true)
         && !CustomerOwnershipReconciliation.tryReconcile(
-            customerIdOwnerStore, customerIntegration, customerId, webAuthJwt, customerType)) {
+            customerIdOwnerStore,
+            ownerKeyResolver,
+            customerIntegration,
+            customerId,
+            webAuthJwt,
+            customerType)) {
       throw new SepNotAuthorizedException(
           "sender_id/receiver_id does not belong to the authenticated client");
     }
@@ -614,7 +624,7 @@ public class Sep31Service {
     Sep31Transaction txn = sep31TransactionStore.findByTransactionId(id);
     if (txn == null) {
       infoF("Transaction ({}) not found", id);
-      throw new NotFoundException(String.format("transaction (id=%s) not found", id));
+      throw new NotFoundException("transaction not found");
     }
 
     StellarId creator = txn.getCreator();
@@ -763,6 +773,21 @@ public class Sep31Service {
               quote.getSellAsset(), assetName));
     }
 
+    // Check quote delivery method: `post_transaction.funding_method == quote.buy_delivery_method`.
+    // A quote that carries no buy delivery method is not bound to one.
+    String quoteMethod = quote.getBuyDeliveryMethod();
+    if (!StringHelper.isEmpty(quoteMethod) && !quoteMethod.equals(request.getFundingMethod())) {
+      infoF(
+          "Quote ({}) - buyDeliveryMethod ({}) is different from the SEP-31 funding method ({})",
+          request.getQuoteId(),
+          quoteMethod,
+          request.getFundingMethod());
+      throw new BadRequestException(
+          String.format(
+              "funding_method(%s) does not match quote buy delivery method(%s)",
+              request.getFundingMethod(), quoteMethod));
+    }
+
     Context.get().setQuote(quote);
   }
 
@@ -789,7 +814,7 @@ public class Sep31Service {
     String assetName = Context.get().getAsset().getId();
     String destAsset =
         (request.getDestinationAsset() == null) ? assetName : request.getDestinationAsset();
-    infoF("Requesting fee for request ({})", request);
+    info("Requesting fee for request:", request);
     // request.getAmount() is always denominated in asset_code (the sell asset) per SEP-31,
     // regardless of paymentType -- so sell_amount is always what's fixed here. paymentType only
     // affects how the fee combines with it afterward, in updateTxAmountsWhenNoQuoteWasUsed.
@@ -808,7 +833,7 @@ public class Sep31Service {
     if (fee == null) {
       throw new SepValidationException("Fee is not present in /rate response");
     }
-    infoF("Fee for request ({}) is ({})", request, fee);
+    info("Fee for request:", Map.of("request", request, "fee", fee));
     Context.get().setFee(fee);
   }
 
@@ -842,21 +867,21 @@ public class Sep31Service {
   void validateRequiredFields() throws BadRequestException, Sep31MissingFieldException {
     AssetInfo assetInfo = Context.get().getAsset();
     if (assetInfo == null) {
-      infoF("Missing asset information for request ({})", Context.get().getRequest());
+      info("Missing asset information for request:", Context.get().getRequest());
       throw new BadRequestException("Missing asset information.");
     }
 
     AssetResponse fieldSpecs = this.infoResponse.getReceive().get(assetInfo.getCode());
     if (fieldSpecs == null) {
-      infoF("Asset [{}] has no fields definition", Context.get().getRequest());
+      info("Asset has no fields definition for request:", Context.get().getRequest());
       throw new BadRequestException(
           String.format("Asset [%s] has no fields definition", assetInfo.getCode()));
     }
 
     Map<String, String> requestFields = Context.get().getTransactionFields();
     if (requestFields == null) {
-      infoF(
-          "'fields' field must have one 'transaction' field for request ({})",
+      info(
+          "'fields' field must have one 'transaction' field for request:",
           Context.get().getRequest());
       throw new BadRequestException("'fields' field must have one 'transaction' field");
     }
@@ -880,10 +905,12 @@ public class Sep31Service {
         }
       }
       if (!missingFields.isEmpty()) {
-        infoF(
-            "Missing required transaction fields [{}] for request ({})",
-            missingFields.keySet(),
-            Context.get().getRequest());
+        // Context.get().getRequest() may be null here (e.g. the PATCH flow never sets it), so a
+        // null-tolerant map is used instead of Map.of, which throws on a null value.
+        Map<String, Object> logDetail = new LinkedHashMap<>();
+        logDetail.put("missingFields", missingFields.keySet());
+        logDetail.put("request", Context.get().getRequest());
+        info("Missing required transaction fields for request:", logDetail);
         Sep31Info.Fields fields = new Sep31Info.Fields();
         fields.setTransaction(missingFields);
         throw new Sep31MissingFieldException(fields);

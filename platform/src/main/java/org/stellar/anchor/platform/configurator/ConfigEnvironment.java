@@ -8,30 +8,32 @@ import java.util.Map;
 import java.util.Properties;
 
 public class ConfigEnvironment {
-  static Map<String, String> env;
+  static volatile Map<String, String> env;
 
   static {
     rebuild();
   }
 
   public static void rebuild(Map<String, String> extra) {
-    env = new HashMap<>();
+    Map<String, String> newEnv = new HashMap<>();
 
     if (extra != null) {
       for (Map.Entry<String, String> entry : extra.entrySet()) {
-        env.put(toPosixForm(entry.getKey()), entry.getValue());
+        newEnv.put(toPosixForm(entry.getKey()), entry.getValue());
       }
     }
 
     // Read all env variables and convert everything to POSIX form
     for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
-      env.put(toPosixForm(entry.getKey()), entry.getValue());
+      newEnv.put(toPosixForm(entry.getKey()), entry.getValue());
     }
 
     Properties sysProps = System.getProperties();
     for (Map.Entry<Object, Object> entry : sysProps.entrySet()) {
-      env.put(toPosixForm(String.valueOf(entry.getKey())), String.valueOf(entry.getValue()));
+      newEnv.put(toPosixForm(String.valueOf(entry.getKey())), String.valueOf(entry.getValue()));
     }
+
+    env = newEnv;
   }
 
   public static void rebuild() {

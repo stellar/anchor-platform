@@ -290,6 +290,12 @@ class JdbcSep6TransactionStoreTest {
   }
 
   @Test
+  fun `findTransactions rejects a paging_id of a row without an owner`() {
+    assertPagingRejected(pagingRow(null, null, Instant.now()), "GACCOUNT", null)
+    assertPagingRejected(pagingRow(null, null, Instant.now()), "GACCOUNT", "111")
+  }
+
+  @Test
   fun `findTransactions with invalid noOlderThan throws SepValidationException`() {
     val request =
       GetTransactionsRequest.builder().assetCode("USDC").noOlderThan("not-a-date").build()

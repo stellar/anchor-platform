@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.asset.AssetService
+import org.stellar.anchor.event.EventService
 import org.stellar.anchor.ledger.Horizon
 import org.stellar.anchor.ledger.LedgerTransaction
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig
@@ -320,6 +321,22 @@ class HorizonPaymentObserverTest {
     assertThrows(LedgerException::class.java) {
       observer.toPaymentTransferEvent(contractTransfer())
     }
+  }
+
+  @Test
+  fun `processOperation holds the cursor when the observing account lookup fails`() {
+    val op = mockk<PaymentOperationResponse>()
+    every { op.to } returns "toAccount"
+    every { op.from } returns "fromAccount"
+    every { op.pagingToken } returns "cursor-1"
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } throws
+      RuntimeException("store unavailable")
+    observer.setStatus(ObserverStatus.RUNNING)
+
+    observer.processOperation(op)
+
+    verify(exactly = 0) { paymentStreamerCursorStore.saveHorizonCursor(any()) }
+    assertEquals(ObserverStatus.PUBLISHER_ERROR, observer.getStatus())
   }
 
   @Test
@@ -714,6 +731,8 @@ class HorizonPaymentObserverTest {
           platformApiClient,
           mockk<RpcConfig>(relaxed = true),
           mockk<AssetService>(relaxed = true),
+          mockk<EventService>(relaxed = true),
+          mockk<SacToAssetMapper>(relaxed = true),
         )
     }
   }

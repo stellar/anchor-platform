@@ -120,15 +120,28 @@ public class NotifyRefundPendingHandler
       var amount = request.getRefund().getAmount().getAmount();
       var amountFee = request.getRefund().getAmountFee().getAmount();
 
-      BigDecimal totalRefunded;
-      if (refunds == null || !refunds.hasRefundPayments()) {
-        totalRefunded = sum(assetInfo, amount, amountFee);
-      } else {
-        var amountRefunded =
+      BigDecimal totalRefunded = sum(assetInfo, amount, amountFee);
+      if (refunds != null && refunds.hasRefundPayments()) {
+        // Same replace-by-id arithmetic updateTransactionWithRpcRequest persists with: a stored
+        // payment with the request's id is replaced, any other id is added.
+        String requestRefundId = request.getRefund().getId();
+        BigDecimal otherPayments =
             refunds instanceof Refunds
-                ? ((Refunds) refunds).getAmountRefunded().getAmount()
-                : ((Sep24Refunds) refunds).getAmountRefunded();
-        totalRefunded = sum(assetInfo, amountRefunded, amount, amountFee);
+                ? Arrays.stream(((Refunds) refunds).getPayments())
+                    .filter(payment -> !payment.getId().equals(requestRefundId))
+                    .map(
+                        payment ->
+                            sum(
+                                assetInfo,
+                                payment.getAmount().getAmount(),
+                                payment.getFee().getAmount()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                : ((Sep24Refunds) refunds)
+                    .getRefundPayments().stream()
+                        .filter(payment -> !payment.getId().equals(requestRefundId))
+                        .map(payment -> sum(assetInfo, payment.getAmount(), payment.getFee()))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+        totalRefunded = totalRefunded.add(otherPayments);
       }
 
       BigDecimal amountIn = decimal(txn.getAmountIn(), assetInfo);
@@ -222,6 +235,8 @@ public class NotifyRefundPendingHandler
         }
         List<RefundPayment> sep6RefundPayments =
             new ArrayList<>(Arrays.asList(refunds.getPayments()));
+        // A repeated refund id replaces the stored payment, as notify_refund_sent does.
+        sep6RefundPayments.removeIf(payment -> payment.getId().equals(requestRefund.getId()));
         sep6RefundPayments.add(requestPayment);
         refunds.setPayments(sep6RefundPayments.toArray(new RefundPayment[0]));
 
@@ -278,6 +293,8 @@ public class NotifyRefundPendingHandler
           sep24Refunds.setRefundPayments(List.of());
         }
         List<Sep24RefundPayment> sep24RefundPayments = sep24Refunds.getRefundPayments();
+        // A repeated refund id replaces the stored payment, as notify_refund_sent does.
+        sep24RefundPayments.removeIf(payment -> payment.getId().equals(requestRefund.getId()));
         sep24RefundPayments.add(refundPayment);
         sep24Refunds.setRefundPayments(sep24RefundPayments);
 

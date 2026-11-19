@@ -13,9 +13,12 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.MoreInfoUrlConstructor
 import org.stellar.anchor.TestConstants.Companion.TEST_ACCOUNT
 import org.stellar.anchor.TestConstants.Companion.TEST_AMOUNT
@@ -32,6 +35,7 @@ import org.stellar.anchor.TestConstants.Companion.TEST_TRANSACTION_ID_1
 import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.asset.StellarAssetInfo
 import org.stellar.anchor.api.exception.*
+import org.stellar.anchor.api.sep.sep24.DepositTransactionResponse
 import org.stellar.anchor.api.sep.sep24.GetTransactionRequest
 import org.stellar.anchor.api.sep.sep24.GetTransactionsRequest
 import org.stellar.anchor.api.shared.FeeDescription
@@ -50,12 +54,14 @@ import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.ExchangeAmountsCalculator
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.Log
 import org.stellar.anchor.util.MemoHelper.makeMemo
 import org.stellar.anchor.util.SepRequestValidator
 import org.stellar.sdk.MemoHash
 import org.stellar.sdk.MemoId
 import org.stellar.sdk.MemoText
 
+@ExtendWith(LockAndMockTest::class)
 internal class Sep24ServiceTest {
   companion object {
     const val TEST_SEP24_INTERACTIVE_URL = "https://test-anchor.stellar.org"
@@ -316,6 +322,91 @@ internal class Sep24ServiceTest {
     assertEquals(TEST_CLIENT_DOMAIN, slotTxn.captured.clientDomain)
     assertEquals(TEST_CLIENT_NAME, slotTxn.captured.clientName)
     assertNull(slotTxn.captured.withdrawAnchorAccount)
+  }
+
+  // ANCHOR-1395 (HackerOne #4107899): token.getAccountMemo() used to be logged raw, unredacted,
+  // even though it is the per-user discriminator on a pooled custodial account -- the one value
+  // shorter(token.getAccount()) on the same line was already protecting the account for.
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test withdraw and deposit mask a short token memo in the log line`() {
+    every { Log.shorter(any()) } answers { callOriginal() }
+    every { Log.infoF(any(), *anyVararg()) } just Runs
+
+    every { txnStore.save(any()) } returns null
+    sep24Service.withdraw(createTestWebAuthJwtWithMemo(), createTestTransactionRequest())
+    sep24Service.deposit(createTestWebAuthJwtWithMemo(), createTestTransactionRequest())
+
+    val shortenedAccount = Log.shorter(TEST_ACCOUNT)
+    verify { Log.infoF("Sep24.withdraw. account={}, memo={}", shortenedAccount, "***") }
+    verify { Log.infoF("Sep24.deposit. account={}, memo={}", shortenedAccount, "***") }
+  }
+
+  @Test
+  fun `test withdraw ignores the client memo and stores none`() {
+    // A valid memo of each type the request accepts: none of them reaches the stored row.
+    val memos =
+      listOf(
+        "77713371337" to "id",
+        "client memo" to "text",
+        "MTIzZTQ1NjctZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc=" to "hash",
+      )
+    for ((memo, memoType) in memos) {
+      val slotTxn = slot<Sep24Transaction>()
+      every { txnStore.save(capture(slotTxn)) } returns null
+      val request = createTestTransactionRequest()
+      request["memo"] = memo
+      request["memo_type"] = memoType
+
+      sep24Service.withdraw(createTestWebAuthJwt(), request)
+
+      assertNull(slotTxn.captured.memo, "memo of type $memoType")
+      assertNull(slotTxn.captured.memoType, "memo_type of type $memoType")
+      val response = Sep24Helper.fromWithdrawTxn(slotTxn.captured, moreInfoUrlConstructor, "en")
+      assertNull(response.withdrawMemo, "withdraw_memo of type $memoType")
+      assertNull(response.withdrawMemoType, "withdraw_memo_type of type $memoType")
+    }
+    verify(exactly = memos.size) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test deposit still stores the client memo as the deposit memo`() {
+    val slotTxn = slot<Sep24Transaction>()
+    every { txnStore.save(capture(slotTxn)) } returns null
+    val request = createTestTransactionRequest()
+    request["memo"] = "77713371337"
+    request["memo_type"] = "id"
+
+    sep24Service.deposit(createTestWebAuthJwt(), request)
+
+    assertEquals("77713371337", slotTxn.captured.memo)
+    assertEquals("id", slotTxn.captured.memoType)
+    val response = Sep24Helper.fromDepositTxn(slotTxn.captured, moreInfoUrlConstructor, "en")
+    val deposit = response as DepositTransactionResponse
+    assertEquals("77713371337", deposit.depositMemo)
+    assertEquals("id", deposit.depositMemoType)
+  }
+
+  @Test
+  fun `test withdraw still rejects an invalid memo with 400`() {
+    val missingType = createTestTransactionRequest()
+    missingType["memo"] = "77713371337"
+    val missingTypeEx =
+      assertThrows<SepValidationException> {
+        sep24Service.withdraw(createTestWebAuthJwt(), missingType)
+      }
+    assertEquals("memo_type is required if memo is specified", missingTypeEx.message)
+
+    val notANumber = createTestTransactionRequest()
+    notANumber["memo"] = "not-a-number"
+    notANumber["memo_type"] = "id"
+    val notANumberEx =
+      assertThrows<SepValidationException> {
+        sep24Service.withdraw(createTestWebAuthJwt(), notANumber)
+      }
+    assertEquals("Invalid memo not-a-number of type: MEMO_ID", notANumberEx.message)
+
+    verify(exactly = 0) { txnStore.save(any()) }
   }
 
   @Test
@@ -1108,6 +1199,24 @@ internal class Sep24ServiceTest {
     sep24Service.findTransaction(createTestWebAuthJwt(), gtr)
 
     verify(exactly = 1) { txnStore.findByExternalTransactionId(TEST_TRANSACTION_ID_0) }
+  }
+
+  // ANCHOR-1395 (HackerOne #4107899): external_transaction_id is a caller-assigned reference
+  // (routinely short, e.g. a wire/invoice reference), not an account -- it is logged directly,
+  // like the platform's own `id`, rather than through shorter(), which cannot meaningfully redact
+  // a value this short without masking it entirely.
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test find transaction logs a short external_transaction_id in full, not masked`() {
+    every { Log.infoF(any(), *anyVararg()) } just Runs
+
+    val shortExternalId = "INV-42"
+    every { txnStore.findByExternalTransactionId(any()) } returns createTestTransaction("deposit")
+    val gtr = GetTransactionRequest(null, null, shortExternalId, "en-US")
+
+    sep24Service.findTransaction(createTestWebAuthJwt(), gtr)
+
+    verify { Log.infoF("externalTransactionId={}", shortExternalId) }
   }
 
   @Test
