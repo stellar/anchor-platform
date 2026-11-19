@@ -1,11 +1,15 @@
 package org.stellar.anchor.util
 
 import com.sun.net.httpserver.HttpServer
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.net.UnknownHostException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -492,6 +496,232 @@ class ClientDomainHelperTest {
       }
     } finally {
       server.stop(0)
+    }
+  }
+
+  // --- client_domain name lookups run on the bounded resolver (ANCHOR-1494) ---
+
+  private val publicAddress = InetAddress.getByAddress(byteArrayOf(8, 8, 8, 8))
+
+  /** Blocks like a native resolver call: an interrupt does not release it, only [release] does. */
+  private fun blockIgnoringInterrupts(release: CountDownLatch) {
+    while (true) {
+      try {
+        release.await()
+        return
+      } catch (e: InterruptedException) {
+        // a native lookup ignores the interrupt, so the stub does too
+      }
+    }
+  }
+
+  private fun <T> withResolver(lookup: BoundedDnsResolver.Lookup, block: () -> T): T {
+    val original = ClientDomainHelper.dnsResolver
+    ClientDomainHelper.dnsResolver = BoundedDnsResolver(lookup)
+    try {
+      return block()
+    } finally {
+      ClientDomainHelper.dnsResolver = original
+    }
+  }
+
+  private fun closedLoopbackHost(): String {
+    val port = ServerSocket(0).use { it.localPort }
+    return "127.0.0.1:$port"
+  }
+
+  /** Leaves every resolver worker held by a lookup that only [release] frees. */
+  private fun saturateResolver(release: CountDownLatch) {
+    val resolver = ClientDomainHelper.dnsResolver
+    val callers = Executors.newFixedThreadPool(8)
+    try {
+      (0 until 8)
+        .map {
+          callers.submit {
+            try {
+              resolver.resolve("stuck$it.example.com")
+            } catch (e: UnknownHostException) {
+              // timing out is how the lookup is left stuck
+            }
+          }
+        }
+        .forEach { it.get(5, TimeUnit.SECONDS) }
+    } finally {
+      callers.shutdownNow()
+    }
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork gives up on a lookup that never completes`() {
+    val release = CountDownLatch(1)
+    try {
+      withResolver({ blockIgnoringInterrupts(release).let { arrayOf(publicAddress) } }) {
+        val start = System.nanoTime()
+        val ex =
+          assertThrows(SepException::class.java) {
+            ClientDomainHelper.validateDomainNotPrivateNetwork("stuck.example.com")
+          }
+        val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+
+        assertEquals("client_domain resolution unavailable", ex.message)
+        assertTrue(elapsedMs < 1_500, "expected failure within 1,500 ms, took ${elapsedMs}ms")
+      }
+    } finally {
+      release.countDown()
+    }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain on mainnet gives up on a validating lookup that never completes`() {
+    val release = CountDownLatch(1)
+    val calls = AtomicInteger()
+    val caller = Executors.newSingleThreadExecutor()
+    try {
+      // the first lookup (the private-network check) answers; the one OkHttp makes then hangs
+      withResolver({
+        if (calls.getAndIncrement() == 0) {
+          arrayOf(publicAddress)
+        } else {
+          blockIgnoringInterrupts(release)
+          arrayOf(publicAddress)
+        }
+      }) {
+        val start = System.nanoTime()
+        val future =
+          caller.submit<String> {
+            ClientDomainHelper.fetchSigningKeyFromClientDomain("two-step.example.com", false)
+          }
+        val ex = assertThrows(ExecutionException::class.java) { future.get(3, TimeUnit.SECONDS) }
+        val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+
+        assertEquals("Unable to read client_domain's SIGNING_KEY", ex.cause?.message)
+        assertEquals(2, calls.get())
+        assertTrue(elapsedMs < 1_500, "expected failure within 1,500 ms, took ${elapsedMs}ms")
+      }
+    } finally {
+      release.countDown()
+      caller.shutdownNow()
+    }
+  }
+
+  @Test
+  fun `test eight bounded fetches whose lookups never complete leave the fetch pool free`() {
+    val release = CountDownLatch(1)
+    val callers = Executors.newFixedThreadPool(8)
+    try {
+      withResolver({ blockIgnoringInterrupts(release).let { arrayOf(publicAddress) } }) {
+        val start = System.nanoTime()
+        val results =
+          (0 until 8).map { i ->
+            callers.submit<String?> {
+              try {
+                ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(
+                  "stuck$i.example.com",
+                  false
+                )
+                null
+              } catch (e: SepException) {
+                e.message
+              }
+            }
+          }
+        results.forEach {
+          assertEquals("client_domain resolution unavailable", it.get(3, TimeUnit.SECONDS))
+        }
+        val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+        assertTrue(elapsedMs < 2_500, "expected all 8 to fail within 2,500 ms, took ${elapsedMs}ms")
+
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(2_500)
+        while (
+          ClientDomainHelper.CLIENT_DOMAIN_EXECUTOR.activeCount > 0 && System.nanoTime() < deadline
+        ) {
+          Thread.sleep(10)
+        }
+        assertEquals(0, ClientDomainHelper.CLIENT_DOMAIN_EXECUTOR.activeCount)
+      }
+    } finally {
+      release.countDown()
+      callers.shutdownNow()
+    }
+  }
+
+  @Test
+  fun `test a testnet fetch is not held up while every resolver worker is stuck`() {
+    val release = CountDownLatch(1)
+    try {
+      withResolver({ blockIgnoringInterrupts(release).let { arrayOf(publicAddress) } }) {
+        saturateResolver(release)
+
+        val start = System.nanoTime()
+        val ex =
+          assertThrows(SepException::class.java) {
+            ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(closedLoopbackHost(), true)
+          }
+        val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+
+        assertEquals("Unable to read client_domain's SIGNING_KEY", ex.message)
+        assertTrue(elapsedMs < 2_500, "expected failure within 2,500 ms, took ${elapsedMs}ms")
+      }
+    } finally {
+      release.countDown()
+    }
+  }
+
+  @Test
+  fun `test a mainnet fetch fails closed while every resolver worker is stuck`() {
+    val release = CountDownLatch(1)
+    try {
+      withResolver({ blockIgnoringInterrupts(release).let { arrayOf(publicAddress) } }) {
+        saturateResolver(release)
+
+        val ex =
+          assertThrows(SepException::class.java) {
+            ClientDomainHelper.fetchSigningKeyFromClientDomainBounded("another.example.com", false)
+          }
+
+        assertEquals("client_domain resolution unavailable", ex.message)
+      }
+    } finally {
+      release.countDown()
+    }
+  }
+
+  @Test
+  fun `test a testnet fetch never calls the resolver`() {
+    val calls = AtomicInteger()
+    withResolver({
+      calls.incrementAndGet()
+      arrayOf(publicAddress)
+    }) {
+      assertThrows(SepException::class.java) {
+        ClientDomainHelper.fetchSigningKeyFromClientDomain(closedLoopbackHost(), true)
+      }
+    }
+
+    assertEquals(0, calls.get())
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork still rejects a private address from the resolver`() {
+    withResolver({ arrayOf(InetAddress.getByAddress(byteArrayOf(10, 0, 0, 5))) }) {
+      val ex =
+        assertThrows(SepException::class.java) {
+          ClientDomainHelper.validateDomainNotPrivateNetwork("internal.example.com")
+        }
+
+      assertEquals("client_domain resolves to a non-public address", ex.message)
+    }
+  }
+
+  @Test
+  fun `test validateDomainNotPrivateNetwork still reports an unresolvable name`() {
+    withResolver({ throw UnknownHostException("nxdomain") }) {
+      val ex =
+        assertThrows(SepException::class.java) {
+          ClientDomainHelper.validateDomainNotPrivateNetwork("missing.example.com")
+        }
+
+      assertEquals("client_domain could not be resolved", ex.message)
     }
   }
 }

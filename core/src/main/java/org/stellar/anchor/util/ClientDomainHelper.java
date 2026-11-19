@@ -37,6 +37,14 @@ public class ClientDomainHelper {
           new ClientDomainThreadFactory(),
           new ThreadPoolExecutor.AbortPolicy());
 
+  /**
+   * Name lookups for caller-controlled hosts run here, not on {@link #CLIENT_DOMAIN_EXECUTOR}: a
+   * native lookup cannot be interrupted, so a stuck one must not hold a fetch worker. Replaced only
+   * by tests.
+   */
+  static volatile BoundedDnsResolver dnsResolver =
+      new BoundedDnsResolver(InetAddress::getAllByName);
+
   private static final int MAX_LABEL_LENGTH = 63;
   private static final int MAX_HOST_LENGTH = 253;
 
@@ -231,13 +239,15 @@ public class ClientDomainHelper {
     String hostname = extractHostname(clientDomain);
 
     try {
-      InetAddress[] addresses = InetAddress.getAllByName(hostname);
+      List<InetAddress> addresses = dnsResolver.resolve(hostname);
       for (InetAddress address : addresses) {
         if (isNonPublicAddress(address)) {
           infoF("client_domain {} resolves to non-public address {}", clientDomain, address);
           throw new SepException("client_domain resolves to a non-public address");
         }
       }
+    } catch (BoundedDnsResolver.ResolutionUnavailableException e) {
+      throw new SepException(BoundedDnsResolver.UNAVAILABLE_MESSAGE);
     } catch (UnknownHostException e) {
       infoF("client_domain {} could not be resolved", clientDomain);
       throw new SepException("client_domain could not be resolved");
@@ -246,7 +256,7 @@ public class ClientDomainHelper {
 
   private static Dns validatingDns() {
     return hostname -> {
-      List<InetAddress> addresses = Dns.SYSTEM.lookup(hostname);
+      List<InetAddress> addresses = dnsResolver.resolve(hostname);
       for (InetAddress address : addresses) {
         if (isNonPublicAddress(address)) {
           throw new UnknownHostException(
