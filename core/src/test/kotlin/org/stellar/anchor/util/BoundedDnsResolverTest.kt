@@ -413,6 +413,70 @@ class BoundedDnsResolverTest {
   }
 
   @Test
+  fun `a name rejected because the pool was saturated resolves once a worker is free again`() {
+    val release = CountDownLatch(1)
+    val lookup = CountingLookup(release, setOf("a.example.com")) { arrayOf(publicAddress) }
+    val resolver = BoundedDnsResolver(lookup, 1, 200, 30_000, 1_024, LongSupplier { 0 })
+    try {
+      assertThrows<ResolutionUnavailableException> { resolver.resolve("a.example.com") }
+      // the only worker is stuck on a, so b is rejected without a lookup
+      assertThrows<ResolutionUnavailableException> { resolver.resolve("b.example.com") }
+      assertFalse(lookup.invocations.contains("b.example.com"))
+
+      release.countDown()
+
+      // A rejection must leave no trace: once the worker is free b gets a real lookup and answer.
+      val deadline = System.nanoTime() + ms(2_000)
+      var answer: List<InetAddress>? = null
+      while (answer == null && System.nanoTime() < deadline) {
+        answer =
+          try {
+            resolver.resolve("b.example.com")
+          } catch (e: ResolutionUnavailableException) {
+            Thread.sleep(10)
+            null
+          }
+      }
+      assertEquals(listOf(publicAddress), answer)
+    } finally {
+      release.countDown()
+    }
+  }
+
+  private fun field(target: Any, name: String): Any? =
+    target.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(target)
+
+  private fun assertDocumentedDefaults(resolver: BoundedDnsResolver) {
+    assertEquals(1_000L, field(resolver, "timeoutMs"))
+    assertEquals(
+      TimeUnit.MILLISECONDS.toNanos(30_000),
+      field(resolver, "negativeTtlNanos"),
+      "the record must last 30 seconds",
+    )
+    val executor = field(resolver, "executor") as java.util.concurrent.ThreadPoolExecutor
+    assertEquals(8, executor.maximumPoolSize)
+    assertEquals(4, executor.corePoolSize)
+    assertEquals(1_024, field(field(resolver, "timedOut")!!, "capacity"))
+  }
+
+  @Test
+  fun `a resolver built with only a lookup carries the documented defaults`() {
+    assertDocumentedDefaults(BoundedDnsResolver(Lookup { arrayOf(publicAddress) }))
+  }
+
+  @Test
+  fun `a resolver built with a worker count and timeout still carries the default record`() {
+    val resolver = BoundedDnsResolver(Lookup { arrayOf(publicAddress) }, 8, 1_000)
+
+    assertDocumentedDefaults(resolver)
+  }
+
+  @Test
+  fun `the resolver ClientDomainHelper uses in production carries the documented defaults`() {
+    assertDocumentedDefaults(ClientDomainHelper.dnsResolver)
+  }
+
+  @Test
   fun `a lookup that finishes after its callers gave up is not shared once the record expires`() {
     val release = CountDownLatch(1)
     val clock = AtomicLong()
