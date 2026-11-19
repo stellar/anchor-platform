@@ -5,7 +5,10 @@ import java.net.UnknownHostException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import java.util.function.LongSupplier
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
@@ -158,5 +161,189 @@ class BoundedDnsResolverTest {
     } finally {
       release.countDown()
     }
+  }
+
+  private fun ms(value: Long) = TimeUnit.MILLISECONDS.toNanos(value)
+
+  /** A resolver whose lookup counts invocations and hangs on [stuckHosts] until [release]. */
+  private class CountingLookup(
+    private val release: CountDownLatch,
+    private val stuckHosts: Set<String>,
+    private val answer: (String) -> Array<InetAddress>,
+  ) : Lookup {
+    val invocations = CopyOnWriteArrayList<String>()
+
+    override fun lookup(hostname: String): Array<InetAddress> {
+      invocations.add(hostname)
+      if (hostname in stuckHosts) {
+        var interrupted = false
+        while (true) {
+          try {
+            release.await()
+            break
+          } catch (e: InterruptedException) {
+            interrupted = true
+          }
+        }
+        if (interrupted) Thread.currentThread().interrupt()
+      }
+      return answer(hostname)
+    }
+  }
+
+  @Test
+  fun `the defaults are a 30 second record of at most 1024 hostnames`() {
+    assertEquals(30_000L, BoundedDnsResolver.DEFAULT_NEGATIVE_TTL_MS)
+    assertEquals(1_024, BoundedDnsResolver.DEFAULT_NEGATIVE_CAPACITY)
+  }
+
+  @Test
+  fun `a name that timed out is rejected fast on repeat without starting a lookup`() {
+    val release = CountDownLatch(1)
+    val lookup = CountingLookup(release, setOf("stuck.example.com")) { arrayOf(publicAddress) }
+    val resolver = BoundedDnsResolver(lookup, 4, 200, 30_000, 1_024, LongSupplier { 0 })
+    try {
+      assertThrows<ResolutionUnavailableException> { resolver.resolve("stuck.example.com") }
+      assertEquals(1, lookup.invocations.size)
+
+      val start = System.nanoTime()
+      val ex =
+        assertThrows<ResolutionUnavailableException> { resolver.resolve("stuck.example.com") }
+      val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+
+      assertEquals("client_domain resolution unavailable", ex.message)
+      assertTrue(elapsedMs < 100, "expected fast rejection, took ${elapsedMs}ms")
+      assertEquals(1, lookup.invocations.size, "the repeat must not start a lookup")
+    } finally {
+      release.countDown()
+    }
+  }
+
+  @Test
+  fun `a timed out name is rejected until exactly 30000 ms have elapsed`() {
+    val release = CountDownLatch(1)
+    val first = AtomicInteger()
+    val finished = CountDownLatch(1)
+    val clock = AtomicLong()
+    val lookup =
+      CountingLookup(release, setOf("stuck.example.com")) {
+        if (first.getAndIncrement() == 0) finished.countDown()
+        arrayOf(publicAddress)
+      }
+    val resolver = BoundedDnsResolver(lookup, 4, 200, 30_000, 1_024, LongSupplier { clock.get() })
+    try {
+      assertThrows<ResolutionUnavailableException> { resolver.resolve("stuck.example.com") }
+      release.countDown()
+      assertTrue(finished.await(1, TimeUnit.SECONDS))
+
+      clock.set(ms(29_999))
+      assertThrows<ResolutionUnavailableException> { resolver.resolve("stuck.example.com") }
+      assertEquals(1, lookup.invocations.size, "still recorded at 29,999 ms")
+
+      clock.set(ms(30_000))
+      assertEquals(listOf(publicAddress), resolver.resolve("stuck.example.com"))
+      assertEquals(2, lookup.invocations.size, "a new lookup starts at 30,000 ms")
+    } finally {
+      release.countDown()
+    }
+  }
+
+  @Test
+  fun `when the record is full a new timeout evicts only the oldest hostname`() {
+    val release = CountDownLatch(1)
+    val hosts = listOf("a.example.com", "b.example.com", "c.example.com", "d.example.com")
+    val lookup = CountingLookup(release, hosts.toSet()) { arrayOf(publicAddress) }
+    val resolver = BoundedDnsResolver(lookup, 8, 100, 30_000, 3, LongSupplier { 0 })
+    try {
+      // exactly at capacity: a, b, c are all recorded
+      hosts.take(3).forEach {
+        assertThrows<ResolutionUnavailableException> { resolver.resolve(it) }
+      }
+      hosts.take(3).forEach {
+        assertThrows<ResolutionUnavailableException> { resolver.resolve(it) }
+      }
+      assertEquals(3, lookup.invocations.size, "a, b and c are rejected without new lookups")
+
+      // one over capacity: d evicts a
+      assertThrows<ResolutionUnavailableException> { resolver.resolve("d.example.com") }
+      assertEquals(4, lookup.invocations.size)
+      listOf("b.example.com", "c.example.com", "d.example.com").forEach {
+        assertThrows<ResolutionUnavailableException> { resolver.resolve(it) }
+      }
+      assertEquals(4, lookup.invocations.size, "b, c and d are still rejected without lookups")
+
+      assertThrows<ResolutionUnavailableException> { resolver.resolve("a.example.com") }
+      assertEquals(5, lookup.invocations.size, "a was evicted, so it gets a new lookup")
+      assertEquals("a.example.com", lookup.invocations.last())
+    } finally {
+      release.countDown()
+    }
+  }
+
+  @Test
+  fun `an NXDOMAIN failure is not recorded`() {
+    val calls = AtomicInteger()
+    val resolver =
+      BoundedDnsResolver(
+        Lookup {
+          calls.incrementAndGet()
+          throw UnknownHostException("nxdomain")
+        },
+        2,
+        1_000,
+        30_000,
+        1_024,
+        LongSupplier { 0 },
+      )
+
+    assertThrows<UnknownHostException> { resolver.resolve("missing.example.com") }
+    val ex = assertThrows<UnknownHostException> { resolver.resolve("missing.example.com") }
+
+    assertEquals(2, calls.get())
+    assertEquals("nxdomain", ex.message)
+  }
+
+  @Test
+  fun `a successful lookup is not recorded`() {
+    val calls = AtomicInteger()
+    val resolver =
+      BoundedDnsResolver(
+        Lookup {
+          calls.incrementAndGet()
+          arrayOf(publicAddress)
+        },
+        2,
+        1_000,
+        30_000,
+        1_024,
+        LongSupplier { 0 },
+      )
+
+    assertEquals(listOf(publicAddress), resolver.resolve("ok.example.com"))
+    assertEquals(listOf(publicAddress), resolver.resolve("ok.example.com"))
+
+    assertEquals(2, calls.get())
+  }
+
+  @Test
+  fun `a runtime failure is not recorded`() {
+    val calls = AtomicInteger()
+    val resolver =
+      BoundedDnsResolver(
+        Lookup {
+          calls.incrementAndGet()
+          throw IllegalStateException("boom")
+        },
+        2,
+        1_000,
+        30_000,
+        1_024,
+        LongSupplier { 0 },
+      )
+
+    assertThrows<ResolutionUnavailableException> { resolver.resolve("boom.example.com") }
+    assertThrows<ResolutionUnavailableException> { resolver.resolve("boom.example.com") }
+
+    assertEquals(2, calls.get())
   }
 }
