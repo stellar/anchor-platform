@@ -53,6 +53,7 @@ spring-context = "6.1.11"
 spring-kafka = "3.2.1"
 spring-retry = "2.0.6"
 stellar-wallet-sdk = "2.0.0"
+testcontainers = "2.0.5"
 
 # Plugin versions
 spotless = "7.2.1"
@@ -135,6 +136,8 @@ spring-data-commons = { module = "org.springframework.data:spring-data-commons",
 spring-kafka = { module = "org.springframework.kafka:spring-kafka", version.ref = "spring-kafka" }
 spring-retry = { module = "org.springframework.retry:spring-retry", version.ref = "spring-retry" }
 stellar-wallet-sdk = { module = "org.stellar:wallet-sdk", version.ref = "stellar-wallet-sdk" }
+testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter", version.ref = "testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
 
 [bundles]
 junit = ["junit-api", "junit-engine", "junit-params", "junit-suite-engine", "kotlin-stdlib", "kotlin-junit", "mockk"]
