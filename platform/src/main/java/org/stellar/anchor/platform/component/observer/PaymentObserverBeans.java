@@ -9,6 +9,7 @@ import org.stellar.anchor.api.exception.ServerErrorException;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.config.StellarNetworkConfig;
+import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.ledger.LedgerClient;
 import org.stellar.anchor.ledger.StellarRpc;
@@ -95,7 +96,9 @@ public class PaymentObserverBeans {
       JdbcSep6TransactionStore sep6TransactionStore,
       PlatformApiClient platformApiClient,
       RpcConfig rpcConfig,
-      AssetService assetService) {
+      AssetService assetService,
+      EventService eventService,
+      SacToAssetMapper sacToAssetMapper) {
 
     return new DefaultPaymentListener(
         paymentObservingAccountsManager,
@@ -104,7 +107,9 @@ public class PaymentObserverBeans {
         sep6TransactionStore,
         platformApiClient,
         rpcConfig,
-        assetService);
+        assetService,
+        eventService,
+        sacToAssetMapper);
   }
 
   /**

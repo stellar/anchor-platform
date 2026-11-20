@@ -11,6 +11,7 @@ import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.Address
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.StrKey
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus.*
 import org.stellar.sdk.scval.Scv
 import org.stellar.sdk.xdr.*
@@ -346,6 +347,31 @@ internal class LedgerClientHelperTest {
     assertEquals(fromAccount, ledgerOperation.invokeHostFunctionOperation.from)
     assertEquals(toAccount, ledgerOperation.invokeHostFunctionOperation.to)
     assertEquals(BigInteger.valueOf(500L), ledgerOperation.invokeHostFunctionOperation.amount)
+  }
+
+  @Test
+  fun `test convert() with invoke host function transfer to a muxed contract returns W-address`() {
+    val fromAccount = KeyPair.random().accountId
+    val contractId = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
+    val muxedContract =
+      StrKey.encodeMuxedContract(StrKey.decodeContract(contractId) + ByteArray(8) { it.toByte() })
+    val operation =
+      buildInvokeHostFunctionOperation(contractId, "transfer", fromAccount, muxedContract, 500L)
+
+    val ledgerOperation =
+      LedgerClientHelper.convert(
+        "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
+        1708638L,
+        5,
+        1,
+        operation,
+        null,
+      )
+
+    assertEquals(OperationType.INVOKE_HOST_FUNCTION, ledgerOperation.type)
+    assertEquals(fromAccount, ledgerOperation.invokeHostFunctionOperation.from)
+    assertEquals(muxedContract, ledgerOperation.invokeHostFunctionOperation.to)
+    assertTrue(ledgerOperation.invokeHostFunctionOperation.to.startsWith("W"))
   }
 
   @Test
@@ -912,6 +938,178 @@ internal class LedgerClientHelperTest {
     assertEquals("GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H", result.sourceAccount())
     assertEquals(memo, result.memo())
     assertEquals(operations, result.operations())
+  }
+
+  private val textMemo = Memo.builder().discriminant(MEMO_TEXT).text(XdrString("muxed")).build()
+
+  private fun v1Envelope(source: MuxedAccount, operations: Array<Operation>): TransactionEnvelope =
+    TransactionEnvelope.builder()
+      .discriminant(ENVELOPE_TYPE_TX)
+      .v1(
+        TransactionV1Envelope.builder()
+          .tx(
+            Transaction.builder()
+              .sourceAccount(source)
+              .memo(textMemo)
+              .operations(operations)
+              .build()
+          )
+          .build()
+      )
+      .build()
+
+  private fun feeBumpEnvelope(
+    innerSource: MuxedAccount,
+    operations: Array<Operation>,
+  ): TransactionEnvelope =
+    TransactionEnvelope.builder()
+      .discriminant(ENVELOPE_TYPE_TX_FEE_BUMP)
+      .feeBump(
+        FeeBumpTransactionEnvelope.builder()
+          .tx(
+            FeeBumpTransaction.builder()
+              .feeSource(ed25519Source(KeyPair.random().accountId))
+              .innerTx(
+                FeeBumpTransaction.FeeBumpTransactionInnerTx.builder()
+                  .discriminant(ENVELOPE_TYPE_TX)
+                  .v1(
+                    TransactionV1Envelope.builder()
+                      .tx(
+                        Transaction.builder()
+                          .sourceAccount(innerSource)
+                          .memo(textMemo)
+                          .operations(operations)
+                          .build()
+                      )
+                      .build()
+                  )
+                  .build()
+              )
+              .build()
+          )
+          .build()
+      )
+      .build()
+
+  @Test
+  fun `parseOperationAndSourceAccountAndMemo returns the base G address of a muxed V1 transaction source`() {
+    val operations = arrayOf(paymentOp(null))
+
+    val result =
+      LedgerClientHelper.parseOperationAndSourceAccountAndMemo(
+        v1Envelope(muxedSource(txSource, 1234L), operations),
+        "hash",
+      )
+
+    assertNotNull(result)
+    assertEquals(txSource, result.sourceAccount())
+    assertArrayEquals(operations, result.operations())
+    assertSame(textMemo, result.memo())
+  }
+
+  @Test
+  fun `parseOperationAndSourceAccountAndMemo returns the base G address of a muxed fee bump inner source`() {
+    val operations = arrayOf(paymentOp(null))
+
+    val result =
+      LedgerClientHelper.parseOperationAndSourceAccountAndMemo(
+        feeBumpEnvelope(muxedSource(txSource, 1234L), operations),
+        "hash",
+      )
+
+    assertNotNull(result)
+    assertEquals(txSource, result.sourceAccount())
+    assertArrayEquals(operations, result.operations())
+    assertSame(textMemo, result.memo())
+  }
+
+  @Test
+  fun `parseOperationAndSourceAccountAndMemo returns the base G address whatever the muxed id is`() {
+    val ids =
+      listOf(BigInteger.ZERO, BigInteger.ONE, BigInteger.TWO.pow(64).subtract(BigInteger.ONE))
+
+    for (id in ids) {
+      val source =
+        MuxedAccount.builder()
+          .discriminant(CryptoKeyType.KEY_TYPE_MUXED_ED25519)
+          .med25519(
+            MuxedAccount.MuxedAccountMed25519.builder()
+              .id(Uint64(XdrUnsignedHyperInteger(id)))
+              .ed25519(
+                Uint256.fromXdrByteArray(org.stellar.sdk.StrKey.decodeEd25519PublicKey(txSource))
+              )
+              .build()
+          )
+          .build()
+      val operations = arrayOf(paymentOp(null))
+
+      val v1 =
+        LedgerClientHelper.parseOperationAndSourceAccountAndMemo(
+          v1Envelope(source, operations),
+          "hash",
+        )
+      val feeBump =
+        LedgerClientHelper.parseOperationAndSourceAccountAndMemo(
+          feeBumpEnvelope(source, operations),
+          "hash",
+        )
+
+      assertEquals(txSource, v1?.sourceAccount(), "V1, muxed id $id")
+      assertEquals(txSource, feeBump?.sourceAccount(), "fee bump, muxed id $id")
+    }
+  }
+
+  @Test
+  fun `a payment without an operation source is attributed to the base G address of a muxed transaction source`() {
+    val parseResult =
+      LedgerClientHelper.parseOperationAndSourceAccountAndMemo(
+        v1Envelope(muxedSource(txSource, 1234L), arrayOf(paymentOp(null))),
+        "hash",
+      )
+
+    val ops = LedgerClientHelper.getLedgerOperations(5, 1708638L, parseResult, null)
+
+    assertEquals(1, ops.size)
+    assertEquals(txSource, ops[0].paymentOperation.from)
+    assertEquals(txSource, ops[0].paymentOperation.sourceAccount)
+  }
+
+  @Test
+  fun `a payment keeps its operation source when the transaction source is muxed`() {
+    val parseResult =
+      LedgerClientHelper.parseOperationAndSourceAccountAndMemo(
+        v1Envelope(
+          muxedSource(txSource, 1234L),
+          arrayOf(paymentOp(ed25519Source(opSource)), paymentOp(muxedSource(opSource, 99L))),
+        ),
+        "hash",
+      )
+
+    val ops = LedgerClientHelper.getLedgerOperations(5, 1708638L, parseResult, null)
+
+    assertEquals(2, ops.size)
+    assertEquals(opSource, ops[0].paymentOperation.from)
+    assertEquals(opSource, ops[1].paymentOperation.from)
+    assertNotEquals(txSource, ops[0].paymentOperation.from)
+  }
+
+  @Test
+  fun `parseOperationAndSourceAccountAndMemo returns null for a transaction source of an unknown key type`() {
+    val unknownKeyType =
+      MuxedAccount.builder().discriminant(CryptoKeyType.KEY_TYPE_PRE_AUTH_TX).build()
+
+    assertNull(
+      LedgerClientHelper.parseOperationAndSourceAccountAndMemo(
+        v1Envelope(unknownKeyType, arrayOf(paymentOp(null))),
+        "hash",
+      )
+    )
+    assertNull(
+      LedgerClientHelper.parseOperationAndSourceAccountAndMemo(
+        feeBumpEnvelope(unknownKeyType, arrayOf(paymentOp(null))),
+        "hash",
+      )
+    )
   }
 
   @Test

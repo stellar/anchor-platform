@@ -207,9 +207,14 @@ public class SepBeans {
       CustomerIntegration customerIntegration,
       PlatformApiClient platformApiClient,
       EventService eventService,
-      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore) {
+      Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore,
+      ClientService clientService) {
     return new Sep12Service(
-        customerIntegration, platformApiClient, eventService, sep31CustomerIdOwnerStore);
+        customerIntegration,
+        platformApiClient,
+        eventService,
+        sep31CustomerIdOwnerStore,
+        clientService);
   }
 
   @Bean
@@ -277,7 +282,8 @@ public class SepBeans {
       Clock clock,
       EventService eventService,
       Sep31CustomerIdOwnerStore sep31CustomerIdOwnerStore,
-      CustomerIntegration customerIntegration) {
+      CustomerIntegration customerIntegration,
+      ClientService clientService) {
     return new Sep31Service(
         languageConfig,
         sep31Config,
@@ -289,7 +295,8 @@ public class SepBeans {
         clock,
         exchangeAmountsCalculator(sep38QuoteStore, clock),
         sep31CustomerIdOwnerStore,
-        customerIntegration);
+        customerIntegration,
+        clientService);
   }
 
   @Bean

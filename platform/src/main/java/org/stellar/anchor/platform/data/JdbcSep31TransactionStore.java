@@ -65,6 +65,7 @@ public class JdbcSep31TransactionStore implements Sep31TransactionStore {
     return transactionRepo.save((JdbcSep31Transaction) transaction);
   }
 
+  @Override
   public List<JdbcSep31Transaction> findAllByToAccountAndMemoAndStatus(
       String toAccount, String memo, String status) {
     return transactionRepo.findAllByToAccountAndStellarMemoAndStatus(toAccount, memo, status);

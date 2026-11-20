@@ -94,7 +94,6 @@ public class Sep12Controller {
       consumes = {MediaType.MULTIPART_FORM_DATA_VALUE},
       produces = {MediaType.APPLICATION_JSON_VALUE})
   public Sep12PutCustomerResponse putCustomerMultipart(MultipartHttpServletRequest request) {
-    debug("PUT /customer multipart body:", request.getParameterMap());
     Gson gson = GsonUtils.getInstance();
     Map<String, String> requestData = new HashMap<>();
     for (Map.Entry<String, String[]> entry : request.getParameterMap().entrySet()) {
@@ -102,6 +101,10 @@ public class Sep12Controller {
     }
     Sep12PutCustomerRequest putCustomerRequest =
         gson.fromJson(gson.toJson(requestData), Sep12PutCustomerRequest.class);
+    // Logged as the typed, @PII-annotated DTO rather than the raw parameter map: a Map has no
+    // declared fields for LogExclusionStrategy to examine, so it would serialize in full
+    // regardless of any annotation.
+    debug("PUT /customer multipart body:", putCustomerRequest);
 
     // Extract binary fields
     MultiValueMap<String, MultipartFile> files = request.getMultiFileMap();

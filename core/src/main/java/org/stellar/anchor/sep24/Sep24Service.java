@@ -139,7 +139,9 @@ public class Sep24Service {
     }
 
     infoF(
-        "Sep24.withdraw. account={}, memo={}", shorter(token.getAccount()), token.getAccountMemo());
+        "Sep24.withdraw. account={}, memo={}",
+        shorter(token.getAccount()),
+        shorter(token.getAccountMemo()));
     String assetCode = withdrawRequest.get("asset_code");
     String assetIssuer = withdrawRequest.get("asset_issuer");
     String sourceAccount = withdrawRequest.get("account");
@@ -179,7 +181,9 @@ public class Sep24Service {
       withdrawRequest.put("client_domain", token.getClientDomain());
     else withdrawRequest.remove("client_domain");
 
-    Memo memo = makeMemo(withdrawRequest.get("memo"), withdrawRequest.get("memo_type"));
+    // The memo of a withdrawal request is validated but not stored: the memo the user pays with is
+    // the one the anchor assigns in request_onchain_funds, never one the client chose.
+    makeMemo(withdrawRequest.get("memo"), withdrawRequest.get("memo_type"));
     Memo refundMemo =
         makeMemo(withdrawRequest.get("refund_memo"), withdrawRequest.get("refund_memo_type"));
     String txnId = UUID.randomUUID().toString();
@@ -202,13 +206,6 @@ public class Sep24Service {
             .clientDomain(token.getClientDomain())
             .clientName(token.getClientName())
             .requestClientIpAddress(withdrawRequest.get("clientIpAddress"));
-
-    if (memo != null) {
-      debug("transaction memo detected.", memo);
-      debug("Set the transaction memo.", memo);
-      builder.memo(memo.toString());
-      builder.memoType(memoTypeString(memoType(memo)));
-    }
 
     if (refundMemo != null) {
       debug("refund memo detected.", refundMemo);
@@ -286,7 +283,9 @@ public class Sep24Service {
     }
 
     infoF(
-        "Sep24.deposit. account={}, memo={}", shorter(token.getAccount()), token.getAccountMemo());
+        "Sep24.deposit. account={}, memo={}",
+        shorter(token.getAccount()),
+        shorter(token.getAccountMemo()));
     String assetCode = depositRequest.get("asset_code");
     String assetIssuer = depositRequest.get("asset_issuer");
     String destinationAccount = depositRequest.get("account");
@@ -500,7 +499,10 @@ public class Sep24Service {
       infoF("stellarTransactionId={}", shorter(txReq.getStellarTransactionId()));
       txn = txnStore.findByStellarTransactionId(txReq.getStellarTransactionId());
     } else if (txReq.getExternalTransactionId() != null) {
-      infoF("externalTransactionId={}", shorter(txReq.getExternalTransactionId()));
+      // Logged like `id` above, not via shorter(): it's a caller-assigned reference, not an
+      // account, and shorter() cannot usefully redact values this short without masking them
+      // entirely -- it is not relied on for protection here.
+      infoF("externalTransactionId={}", txReq.getExternalTransactionId());
       txn = txnStore.findByExternalTransactionId(txReq.getExternalTransactionId());
     } else {
       throw new SepValidationException(

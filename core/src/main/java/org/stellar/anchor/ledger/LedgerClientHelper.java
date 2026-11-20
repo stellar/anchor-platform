@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.stellar.anchor.api.exception.LedgerException;
+import org.stellar.sdk.Address;
 import org.stellar.sdk.StrKey;
 import org.stellar.sdk.TOID;
 import org.stellar.sdk.exception.BadRequestException;
@@ -306,6 +307,7 @@ public class LedgerClientHelper {
         BigInteger muxedId = ma.getId().getUint64().getNumber();
         yield new org.stellar.sdk.MuxedAccount(accountId, muxedId).getAddress();
       }
+      case SC_ADDRESS_TYPE_MUXED_CONTRACT -> Address.fromSCAddress(address).toString();
       case SC_ADDRESS_TYPE_CLAIMABLE_BALANCE, SC_ADDRESS_TYPE_LIQUIDITY_POOL -> null;
     };
   }
@@ -334,8 +336,8 @@ public class LedgerClientHelper {
       case ENVELOPE_TYPE_TX:
         operations = txnEnv.getV1().getTx().getOperations();
         sourceAccount =
-            StrKey.encodeEd25519PublicKey(
-                txnEnv.getV1().getTx().getSourceAccount().getEd25519().getUint256());
+            resolveTransactionSource(txnEnv.getV1().getTx().getSourceAccount(), txnHash);
+        if (sourceAccount == null) return null;
         memo = txnEnv.getV1().getTx().getMemo();
         break;
       case ENVELOPE_TYPE_TX_FEE_BUMP:
@@ -343,9 +345,8 @@ public class LedgerClientHelper {
             == EnvelopeType.ENVELOPE_TYPE_TX) {
           Transaction txnFeeBump = txnEnv.getFeeBump().getTx().getInnerTx().getV1().getTx();
           operations = txnFeeBump.getOperations();
-          sourceAccount =
-              StrKey.encodeEd25519PublicKey(
-                  txnFeeBump.getSourceAccount().getEd25519().getUint256());
+          sourceAccount = resolveTransactionSource(txnFeeBump.getSourceAccount(), txnHash);
+          if (sourceAccount == null) return null;
           memo = txnFeeBump.getMemo();
         } else {
           debugF("FeeBump tx does not have a ENVELOPE_TYPE_TX discriminant. tx.hash={}", txnHash);
@@ -362,6 +363,32 @@ public class LedgerClientHelper {
     }
 
     return new ParseResult(operations, sourceAccount, memo);
+  }
+
+  /**
+   * Resolve the account a transaction is submitted from. The transaction source is a muxed account
+   * union (CAP-0027): a plain ed25519 key, or a muxed key whose id is dropped here, so the result
+   * is always the base {@code G...} address, the same shape {@link #resolveSourceAccount} yields
+   * for an operation source.
+   *
+   * @param source the transaction-level source account
+   * @param txnHash the transaction hash, for logging
+   * @return the base {@code G...} address, or null if the key type is not one the XDR union allows
+   */
+  private static String resolveTransactionSource(
+      org.stellar.sdk.xdr.MuxedAccount source, String txnHash) {
+    return switch (source.getDiscriminant()) {
+      case KEY_TYPE_ED25519 -> StrKey.encodeEd25519PublicKey(source.getEd25519().getUint256());
+      case KEY_TYPE_MUXED_ED25519 ->
+          StrKey.encodeEd25519PublicKey(source.getMed25519().getEd25519().getUint256());
+      default -> {
+        debugF(
+            "Unsupported transaction source key type. tx.hash={}, discriminant={}",
+            txnHash,
+            source.getDiscriminant());
+        yield null;
+      }
+    };
   }
 
   public record ParseResult(Operation[] operations, String sourceAccount, Memo memo) {}

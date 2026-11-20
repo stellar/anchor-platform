@@ -58,9 +58,24 @@ This should only be run one time.
 
 ## Install and check the secret store `fake-secret-store`
 
+The chart commits no JWT or API secret, because this repository is public. Generate a new value for each of the
+seven secrets with `openssl rand -hex 32` and pass them with `--set`; `helm` fails and names the missing value if one
+is left out. Each secret must be different, and the SEP server, the platform and the reference server read the same
+values, so keep them and pass the same ones on every upgrade.
+
 ```bash
 source ../.env
-helm upgrade --install fake-secret-store ./secret-store/ --set sep10_signing_seed=$SECRET_SEP10_SIGNING_SEED --set sentry_auth_token=$SENTRY_AUTH_TOKEN --set payment_signing_seed=$APP__PAYMENT_SIGNING_SEED
+helm upgrade --install fake-secret-store ./secret-store/ \
+  --set sep10_signing_seed=$SECRET_SEP10_SIGNING_SEED \
+  --set sentry_auth_token=$SENTRY_AUTH_TOKEN \
+  --set payment_signing_seed=$APP__PAYMENT_SIGNING_SEED \
+  --set sep10_jwt_secret=$(openssl rand -hex 32) \
+  --set sep24_interactive_url_jwt_secret=$(openssl rand -hex 32) \
+  --set sep24_more_info_url_jwt_secret=$(openssl rand -hex 32) \
+  --set sep6_more_info_url_jwt_secret=$(openssl rand -hex 32) \
+  --set sep45_jwt_secret=$(openssl rand -hex 32) \
+  --set callback_api_auth_secret=$(openssl rand -hex 32) \
+  --set platform_api_auth_secret=$(openssl rand -hex 32)
 ```
 
 To show if the secret store is running, run the following command:
