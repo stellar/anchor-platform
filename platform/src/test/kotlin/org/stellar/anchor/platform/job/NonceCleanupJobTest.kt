@@ -2,13 +2,16 @@ package org.stellar.anchor.platform.job
 
 import io.mockk.MockKAnnotations
 import io.mockk.confirmVerified
+import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.verify
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.test.Test
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.auth.NonceStore
 
 class NonceCleanupJobTest {
@@ -32,5 +35,15 @@ class NonceCleanupJobTest {
 
     verify(exactly = 1) { nonceStore.deleteExpiredNonces(now) }
     confirmVerified(nonceStore)
+  }
+
+  @Test
+  fun `cleanup lets a store failure propagate to the scheduler`() {
+    val failure = IllegalStateException("database unavailable")
+    every { nonceStore.deleteExpiredNonces(now) } throws failure
+
+    val thrown = assertThrows<IllegalStateException> { nonceCleanupJob.cleanup() }
+
+    assertSame(failure, thrown)
   }
 }
