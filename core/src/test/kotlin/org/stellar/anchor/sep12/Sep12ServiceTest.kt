@@ -569,6 +569,23 @@ class Sep12ServiceTest {
   }
 
   @Test
+  fun `test get by transaction_id decides key and memo rule from one registry lookup`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+    givenSep31TransactionOf("111", "customer-b")
+    // The registry answers the first lookup and fails afterwards.
+    every { clientService.getClientConfigByName("vibrant") } returnsMany
+      listOf(
+        CustodialClient.builder().name("vibrant").signingKeys(setOf(TEST_ACCOUNT)).build()
+      ) andThenThrows
+      RuntimeException("db down")
+
+    assertThrows<SepNotAuthorizedException> {
+      sep12Service.getCustomer(custodialToken("111"), transactionGet())
+    }
+  }
+
+  @Test
   fun `test update request memo and memo type`() {
     val mockRequestBase = mockk<Sep12CustomerRequestBase>(relaxed = true)
 

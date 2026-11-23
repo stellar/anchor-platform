@@ -200,21 +200,21 @@ public class Sep31Service {
             .memo(webAuthJwt.getAccountMemo())
             .build();
 
-    String ownerAccount = ownerKeyResolver.ownerKey(webAuthJwt);
+    OwnerKeyResolver.Owner owner = ownerKeyResolver.resolve(webAuthJwt);
     String ownerMemo = webAuthJwt.getOwnerMemo();
 
     Sep31Info.Sep12Info sep12Config = assetInfo.getSep31().getSep12();
     verifyCustomerOwnershipAndKyc(
         request.getSenderId(),
         "sep31-sender",
-        ownerAccount,
+        owner,
         ownerMemo,
         webAuthJwt,
         sep12Config != null && sep12Config.getSender() != null);
     verifyCustomerOwnershipAndKyc(
         request.getReceiverId(),
         "sep31-receiver",
-        ownerAccount,
+        owner,
         ownerMemo,
         webAuthJwt,
         sep12Config != null && sep12Config.getReceiver() != null);
@@ -323,8 +323,8 @@ public class Sep31Service {
    *     {@link org.stellar.anchor.api.sep.sep31.Sep31InfoResponse.AssetResponse#getSep12()}), and
    *     echoed back in {@link Sep31CustomerInfoNeededException#getType()} so the sending anchor
    *     knows which SEP-12 `type` to use when it re-fetches the customer
-   * @param ownerAccount the authenticated caller's per-user ownership-store identity (see the
-   *     {@code ownerAccount} computed in {@link #postTransaction})
+   * @param owner the authenticated caller's ownership-store key and client type, resolved once (see
+   *     the {@code owner} computed in {@link #postTransaction})
    * @param ownerMemo the authenticated caller's ownership-store memo
    * @param webAuthJwt the authenticated caller's token, used both for the unclaimed-id reverse
    *     lookup and for legacy-key reconciliation
@@ -340,7 +340,7 @@ public class Sep31Service {
   void verifyCustomerOwnershipAndKyc(
       String customerId,
       String customerType,
-      String ownerAccount,
+      OwnerKeyResolver.Owner owner,
       String ownerMemo,
       WebAuthJwt webAuthJwt,
       boolean kycRequired)
@@ -375,8 +375,8 @@ public class Sep31Service {
 
     // A sending client may manage the customers of several of its memos, except a custodial client:
     // its owner key is the client name for every end user, so the memo alone keeps them apart.
-    boolean ignoreMemo = !ownerKeyResolver.isCustodial(webAuthJwt);
-    if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo, ignoreMemo)
+    boolean ignoreMemo = !owner.custodial();
+    if (!customerIdOwnerStore.verifyOrClaim(customerId, owner.key(), ownerMemo, ignoreMemo)
         && !CustomerOwnershipReconciliation.tryReconcile(
             customerIdOwnerStore,
             ownerKeyResolver,

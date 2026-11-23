@@ -1565,6 +1565,28 @@ class Sep31ServiceTest {
   }
 
   @Test
+  fun `test postTransaction decides key and memo rule from one registry lookup`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+    // The registry answers the first lookup and fails afterwards.
+    every { clientService.getClientConfigByName("vibrant") } returnsMany
+      listOf(
+        CustodialClient.builder()
+          .name("vibrant")
+          .signingKeys(setOf(TestHelper.TEST_ACCOUNT))
+          .build()
+      ) andThenThrows
+      RuntimeException("db down")
+
+    assertThrows<SepNotAuthorizedException> {
+      sep31Service.postTransaction(
+        clientToken("vibrant", "111"),
+        ownershipTestRequest(receiverId = "customer-b"),
+      )
+    }
+  }
+
+  @Test
   fun `test postTransaction skips ownership check when sender_id and receiver_id are absent and KYC is not required`() {
     useNoSep12AssetService()
     val postTxRequest = ownershipTestRequest()
