@@ -354,11 +354,14 @@ public class Sep12Service {
       isIdPath = true;
 
       if (customerIdOwnerStore.isClaimed(requestBase.getId())) {
+        // Same relaxation as SEP-31 `sender_id`/`receiver_id`, except for a custodial client, whose
+        // owner key is shared by every end user so the memo alone keeps them apart.
+        boolean ignoreMemo = isSep31TransactionLookup && !ownerKeyResolver.isCustodial(token);
         if (!customerIdOwnerStore.verify(
                 requestBase.getId(),
                 ownerKeyResolver.ownerKey(token),
                 token.getOwnerMemo(),
-                isSep31TransactionLookup)
+                ignoreMemo)
             && !CustomerOwnershipReconciliation.tryReconcile(
                 customerIdOwnerStore,
                 ownerKeyResolver,

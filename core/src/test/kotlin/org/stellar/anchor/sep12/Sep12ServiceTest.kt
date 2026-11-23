@@ -38,6 +38,7 @@ import org.stellar.anchor.client.ClientService
 import org.stellar.anchor.client.CustodialClient
 import org.stellar.anchor.client.NonCustodialClient
 import org.stellar.anchor.event.EventService
+import org.stellar.anchor.sep31.InMemoryCustomerIdOwnerStore
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
 import org.stellar.anchor.util.StringHelper.json
 
@@ -382,6 +383,189 @@ class Sep12ServiceTest {
     val jwtToken = createJwtToken("$TEST_ACCOUNT:$TEST_MEMO")
 
     assertDoesNotThrow { sep12Service.validateGetOrPutRequest(request, jwtToken) }
+  }
+
+  private val custodialSecondKey = "GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"
+
+  // Runs the SEP-31 `transaction_id` lookup against the real ownership comparison (an in-memory
+  // store with the JDBC store's semantics) so the tests assert who is refused, not which argument
+  // was passed to a mock.
+  private fun useInMemoryOwnerStore(): InMemoryCustomerIdOwnerStore {
+    val store = InMemoryCustomerIdOwnerStore()
+    sep12Service =
+      Sep12Service(customerIntegration, platformApiClient, eventService, store, clientService)
+    every { clientService.getClientConfigByName("vibrant") } returns
+      CustodialClient.builder()
+        .name("vibrant")
+        .signingKeys(setOf(TEST_ACCOUNT, custodialSecondKey))
+        .build()
+    every { customerIntegration.putCustomer(any()) } returns
+      PutCustomerResponse.builder().id("updated-id").status(Sep12Status.ACCEPTED.name).build()
+    return store
+  }
+
+  // The SEP-31 transaction of the given creator whose customer is `customerId`, as the platform API
+  // returns it.
+  private fun givenSep31TransactionOf(
+    creatorMemo: String?,
+    customerId: String,
+    role: String = "sep31-receiver",
+    creatorAccount: String = TEST_ACCOUNT,
+  ) {
+    val customer = StellarId.builder().id(customerId).build()
+    val customers =
+      if (role == "sep31-receiver") Customers.builder().receiver(customer).build()
+      else Customers.builder().sender(customer).build()
+    every { platformApiClient.getTransaction(any()) } returns
+      GetTransactionResponse.builder()
+        .creator(StellarId.builder().account(creatorAccount).memo(creatorMemo).build())
+        .customers(customers)
+        .build()
+  }
+
+  private fun custodialToken(memo: String?, account: String = TEST_ACCOUNT) =
+    createJwtToken(if (memo == null) account else "$account:$memo", "vibrant")
+
+  private fun transactionGet(role: String = "sep31-receiver") =
+    Sep12GetCustomerRequest.builder().transactionId(TEST_TRANSACTION_ID).type(role).build()
+
+  private fun transactionPut(role: String = "sep31-receiver") =
+    Sep12PutCustomerRequest.builder()
+      .transactionId(TEST_TRANSACTION_ID)
+      .type(role)
+      .firstName("Mallory")
+      .build()
+
+  @Test
+  fun `test get by transaction_id refuses a receiver owned by another end user of the same custodial client`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+    givenSep31TransactionOf("111", "customer-b")
+
+    val ex: SepException = assertThrows {
+      sep12Service.getCustomer(custodialToken("111"), transactionGet())
+    }
+
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
+    verify(exactly = 0) { customerIntegration.getCustomer(match { it.id == "customer-b" }) }
+  }
+
+  @Test
+  fun `test get by transaction_id refuses a sender owned by another end user of the same custodial client`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+    givenSep31TransactionOf("111", "customer-b", "sep31-sender")
+
+    val ex: SepException = assertThrows {
+      sep12Service.getCustomer(custodialToken("111"), transactionGet("sep31-sender"))
+    }
+
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
+    verify(exactly = 0) { customerIntegration.getCustomer(match { it.id == "customer-b" }) }
+  }
+
+  @Test
+  fun `test put by transaction_id refuses a receiver owned by another end user of the same custodial client`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+    givenSep31TransactionOf("111", "customer-b")
+
+    val ex: SepException = assertThrows {
+      sep12Service.putCustomer(custodialToken("111"), transactionPut())
+    }
+
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("not authorized for customer id", ex.message)
+    verify(exactly = 0) { customerIntegration.putCustomer(any()) }
+  }
+
+  @Test
+  fun `test get and put by transaction_id accept a customer owned by the same custodial end user under every signing key`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+
+    for (account in listOf(TEST_ACCOUNT, custodialSecondKey)) {
+      givenSep31TransactionOf("222", "customer-b", creatorAccount = account)
+      assertDoesNotThrow {
+        sep12Service.getCustomer(custodialToken("222", account), transactionGet())
+      }
+      assertDoesNotThrow {
+        sep12Service.putCustomer(custodialToken("222", account), transactionPut())
+      }
+    }
+
+    verify(atLeast = 2) { customerIntegration.getCustomer(match { it.id == "customer-b" }) }
+    verify(exactly = 2) { customerIntegration.putCustomer(any()) }
+  }
+
+  @Test
+  fun `test get by transaction_id refuses a custodial end user without a memo on a customer owned under a memo`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+    givenSep31TransactionOf(null, "customer-b")
+
+    assertThrows<SepNotAuthorizedException> {
+      sep12Service.getCustomer(custodialToken(null), transactionGet())
+    }
+  }
+
+  @Test
+  fun `test get by transaction_id accepts a custodial end user without a memo on a customer it owns`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-c", "vibrant", null, false)
+    givenSep31TransactionOf(null, "customer-c")
+
+    assertDoesNotThrow { sep12Service.getCustomer(custodialToken(null), transactionGet()) }
+  }
+
+  @Test
+  fun `test get by transaction_id refuses a custodial caller on a customer owned by another custodial client`() {
+    val store = useInMemoryOwnerStore()
+    every { clientService.getClientConfigByName("other") } returns
+      CustodialClient.builder().name("other").signingKeys(setOf(TEST_ACCOUNT)).build()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+    givenSep31TransactionOf("222", "customer-b")
+
+    assertThrows<SepNotAuthorizedException> {
+      sep12Service.getCustomer(createJwtToken("$TEST_ACCOUNT:222", "other"), transactionGet())
+    }
+  }
+
+  @Test
+  fun `test get by transaction_id keeps accepting a customer owned under a different memo for a non-custodial client`() {
+    val store = useInMemoryOwnerStore()
+    every { clientService.getClientConfigByName("wallet") } returns
+      NonCustodialClient.builder().name("wallet").domains(setOf("wallet.org")).build()
+    store.verifyOrClaim("customer-b", "wallet:$TEST_ACCOUNT", "222", false)
+    givenSep31TransactionOf("111", "customer-b")
+
+    assertDoesNotThrow {
+      sep12Service.getCustomer(createJwtToken("$TEST_ACCOUNT:111", "wallet"), transactionGet())
+    }
+  }
+
+  @Test
+  fun `test get by transaction_id keeps accepting a different memo when the client registry fails`() {
+    val store = useInMemoryOwnerStore()
+    every { clientService.getClientConfigByName("vibrant") } throws RuntimeException("db down")
+    store.verifyOrClaim("customer-b", "vibrant:$TEST_ACCOUNT", "222", false)
+    givenSep31TransactionOf("111", "customer-b")
+
+    assertDoesNotThrow { sep12Service.getCustomer(custodialToken("111"), transactionGet()) }
+  }
+
+  @Test
+  fun `test a registry failure does not let get by transaction_id reach a custodial end user's customer`() {
+    val store = useInMemoryOwnerStore()
+    every { clientService.getClientConfigByName("vibrant") } throws RuntimeException("db down")
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+    givenSep31TransactionOf("111", "customer-b")
+
+    assertThrows<SepNotAuthorizedException> {
+      sep12Service.getCustomer(custodialToken("111"), transactionGet())
+    }
   }
 
   @Test
