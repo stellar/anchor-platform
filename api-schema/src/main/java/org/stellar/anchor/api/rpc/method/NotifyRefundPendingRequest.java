@@ -23,11 +23,10 @@ public class NotifyRefundPendingRequest extends RpcMethodParamsRequest {
   public static class Refund {
 
     @NotBlank private String id;
-    @NotNull @Valid private AmountAssetRequest amount;
+    @NotNull private AmountAssetRequest amount;
 
     @SerializedName("amount_fee")
     @NotNull
-    @Valid
     private AmountAssetRequest amountFee;
   }
 }

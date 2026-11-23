@@ -135,10 +135,13 @@ class RefundNestedValidationTest {
     return txn
   }
 
-  private fun sep24Txn(): JdbcSep24Transaction {
+  private fun sep24Txn(
+    kind: String = DEPOSIT.kind,
+    status: SepTransactionStatus = PENDING_ANCHOR
+  ): JdbcSep24Transaction {
     val txn = JdbcSep24Transaction()
-    txn.status = PENDING_ANCHOR.toString()
-    txn.kind = DEPOSIT.kind
+    txn.status = status.toString()
+    txn.kind = kind
     txn.transferReceivedAt = Instant.now()
     txn.amountIn = "100"
     txn.amountInAsset = NATIVE
@@ -179,6 +182,9 @@ class RefundNestedValidationTest {
       "no-amount-asset" -> refund(amount = amount("40", null))
       "no-amount-fee-value" -> refund(amountFee = amount(null))
       "no-amount-fee-asset" -> refund(amountFee = amount("0", null))
+      "blank-amount-asset" -> refund(amount = amount("40", " "))
+      "blank-amount-fee-value" -> refund(amountFee = amount(" "))
+      "blank-amount-fee-asset" -> refund(amountFee = amount("0", " "))
       "empty-object" -> emptyMap()
       else -> throw IllegalArgumentException(shape)
     }
@@ -197,6 +203,9 @@ class RefundNestedValidationTest {
     "notify_refund_sent,no-amount-asset",
     "notify_refund_sent,no-amount-fee-value",
     "notify_refund_sent,no-amount-fee-asset",
+    "notify_refund_sent,blank-amount-asset",
+    "notify_refund_sent,blank-amount-fee-value",
+    "notify_refund_sent,blank-amount-fee-asset",
     "notify_refund_sent,empty-object",
     "notify_refund_pending,no-id",
     "notify_refund_pending,empty-id",
@@ -208,6 +217,9 @@ class RefundNestedValidationTest {
     "notify_refund_pending,no-amount-asset",
     "notify_refund_pending,no-amount-fee-value",
     "notify_refund_pending,no-amount-fee-asset",
+    "notify_refund_pending,blank-amount-asset",
+    "notify_refund_pending,blank-amount-fee-value",
+    "notify_refund_pending,blank-amount-fee-asset",
     "notify_refund_pending,empty-object"
   )
   fun refv01_02_03_sep6_malformedRefundIsRejectedAsInvalidParamsAndNothingIsStored(
@@ -286,6 +298,59 @@ class RefundNestedValidationTest {
 
     assertNull(response.error)
     assertEquals(PENDING_ANCHOR.toString(), txn.status)
+  }
+
+  @Test
+  fun refv04_sep24_sentWithoutRefundOutsidePendingAnchorIsAccepted() {
+    val txn = sep24Txn(status = PENDING_EXTERNAL)
+    assertNull(call(SENT, refund()).error) // stores refund A, back to pending_anchor
+    txn.status = PENDING_EXTERNAL.toString()
+
+    val response = call(SENT, null)
+
+    assertNull(response.error)
+    assertEquals(listOf("A"), txn.refunds.refundPayments.map { it.id })
+  }
+
+  @Test
+  fun refv04_sep24_pendingWithoutRefundOnWithdrawalIsAccepted() {
+    val txn = sep24Txn(kind = WITHDRAWAL.kind, status = PENDING_EXTERNAL)
+
+    val response = call(PENDING, null)
+
+    assertNull(response.error)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["no-id", "blank-id", "no-amount", "no-amount-fee"])
+  fun refv01_02_sep6_pendingWithMalformedRefundOnWithdrawalIsRejectedAndUnchanged(shape: String) {
+    val txn = sep6Txn(kind = WITHDRAWAL.kind, status = PENDING_EXTERNAL)
+
+    val response = call(PENDING, malformed(shape))
+
+    assertInvalidParams(response)
+    assertNull(txn.refunds)
+    assertEquals(PENDING_EXTERNAL.toString(), txn.status)
+    verify(exactly = 0) { txn6Store.save(any()) }
+  }
+
+  // ---- Edge: the status guard answers before the refund is looked at ----
+
+  @ParameterizedTest
+  @ValueSource(strings = [SENT, PENDING])
+  fun edge_sep6_malformedRefundOnUnsupportedStatusAnswersInvalidRequestAndLeavesTheTransaction(
+    method: String
+  ) {
+    val txn = sep6Txn(status = COMPLETED)
+
+    val response = call(method, refund(id = null))
+
+    assertNull(response.result)
+    assertEquals(-32600, response.error.code)
+    assertNull(txn.refunds)
+    assertEquals(COMPLETED.toString(), txn.status)
+    verify(exactly = 0) { txn6Store.save(any()) }
   }
 
   @ParameterizedTest
