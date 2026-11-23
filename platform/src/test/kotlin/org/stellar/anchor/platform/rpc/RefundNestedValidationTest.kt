@@ -335,6 +335,18 @@ class RefundNestedValidationTest {
     verify(exactly = 0) { txn6Store.save(any()) }
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = ["blank-amount-value", "no-amount-asset", "blank-amount-fee-value"])
+  fun refv02_sep6_pendingOnWithdrawalNeverReadsRefundAmountsAndStoresNothing(shape: String) {
+    val txn = sep6Txn(kind = WITHDRAWAL.kind, status = PENDING_EXTERNAL)
+
+    val response = call(PENDING, malformed(shape))
+
+    assertNull(response.error)
+    assertNull(txn.refunds)
+    assertEquals(PENDING_ANCHOR.toString(), txn.status)
+  }
+
   // ---- Edge: the status guard answers before the refund is looked at ----
 
   @ParameterizedTest
