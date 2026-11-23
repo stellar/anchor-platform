@@ -13,10 +13,14 @@ import org.stellar.anchor.TestHelper
 import org.stellar.anchor.api.callback.CustomerIntegration
 import org.stellar.anchor.api.callback.GetCustomerResponse
 import org.stellar.anchor.auth.WebAuthJwt
+import org.stellar.anchor.client.ClientService
+import org.stellar.anchor.client.CustodialClient
 
 class CustomerOwnershipReconciliationTest {
   private val store = mockk<Sep31CustomerIdOwnerStore>(relaxed = true)
   private val customerIntegration = mockk<CustomerIntegration>()
+  private val clientService = mockk<ClientService>(relaxed = true)
+  private val ownerKeyResolver = OwnerKeyResolver(clientService)
 
   private lateinit var token: WebAuthJwt
 
@@ -29,6 +33,7 @@ class CustomerOwnershipReconciliationTest {
   private fun reconcile(jwt: WebAuthJwt = token) =
     CustomerOwnershipReconciliation.tryReconcile(
       store,
+      ownerKeyResolver,
       customerIntegration,
       "customer-1",
       jwt,
@@ -47,6 +52,22 @@ class CustomerOwnershipReconciliationTest {
     assertTrue(reconcile())
     verify(exactly = 1) {
       store.reconcileLegacyKey("customer-1", "vibrant", "222", "vibrant:$TEST_ACCOUNT", TEST_MEMO)
+    }
+  }
+
+  @Test
+  fun `tryReconcile hands the client name as the new key when the client is custodial`() {
+    every { clientService.getClientConfigByName("vibrant") } returns
+      CustodialClient.builder().name("vibrant").signingKeys(setOf(TEST_ACCOUNT)).build()
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse().apply { id = "customer-1" }
+    every { store.getCreatorMemo("customer-1") } returns "222"
+    every { store.reconcileLegacyKey("customer-1", "vibrant", "222", "vibrant", TEST_MEMO) } returns
+      true
+
+    assertTrue(reconcile())
+    verify(exactly = 1) {
+      store.reconcileLegacyKey("customer-1", "vibrant", "222", "vibrant", TEST_MEMO)
     }
   }
 

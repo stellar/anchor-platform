@@ -168,12 +168,55 @@ class TransactionMapperTest {
     // them directly rather than switching this whole builder chain to GetTransactionResponse.
     expectedJsonObject.add("fields", gson.toJsonTree(sepTxn.fields))
     expectedJsonObject.add(
-      "requiredInfoUpdatesFields",
+      "required_info_updates_fields",
       gson.toJsonTree(sepTxn.requiredInfoUpdates.transaction),
     )
     val expected = gson.toJson(expectedJsonObject)
 
     JSONAssert.assertEquals(expected, actual, true)
+  }
+
+  // WIRE-04
+  @Test
+  fun `test SEP-31 transaction mapping publishes the per-field metadata under one key`() {
+    val metadata = mapOf("bank_name" to AssetInfo.Field("The bank's name", null, false))
+    val sepTxn =
+      PojoSep31Transaction().apply {
+        id = UUID.randomUUID().toString()
+        status = "pending_transaction_info_update"
+        amountIn = "100.0"
+        amountInAsset = "USDC"
+        amountOut = "100.0"
+        amountOutAsset = "USD"
+        feeDetails = FeeDetails("10.0", "USD")
+        fromAccount = "fromAccount"
+        toAccount = "toAccount"
+        startedAt = Instant.now()
+        updatedAt = Instant.now()
+        amountExpected = "100.0"
+        receiverId = "receiverId"
+        senderId = "senderId"
+        requiredInfoUpdates = Sep31Info.Fields().apply { transaction = metadata }
+      }
+
+    val response = TransactionMapper.toGetTransactionResponse(sepTxn)
+    val json = gson.toJsonTree(response).asJsonObject
+
+    assertEquals(metadata, response.requiredInfoUpdatesFields)
+    assertEquals(
+      "The bank's name",
+      json
+        .getAsJsonObject("required_info_updates_fields")
+        .getAsJsonObject("bank_name")
+        .get("description")
+        .asString,
+    )
+    assertEquals(
+      listOf("required_info_updates_fields"),
+      json.keySet().filter {
+        it in setOf("required_info_updates_fields", "requiredInfoUpdatesFields")
+      },
+    )
   }
 
   @Test
@@ -492,7 +535,7 @@ class TransactionMapperTest {
     val jsonObject = gson.fromJson(jsonString, JsonObject::class.java)
 
     // Add the "funding_method" field
-    jsonObject.addProperty("fundingMethod", sepTxn.type)
+    jsonObject.addProperty("funding_method", sepTxn.type)
     // PlatformTransactionData's builder has no slot for `fields` (it lives on
     // GetTransactionResponse instead), so add it directly rather than switching this whole
     // builder chain to GetTransactionResponse.

@@ -61,7 +61,7 @@ jobs:
         uses: stellar/actions/rust-cache@main
 
       - name: Install Stellar CLI
-        uses: stellar/stellar-cli@v27.0.0
+        uses: stellar/stellar-cli@v30.0.1
 
       - name: Install stellar-sdk Python package
         run: python3 -m pip install stellar-sdk
