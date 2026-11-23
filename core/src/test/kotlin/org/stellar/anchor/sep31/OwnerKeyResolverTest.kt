@@ -4,6 +4,8 @@ import io.mockk.every
 import io.mockk.mockk
 import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.auth.Sep10Jwt
 import org.stellar.anchor.client.ClientService
@@ -103,5 +105,21 @@ class OwnerKeyResolverTest {
     every { clientService.getClientConfigByName("vibrant") } throws RuntimeException("db down")
 
     assertEquals("vibrant:$key1", resolver.ownerKey(token(key1, "vibrant")))
+  }
+
+  @Test
+  fun `only a registered custodial client is custodial`() {
+    every { clientService.getClientConfigByName("vibrant") } returns custodial("vibrant")
+    every { clientService.getClientConfigByName("wallet") } returns
+      NonCustodialClient.builder().name("wallet").domains(setOf("wallet.org")).build()
+    every { clientService.getClientConfigByName("ghost") } returns null
+    every { clientService.getClientConfigByName("broken") } throws RuntimeException("db down")
+
+    assertTrue(resolver.isCustodial(token("$key1:42", "vibrant")))
+    assertTrue(resolver.isCustodial(token(key2, "vibrant")))
+    assertFalse(resolver.isCustodial(token(userAccount, "wallet")))
+    assertFalse(resolver.isCustodial(token(key1, "ghost")))
+    assertFalse(resolver.isCustodial(token(key1, "broken")))
+    assertFalse(resolver.isCustodial(token(userAccount, null)))
   }
 }

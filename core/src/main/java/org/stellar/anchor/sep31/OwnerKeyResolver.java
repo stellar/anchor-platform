@@ -22,11 +22,17 @@ public class OwnerKeyResolver {
   }
 
   public String ownerKey(WebAuthJwt token) {
+    return isCustodial(token) ? token.getClientName() : token.getOwnerKey();
+  }
+
+  /**
+   * Whether the token belongs to a registered custodial client, the one case where {@link
+   * #ownerKey} is shared by every end user and the owner memo is the only thing that tells them
+   * apart. An unregistered client or a failing registry lookup is not custodial.
+   */
+  public boolean isCustodial(WebAuthJwt token) {
     String clientName = token.getClientName();
-    if (clientName != null && isCustodial(clientName)) {
-      return clientName;
-    }
-    return token.getOwnerKey();
+    return clientName != null && isCustodial(clientName);
   }
 
   private boolean isCustodial(String clientName) {
