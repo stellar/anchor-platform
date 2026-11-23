@@ -44,6 +44,7 @@ import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.auth.JwtService
 import org.stellar.anchor.client.ClientService
 import org.stellar.anchor.client.CustodialClient
+import org.stellar.anchor.client.NonCustodialClient
 import org.stellar.anchor.config.*
 import org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_RECEIVE
 import org.stellar.anchor.config.Sep31Config.PaymentType.STRICT_SEND
@@ -1279,7 +1280,7 @@ class Sep31ServiceTest {
     }
 
     verify(exactly = 2) {
-      customerIdOwnerStore.verifyOrClaim("shared-receiver-id", "vibrant", null, true)
+      customerIdOwnerStore.verifyOrClaim("shared-receiver-id", "vibrant", null, false)
     }
     verify(exactly = 0) {
       customerIdOwnerStore.verifyOrClaim(any(), match { it.startsWith("vibrant:") }, any(), any())
@@ -1366,6 +1367,201 @@ class Sep31ServiceTest {
       customerIdOwnerStore.verifyOrClaim("sub-user-b-id", subUserB.ownerKey, "99", true)
     }
     assertNotEquals(subUserA.ownerKey, subUserB.ownerKey)
+  }
+
+  private val custodialSecondKey = "GAXLBAY4YSF6RRZTMV2CKS4NDVCMAYVKQGV3GNPUR2WWQVEFF6UYS4XZ"
+
+  // Runs postTransaction against the real ownership comparison (an in-memory store with the JDBC
+  // store's semantics) so the tests assert who is refused instead of which argument was passed.
+  private fun useInMemoryOwnerStore(): InMemoryCustomerIdOwnerStore {
+    val store = InMemoryCustomerIdOwnerStore()
+    sep31Service =
+      Sep31Service(
+        languageConfig,
+        sep31Config,
+        txnStore,
+        quoteStore,
+        DefaultAssetService.fromJsonContent(noSep12AssetJson),
+        rateIntegration,
+        eventService,
+        Clock.systemUTC(),
+        exchangeAmountsCalculator,
+        store,
+        customerIntegration,
+        clientService,
+      )
+    every { rateIntegration.getRate(any()) } returns
+      GetRateResponse(
+        GetRateResponse.Rate.builder()
+          .fee(
+            FeeDetails("2", "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+          )
+          .build()
+      )
+    every { txnStore.save(any()) } answers
+      {
+        firstArg<Sep31Transaction>().also { it.id = "ABC-123" }
+      }
+    every { clientService.getClientConfigByName("vibrant") } returns
+      CustodialClient.builder()
+        .name("vibrant")
+        .signingKeys(setOf(TestHelper.TEST_ACCOUNT, custodialSecondKey))
+        .build()
+    return store
+  }
+
+  private fun clientToken(
+    clientName: String,
+    memo: String?,
+    account: String = TestHelper.TEST_ACCOUNT,
+  ) =
+    TestHelper.createWebAuthJwt(account = account, accountMemo = memo).also {
+      it.clientName = clientName
+    }
+
+  @Test
+  fun `test postTransaction refuses a receiver_id owned by another end user of the same custodial client`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+
+    val ex: AnchorException = assertThrows {
+      sep31Service.postTransaction(
+        clientToken("vibrant", "111"),
+        ownershipTestRequest(receiverId = "customer-b"),
+      )
+    }
+
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("sender_id/receiver_id does not belong to the authenticated client", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction refuses a sender_id owned by another end user of the same custodial client`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+
+    val ex: AnchorException = assertThrows {
+      sep31Service.postTransaction(
+        clientToken("vibrant", "111"),
+        ownershipTestRequest(senderId = "customer-b"),
+      )
+    }
+
+    assertInstanceOf(SepNotAuthorizedException::class.java, ex)
+    assertEquals("sender_id/receiver_id does not belong to the authenticated client", ex.message)
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test postTransaction accepts a customer id owned by the same custodial end user under every signing key`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+
+    for (account in listOf(TestHelper.TEST_ACCOUNT, custodialSecondKey)) {
+      assertDoesNotThrow {
+        sep31Service.postTransaction(
+          clientToken("vibrant", "222", account),
+          ownershipTestRequest(receiverId = "customer-b"),
+        )
+      }
+    }
+  }
+
+  @Test
+  fun `test postTransaction refuses a custodial end user without a memo on a customer id owned under a memo`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+
+    assertThrows<SepNotAuthorizedException> {
+      sep31Service.postTransaction(
+        clientToken("vibrant", null),
+        ownershipTestRequest(receiverId = "customer-b"),
+      )
+    }
+  }
+
+  @Test
+  fun `test postTransaction accepts a custodial end user without a memo on a customer id it owns`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-c", "vibrant", null, false)
+
+    assertDoesNotThrow {
+      sep31Service.postTransaction(
+        clientToken("vibrant", null),
+        ownershipTestRequest(receiverId = "customer-c"),
+      )
+    }
+  }
+
+  @Test
+  fun `test postTransaction accepts a custodial muxed end user on a customer id owned under its muxed id`() {
+    val store = useInMemoryOwnerStore()
+    store.verifyOrClaim("customer-m", "vibrant", "42", false)
+    val muxedToken =
+      TestHelper.createMuxedWebAuthJwt(muxedId = 42L).also { it.clientName = "vibrant" }
+
+    assertDoesNotThrow {
+      sep31Service.postTransaction(muxedToken, ownershipTestRequest(receiverId = "customer-m"))
+    }
+  }
+
+  @Test
+  fun `test postTransaction refuses a custodial caller on a customer id owned by another custodial client`() {
+    val store = useInMemoryOwnerStore()
+    every { clientService.getClientConfigByName("other") } returns
+      CustodialClient.builder().name("other").signingKeys(setOf(TestHelper.TEST_ACCOUNT)).build()
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+
+    assertThrows<SepNotAuthorizedException> {
+      sep31Service.postTransaction(
+        clientToken("other", "222"),
+        ownershipTestRequest(receiverId = "customer-b"),
+      )
+    }
+  }
+
+  @Test
+  fun `test postTransaction keeps accepting a customer id owned under a different memo for a non-custodial client`() {
+    val store = useInMemoryOwnerStore()
+    every { clientService.getClientConfigByName("wallet") } returns
+      NonCustodialClient.builder().name("wallet").domains(setOf("wallet.org")).build()
+    store.verifyOrClaim("customer-b", "wallet:${TestHelper.TEST_ACCOUNT}", "222", false)
+
+    assertDoesNotThrow {
+      sep31Service.postTransaction(
+        clientToken("wallet", "111"),
+        ownershipTestRequest(receiverId = "customer-b"),
+      )
+    }
+  }
+
+  @Test
+  fun `test postTransaction keeps accepting a customer id owned under a different memo when the client registry fails`() {
+    val store = useInMemoryOwnerStore()
+    every { clientService.getClientConfigByName("vibrant") } throws RuntimeException("db down")
+    store.verifyOrClaim("customer-b", "vibrant:${TestHelper.TEST_ACCOUNT}", "222", false)
+
+    assertDoesNotThrow {
+      sep31Service.postTransaction(
+        clientToken("vibrant", "111"),
+        ownershipTestRequest(receiverId = "customer-b"),
+      )
+    }
+  }
+
+  @Test
+  fun `test postTransaction does not let a registry failure reach a custodial end user's customer id`() {
+    val store = useInMemoryOwnerStore()
+    every { clientService.getClientConfigByName("vibrant") } throws RuntimeException("db down")
+    store.verifyOrClaim("customer-b", "vibrant", "222", false)
+
+    assertThrows<SepNotAuthorizedException> {
+      sep31Service.postTransaction(
+        clientToken("vibrant", "111"),
+        ownershipTestRequest(receiverId = "customer-b"),
+      )
+    }
   }
 
   @Test

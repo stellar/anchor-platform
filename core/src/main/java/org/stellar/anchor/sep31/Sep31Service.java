@@ -373,7 +373,10 @@ public class Sep31Service {
       }
     }
 
-    if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo, true)
+    // A sending client may manage the customers of several of its memos, except a custodial client:
+    // its owner key is the client name for every end user, so the memo alone keeps them apart.
+    boolean ignoreMemo = !ownerKeyResolver.isCustodial(webAuthJwt);
+    if (!customerIdOwnerStore.verifyOrClaim(customerId, ownerAccount, ownerMemo, ignoreMemo)
         && !CustomerOwnershipReconciliation.tryReconcile(
             customerIdOwnerStore,
             ownerKeyResolver,
