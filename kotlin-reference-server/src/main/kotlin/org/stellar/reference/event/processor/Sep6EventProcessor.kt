@@ -31,7 +31,7 @@ class Sep6EventProcessor(
   private val onchainPayments: MutableMap<String, String> = mutableMapOf(),
   /** Map of transaction ID to external transaction ID. */
   private val offchainPayments: MutableMap<String, String> = mutableMapOf(),
-  private val customerUpdateRetryDelaySeconds: Int = 5,
+  private val customerUpdateRetryDelaySeconds: Int = 1,
 ) : SepAnchorEventProcessor {
   companion object {
     val requiredKyc =
@@ -262,7 +262,7 @@ class Sep6EventProcessor(
 
   override suspend fun onCustomerUpdated(event: SendEventRequest) {
     val updatedCustomerId = event.payload?.customer?.id ?: return
-    retryOnException(delaySeconds = customerUpdateRetryDelaySeconds) {
+    retryOnException(maxAttempts = 3, delaySeconds = customerUpdateRetryDelaySeconds) {
       fetchAllPendingCustomerInfoUpdateTransactions()
         .filter { isCustomerForTransaction(it.id, updatedCustomerId) }
         .forEach { requestCustomerFunds(it) }

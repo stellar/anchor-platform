@@ -15,7 +15,7 @@ import org.stellar.reference.retryOnException
 class Sep31EventProcessor(
   private val config: Config,
   private val platformClient: PlatformClient,
-  private val customerUpdateRetryDelaySeconds: Int = 5,
+  private val customerUpdateRetryDelaySeconds: Int = 1,
 ) : SepAnchorEventProcessor {
   companion object {
     val requiredKyc =
@@ -111,7 +111,7 @@ class Sep31EventProcessor(
 
   override suspend fun onCustomerUpdated(event: SendEventRequest) {
     val updatedCustomerId = event.payload?.customer?.id ?: return
-    retryOnException(delaySeconds = customerUpdateRetryDelaySeconds) {
+    retryOnException(maxAttempts = 3, delaySeconds = customerUpdateRetryDelaySeconds) {
       fetchAllPendingCustomerInfoUpdateTransactions(TransactionsSeps.SEP_31)
         .filter { it.customers?.receiver?.id == updatedCustomerId }
         .forEach { notifyCustomerUpdated(it) }
