@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.stellar.anchor.MoreInfoUrlConstructor;
 import org.stellar.anchor.api.callback.CustomerIntegration;
 import org.stellar.anchor.api.callback.RateIntegration;
+import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
@@ -26,6 +27,7 @@ import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.platform.condition.OnAnySepsEnabled;
 import org.stellar.anchor.platform.config.*;
 import org.stellar.anchor.platform.service.SimpleInteractiveUrlConstructor;
+import org.stellar.anchor.platform.utils.RequestBodySizeLimitFilter;
 import org.stellar.anchor.platform.utils.TransactionCreationRateLimiter;
 import org.stellar.anchor.sep1.Sep1Service;
 import org.stellar.anchor.sep10.Sep10Service;
@@ -96,6 +98,17 @@ public class SepBeans {
       SecretConfig secretConfig,
       ClientService clientService) {
     return new PropertySep45Config(stellarNetworkConfig, secretConfig, clientService);
+  }
+
+  @Bean
+  public FilterRegistrationBean<RequestBodySizeLimitFilter> sepRequestBodySizeLimitFilter(
+      SepServerConfig sepServerConfig) throws InvalidConfigException {
+    long maxRequestBodySize = sepServerConfig.getMaxRequestBodySize();
+    if (maxRequestBodySize <= 0) {
+      throw new InvalidConfigException(
+          "sep_server.max_request_body_size must be a positive number of bytes");
+    }
+    return RequestBodySizeLimitFilter.registration(maxRequestBodySize);
   }
 
   /**

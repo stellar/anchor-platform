@@ -7,7 +7,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.Ordered;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
@@ -78,12 +77,7 @@ public class PlatformServerBeans {
     if (platformServerConfig.getMaxPatchRecords() <= 0) {
       throw new InvalidConfigException("platform_server.max_patch_records must be positive");
     }
-    FilterRegistrationBean<RequestBodySizeLimitFilter> registrationBean =
-        new FilterRegistrationBean<>();
-    registrationBean.setFilter(new RequestBodySizeLimitFilter(maxRequestBodySize));
-    registrationBean.addUrlPatterns("/*");
-    registrationBean.setOrder(Ordered.HIGHEST_PRECEDENCE);
-    return registrationBean;
+    return RequestBodySizeLimitFilter.registration(maxRequestBodySize);
   }
 
   @Bean
