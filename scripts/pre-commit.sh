@@ -8,9 +8,16 @@ echo "Running spotlessCheck."
 
 echo "Running helm lint."
 
+# The secret-store chart commits no secret, so its required values need a throwaway value to lint.
+SECRET_STORE_LINT_VALUES="--set-string sep10_jwt_secret=lint --set-string sep24_interactive_url_jwt_secret=lint --set-string sep24_more_info_url_jwt_secret=lint --set-string sep6_more_info_url_jwt_secret=lint --set-string sep45_jwt_secret=lint --set-string callback_api_auth_secret=lint --set-string platform_api_auth_secret=lint"
+
 find . -name Chart.yaml -exec dirname {} \; | while read chart_dir; do
   echo "Linting $chart_dir"
-  helm lint --quiet "$chart_dir" || (echo "${R}Helm lint failed. Please fix the issues before committing.${CLEAN}" && exit 1)
+  lint_values=""
+  if [ "$(basename "$chart_dir")" = "secret-store" ]; then
+    lint_values="$SECRET_STORE_LINT_VALUES"
+  fi
+  helm lint --quiet $lint_values "$chart_dir" || (echo "${R}Helm lint failed. Please fix the issues before committing.${CLEAN}" && exit 1)
 done
 
 #

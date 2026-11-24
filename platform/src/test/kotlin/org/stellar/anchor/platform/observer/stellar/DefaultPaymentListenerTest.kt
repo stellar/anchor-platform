@@ -701,9 +701,9 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
-  fun `test a transaction without amount_expected is credited and records nothing`() {
+  fun `test a transaction without amount_expected is credited against amount_in and records nothing`() {
     val event = underpaidEvent()
-    stubSep31(pendingSep31(amountExpected = null))
+    stubSep31(pendingSep31(amountExpected = null).apply { amountIn = "99.0000000" })
 
     paymentListener.onReceived(event)
 
@@ -844,6 +844,135 @@ class DefaultPaymentListenerTest {
       "6"
     )
     verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+  }
+
+  @Test
+  fun `test a transaction with neither amount_expected nor amount_in is not credited and records nothing`() {
+    stubSep31(pendingSep31(amountExpected = null))
+
+    paymentListener.onReceived(underpaidEvent())
+
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @Test
+  fun `test SEP-24 withdrawal without amount_expected is checked against amount_in`() {
+    val event = underpaidEvent()
+    val saved =
+      stubSep24(
+        pendingSep24Withdrawal().apply {
+          amountExpected = null
+          amountIn = "100.0000000"
+        }
+      )
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+    assertRecordedAndAnnounced(
+      event.ledgerTransaction.hash,
+      saved.captured.stellarTransactions,
+      "24"
+    )
+  }
+
+  @Test
+  fun `test SEP-24 withdrawal with an empty amount_expected is checked against amount_in`() {
+    stubSep24(
+      pendingSep24Withdrawal().apply {
+        amountExpected = ""
+        amountIn = "100.0000000"
+      }
+    )
+
+    paymentListener.onReceived(underpaidEvent())
+
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+  }
+
+  @Test
+  fun `test SEP-24 withdrawal paying the full amount_in without amount_expected is credited`() {
+    val event = underpaidEvent()
+    stubSep24(
+      pendingSep24Withdrawal().apply {
+        amountExpected = null
+        amountIn = "99.0000000"
+      }
+    )
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 1) {
+      platformApiClient.notifyOnchainFundsReceived(
+        "sep24-underpaid",
+        event.ledgerTransaction.hash,
+        any(),
+        any()
+      )
+    }
+  }
+
+  @Test
+  fun `test SEP-24 withdrawal with neither amount_expected nor amount_in is not credited`() {
+    stubSep24(pendingSep24Withdrawal().apply { amountExpected = null })
+
+    paymentListener.onReceived(underpaidEvent())
+
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+    verify(exactly = 0) { sep24TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun `test SEP-6 withdrawal without amount_expected is checked against amount_in`() {
+    val event = underpaidEvent()
+    val saved =
+      stubSep6(
+        pendingSep6Withdrawal(PlatformTransactionData.Kind.WITHDRAWAL.kind).apply {
+          amountExpected = null
+          amountIn = "100.0000000"
+        }
+      )
+
+    paymentListener.onReceived(event)
+
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+    assertRecordedAndAnnounced(
+      event.ledgerTransaction.hash,
+      saved.captured.stellarTransactions,
+      "6"
+    )
+  }
+
+  @Test
+  fun `test SEP-6 withdrawal with neither amount_expected nor amount_in is not credited`() {
+    stubSep6(
+      pendingSep6Withdrawal(PlatformTransactionData.Kind.WITHDRAWAL_EXCHANGE.kind).apply {
+        amountExpected = null
+      }
+    )
+
+    paymentListener.onReceived(underpaidEvent())
+
+    verify(exactly = 0) { platformApiClient.notifyOnchainFundsReceived(any(), any(), any(), any()) }
+    verify(exactly = 0) { sep6TransactionStore.save(any()) }
+  }
+
+  @Test
+  fun `test checkAssetAmountSufficient still accepts an outgoing payment without amounts`() {
+    val event = underpaidEvent()
+    val payment = event.ledgerTransaction.operations[0].paymentOperation
+    val deposit =
+      JdbcSep24Transaction().apply {
+        id = "sep24-deposit"
+        kind = PlatformTransactionData.Kind.DEPOSIT.kind
+        amountInAsset = underpaidAsset
+      }
+
+    assertTrue(
+      paymentListener.checkAssetAmountSufficient(event.ledgerTransaction, payment, deposit, false)
+    )
   }
 
   @Test
@@ -3068,6 +3197,7 @@ class DefaultPaymentListenerTest {
     val txn = JdbcSep31Transaction()
     txn.id = "123"
     txn.amountInAsset = fooAssetId
+    txn.amountExpected = "0.0000001"
     return txn
   }
 
@@ -3109,6 +3239,7 @@ class DefaultPaymentListenerTest {
     JdbcSep24Transaction().apply {
       id = "123"
       amountInAsset = fooAssetId
+      amountExpected = "0.0000001"
       this.kind = kind.kind
     }
 
@@ -3116,6 +3247,7 @@ class DefaultPaymentListenerTest {
     JdbcSep6Transaction().apply {
       id = "123"
       amountInAsset = fooAssetId
+      amountExpected = "0.0000001"
       this.kind = kind.kind
     }
 
