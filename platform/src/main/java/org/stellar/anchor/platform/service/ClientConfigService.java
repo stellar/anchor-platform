@@ -126,6 +126,10 @@ public class ClientConfigService {
         .toList();
   }
 
+  public boolean hasClients() {
+    return repo().count() > 0;
+  }
+
   public List<ClientConfigResponse> listCustodial() {
     return repo().findByType(ClientType.CUSTODIAL).stream().map(this::toResponse).toList();
   }
