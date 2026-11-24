@@ -31,7 +31,7 @@ public final class JwtUtil {
         .and();
   }
 
-  private static final class RefusedCompression implements CompressionAlgorithm {
+  static final class RefusedCompression implements CompressionAlgorithm {
     private static final String MESSAGE = "Compressed JWTs are not supported";
     private final String id;
 
