@@ -1145,7 +1145,9 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
   @Test
   fun `test sep24 refuses to expire a deposit whose funds were received`() {
     val account = newAccount()
-    val depositId = createOnHoldDeposit(account, "held for review ${UUID.randomUUID()}")
+    val depositId = createDeposit(account)
+    sendRpc(SEP24_PENDING_DEPOSIT_RPC, depositId)
+    sendRpc(SEP24_FUNDS_RECEIVED_RPC, depositId)
 
     val responses =
       sendRpcForResponses(
@@ -1156,10 +1158,27 @@ class Sep24Tests : IntegrationTestBase(TestConfig()) {
     assertEquals(1, responses.size)
     assertEquals(
       "RPC method[notify_transaction_expired] is not supported. " +
-        "Status[on_hold], kind[deposit], protocol[24], funds received[true]",
+        "Status[pending_anchor], kind[deposit], protocol[24], funds received[true]",
       responses.single().error?.message,
     )
-    assertEquals("on_hold", getTransactionRaw(account, depositId).string("status"))
+    assertEquals("pending_anchor", getTransactionRaw(account, depositId).string("status"))
+  }
+
+  // SEP24IF-24: a hold records no funds, so a held deposit that was never paid can still expire.
+  @Test
+  fun `test sep24 expires a held deposit whose funds were not received`() {
+    val account = newAccount()
+    val depositId = createOnHoldDeposit(account, "held for review ${UUID.randomUUID()}")
+
+    val responses =
+      sendRpcForResponses(
+        SEP24_EXPIRE_RPC.replace("%EXPIRE_MESSAGE%", "abandoned by the user"),
+        depositId,
+      )
+
+    assertEquals(1, responses.size)
+    assertNull(responses.single().error)
+    assertEquals("expired", getTransactionRaw(account, depositId).string("status"))
   }
 
   @Test

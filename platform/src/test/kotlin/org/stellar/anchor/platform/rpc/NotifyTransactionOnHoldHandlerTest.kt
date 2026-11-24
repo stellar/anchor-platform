@@ -5,6 +5,7 @@ import io.mockk.*
 import io.mockk.impl.annotations.MockK
 import java.time.Instant
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -507,5 +508,62 @@ class NotifyTransactionOnHoldHandlerTest {
 
     assertTrue(sep6TxnCapture.captured.updatedAt >= startDate)
     assertTrue(sep6TxnCapture.captured.updatedAt <= endDate)
+  }
+
+  /** Holds a transaction and returns what the store saved: its status and `transferReceivedAt`. */
+  private fun holdAndCapture(
+    protocol: String,
+    kind: String,
+    transferReceivedAt: Instant?
+  ): Pair<String, Instant?> {
+    val request = NotifyTransactionOnHoldRequest.builder().transactionId(TX_ID).build()
+    every { txn31Store.findByTransactionId(any()) } returns null
+    every { eventSession.publish(any()) } just Runs
+    every { metricsService.counter(PLATFORM_RPC_TRANSACTION, any(), any()) } returns
+      sepTransactionCounter
+
+    if (protocol == "24") {
+      val txn24 = JdbcSep24Transaction()
+      txn24.status = PENDING_USR_TRANSFER_START.toString()
+      txn24.kind = kind
+      txn24.transferReceivedAt = transferReceivedAt
+      val saved = slot<JdbcSep24Transaction>()
+      every { txn6Store.findByTransactionId(any()) } returns null
+      every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+      every { txn24Store.save(capture(saved)) } returns null
+      handler.handle(request)
+      return Pair(saved.captured.status, saved.captured.transferReceivedAt)
+    }
+
+    val txn6 = JdbcSep6Transaction()
+    txn6.status = PENDING_USR_TRANSFER_START.toString()
+    txn6.kind = kind
+    txn6.transferReceivedAt = transferReceivedAt
+    val saved = slot<JdbcSep6Transaction>()
+    every { txn6Store.findByTransactionId(TX_ID) } returns txn6
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn6Store.save(capture(saved)) } returns null
+    handler.handle(request)
+    return Pair(saved.captured.status, saved.captured.transferReceivedAt)
+  }
+
+  @CsvSource(value = ["24,withdrawal", "24,deposit", "6,withdrawal", "6,deposit"])
+  @ParameterizedTest
+  fun test_handle_keeps_transferReceivedAt_unset(protocol: String, kind: String) {
+    val (status, transferReceivedAt) = holdAndCapture(protocol, kind, null)
+
+    assertEquals(ON_HOLD.toString(), status)
+    assertNull(transferReceivedAt)
+  }
+
+  @CsvSource(value = ["24,withdrawal", "24,deposit", "6,withdrawal", "6,deposit"])
+  @ParameterizedTest
+  fun test_handle_keeps_existing_transferReceivedAt(protocol: String, kind: String) {
+    val receivedAt = Instant.parse("2023-05-10T10:18:20Z")
+
+    val (status, transferReceivedAt) = holdAndCapture(protocol, kind, receivedAt)
+
+    assertEquals(ON_HOLD.toString(), status)
+    assertEquals(receivedAt, transferReceivedAt)
   }
 }
