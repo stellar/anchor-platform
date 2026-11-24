@@ -7,7 +7,6 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
-import io.ktor.server.auth.jwt.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -19,8 +18,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.stellar.reference.callbacks.test.testCustomer
-import org.stellar.reference.di.AUTH_CONFIG_ENDPOINT
-import org.stellar.reference.di.callbackJwtVerifier
+import org.stellar.reference.data.AuthSettings
+import org.stellar.reference.di.configureAuth
 import org.stellar.reference.service.sep31.ReceiveService
 
 /**
@@ -59,13 +58,14 @@ class TestRoutesAuthGuardTest {
     var root: Route? = null
     application {
       install(ContentNegotiation) { json() }
-      authentication {
-        jwt(AUTH_CONFIG_ENDPOINT) {
-          verifier(callbackJwtVerifier(secret))
-          validate { JWTPrincipal(it.payload) }
-          challenge { _, _ -> call.respond(HttpStatusCode.Unauthorized, "Token is invalid") }
-        }
-      }
+      configureAuth(
+        AuthSettings(
+          AuthSettings.Type.JWT,
+          secret,
+          "anchor_to_platform_secret_unused_0123456789",
+          900_000
+        )
+      )
       root = routing { builder() }
     }
     startApplication()

@@ -7,7 +7,6 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
-import io.ktor.server.auth.jwt.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -30,6 +29,7 @@ import org.stellar.reference.callbacks.customer.CustomerService
 import org.stellar.reference.callbacks.customer.customer
 import org.stellar.reference.callbacks.rate.RateService
 import org.stellar.reference.callbacks.rate.rate
+import org.stellar.reference.data.AuthSettings
 import org.stellar.reference.event.EventService
 import org.stellar.reference.event.event
 
@@ -61,13 +61,14 @@ class CallbackRoutesAudienceTest {
       val eventService = EventService(retainEvents = true)
       application {
         install(ContentNegotiation) { json() }
-        authentication {
-          jwt(AUTH_CONFIG_ENDPOINT) {
-            verifier(callbackJwtVerifier(secret))
-            validate { JWTPrincipal(it.payload) }
-            challenge { _, _ -> call.respond(HttpStatusCode.Unauthorized, "Token is invalid") }
-          }
-        }
+        configureAuth(
+          AuthSettings(
+            AuthSettings.Type.JWT,
+            secret,
+            "anchor_to_platform_secret_unused_0123456789",
+            900_000
+          )
+        )
         routing {
           customer(customerService)
           rate(rateService)

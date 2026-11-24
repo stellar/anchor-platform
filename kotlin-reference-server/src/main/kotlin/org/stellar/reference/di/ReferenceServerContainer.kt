@@ -47,7 +47,7 @@ object ReferenceServerContainer {
     server =
       embeddedServer(Netty, port = config.appSettings.port) {
         install(ContentNegotiation) { json() }
-        configureAuth()
+        configureAuth(config.authSettings)
         configureRouting()
         install(CORS) {
           anyHost()
@@ -91,33 +91,34 @@ object ReferenceServerContainer {
       testCustomer(ServiceContainer.customerService)
     }
   }
+}
 
-  private fun Application.configureAuth() {
-    when (config.authSettings.type) {
-      AuthSettings.Type.JWT ->
-        authentication {
-          jwt(AUTH_CONFIG_ENDPOINT) {
-            verifier(callbackJwtVerifier(config.authSettings.platformToAnchorSecret))
-            validate { credential ->
-              val principal = JWTPrincipal(credential.payload)
-              if (principal.payload.expiresAt.time < System.currentTimeMillis()) {
-                null
-              } else {
-                principal
-              }
-            }
-            challenge { _, _ ->
-              call.respond(HttpStatusCode.Unauthorized, "Token is invalid or expired")
+/** Registers the `AUTH_CONFIG_ENDPOINT` provider the callback routes sit behind. */
+fun Application.configureAuth(settings: AuthSettings) {
+  when (settings.type) {
+    AuthSettings.Type.JWT ->
+      authentication {
+        jwt(AUTH_CONFIG_ENDPOINT) {
+          verifier(callbackJwtVerifier(settings.platformToAnchorSecret))
+          validate { credential ->
+            val principal = JWTPrincipal(credential.payload)
+            if (principal.payload.expiresAt.time < System.currentTimeMillis()) {
+              null
+            } else {
+              principal
             }
           }
+          challenge { _, _ ->
+            call.respond(HttpStatusCode.Unauthorized, "Token is invalid or expired")
+          }
         }
-      AuthSettings.Type.API_KEY -> {
-        TODO("API key auth not implemented yet")
       }
-      AuthSettings.Type.NONE -> {
-        log.warn("Authentication is disabled. Endpoints are not secured.")
-        authentication { basic(AUTH_CONFIG_ENDPOINT) { skipWhen { true } } }
-      }
+    AuthSettings.Type.API_KEY -> {
+      TODO("API key auth not implemented yet")
+    }
+    AuthSettings.Type.NONE -> {
+      log.warn("Authentication is disabled. Endpoints are not secured.")
+      authentication { basic(AUTH_CONFIG_ENDPOINT) { skipWhen { true } } }
     }
   }
 }

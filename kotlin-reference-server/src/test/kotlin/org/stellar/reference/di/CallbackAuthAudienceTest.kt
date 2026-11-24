@@ -7,13 +7,13 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
-import io.ktor.server.auth.jwt.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.testing.*
 import java.util.Date
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.stellar.reference.data.AuthSettings
 
 /**
  * ANCHOR-1546 / #4210349: the callback verifier requires the audience the platform stamps on its
@@ -34,13 +34,14 @@ class CallbackAuthAudienceTest {
     var status = HttpStatusCode.InternalServerError
     testApplication {
       application {
-        authentication {
-          jwt(AUTH_CONFIG_ENDPOINT) {
-            verifier(callbackJwtVerifier(secret))
-            validate { JWTPrincipal(it.payload) }
-            challenge { _, _ -> call.respond(HttpStatusCode.Unauthorized, "Token is invalid") }
-          }
-        }
+        configureAuth(
+          AuthSettings(
+            AuthSettings.Type.JWT,
+            secret,
+            "anchor_to_platform_secret_unused_0123456789",
+            900_000
+          )
+        )
         routing { authenticate(AUTH_CONFIG_ENDPOINT) { get("/probe") { call.respondText("ok") } } }
       }
       status = client.get("/probe") { header(HttpHeaders.Authorization, "Bearer $bearer") }.status
