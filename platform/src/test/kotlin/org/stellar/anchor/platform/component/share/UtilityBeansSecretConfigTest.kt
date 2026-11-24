@@ -5,8 +5,8 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import java.util.function.Supplier
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -19,6 +19,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.stellar.anchor.platform.config.PropertySecretConfig
 import org.stellar.anchor.platform.configurator.SecretManager
 import org.stellar.anchor.platform.utils.PublishedLiterals
+import org.stellar.anchor.platform.utils.RecordingLogger
 
 /**
  * ANCHOR-1546: the secret checks must run through the real `UtilityBeans` declaration. A test that
@@ -28,6 +29,9 @@ import org.stellar.anchor.platform.utils.PublishedLiterals
 class UtilityBeansSecretConfigTest {
   private lateinit var secretManager: SecretManager
 
+  /** What the real singleton holds for the SEP-10 secret before this test mocks it. */
+  private var realSep10Secret: String? = null
+
   private val freshSecrets =
     PublishedLiterals.secretsByProperty.keys.mapIndexed { i, property ->
       property to "fresh_secret_${i}_" + "0123456789abcdef".repeat(3)
@@ -35,6 +39,7 @@ class UtilityBeansSecretConfigTest {
 
   @BeforeEach
   fun setup() {
+    realSep10Secret = SecretManager.getInstance().get(PropertySecretConfig.SECRET_SEP_10_JWT_SECRET)
     secretManager = mockk()
     mockkStatic(SecretManager::class)
     every { secretManager.get(any()) } returns null
@@ -79,6 +84,7 @@ class UtilityBeansSecretConfigTest {
     val property = PropertySecretConfig.SECRET_SEP_10_JWT_SECRET
     val published = PublishedLiterals.secretsByProperty.getValue(property)
     configure(*freshSecrets.toTypedArray(), property to published)
+    val log = RecordingLogger().install()
 
     runner().run { context ->
       assertNotNull(context.startupFailure)
@@ -86,6 +92,7 @@ class UtilityBeansSecretConfigTest {
       assertTrue(message.contains("secret-published"), message)
       assertTrue(message.contains(property), message)
       assertFalse(message.contains(published), "the failure repeats the secret")
+      assertFalse(log.lines.any { it.contains(published) }, "a log line repeats the secret")
     }
   }
 
@@ -110,14 +117,13 @@ class UtilityBeansSecretConfigTest {
   }
 
   @Test
-  fun `test the secrets of a failed run do not stay in the real secret manager`() {
+  fun `test the real secret manager holds the same value after a failed run`() {
     val property = PropertySecretConfig.SECRET_SEP_10_JWT_SECRET
-    val published = PublishedLiterals.secretsByProperty.getValue(property)
-    configure(property to published)
+    configure(property to PublishedLiterals.secretsByProperty.getValue(property))
     runner().run { context -> assertNotNull(context.startupFailure) }
 
     unmockkAll()
 
-    assertNotEquals(published, SecretManager.getInstance().get(property))
+    assertEquals(realSep10Secret, SecretManager.getInstance().get(property))
   }
 }
