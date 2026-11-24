@@ -1,7 +1,10 @@
 package org.stellar.anchor.util
 
+import java.time.Duration
 import java.util.*
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.stellar.anchor.api.exception.SepException
@@ -83,6 +86,28 @@ internal class MemoHelperTest {
     assertThrows<SepValidationException> { makeMemo("-1", "id") }
     assertThrows<SepValidationException> { makeMemo("18446744073709551616", "id") }
     assertThrows<SepValidationException> { makeMemo("abc", "id") }
+  }
+
+  @Test
+  fun `test makeMemoId rejects memo ids longer than 20 digits`() {
+    assertThrows<NumberFormatException> { makeMemoId("0" + "18446744073709551615") }
+    assertThrows<NumberFormatException> { makeMemoId("9".repeat(21)) }
+    assertThrows<NumberFormatException> { makeMemoId(null) }
+  }
+
+  @Test
+  fun `test makeMemo rejects a 1MB memo id without parsing it`() {
+    val huge = "9".repeat(1_000_000)
+    assertTimeoutPreemptively(Duration.ofSeconds(1)) {
+      repeat(100) { assertThrows<SepValidationException> { makeMemo(huge, "id") } }
+    }
+  }
+
+  @Test
+  fun `test makeMemo does not echo an oversized memo in the error`() {
+    val ex = assertThrows<SepValidationException> { makeMemo("9".repeat(1_000_000), "id") }
+    assertTrue(ex.message!!.length < 200)
+    assertTrue(ex.message!!.startsWith("Invalid memo ${"9".repeat(64)}... of type: MEMO_ID"))
   }
 
   @Test
