@@ -800,6 +800,20 @@ class StellarRpcPaymentObserverTest {
   }
 
   @Test
+  fun `processEvents skips an event from a known non-SAC contract before fetching the transaction`() {
+    val armed = KeyPair.random().accountId
+    val event = transferEvent(KeyPair.random().accountId, armed)
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns false
+    every { paymentObservingAccountsManager.lookupAndUpdate(armed) } returns true
+    sacToAssetMapper.knownNonSacContracts = setOf("contractId")
+    every { observer.processTransferEvent(any()) } answers {}
+
+    assertEquals("END", observer.processEvents(listOf(event), "END"))
+
+    verify(exactly = 0) { observer.processTransferEvent(any()) }
+  }
+
+  @Test
   fun `processEvents hands an event to a muxed recipient whose base account is observed`() {
     val base = KeyPair.random().accountId
     val memo =
@@ -1565,6 +1579,7 @@ class StellarRpcPaymentObserverTest {
  */
 internal class MockSacToAssetMapper : SacToAssetMapper(null) {
   var resolvableContracts: Set<String>? = null
+  var knownNonSacContracts: Set<String> = emptySet()
 
   override fun getAssetFromSac(sac: String): org.stellar.sdk.xdr.Asset? {
     val allowed = resolvableContracts
@@ -1573,4 +1588,6 @@ internal class MockSacToAssetMapper : SacToAssetMapper(null) {
     }
     return Asset.createNativeAsset().toXdr()
   }
+
+  override fun isKnownNonSac(sac: String): Boolean = sac in knownNonSacContracts
 }

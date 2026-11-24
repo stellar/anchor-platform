@@ -39,16 +39,18 @@ public class SacToAssetMapper {
     SCVal metadata;
     try {
       metadata = fetchSacMetadata(sac);
-      if (metadata == null) {
-        return null;
-      }
     } catch (IOException e) {
+      return null;
+    }
+    if (metadata == null) {
+      sacToAssetMap.put(sac, null);
       return null;
     }
 
     Map<SCVal, SCVal> scMap = Scv.fromMap(metadata);
     SCVal scAssetName = scMap.get(Scv.toSymbol("name"));
     if (scAssetName == null) {
+      sacToAssetMap.put(sac, null);
       return null;
     }
 
@@ -56,6 +58,10 @@ public class SacToAssetMapper {
     Asset asset = org.stellar.sdk.Asset.create(assetName).toXdr();
     sacToAssetMap.put(sac, asset);
     return asset;
+  }
+
+  public boolean isKnownNonSac(String sac) {
+    return sacToAssetMap.containsKey(sac) && sacToAssetMap.get(sac) == null;
   }
 
   private SCVal fetchSacMetadata(String sac) throws IOException {
