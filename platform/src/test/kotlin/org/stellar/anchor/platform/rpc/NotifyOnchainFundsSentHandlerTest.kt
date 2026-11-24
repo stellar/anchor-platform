@@ -51,10 +51,24 @@ import org.stellar.anchor.sep31.Sep31TransactionStore
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.MemoHelper
+import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Memo
+import org.stellar.sdk.Network
+import org.stellar.sdk.Server
+import org.stellar.sdk.TOID
+import org.stellar.sdk.TransactionBuilder
+import org.stellar.sdk.operations.PaymentOperation
+import org.stellar.sdk.requests.TransactionsRequestBuilder
+import org.stellar.sdk.responses.TransactionResponse
 import org.stellar.sdk.xdr.Asset
 import org.stellar.sdk.xdr.AssetType
+import org.stellar.sdk.xdr.OperationResult
+import org.stellar.sdk.xdr.OperationResultCode
 import org.stellar.sdk.xdr.OperationType
+import org.stellar.sdk.xdr.PaymentResult
+import org.stellar.sdk.xdr.PaymentResultCode
+import org.stellar.sdk.xdr.TransactionResult
+import org.stellar.sdk.xdr.TransactionResultCode
 
 class NotifyOnchainFundsSentHandlerTest {
 
@@ -216,6 +230,105 @@ class NotifyOnchainFundsSentHandlerTest {
     verify(exactly = 0) { txn24Store.save(any()) }
     verify(exactly = 0) { txn31Store.save(any()) }
     verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @Test
+  fun test_handle_sep24_failedStellarTransaction_doesNotCompleteDeposit() {
+    val request =
+      NotifyOnchainFundsSentRequest.builder()
+        .transactionId(TX_ID)
+        .stellarTransactionId(STELLAR_TX_ID)
+        .build()
+    val txn24 = JdbcSep24Transaction()
+    txn24.status = PENDING_STELLAR.toString()
+    txn24.kind = DEPOSIT.kind
+    txn24.toAccount = KeyPair.random().accountId
+
+    val source = KeyPair.random()
+    val failedPayment =
+      TransactionBuilder(org.stellar.sdk.Account(source.accountId, 1L), Network.TESTNET)
+        .addOperation(
+          PaymentOperation.builder()
+            .destination(txn24.toAccount)
+            .asset(org.stellar.sdk.Asset.createNativeAsset())
+            .amount(java.math.BigDecimal("10"))
+            .build()
+        )
+        .setBaseFee(100)
+        .setTimeout(0L)
+        .build()
+    failedPayment.sign(source)
+    val failedResult =
+      TransactionResult.builder()
+        .result(
+          TransactionResult.TransactionResultResult.builder()
+            .discriminant(TransactionResultCode.txFAILED)
+            .results(
+              arrayOf(
+                OperationResult.builder()
+                  .discriminant(OperationResultCode.opINNER)
+                  .tr(
+                    OperationResult.OperationResultTr.builder()
+                      .discriminant(OperationType.PAYMENT)
+                      .paymentResult(
+                        PaymentResult.builder()
+                          .discriminant(PaymentResultCode.PAYMENT_UNDERFUNDED)
+                          .build()
+                      )
+                      .build()
+                  )
+                  .build()
+              )
+            )
+            .build()
+        )
+        .build()
+    val response = mockk<TransactionResponse>()
+    every { response.envelopeXdr } returns failedPayment.toEnvelopeXdrBase64()
+    every { response.pagingToken } returns TOID(100, 1, 0).toInt64().toString()
+    every { response.ledger } returns 100L
+    every { response.hash } returns STELLAR_TX_ID
+    every { response.sourceAccount } returns source.accountId
+    every { response.sourceAccountSequence } returns 2L
+    every { response.createdAt } returns "2026-09-23T00:00:00Z"
+    every { response.parseResultXdr() } returns failedResult
+    val transactionsRequestBuilder = mockk<TransactionsRequestBuilder>()
+    every { transactionsRequestBuilder.transaction(STELLAR_TX_ID) } returns response
+    val server = mockk<Server>()
+    every { server.transactions() } returns transactionsRequestBuilder
+    val realHorizon = mockk<Horizon>()
+    every { realHorizon.server } returns server
+    every { realHorizon.getTransaction(STELLAR_TX_ID) } answers { callOriginal() }
+    val handler =
+      NotifyOnchainFundsSentHandler(
+        txn6Store,
+        txn24Store,
+        txn31Store,
+        requestValidator,
+        realHorizon,
+        assetService,
+        eventService,
+        metricsService,
+        mockk<SacToAssetMapper>()
+      )
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(TX_ID) } returns txn24
+    every { txn31Store.findByTransactionId(any()) } returns null
+
+    val ex = assertThrows<InternalErrorException> { handler.handle(request) }
+    assertEquals(
+      "Failed to retrieve Stellar transaction by ID[stellarTxId]: Transaction did not succeed on ledger: stellarTxId",
+      ex.message
+    )
+
+    assertEquals(PENDING_STELLAR.toString(), txn24.status)
+    assertEquals(null, txn24.transferReceivedAt)
+    assertEquals(null, txn24.stellarTransactionId)
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
   }
 
   @Test
