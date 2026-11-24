@@ -1,6 +1,7 @@
 package org.stellar.reference.event.processor
 
 import io.mockk.Called
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
@@ -9,11 +10,16 @@ import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.api.callback.GetCustomerResponse
+import org.stellar.anchor.api.platform.CustomerUpdatedResponse
 import org.stellar.anchor.api.platform.GetTransactionResponse
+import org.stellar.anchor.api.platform.GetTransactionsResponse
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
 import org.stellar.anchor.api.rpc.method.RpcMethod
 import org.stellar.anchor.api.sep.SepTransactionStatus
+import org.stellar.anchor.api.shared.Amount
 import org.stellar.anchor.api.shared.Customers
+import org.stellar.anchor.api.shared.ProvidedCustomerField
 import org.stellar.anchor.api.shared.StellarId
 import org.stellar.reference.callbacks.customer.CustomerService
 import org.stellar.reference.client.PaymentClient
@@ -111,5 +117,86 @@ class Sep6EventProcessorTest {
       coVerify(exactly = 1) { sepHelper.rpcAction(capture(method), capture(params)) }
       assertEquals(RpcMethod.NOTIFY_OFFCHAIN_FUNDS_RECEIVED.toString(), method.captured)
       assertEquals(id, (params.captured as NotifyOffchainFundsReceivedRequest).transactionId)
+    }
+
+  @Test
+  fun `onCustomerUpdated retries and still advances the parked deposit when the first attempt fails`() =
+    runBlocking {
+      val txnId = newId()
+      val customerId = UUID.randomUUID().toString()
+
+      val platformClient = mockk<PlatformClient>()
+      val customerService = mockk<CustomerService>(relaxed = true)
+      val sepHelper = mockk<SepHelper>(relaxed = true)
+
+      val pendingDeposit =
+        GetTransactionResponse.builder()
+          .id(txnId)
+          .kind(Kind.DEPOSIT)
+          .status(SepTransactionStatus.PENDING_CUSTOMER_INFO_UPDATE)
+          .amountExpected(Amount.builder().amount("10").asset("iso4217:USD").build())
+          .customers(
+            Customers.builder()
+              .sender(StellarId.builder().account("GSENDER").build())
+              .receiver(StellarId.builder().account("GSENDER").build())
+              .build()
+          )
+          .build()
+
+      var attempts = 0
+      coEvery { platformClient.getTransactions(any()) } answers
+        {
+          attempts++
+          if (attempts == 1) throw RuntimeException("transient platform error")
+          GetTransactionsResponse(listOf(pendingDeposit))
+        }
+
+      val acceptedCustomer =
+        GetCustomerResponse.builder()
+          .id(customerId)
+          .status("ACCEPTED")
+          .providedFields(
+            listOf(
+                "birth_date",
+                "id_type",
+                "id_country_code",
+                "id_issue_date",
+                "id_expiration_date",
+                "id_number",
+                "address",
+              )
+              .associateWith { ProvidedCustomerField.builder().build() }
+          )
+          .build()
+      coEvery { customerService.getCustomer(any()) } returns acceptedCustomer
+
+      val processor =
+        Sep6EventProcessor(
+          mockk<Config>(relaxed = true),
+          platformClient,
+          mockk<PaymentClient>(relaxed = true),
+          customerService,
+          sepHelper,
+          customerUpdateRetryDelaySeconds = 0,
+        )
+
+      processor.onCustomerUpdated(
+        SendEventRequest(
+          id = UUID.randomUUID().toString(),
+          type = "customer_updated",
+          timestamp = "2026-10-01T00:00:00Z",
+          payload =
+            SendEventRequestPayload(
+              transaction = null,
+              quote = null,
+              customer = CustomerUpdatedResponse(customerId),
+            ),
+        )
+      )
+
+      assertEquals(2, attempts)
+      val method = slot<String>()
+      coVerify(exactly = 1) { sepHelper.rpcAction(capture(method), any()) }
+      assertEquals(RpcMethod.REQUEST_OFFCHAIN_FUNDS.toString(), method.captured)
     }
 }

@@ -15,6 +15,7 @@ import org.stellar.reference.client.PaymentClient
 import org.stellar.reference.client.PlatformClient
 import org.stellar.reference.data.*
 import org.stellar.reference.log
+import org.stellar.reference.retryOnException
 import org.stellar.reference.service.SepHelper
 import org.stellar.reference.transactionWithRetry
 import org.stellar.sdk.Asset
@@ -30,6 +31,7 @@ class Sep6EventProcessor(
   private val onchainPayments: MutableMap<String, String> = mutableMapOf(),
   /** Map of transaction ID to external transaction ID. */
   private val offchainPayments: MutableMap<String, String> = mutableMapOf(),
+  private val customerUpdateRetryDelaySeconds: Int = 1,
 ) : SepAnchorEventProcessor {
   companion object {
     val requiredKyc =
@@ -260,9 +262,11 @@ class Sep6EventProcessor(
 
   override suspend fun onCustomerUpdated(event: SendEventRequest) {
     val updatedCustomerId = event.payload?.customer?.id ?: return
-    fetchAllPendingCustomerInfoUpdateTransactions()
-      .filter { isCustomerForTransaction(it.id, updatedCustomerId) }
-      .forEach { requestCustomerFunds(it) }
+    retryOnException(maxAttempts = 3, delaySeconds = customerUpdateRetryDelaySeconds) {
+      fetchAllPendingCustomerInfoUpdateTransactions()
+        .filter { isCustomerForTransaction(it.id, updatedCustomerId) }
+        .forEach { requestCustomerFunds(it) }
+    }
   }
 
   // The Platform API paginates /transactions (20 records per page by default), so a single

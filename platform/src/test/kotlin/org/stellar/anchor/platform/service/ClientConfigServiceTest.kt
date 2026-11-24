@@ -562,4 +562,13 @@ class ClientConfigServiceTest {
       )
     }
   }
+
+  @Test
+  fun `hasClients reflects whether the repository holds any rows`() {
+    every { repo.count() } returns 0L
+    assertFalse(service.hasClients())
+
+    every { repo.count() } returns 2L
+    assertTrue(service.hasClients())
+  }
 }

@@ -741,6 +741,7 @@ class HorizonPaymentObserverTest {
     JdbcSep31Transaction().apply {
       this.id = id
       amountInAsset = "stellar:native"
+      amountExpected = "0.0000001"
     }
 
   @Test
