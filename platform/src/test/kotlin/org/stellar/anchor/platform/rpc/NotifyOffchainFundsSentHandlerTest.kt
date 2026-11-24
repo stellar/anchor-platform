@@ -565,6 +565,53 @@ class NotifyOffchainFundsSentHandlerTest {
     assertTrue(sep24TxnCapture.captured.completedAt <= endDate)
   }
 
+  @CsvSource(value = ["pending_receiver", "pending_external"])
+  @ParameterizedTest
+  fun test_handle_sep31_transferNotReceived(status: String) {
+    val request = NotifyOffchainFundsSentRequest.builder().transactionId(TX_ID).build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = status
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(TX_ID) } returns txn31
+
+    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
+    assertEquals(
+      "RPC method[notify_offchain_funds_sent] is not supported. Status[$status], kind[receive], protocol[31], funds received[false]",
+      ex.message
+    )
+    assertEquals(status, txn31.status)
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @Test
+  fun test_handle_ok_sep31_pending_external() {
+    val transferReceivedAt = Instant.now()
+    val request = NotifyOffchainFundsSentRequest.builder().transactionId(TX_ID).build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_EXTERNAL.toString()
+    txn31.transferReceivedAt = transferReceivedAt
+    val sep31TxnCapture = slot<JdbcSep31Transaction>()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(TX_ID) } returns txn31
+    every { txn31Store.save(capture(sep31TxnCapture)) } returns null
+    every { eventSession.publish(any()) } just Runs
+    every { metricsService.counter(PLATFORM_RPC_TRANSACTION, "SEP", "sep31") } returns
+      sepTransactionCounter
+
+    handler.handle(request)
+
+    assertEquals(COMPLETED.toString(), sep31TxnCapture.captured.status)
+    verify(exactly = 1) { sepTransactionCounter.increment() }
+  }
+
   @Test
   fun test_handle_ok_sep31_deposit_withExternalTxIdAndDate() {
     val transferReceivedAt = Instant.now()
