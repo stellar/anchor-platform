@@ -42,7 +42,11 @@ public class ClientDomainHelper {
 
   private static final long BOUNDED_FETCH_TIMEOUT_MS = 2_500;
   private static final long FETCH_CALL_TIMEOUT_MS = 1_000;
-  private static final OkHttpClient FETCH_CLIENT = OkHttpUtil.buildClient(FETCH_CALL_TIMEOUT_MS);
+  static Dns dns = BoundedDnsResolver.getDefault();
+  private static final OkHttpClient FETCH_CLIENT =
+      OkHttpUtil.buildClient(hostname -> dns.lookup(hostname), FETCH_CALL_TIMEOUT_MS);
+  private static final OkHttpClient PUBLIC_FETCH_CLIENT =
+      OkHttpUtil.buildClient(validatingDns(), FETCH_CALL_TIMEOUT_MS);
 
   private static class ClientDomainThreadFactory implements ThreadFactory {
     private final AtomicInteger counter = new AtomicInteger();
@@ -97,7 +101,7 @@ public class ClientDomainHelper {
     OkHttpClient client = FETCH_CLIENT;
     if (!allowHttpRetry) {
       validateDomainNotPrivateNetwork(clientDomain);
-      client = OkHttpUtil.buildClient(validatingDns(), FETCH_CALL_TIMEOUT_MS);
+      client = PUBLIC_FETCH_CLIENT;
     }
 
     String clientSigningKey = "";
@@ -231,7 +235,7 @@ public class ClientDomainHelper {
     String hostname = extractHostname(clientDomain);
 
     try {
-      InetAddress[] addresses = InetAddress.getAllByName(hostname);
+      List<InetAddress> addresses = dns.lookup(hostname);
       for (InetAddress address : addresses) {
         if (isNonPublicAddress(address)) {
           infoF("client_domain {} resolves to non-public address {}", clientDomain, address);
@@ -246,7 +250,7 @@ public class ClientDomainHelper {
 
   private static Dns validatingDns() {
     return hostname -> {
-      List<InetAddress> addresses = Dns.SYSTEM.lookup(hostname);
+      List<InetAddress> addresses = dns.lookup(hostname);
       for (InetAddress address : addresses) {
         if (isNonPublicAddress(address)) {
           throw new UnknownHostException(
