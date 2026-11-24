@@ -20,6 +20,9 @@ import org.stellar.anchor.api.rpc.RpcRequest
 import org.stellar.anchor.api.rpc.RpcResponse
 import org.stellar.anchor.api.sep.SepTransactionStatus
 import org.stellar.anchor.api.sep.SepTransactionStatus.*
+import org.stellar.anchor.api.shared.Amount
+import org.stellar.anchor.api.shared.RefundPayment
+import org.stellar.anchor.api.shared.Refunds
 import org.stellar.anchor.asset.DefaultAssetService
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
@@ -345,6 +348,170 @@ class RefundNestedValidationTest {
     assertNull(response.error)
     assertNull(txn.refunds)
     assertEquals(PENDING_ANCHOR.toString(), txn.status)
+  }
+
+  // ---- REFV-06: refund payments already stored with a null id do not block later updates ----
+
+  private class OrphanSpec(val id: String?, val amount: String)
+
+  private fun withStoredSep6(txn: JdbcSep6Transaction, vararg stored: OrphanSpec) {
+    val refunds = Refunds()
+    refunds.payments =
+      stored
+        .map {
+          RefundPayment.builder()
+            .id(it.id)
+            .idType(RefundPayment.IdType.EXTERNAL)
+            .amount(Amount(it.amount, NATIVE))
+            .fee(Amount("0", NATIVE))
+            .build()
+        }
+        .toTypedArray()
+    refunds.amountRefunded = Amount(stored.sumOf { it.amount.toInt() }.toString(), NATIVE)
+    refunds.amountFee = Amount("0", NATIVE)
+    txn.refunds = refunds
+  }
+
+  private fun withStoredSep24(txn: JdbcSep24Transaction, vararg stored: OrphanSpec) {
+    val refunds = JdbcSep24Refunds()
+    refunds.payments =
+      stored.map {
+        JdbcSep24RefundPayment.builder()
+          .id(it.id)
+          .idType("EXTERNAL")
+          .amount(it.amount)
+          .fee("0")
+          .build()
+      }
+    refunds.amountRefunded = stored.sumOf { it.amount.toInt() }.toString()
+    refunds.amountFee = "0"
+    txn.refunds = refunds
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = [SENT, PENDING])
+  fun refv06_sep6_validRefundSucceedsBesideAStoredNullIdPaymentAndCountsIt(method: String) {
+    val txn = sep6Txn()
+    withStoredSep6(txn, OrphanSpec(null, "30"))
+
+    val response = call(method, refund(id = "B", amount = amount("40")))
+
+    assertNull(response.error)
+    assertEquals(listOf<String?>(null, "B"), txn.refunds.payments.map { it.id })
+    assertEquals("70", txn.refunds.amountRefunded.amount)
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = [SENT, PENDING])
+  fun refv06_sep24_validRefundSucceedsBesideAStoredNullIdPaymentAndCountsIt(method: String) {
+    val txn = sep24Txn()
+    withStoredSep24(txn, OrphanSpec(null, "30"))
+
+    val response = call(method, refund(id = "B", amount = amount("40")))
+
+    assertNull(response.error)
+    assertEquals(listOf<String?>(null, "B"), txn.refunds.refundPayments.map { it.id })
+    assertEquals("70", txn.refunds.amountRefunded)
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = [SENT, PENDING])
+  fun refv06_sep6_repeatedIdStillReplacesItsPaymentAndKeepsTheNullIdOne(method: String) {
+    val txn = sep6Txn()
+    withStoredSep6(txn, OrphanSpec(null, "30"), OrphanSpec("A", "20"))
+
+    val response = call(method, refund(id = "A", amount = amount("40")))
+
+    assertNull(response.error)
+    assertEquals(listOf<String?>(null, "A"), txn.refunds.payments.map { it.id })
+    assertEquals("70", txn.refunds.amountRefunded.amount)
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = [SENT, PENDING])
+  fun refv06_sep24_repeatedIdStillReplacesItsPaymentAndKeepsTheNullIdOne(method: String) {
+    val txn = sep24Txn()
+    withStoredSep24(txn, OrphanSpec(null, "30"), OrphanSpec("A", "20"))
+
+    val response = call(method, refund(id = "A", amount = amount("40")))
+
+    assertNull(response.error)
+    assertEquals(listOf<String?>(null, "A"), txn.refunds.refundPayments.map { it.id })
+    assertEquals("70", txn.refunds.amountRefunded)
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = [SENT, PENDING])
+  fun refv06_sep6_storedNullIdPaymentCountsTowardTheAmountInCap(method: String) {
+    val txn = sep6Txn()
+    withStoredSep6(txn, OrphanSpec(null, "30"))
+
+    val response = call(method, refund(id = "B", amount = amount("80")))
+
+    assertInvalidParams(response)
+    assertEquals(listOf<String?>(null), txn.refunds.payments.map { it.id })
+    assertEquals("30", txn.refunds.amountRefunded.amount)
+    verify(exactly = 0) { txn6Store.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = [SENT, PENDING])
+  fun refv06_sep24_storedNullIdPaymentCountsTowardTheAmountInCap(method: String) {
+    val txn = sep24Txn()
+    withStoredSep24(txn, OrphanSpec(null, "30"))
+
+    val response = call(method, refund(id = "B", amount = amount("80")))
+
+    assertInvalidParams(response)
+    assertEquals(listOf<String?>(null), txn.refunds.refundPayments.map { it.id })
+    assertEquals("30", txn.refunds.amountRefunded)
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
+  @Test
+  fun refv06_sep6_sentOutsidePendingAnchorAcceptsAnAnnouncedIdBesideANullIdPayment() {
+    val txn = sep6Txn(status = PENDING_EXTERNAL)
+    withStoredSep6(txn, OrphanSpec(null, "30"), OrphanSpec("A", "20"))
+
+    val response = call(SENT, refund(id = "A", amount = amount("20")))
+
+    assertNull(response.error)
+    assertEquals(listOf<String?>(null, "A"), txn.refunds.payments.map { it.id })
+  }
+
+  @Test
+  fun refv06_sep6_sentOutsidePendingAnchorRejectsAnUnannouncedIdAsInvalidParams() {
+    val txn = sep6Txn(status = PENDING_EXTERNAL)
+    withStoredSep6(txn, OrphanSpec(null, "30"), OrphanSpec("A", "20"))
+
+    val response = call(SENT, refund(id = "B", amount = amount("10")))
+
+    assertInvalidParams(response)
+    assertEquals("Invalid refund id", response.error.message)
+    assertEquals(listOf<String?>(null, "A"), txn.refunds.payments.map { it.id })
+  }
+
+  @Test
+  fun refv06_sep24_sentOutsidePendingAnchorRejectsAnUnannouncedIdAsInvalidParams() {
+    val txn = sep24Txn(status = PENDING_EXTERNAL)
+    withStoredSep24(txn, OrphanSpec(null, "30"), OrphanSpec("A", "20"))
+
+    val response = call(SENT, refund(id = "B", amount = amount("10")))
+
+    assertInvalidParams(response)
+    assertEquals("Invalid refund id", response.error.message)
+    assertEquals(listOf<String?>(null, "A"), txn.refunds.refundPayments.map { it.id })
+  }
+
+  @Test
+  fun refv06_sep24_sentOutsidePendingAnchorAcceptsAnAnnouncedIdBesideANullIdPayment() {
+    val txn = sep24Txn(status = PENDING_EXTERNAL)
+    withStoredSep24(txn, OrphanSpec(null, "30"), OrphanSpec("A", "20"))
+
+    val response = call(SENT, refund(id = "A", amount = amount("20")))
+
+    assertNull(response.error)
+    assertEquals(listOf<String?>(null, "A"), txn.refunds.refundPayments.map { it.id })
   }
 
   // ---- Edge: the status guard answers before the refund is looked at ----
