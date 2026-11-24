@@ -11,6 +11,7 @@ import okhttp3.Response;
 import org.stellar.anchor.api.callback.SendEventRequest;
 import org.stellar.anchor.api.callback.SendEventResponse;
 import org.stellar.anchor.api.exception.AnchorException;
+import org.stellar.anchor.api.exception.HttpException;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.auth.AuthHelper;
 import org.stellar.anchor.util.GsonUtils;
@@ -52,6 +53,11 @@ public class CallbackApiClient extends BaseApiClient {
     RequestBody requestBody = OkHttpUtil.buildJsonRequestBody(gson.toJson(sendEventRequest));
     Request request = getRequestBuilder().url(url).post(requestBody).build();
     Response response = getClient().newCall(request).execute();
+    if (response.code() >= 400) {
+      int code = response.code();
+      response.close();
+      throw new HttpException(code);
+    }
     String responseText = handleResponse(response);
 
     return new SendEventResponse(response.code(), isEmpty(responseText) ? "" : responseText);
