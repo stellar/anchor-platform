@@ -1575,6 +1575,84 @@ internal class Sep10ServiceTest {
     verify(exactly = 1) { clientFinder.getClientName(clientDomain, any()) }
   }
 
+  // Signs the header JWT with `key`, optionally compressing the payload with zip:DEF.
+  private fun headerSigner(key: SigningKeyPair, compress: Boolean) =
+    object : DefaultAuthHeaderSigner() {
+      override suspend fun createToken(
+        claims: Map<String, String>,
+        clientDomain: String?,
+        issuer: AccountKeyPair?,
+      ): String {
+        val timeExp = Instant.ofEpochSecond(Clock.System.now().plus(expiration).epochSeconds)
+        val builder = createBuilder(timeExp, claims)
+        if (compress) builder.compressWith(Jwts.ZIP.DEF)
+        builder.signWith(key.toJava().private, Jwts.SIG.EdDSA)
+        return builder.compact()
+      }
+    }
+
+  @Test
+  fun `test custodial header JWT self-signed by the account key is refused when compressed`() =
+    runBlocking {
+      val params = mapOf("account" to custodialKp.address, "memo" to custodialMemo)
+      val req = ChallengeRequest.builder().account(custodialKp.address).memo(custodialMemo).build()
+
+      // Control: the same claims uncompressed pass validation.
+      val plain =
+        createAuthSignToken(
+          custodialKp,
+          authEndpoint,
+          params,
+          authHeaderSigner = headerSigner(custodialKp, false),
+        )
+      sep10Service.validateAuthorizationToken(req, plain, null)
+
+      val zipped =
+        createAuthSignToken(
+          custodialKp,
+          authEndpoint,
+          params,
+          authHeaderSigner = headerSigner(custodialKp, true),
+        )
+      val ex =
+        assertThrows<SepValidationException> {
+          sep10Service.validateAuthorizationToken(req, zipped, null)
+        }
+      assertEquals("Invalid header signature", ex.message)
+    }
+
+  @Test
+  fun `test noncustodial header JWT signed by the client_domain key is refused when compressed`() =
+    runBlocking {
+      val account = SigningKeyPair(KeyPair.random())
+      val params = mapOf("account" to account.address, "client_domain" to clientDomain)
+      val req =
+        ChallengeRequest.builder().account(account.address).clientDomain(clientDomain).build()
+
+      // Control: the same claims uncompressed pass validation.
+      val plain =
+        createAuthSignToken(
+          account,
+          authEndpoint,
+          params,
+          authHeaderSigner = headerSigner(domainKp, false),
+        )
+      sep10Service.validateAuthorizationToken(req, plain, domainKp.address)
+
+      val zipped =
+        createAuthSignToken(
+          account,
+          authEndpoint,
+          params,
+          authHeaderSigner = headerSigner(domainKp, true),
+        )
+      val ex =
+        assertThrows<SepValidationException> {
+          sep10Service.validateAuthorizationToken(req, zipped, domainKp.address)
+        }
+      assertEquals("Invalid header signature", ex.message)
+    }
+
   @Test
   fun `test http works for testnet`() = runBlocking {
     val params = mapOf("account" to custodialKp.address, "memo" to custodialMemo)
