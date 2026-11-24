@@ -86,15 +86,21 @@ class Sep31PlatformApiTests : PlatformApiTests() {
       Thread.sleep(1000L)
     }
 
+    // `injectWith` with no payment values keeps `%TESTPAYMENT_*%` in place: `test flow` pays this
+    // transaction itself and fills them in, where `inject` would put the shared payment of the
+    // class
+    // (which pays no transaction) in their place.
     val updatedActionRequests =
-      inject(
+      injectWith(
         actionRequests,
+        emptyList(),
         RECEIVER_ID_KEY to receiverCustomer.id,
         SENDER_ID_KEY to senderCustomer.id,
       )
     val updatedActionResponses =
-      inject(
+      injectWith(
         actionResponses,
+        emptyList(),
         RECEIVER_ID_KEY to receiverCustomer.id,
         SENDER_ID_KEY to senderCustomer.id,
       )
