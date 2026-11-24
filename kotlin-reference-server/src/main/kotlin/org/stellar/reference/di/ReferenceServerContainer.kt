@@ -1,6 +1,7 @@
 package org.stellar.reference.di
 
 import com.auth0.jwt.JWT
+import com.auth0.jwt.JWTVerifier
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -27,6 +28,17 @@ import org.stellar.reference.sep24.sep24
 import org.stellar.reference.sep24.testSep24
 
 const val AUTH_CONFIG_ENDPOINT = "endpoint-auth"
+
+/** The audience the platform stamps on the tokens it sends to the Callback API. */
+const val CALLBACK_API_AUDIENCE = "callback_api"
+
+/**
+ * Accepts only tokens signed with the callback secret that carry the `callback_api` audience. A
+ * token signed with the same secret for another purpose (a SEP-10 token under a reused secret) is
+ * refused.
+ */
+fun callbackJwtVerifier(secret: String): JWTVerifier =
+  JWT.require(Algorithm.HMAC256(secret)).withAudience(CALLBACK_API_AUDIENCE).build()
 
 object ReferenceServerContainer {
   lateinit var server: NettyApplicationEngine
@@ -85,9 +97,7 @@ object ReferenceServerContainer {
       AuthSettings.Type.JWT ->
         authentication {
           jwt(AUTH_CONFIG_ENDPOINT) {
-            verifier(
-              JWT.require(Algorithm.HMAC256(config.authSettings.platformToAnchorSecret)).build()
-            )
+            verifier(callbackJwtVerifier(config.authSettings.platformToAnchorSecret))
             validate { credential ->
               val principal = JWTPrincipal(credential.payload)
               if (principal.payload.expiresAt.time < System.currentTimeMillis()) {
