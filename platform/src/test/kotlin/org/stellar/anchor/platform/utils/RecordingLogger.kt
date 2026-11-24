@@ -26,7 +26,9 @@ class RecordingLogger {
       if (method.returnType == Boolean::class.javaPrimitiveType) {
         true
       } else {
-        recorded.add(args?.joinToString(" ") { it.toString() } ?: "")
+        // the `...F(format, args...)` overloads pass their arguments as one array
+        val flat = args?.flatMap { if (it is Array<*>) it.toList() else listOf(it) }
+        recorded.add(flat?.joinToString(" ") { it.toString() } ?: "")
         null
       }
     } as Logger
