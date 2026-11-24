@@ -1615,6 +1615,9 @@ class NotifyOnchainFundsReceivedHandlerTest {
     ledgerTxn: LedgerTransaction,
     destination: String,
   ): String {
+    // The observer rejects an incoming payment when the transaction stores neither amount_expected
+    // nor amount_in; a stored transaction always has one of them, and the payment below is 15.
+    txn.amountExpected = "1"
     val sep31Store = mockk<JdbcSep31TransactionStore>(relaxed = true)
     val sep24Store = mockk<JdbcSep24TransactionStore>(relaxed = true)
     val sep6Store = mockk<JdbcSep6TransactionStore>(relaxed = true)
