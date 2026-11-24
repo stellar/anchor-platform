@@ -5,6 +5,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -236,6 +237,64 @@ class ClientDomainHelperTest {
       }
     } finally {
       serverSocket.close()
+    }
+  }
+
+  @Test
+  fun `test hanging DNS for client_domain does not keep the bounded pool saturated`() {
+    val hanging = BoundedDnsResolver(500, StubHangingResolver())
+    val original = ClientDomainHelper.dns
+    ClientDomainHelper.dns = hanging
+    val executor = ClientDomainHelper.CLIENT_DOMAIN_EXECUTOR
+    val callers = Executors.newFixedThreadPool(executor.maximumPoolSize)
+    try {
+      val start = System.nanoTime()
+      val attacks =
+        (1..executor.maximumPoolSize).map { i ->
+          callers.submit<String?> {
+            try {
+              ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(
+                "a$i.hang.example.com",
+                false,
+              )
+            } catch (e: SepException) {
+              e.message
+            }
+          }
+        }
+      attacks.forEach {
+        assertEquals("client_domain could not be resolved", it.get(5, TimeUnit.SECONDS))
+      }
+      val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+      assertTrue(elapsedMs < 2_500, "expected bounded resolution, took ${elapsedMs}ms")
+      assertEquals(0, executor.activeCount)
+
+      val ex =
+        assertThrows(SepException::class.java) {
+          ClientDomainHelper.fetchSigningKeyFromClientDomainBounded("next.hang.example.com", false)
+        }
+      assertEquals("client_domain could not be resolved", ex.message)
+    } finally {
+      ClientDomainHelper.dns = original
+      callers.shutdownNow()
+    }
+  }
+
+  @Test
+  fun `test hanging DNS on the non-public network path is also bounded`() {
+    val original = ClientDomainHelper.dns
+    ClientDomainHelper.dns = BoundedDnsResolver(500, StubHangingResolver())
+    try {
+      val start = System.nanoTime()
+      val ex =
+        assertThrows(SepException::class.java) {
+          ClientDomainHelper.fetchSigningKeyFromClientDomain("a.hang.example.com", true)
+        }
+      assertEquals("Unable to read client_domain's SIGNING_KEY", ex.message)
+      val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+      assertTrue(elapsedMs < 2_500, "expected bounded resolution, took ${elapsedMs}ms")
+    } finally {
+      ClientDomainHelper.dns = original
     }
   }
 
@@ -494,4 +553,33 @@ class ClientDomainHelperTest {
       server.stop(0)
     }
   }
+}
+
+private class StubHangingResolver : org.xbill.DNS.Resolver {
+  override fun setPort(port: Int) {}
+
+  override fun setTCP(flag: Boolean) {}
+
+  override fun setIgnoreTruncation(flag: Boolean) {}
+
+  override fun setEDNS(
+    version: Int,
+    payloadSize: Int,
+    flags: Int,
+    options: MutableList<org.xbill.DNS.EDNSOption>?,
+  ) {}
+
+  override fun setTSIGKey(key: org.xbill.DNS.TSIG?) {}
+
+  override fun setTimeout(timeout: java.time.Duration) {}
+
+  override fun sendAsync(
+    query: org.xbill.DNS.Message
+  ): java.util.concurrent.CompletionStage<org.xbill.DNS.Message> =
+    java.util.concurrent.CompletableFuture()
+
+  override fun sendAsync(
+    query: org.xbill.DNS.Message,
+    executor: java.util.concurrent.Executor,
+  ): java.util.concurrent.CompletionStage<org.xbill.DNS.Message> = sendAsync(query)
 }

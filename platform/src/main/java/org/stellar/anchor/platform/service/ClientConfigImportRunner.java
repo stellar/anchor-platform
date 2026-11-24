@@ -15,6 +15,12 @@ public class ClientConfigImportRunner implements CommandLineRunner {
 
   @Override
   public void run(String... args) {
+    if (clientConfigService.hasClients()) {
+      Log.infoF(
+          "Clients already present in the database; skipping clients.value import of {} clients",
+          clientsConfig.getItems().size());
+      return;
+    }
     int imported = 0;
     for (RawClient item : clientsConfig.getItems()) {
       try {
