@@ -69,14 +69,16 @@ internal class JwtUtilTest {
 
   private fun parse(token: String) = jwtsParser().verifyWith(key).build().parse(token)
 
-  private class CountingInputStream(bytes: ByteArray) : ByteArrayInputStream(bytes) {
+  // Extends InputStream, not ByteArrayInputStream: InputStream's bulk methods (readAllBytes,
+  // readNBytes, transferTo, skip) all go through the two read methods below, so none escapes the
+  // count.
+  private class CountingInputStream(bytes: ByteArray) : InputStream() {
+    private val source = ByteArrayInputStream(bytes)
     var bytesRead = 0L
 
-    override fun read(): Int = super.read().also { if (it >= 0) bytesRead++ }
+    override fun read(): Int = source.read().also { if (it >= 0) bytesRead++ }
 
     override fun read(b: ByteArray, off: Int, len: Int): Int =
-      super.read(b, off, len).also { if (it > 0) bytesRead += it }
-
-    override fun skip(n: Long): Long = super.skip(n).also { bytesRead += it }
+      source.read(b, off, len).also { if (it > 0) bytesRead += it }
   }
 }
