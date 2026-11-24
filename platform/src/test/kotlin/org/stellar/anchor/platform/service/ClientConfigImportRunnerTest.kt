@@ -29,13 +29,24 @@ class ClientConfigImportRunnerTest {
     RawClient.builder().name(name).type(ClientType.CUSTODIAL).signingKeys(setOf("GALICE")).build()
 
   @Test
-  fun `run upserts every item from clientsConfig`() {
+  fun `run upserts every item from clientsConfig when the database is empty`() {
+    every { clientConfigService.hasClients() } returns false
     every { clientsConfig.items } returns listOf(rawCustodial("MGI"), rawCustodial("VIBRANT"))
 
     runner.run()
 
     verify(exactly = 1) { clientConfigService.upsert("MGI", any()) }
     verify(exactly = 1) { clientConfigService.upsert("VIBRANT", any()) }
+  }
+
+  @Test
+  fun `run skips the import when clients already exist in the database`() {
+    every { clientConfigService.hasClients() } returns true
+    every { clientsConfig.items } returns listOf(rawCustodial("MGI"), rawCustodial("VIBRANT"))
+
+    runner.run()
+
+    verify(exactly = 0) { clientConfigService.upsert(any(), any()) }
   }
 
   @Test
