@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.exception.InvalidConfigException
 import org.stellar.anchor.platform.configurator.SecretManager
 import org.stellar.anchor.platform.utils.PublishedLiterals
+import org.stellar.anchor.platform.utils.RecordingLogger
 import org.stellar.anchor.util.Log
 
 /**
@@ -97,6 +98,41 @@ class SecretConfigStartupTest {
     assertTrue(failure.message!!.contains("hmac-weak-secret"))
     assertTrue(failure.message!!.contains(PropertySecretConfig.SECRET_SEP_45_JWT_SECRET))
     assertFalse(failure.message!!.contains(weak))
+  }
+
+  @Test
+  fun `test a failed start writes no secret value to the log`() {
+    val log = RecordingLogger().install()
+    val shared = "shared_secret_value_that_is_long_enough_"
+    val weak = "w3akS3cr3t"
+
+    PublishedLiterals.secretsByProperty.forEach { (property, value) ->
+      startFailure(property to value)
+    }
+    startFailure(
+      PropertySecretConfig.SECRET_PLATFORM_API_AUTH_SECRET to shared,
+      PropertySecretConfig.SECRET_SEP_10_JWT_SECRET to shared,
+    )
+    startFailure(PropertySecretConfig.SECRET_SEP_45_JWT_SECRET to weak)
+    // the recorder is live: a published seed makes `validate` log its warning
+    configure(
+      *freshSecrets.toTypedArray(),
+      PropertySecretConfig.SECRET_SEP_10_SIGNING_SEED to PublishedLiterals.signingSeeds[0],
+    )
+    config.afterPropertiesSet()
+
+    assertTrue(
+      log.lines.any { it.contains(PropertySecretConfig.SECRET_SEP_10_SIGNING_SEED) },
+      "the recorder saw no log line, so the assertions below would prove nothing",
+    )
+    val secrets =
+      PublishedLiterals.secretsByProperty.values +
+        PublishedLiterals.signingSeeds +
+        freshSecrets.map { it.second } +
+        listOf(shared, weak)
+    secrets.forEach { secret ->
+      assertFalse(log.lines.any { it.contains(secret) }, "a log line repeats a secret value")
+    }
   }
 
   @Test
