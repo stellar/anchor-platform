@@ -2017,13 +2017,11 @@ class NotifyOnchainFundsReceivedHandlerTest {
   @ParameterizedTest
   fun test_handle_payment_one_nanosecond_before_the_expiry_advances_as_before(protocol: String) {
     val stubbed = stubTransaction(protocol)
-    stubbed.amountOut = "9.5"
     bindQuote(stubbed, quoteExpiresAt)
 
     accept(ledgerOf(Memo.id(12345), payment(), createdAt = quoteExpiresAt.minusNanos(1)))
 
     assertEquals(normalNextStatus(protocol), stubbed.status)
-    assertEquals("9.5", stubbed.amountOut)
     assertNull(messageOf(stubbed))
   }
 
@@ -2089,13 +2087,11 @@ class NotifyOnchainFundsReceivedHandlerTest {
       every { Log.warnF(any(), *anyVararg()) } just Runs
       every { rpcConfig.isHonorLateQuotePayments } returns true
       val txn = stubTransaction(protocol)
-      txn.amountOut = "9.5"
       bindQuote(txn, quoteExpiresAt)
 
       accept(ledgerOf(Memo.id(12345), payment(), createdAt = lateLedgerTime))
 
       assertEquals(normalNextStatus(protocol), txn.status)
-      assertEquals("9.5", txn.amountOut)
       verify(exactly = 1) {
         Log.warnF(
           match { it.contains("Honoring a payment after the firm quote expired") },

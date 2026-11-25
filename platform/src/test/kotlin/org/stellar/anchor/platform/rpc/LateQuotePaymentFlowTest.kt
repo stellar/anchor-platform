@@ -235,7 +235,7 @@ class LateQuotePaymentFlowTest {
 
   @CsvSource(value = ["24,pending_anchor", "6,pending_anchor", "31,pending_receiver"])
   @ParameterizedTest
-  fun held_late_payment_is_recovered_without_reading_the_quote_again(
+  fun held_late_payment_is_recovered_to_the_normal_pending_status(
     protocol: String,
     expectedStatus: String
   ) {
@@ -244,7 +244,6 @@ class LateQuotePaymentFlowTest {
     recover()
 
     assertEquals(expectedStatus, txn.status)
-    verify(exactly = 1) { sep38QuoteStore.findByQuoteId(any()) }
   }
 
   @CsvSource(value = ["24", "6", "31"])

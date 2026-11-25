@@ -11,7 +11,7 @@ class RpcConfigTest {
     javaClass.classLoader.getResourceAsStream(path)!!.use { it.readBytes().decodeToString() }
 
   @Test
-  fun `a late quote payment is held unless the operator opts in`() {
+  fun `the class default does not honor a late quote payment`() {
     assertFalse(RpcConfig().isHonorLateQuotePayments)
   }
 
