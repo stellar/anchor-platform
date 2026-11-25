@@ -3,6 +3,7 @@ package org.stellar.anchor.api.sep.sep31;
 import lombok.Builder;
 import lombok.Data;
 import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest.Sep31TxnFields;
+import org.stellar.anchor.config.PII;
 
 /**
  * The request sent to PATCH /transaction/{id} of SEP-31.
@@ -15,5 +16,6 @@ import org.stellar.anchor.api.sep.sep31.Sep31PostTransactionRequest.Sep31TxnFiel
 @Builder
 public class Sep31PatchTransactionRequest {
   String id;
-  Sep31TxnFields fields;
+
+  @PII Sep31TxnFields fields;
 }

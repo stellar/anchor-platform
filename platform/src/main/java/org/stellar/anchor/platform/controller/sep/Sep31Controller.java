@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.controller.sep;
 
 import static org.stellar.anchor.platform.controller.sep.SepRequestHelper.getClientIpAddress;
+import static org.stellar.anchor.util.Log.debug;
 import static org.stellar.anchor.util.Log.debugF;
 import static org.stellar.anchor.util.Log.errorEx;
 
@@ -54,7 +55,7 @@ public class Sep31Controller {
     WebAuthJwt webAuthJwt = SepRequestHelper.getToken(servletRequest);
     rateLimiter.checkAndRecord(webAuthJwt);
     request.setRequestClientIpAddress(getClientIpAddress(servletRequest));
-    debugF("POST /transactions request={}", request);
+    debug("POST /transactions request:", request);
     return sep31Service.postTransaction(webAuthJwt, request);
   }
 
@@ -88,7 +89,7 @@ public class Sep31Controller {
     if (request != null) {
       request.setId(txnId);
     }
-    debugF("PATCH /transactions id={} request={}", txnId, request);
+    debug("PATCH /transactions id=" + txnId + " request:", request);
     return sep31Service.patchTransaction(webAuthJwt, request);
   }
 
