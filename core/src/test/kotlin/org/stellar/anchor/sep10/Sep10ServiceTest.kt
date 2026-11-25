@@ -1770,12 +1770,17 @@ internal class Sep10ServiceTest {
     ClientDomainTomlFixtures.withTomlServer(
       ClientDomainTomlFixtures.reportDocument().toByteArray()
     ) { host ->
+      val tasksBefore = ClientDomainTomlFixtures.clientDomainCompletedTasks()
       val start = System.nanoTime()
       val ex =
         assertThrows<SepException> { sep10Service.fetchSigningKeyFromClientDomainBounded(host) }
       val ms = (System.nanoTime() - start) / 1_000_000
       assertEquals("SIGNING_KEY not present in 'client_domain' TOML", ex.message)
       assertTrue(ms < 2_500, "took ${ms}ms")
+      assertTrue(
+        ClientDomainTomlFixtures.awaitClientDomainTaskCompleted(tasksBefore),
+        "the fetch did not run on the bounded client_domain pool",
+      )
     }
   }
 }

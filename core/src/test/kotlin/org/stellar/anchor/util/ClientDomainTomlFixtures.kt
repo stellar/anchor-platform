@@ -88,6 +88,24 @@ object ClientDomainTomlFixtures {
     return sb.toString()
   }
 
+  /** Tasks `CLIENT_DOMAIN_EXECUTOR` has completed so far (the bounded pool's observable). */
+  fun clientDomainCompletedTasks(): Long =
+    ClientDomainHelper.CLIENT_DOMAIN_EXECUTOR.completedTaskCount
+
+  /**
+   * True when `CLIENT_DOMAIN_EXECUTOR` has completed at least one task more than [before] within
+   * [timeoutMs]. A fetch through `fetchSigningKeyFromClientDomainBounded` runs as a pool task, so
+   * this tells it from a direct call to `fetchSigningKeyFromClientDomain`, which does not.
+   */
+  fun awaitClientDomainTaskCompleted(before: Long, timeoutMs: Long = 1_000): Boolean {
+    val deadline = System.nanoTime() + timeoutMs * 1_000_000
+    while (clientDomainCompletedTasks() <= before) {
+      if (System.nanoTime() >= deadline) return false
+      Thread.sleep(10)
+    }
+    return true
+  }
+
   /**
    * Serves [body] at `/.well-known/stellar.toml` on `127.0.0.1` with status 200, calls [block] with
    * `127.0.0.1:<port>` and always stops the server. Every request increments [requests].

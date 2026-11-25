@@ -757,6 +757,7 @@ class Sep45ServiceTest {
           .clientDomain(host)
           .build()
 
+      val tasksBefore = ClientDomainTomlFixtures.clientDomainCompletedTasks()
       val start = System.nanoTime()
       val ex =
         assertThrows(SepException::class.java) { sep45Service.getChallenge(challengeRequest) }
@@ -764,6 +765,10 @@ class Sep45ServiceTest {
 
       assertEquals(clientDomainNotPresent, ex.message)
       assertTrue(ms < 2_500, "took ${ms}ms")
+      assertTrue(
+        ClientDomainTomlFixtures.awaitClientDomainTaskCompleted(tasksBefore),
+        "the fetch did not run on the bounded client_domain pool",
+      )
       verify(exactly = 0) { nonceManager.create(any()) }
     }
   }
@@ -781,12 +786,17 @@ class Sep45ServiceTest {
           "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
         )
 
+      val tasksBefore = ClientDomainTomlFixtures.clientDomainCompletedTasks()
       val start = System.nanoTime()
       val ex = assertThrows(SepException::class.java) { sep45Service.validate(request) }
       val ms = (System.nanoTime() - start) / 1_000_000
 
       assertEquals(clientDomainNotPresent, ex.message)
       assertTrue(ms < 2_500, "took ${ms}ms")
+      assertTrue(
+        ClientDomainTomlFixtures.awaitClientDomainTaskCompleted(tasksBefore),
+        "the fetch did not run on the bounded client_domain pool",
+      )
       verify(exactly = 0) { nonceManager.verifyAndUse(any()) }
     }
   }
