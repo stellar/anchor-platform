@@ -15,7 +15,7 @@ import org.stellar.sdk.xdr.Asset;
 import org.stellar.sdk.xdr.Memo;
 import org.stellar.sdk.xdr.OperationType;
 
-@Builder
+@Builder(toBuilder = true)
 @Data
 public class LedgerTransaction {
   String hash;

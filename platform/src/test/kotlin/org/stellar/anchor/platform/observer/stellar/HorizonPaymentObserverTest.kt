@@ -1,5 +1,7 @@
 package org.stellar.anchor.platform.observer.stellar
 
+import io.micrometer.core.instrument.Metrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -9,6 +11,7 @@ import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.api.exception.LedgerDecodeException
 import org.stellar.anchor.api.exception.LedgerException
 import org.stellar.anchor.apiclient.PlatformApiClient
 import org.stellar.anchor.asset.AssetService
@@ -23,6 +26,7 @@ import org.stellar.anchor.platform.data.JdbcSep31TransactionStore
 import org.stellar.anchor.platform.data.JdbcSep6TransactionStore
 import org.stellar.anchor.platform.observer.PaymentListener
 import org.stellar.anchor.platform.observer.stellar.AbstractPaymentObserver.ObserverStatus
+import org.stellar.anchor.platform.service.AnchorMetrics
 import org.stellar.anchor.util.AssetHelper
 import org.stellar.sdk.Asset
 import org.stellar.sdk.KeyPair
@@ -897,5 +901,266 @@ class HorizonPaymentObserverTest {
 
     assertTrue(payment.message!!.contains("txHash"))
     assertTrue(pathPayment.message!!.contains("txHash2"))
+  }
+
+  // ---- ANCHOR-1514: one fetch per transaction, however many of its operations match ----
+
+  private val operationsPerTransaction = 100
+
+  private fun ledgerTransactionOf(hash: String): LedgerTransaction =
+    LedgerTransaction.builder().hash(hash).ledger(7L).operations(listOf()).build()
+
+  private fun paymentOf(index: Int, hash: String): PaymentOperationResponse {
+    val op = mockk<PaymentOperationResponse>()
+    every { op.to } returns KeyPair.random().accountId
+    every { op.from } returns KeyPair.random().accountId
+    every { op.asset } returns Asset.createNativeAsset()
+    every { op.amount } returns "1.0"
+    every { op.id } returns 1000L + index
+    every { op.transactionHash } returns hash
+    every { op.pagingToken } returns "p$index"
+    return op
+  }
+
+  private fun pathPaymentOf(index: Int, hash: String): PathPaymentBaseOperationResponse {
+    val op = mockk<PathPaymentBaseOperationResponse>()
+    every { op.to } returns KeyPair.random().accountId
+    every { op.from } returns KeyPair.random().accountId
+    every { op.asset } returns Asset.createNativeAsset()
+    every { op.amount } returns "1.0"
+    every { op.id } returns 2000L + index
+    every { op.transactionHash } returns hash
+    every { op.pagingToken } returns "pp$index"
+    return op
+  }
+
+  private fun contractOf(index: Int, hash: String): InvokeHostFunctionOperationResponse {
+    val invokeOp = mockk<InvokeHostFunctionOperationResponse>()
+    every { invokeOp.assetBalanceChanges } returns
+      listOf(balanceChange(KeyPair.random().accountId, KeyPair.random().accountId, "1.0"))
+    every { invokeOp.transactionHash } returns hash
+    every { invokeOp.id } returns 3000L + index
+    every { invokeOp.pagingToken } returns "pc$index"
+    return invokeOp
+  }
+
+  private fun givenObserving(observing: Boolean = true) {
+    every { paymentObservingAccountsManager.lookupAndUpdate(any()) } returns observing
+  }
+
+  @Test
+  fun `HZC-01 fetches the transaction once for 100 observed payments of one transaction`() {
+    givenObserving()
+    val fetched = ledgerTransactionOf("txA")
+    every { horizon.getTransaction("txA") } returns fetched
+
+    val events =
+      (0 until operationsPerTransaction).map {
+        observer.toPaymentTransferEvent(paymentOf(it, "txA"))
+      }
+
+    assertEquals(operationsPerTransaction, events.size)
+    events.forEach {
+      assertNotNull(it)
+      assertEquals(fetched, it!!.ledgerTransaction)
+    }
+    verify(exactly = 1) { horizon.getTransaction("txA") }
+  }
+
+  @Test
+  fun `HZC-02 fetches the transaction once for 100 observed path payments of one transaction`() {
+    givenObserving()
+    val fetched = ledgerTransactionOf("txB")
+    every { horizon.getTransaction("txB") } returns fetched
+
+    val events =
+      (0 until operationsPerTransaction).map {
+        observer.toPaymentTransferEvent(pathPaymentOf(it, "txB"))
+      }
+
+    assertEquals(operationsPerTransaction, events.size)
+    events.forEach {
+      assertNotNull(it)
+      assertEquals(fetched, it!!.ledgerTransaction)
+    }
+    verify(exactly = 1) { horizon.getTransaction("txB") }
+  }
+
+  @Test
+  fun `HZC-03 fetches the transaction once for 100 contract operations of one transaction`() {
+    givenObserving()
+    every { horizon.getTransaction("txC") } returns ledgerTransactionOf("txC")
+
+    val events =
+      (0 until operationsPerTransaction).map {
+        observer.toPaymentTransferEvents(contractOf(it, "txC"))
+      }
+
+    assertEquals(operationsPerTransaction, events.size)
+    events.forEach { assertEquals(1, it.size) }
+    verify(exactly = 1) { horizon.getTransaction("txC") }
+  }
+
+  @Test
+  fun `HZC-04 processOperation fetches once, dispatches 100 events and saves a cursor per operation`() {
+    val listener = mockk<PaymentListener>(relaxed = true)
+    val observer = observerWith(listener)
+    givenObserving()
+    every { horizon.getTransaction("txA") } returns ledgerTransactionOf("txA")
+
+    (0 until operationsPerTransaction).forEach { observer.processOperation(paymentOf(it, "txA")) }
+
+    verify(exactly = 1) { horizon.getTransaction("txA") }
+    verify(exactly = operationsPerTransaction) { listener.onReceived(any()) }
+    (0 until operationsPerTransaction).forEach {
+      verify(exactly = 1) { listener.onReceived(match { e -> e.operationId == "${1000 + it}" }) }
+      verify(exactly = 1) { paymentStreamerCursorStore.saveHorizonCursor("p$it") }
+    }
+    verify(exactly = operationsPerTransaction) {
+      paymentStreamerCursorStore.saveHorizonCursor(any())
+    }
+  }
+
+  @Test
+  fun `HZC-05 fetches once per distinct hash and each event carries its own transaction`() {
+    givenObserving()
+    listOf("txA", "txB", "txC").forEach {
+      every { horizon.getTransaction(it) } returns ledgerTransactionOf(it)
+    }
+
+    val events =
+      listOf("txA", "txA", "txB", "txB", "txC").mapIndexed { i, hash ->
+        observer.toPaymentTransferEvent(paymentOf(i, hash))!!
+      }
+
+    assertEquals(
+      listOf("txA", "txA", "txB", "txB", "txC"),
+      events.map { it.ledgerTransaction.hash },
+    )
+    listOf("txA", "txB", "txC").forEach { verify(exactly = 1) { horizon.getTransaction(it) } }
+  }
+
+  @Test
+  fun `HZC-06 does not fetch the transaction of an operation that is not observed`() {
+    givenObserving(false)
+
+    assertNull(observer.toPaymentTransferEvent(paymentOf(0, "txA")))
+    assertNull(observer.toPaymentTransferEvent(pathPaymentOf(0, "txB")))
+
+    verify(exactly = 0) { horizon.getTransaction(any()) }
+  }
+
+  @Test
+  fun `HZC-07 refetches a transaction that was not found on the previous operation`() {
+    givenObserving()
+    val fetched = ledgerTransactionOf("txA")
+    every { horizon.getTransaction("txA") } returnsMany listOf(null, fetched)
+
+    assertThrows(LedgerException::class.java) {
+      observer.toPaymentTransferEvent(paymentOf(0, "txA"))
+    }
+    val event = observer.toPaymentTransferEvent(paymentOf(1, "txA"))
+
+    assertEquals(fetched, event!!.ledgerTransaction)
+    verify(exactly = 2) { horizon.getTransaction("txA") }
+  }
+
+  @Test
+  fun `HZC-08 refetches a transaction whose previous fetch failed`() {
+    givenObserving()
+    val fetched = ledgerTransactionOf("txA")
+    every { horizon.getTransaction("txA") } throws
+      LedgerException("Error getting transaction") andThen
+      fetched
+
+    assertThrows(LedgerException::class.java) {
+      observer.toPaymentTransferEvent(paymentOf(0, "txA"))
+    }
+    val event = observer.toPaymentTransferEvent(paymentOf(1, "txA"))
+
+    assertEquals(fetched, event!!.ledgerTransaction)
+    verify(exactly = 2) { horizon.getTransaction("txA") }
+  }
+
+  @Test
+  fun `HZC-10 and HZC-11 each contract event owns its transaction and the fetched one is unchanged`() {
+    givenObserving()
+    val fetched = ledgerTransactionOf("txC")
+    every { horizon.getTransaction("txC") } returns fetched
+
+    val first = observer.toPaymentTransferEvents(contractOf(1, "txC")).single()
+    val second = observer.toPaymentTransferEvents(contractOf(2, "txC")).single()
+
+    assertNotSame(first.ledgerTransaction, second.ledgerTransaction)
+    assertNotSame(fetched, first.ledgerTransaction)
+    assertNotSame(fetched, second.ledgerTransaction)
+    assertEquals(
+      listOf("3001"),
+      first.ledgerTransaction.operations.map { it.invokeHostFunctionOperation.id },
+    )
+    assertEquals(
+      listOf("3002"),
+      second.ledgerTransaction.operations.map { it.invokeHostFunctionOperation.id },
+    )
+    assertTrue(fetched.operations.isEmpty())
+    verify(exactly = 1) { horizon.getTransaction("txC") }
+  }
+
+  @Test
+  fun `HZC-13 rethrows a decode failure for later operations of the same transaction without refetching`() {
+    givenObserving()
+    every { horizon.getTransaction("txA") } throws
+      LedgerDecodeException("cannot decode txA", RuntimeException("bad xdr"))
+
+    val failures =
+      (0 until 3).map {
+        assertThrows(LedgerDecodeException::class.java) {
+          observer.toPaymentTransferEvent(paymentOf(it, "txA"))
+        }
+      }
+
+    failures.forEach { assertEquals("cannot decode txA", it.message) }
+    verify(exactly = 1) { horizon.getTransaction("txA") }
+  }
+
+  @Test
+  fun `HZC-14 skips each of 100 operations of an undecodable transaction after one fetch`() {
+    val listener = mockk<PaymentListener>(relaxed = true)
+    val observer = observerWith(listener)
+    givenObserving()
+    every { horizon.getTransaction("txA") } throws
+      LedgerDecodeException("cannot decode txA", RuntimeException("bad xdr"))
+    val registry = SimpleMeterRegistry()
+    Metrics.addRegistry(registry)
+    try {
+      (0 until operationsPerTransaction).forEach { observer.processOperation(paymentOf(it, "txA")) }
+    } finally {
+      Metrics.removeRegistry(registry)
+    }
+
+    verify(exactly = 1) { horizon.getTransaction("txA") }
+    verify(exactly = 0) { listener.onReceived(any()) }
+    (0 until operationsPerTransaction).forEach {
+      verify(exactly = 1) { paymentStreamerCursorStore.saveHorizonCursor("p$it") }
+    }
+    assertEquals(
+      operationsPerTransaction.toDouble(),
+      registry.counter(AnchorMetrics.PAYMENT_OBSERVER_EVENT_SKIPPED.toString()).count(),
+    )
+  }
+
+  @Test
+  fun `HZC-15 keeps only the last transaction so an earlier hash is fetched again`() {
+    givenObserving()
+    listOf("txA", "txB").forEach {
+      every { horizon.getTransaction(it) } returns ledgerTransactionOf(it)
+    }
+
+    observer.toPaymentTransferEvent(paymentOf(0, "txA"))
+    observer.toPaymentTransferEvent(paymentOf(1, "txB"))
+    observer.toPaymentTransferEvent(paymentOf(2, "txA"))
+
+    verify(exactly = 2) { horizon.getTransaction("txA") }
+    verify(exactly = 1) { horizon.getTransaction("txB") }
   }
 }
