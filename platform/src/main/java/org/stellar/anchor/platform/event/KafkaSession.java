@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import lombok.AllArgsConstructor;
@@ -25,6 +26,7 @@ import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -112,6 +114,8 @@ public class KafkaSession implements EventService.Session {
     ConsumerRecords<String, String> consumerRecords =
         consumer.poll(Duration.ofSeconds(kafkaConfig.getPollTimeoutSeconds()));
     ArrayList<AnchorEvent> events = new ArrayList<>(consumerRecords.count());
+    ArrayList<ConsumerRecord<String, String>> eventRecords =
+        new ArrayList<>(consumerRecords.count());
     if (consumerRecords.isEmpty()) {
       debugF("Received {} Kafka records", consumerRecords.count());
     } else {
@@ -124,6 +128,7 @@ public class KafkaSession implements EventService.Session {
             throw new EventPublishException("null event type");
           }
           events.add(deserialized);
+          eventRecords.add(record);
         } catch (JsonSyntaxException | AnchorException ex) {
           Log.debugF(
               "Skipping mal-formatted event from Kafka. ex={}, message={}", ex, ex.getMessage());
@@ -131,12 +136,14 @@ public class KafkaSession implements EventService.Session {
       }
       // TOOD: emit metrics here.
     }
-    return new KafkaReadResponse(events);
+    return new KafkaReadResponse(events, eventRecords);
   }
 
   @AllArgsConstructor
   public static class KafkaReadResponse implements EventService.ReadResponse {
     private final List<AnchorEvent> events;
+    // The record each event was built from, in the same order as the events.
+    private final List<ConsumerRecord<String, String>> records;
 
     @Override
     public List<AnchorEvent> getEvents() {
@@ -149,6 +156,21 @@ public class KafkaSession implements EventService.Session {
     if (consumer != null) {
       consumer.commitSync();
     }
+  }
+
+  @Override
+  public void ack(EventService.ReadResponse readResponse, int handledCount) throws AnchorException {
+    List<ConsumerRecord<String, String>> records = ((KafkaReadResponse) readResponse).records;
+    if (consumer == null || handledCount <= 0 || records.isEmpty()) {
+      return;
+    }
+    // Events are handled in the order they were read, so committing the offset after the last
+    // handled record of its own partition never skips a record that was not handled.
+    ConsumerRecord<String, String> last = records.get(Math.min(handledCount, records.size()) - 1);
+    consumer.commitSync(
+        Map.of(
+            new TopicPartition(last.topic(), last.partition()),
+            new OffsetAndMetadata(last.offset() + 1)));
   }
 
   @Override
