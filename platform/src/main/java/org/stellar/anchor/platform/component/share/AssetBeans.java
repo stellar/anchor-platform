@@ -8,6 +8,8 @@ import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.asset.DefaultAssetService;
 import org.stellar.anchor.config.AssetsConfig;
 import org.stellar.anchor.config.StellarNetworkConfig;
+import org.stellar.anchor.ledger.LedgerClient;
+import org.stellar.anchor.ledger.StellarRpc;
 import org.stellar.anchor.platform.config.PropertyAssetsConfig;
 import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
 import org.stellar.sdk.SorobanServer;
@@ -26,7 +28,11 @@ public class AssetBeans {
   }
 
   @Bean
-  SacToAssetMapper sacToAssetMapper(StellarNetworkConfig stellarNetworkConfig) {
+  SacToAssetMapper sacToAssetMapper(
+      StellarNetworkConfig stellarNetworkConfig, LedgerClient ledgerClient) {
+    if (ledgerClient instanceof StellarRpc stellarRpc) {
+      return new SacToAssetMapper(stellarRpc.getSorobanServer());
+    }
     return new SacToAssetMapper(new SorobanServer(stellarNetworkConfig.getRpcUrl()));
   }
 }

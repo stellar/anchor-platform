@@ -2,6 +2,7 @@ package org.stellar.anchor.sep31
 
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import java.math.BigInteger
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -103,5 +104,51 @@ class OwnerKeyResolverTest {
     every { clientService.getClientConfigByName("vibrant") } throws RuntimeException("db down")
 
     assertEquals("vibrant:$key1", resolver.ownerKey(token(key1, "vibrant")))
+  }
+
+  @Test
+  fun `resolve reports custodial only for a registered custodial client`() {
+    every { clientService.getClientConfigByName("vibrant") } returns custodial("vibrant")
+    every { clientService.getClientConfigByName("wallet") } returns
+      NonCustodialClient.builder().name("wallet").domains(setOf("wallet.org")).build()
+    every { clientService.getClientConfigByName("ghost") } returns null
+    every { clientService.getClientConfigByName("broken") } throws RuntimeException("db down")
+
+    assertEquals(
+      OwnerKeyResolver.Owner("vibrant", true),
+      resolver.resolve(token("$key1:42", "vibrant"))
+    )
+    assertEquals(OwnerKeyResolver.Owner("vibrant", true), resolver.resolve(token(key2, "vibrant")))
+    assertEquals(
+      OwnerKeyResolver.Owner("wallet:$userAccount", false),
+      resolver.resolve(token(userAccount, "wallet")),
+    )
+    assertEquals(
+      OwnerKeyResolver.Owner("ghost:$key1", false),
+      resolver.resolve(token(key1, "ghost")),
+    )
+    assertEquals(
+      OwnerKeyResolver.Owner("broken:$key1", false),
+      resolver.resolve(token(key1, "broken")),
+    )
+    assertEquals(
+      OwnerKeyResolver.Owner(userAccount, false),
+      resolver.resolve(token(userAccount, null))
+    )
+  }
+
+  @Test
+  fun `resolve looks the client up once so key and custodial flag cannot disagree`() {
+    // A registry that answers once and then fails must not yield the custodial key with the
+    // non-custodial flag.
+    every { clientService.getClientConfigByName("vibrant") } returnsMany
+      listOf(custodial("vibrant")) andThenThrows
+      RuntimeException("db down")
+
+    assertEquals(
+      OwnerKeyResolver.Owner("vibrant", true),
+      resolver.resolve(token("$key1:42", "vibrant"))
+    )
+    verify(exactly = 1) { clientService.getClientConfigByName("vibrant") }
   }
 }
