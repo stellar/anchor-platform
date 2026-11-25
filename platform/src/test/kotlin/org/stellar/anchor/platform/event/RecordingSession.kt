@@ -8,6 +8,7 @@ import org.stellar.anchor.event.EventService
 internal class RecordingSession(
   private val batches: List<List<AnchorEvent>>,
   private val failAckAt: Int? = null,
+  private val failKeepAlive: Boolean = false,
   private val onExhausted: () -> Unit,
 ) : EventService.Session {
   val calls = mutableListOf<String>()
@@ -40,6 +41,7 @@ internal class RecordingSession(
 
   override fun keepAlive() {
     calls += "keepAlive"
+    if (failKeepAlive) throw InternalServerErrorException("keep-alive failed")
   }
 
   override fun close() {

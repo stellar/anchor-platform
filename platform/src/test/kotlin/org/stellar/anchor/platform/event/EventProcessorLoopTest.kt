@@ -5,6 +5,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.InternalServerErrorException
 import org.stellar.anchor.event.EventService
@@ -265,5 +266,46 @@ class EventProcessorLoopTest {
 
     assertEquals(listOf("e1", "e2"), processor.handled)
     assertEquals(listOf("ack:1", "ack:batch"), second.calls.filter { it.startsWith("ack") })
+  }
+
+  @Test
+  @Timeout(30)
+  fun `a refused keep-alive interrupts a handler that retries until it is interrupted`() {
+    val session =
+      FakeSession(clock, listOf(events("e1", "e2")), failKeepAliveAt = 1, onExhausted = {})
+    var attempts = 0
+    val processor =
+      TestProcessor(serviceOf(session)) { p, _ ->
+        // like the retry loops: keep going until interrupted, waiting through keepAlive()
+        while (!Thread.currentThread().isInterrupted && attempts < 5) {
+          attempts++
+          p.callKeepAlive()
+        }
+      }
+
+    processor.run()
+
+    assertEquals(1, attempts)
+    assertEquals(emptyList<String>(), session.calls.filter { it.startsWith("ack") })
+  }
+
+  @Test
+  @Timeout(30)
+  fun `a refused keep-alive ends the run even when the handler clears the interrupt flag`() {
+    val session =
+      FakeSession(clock, listOf(events("e1", "e2")), failKeepAliveAt = 1, onExhausted = {})
+    val processor =
+      TestProcessor(serviceOf(session)) { p, e ->
+        p.callKeepAlive()
+        Thread.interrupted()
+        p.handled += e.id
+      }
+
+    processor.run()
+
+    // no commit of the event in flight, no second event, and no further read from the dead session
+    assertEquals(emptyList<String>(), session.calls.filter { it.startsWith("ack") })
+    assertEquals(listOf("e1"), processor.handled)
+    assertEquals(listOf("read", "keepAlive"), session.calls.takeWhile { it != "close" })
   }
 }

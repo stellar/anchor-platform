@@ -6,6 +6,7 @@ import java.io.IOException
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.api.event.AnchorEvent
@@ -177,5 +178,44 @@ class CallbackApiEventProcessorTest {
       listOf("read", "keepAlive", "keepAlive", "ack:1", "keepAlive", "ack:batch", "read"),
       session.calls.takeWhile { it != "close" },
     )
+  }
+
+  private fun refusedKeepAliveSession(): RecordingSession {
+    every { eventProcessor.backoffTimer } returns backoffTimer
+    val session =
+      RecordingSession(
+        listOf(anchorEvents(3)),
+        failKeepAlive = true,
+        onExhausted = { eventProcessor.stop() },
+      )
+    every { eventService.createSession(any(), any()) } returns session
+    return session
+  }
+
+  @Test
+  @Timeout(30)
+  fun `a keep-alive the queue refuses ends the retry of a rejected event`() {
+    every { eventHandler.handleEvent(any()) } returns false
+    val session = refusedKeepAliveSession()
+
+    eventProcessor.run()
+
+    // the endless retry stops after the first wait; nothing is committed
+    verify(exactly = 1) { eventHandler.handleEvent(any()) }
+    assertEquals(emptyList<String>(), session.calls.filter { it.startsWith("ack") })
+    assertEquals("close", session.calls.last())
+  }
+
+  @Test
+  @Timeout(30)
+  fun `a keep-alive the queue refuses ends the retry after a connection error`() {
+    every { eventHandler.handleEvent(any()) } answers { throw IOException("down") }
+    val session = refusedKeepAliveSession()
+
+    eventProcessor.run()
+
+    verify(exactly = 1) { eventHandler.handleEvent(any()) }
+    assertEquals(emptyList<String>(), session.calls.filter { it.startsWith("ack") })
+    assertEquals("close", session.calls.last())
   }
 }
