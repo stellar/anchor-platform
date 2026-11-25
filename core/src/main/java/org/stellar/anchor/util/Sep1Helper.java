@@ -15,6 +15,11 @@ public class Sep1Helper {
   // parsing a single key or table header with n dotted segments costs O(n^2). Reject pathologically
   // deep segment chains before the string ever reaches toml4j. No stellar.toml table header needs
   // more than one segment (CURRENCIES, DOCUMENTATION, PRINCIPALS).
+  //
+  // This check re-implements part of toml4j's lexer and is NOT a boundary for untrusted input: it
+  // can be bypassed with quoting shapes it reads differently from toml4j. It only covers
+  // operator-controlled content (the anchor's own stellar.toml). A document fetched from a
+  // client_domain must go through readSigningKey / extractSigningKey and never reach toml4j.
   private static final int MAX_KEY_SEGMENTS = 20;
 
   public static TomlContent readToml(String url) throws IOException, InvalidConfigException {
@@ -34,11 +39,18 @@ public class Sep1Helper {
     }
   }
 
-  public static TomlContent readToml(String url, OkHttpClient client)
+  /**
+   * Fetches a stellar.toml served by an untrusted {@code client_domain} and returns its top-level
+   * {@code SIGNING_KEY}. The document is never given to a TOML parser, see {@link
+   * #extractSigningKey}.
+   *
+   * @return the signing key text, or {@code null} if the document has none.
+   */
+  public static String readSigningKey(String url, OkHttpClient client)
       throws IOException, InvalidConfigException {
     try {
       String tomlValue = NetUtil.fetch(url, DEFAULT_MAX_RESPONSE_SIZE, client);
-      return new TomlContent(tomlValue);
+      return extractSigningKey(tomlValue);
     } catch (IOException e) {
       String obfuscatedMessage =
           String.format("An error occurred while fetching the TOML from %s", url);
