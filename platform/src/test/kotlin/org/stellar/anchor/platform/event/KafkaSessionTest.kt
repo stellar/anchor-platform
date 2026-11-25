@@ -287,4 +287,34 @@ class KafkaSessionTest {
       verify(exactly = 0) { kafkaSession.find(any()) }
     }
   }
+
+  @Test
+  fun `a malformed record after the last event is committed by the end-of-batch ack`() {
+    val consumer = sessionWithConsumer(partition0)
+    consumer.addRecord(eventRecord(partition0, 0L))
+    consumer.addRecord(eventRecord(partition0, 1L))
+    consumer.addRecord(malformedRecord(partition0, 2L))
+    val response = kafkaSession.read()
+    assertEquals(2, response.events.size)
+
+    // the last handled event commits the offset after itself, leaving the malformed record
+    kafkaSession.ack(response, 2)
+    assertEquals(2L, consumer.committedOffset(partition0))
+
+    // the end of the batch commits the position, which is past the malformed record
+    kafkaSession.ack(response)
+    assertEquals(3L, consumer.committedOffset(partition0))
+  }
+
+  @Test
+  fun `keepAlive with no assigned partitions does not poll`() {
+    val consumer = MockConsumer<String, String>(OffsetResetStrategy.EARLIEST)
+    var polled = false
+    consumer.schedulePollTask { polled = true }
+    kafkaSession.consumer = consumer
+
+    kafkaSession.keepAlive()
+
+    assertEquals(false, polled)
+  }
 }
