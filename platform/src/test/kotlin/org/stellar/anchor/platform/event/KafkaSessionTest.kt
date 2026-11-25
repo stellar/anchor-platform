@@ -15,6 +15,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SaslConfigs.SASL_MECHANISM
 import org.apache.kafka.common.config.SslConfigs.*
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -23,6 +24,7 @@ import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.context.ConfigurableApplicationContext
 import org.stellar.anchor.LockAndMockStatic
 import org.stellar.anchor.LockAndMockTest
+import org.stellar.anchor.api.exception.AnchorException
 import org.stellar.anchor.event.EventService.EventQueue
 import org.stellar.anchor.platform.config.KafkaConfig
 import org.stellar.anchor.platform.config.KafkaConfig.SecurityProtocol.PLAINTEXT
@@ -150,6 +152,59 @@ class KafkaSessionTest {
     kafkaSession.ack(response)
 
     assertEquals(13L, consumer.committedOffset(partition0))
+  }
+
+  @Test
+  fun `keepAlive before any read does nothing`() {
+    kafkaSession.keepAlive()
+  }
+
+  @Test
+  fun `keepAlive with no assigned partitions does nothing`() {
+    val consumer = MockConsumer<String, String>(OffsetResetStrategy.EARLIEST)
+    kafkaSession.consumer = consumer
+
+    kafkaSession.keepAlive()
+
+    assertEquals(emptySet<TopicPartition>(), consumer.paused())
+  }
+
+  @Test
+  fun `keepAlive pauses the assignment and hands no record to the caller`() {
+    val consumer = sessionWithConsumer(partition0, partition1)
+    consumer.addRecord(eventRecord(partition0, 10L))
+
+    kafkaSession.keepAlive()
+
+    assertEquals(setOf(partition0, partition1), consumer.paused())
+    assertEquals(null, consumer.committedOffset(partition0))
+  }
+
+  @Test
+  fun `read after keepAlive resumes the partitions and returns the waiting record`() {
+    val consumer = sessionWithConsumer(partition0)
+    consumer.addRecord(eventRecord(partition0, 10L))
+    kafkaSession.keepAlive()
+
+    val response = kafkaSession.read()
+
+    assertEquals(listOf("event-10"), response.events.map { it.id })
+    assertEquals(emptySet<TopicPartition>(), consumer.paused())
+  }
+
+  @Test
+  fun `keepAlive throws instead of dropping a record the poll returns`() {
+    val consumer = sessionWithConsumer(partition0)
+    // A rebalance clears the pause: the partition is live again when the keep-alive poll runs.
+    consumer.schedulePollTask {
+      consumer.resume(setOf(partition0))
+      consumer.addRecord(eventRecord(partition0, 10L))
+    }
+
+    assertThrows(AnchorException::class.java) { kafkaSession.keepAlive() }
+
+    // Nothing was committed, so a replacement session reads the record again.
+    assertEquals(null, consumer.committedOffset(partition0))
   }
 
   @Test

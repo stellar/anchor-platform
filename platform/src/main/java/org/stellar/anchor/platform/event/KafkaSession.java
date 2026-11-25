@@ -34,6 +34,7 @@ import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.EventPublishException;
+import org.stellar.anchor.api.exception.InternalServerErrorException;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.event.EventService.EventQueue;
@@ -111,6 +112,8 @@ public class KafkaSession implements EventService.Session {
       consumer.subscribe(java.util.Collections.singletonList(topic));
     }
 
+    // A previous keepAlive() paused the partitions; they must be live to return records.
+    consumer.resume(consumer.paused());
     ConsumerRecords<String, String> consumerRecords =
         consumer.poll(Duration.ofSeconds(kafkaConfig.getPollTimeoutSeconds()));
     ArrayList<AnchorEvent> events = new ArrayList<>(consumerRecords.count());
@@ -171,6 +174,26 @@ public class KafkaSession implements EventService.Session {
         Map.of(
             new TopicPartition(last.topic(), last.partition()),
             new OffsetAndMetadata(last.offset() + 1)));
+  }
+
+  @Override
+  public void keepAlive() throws AnchorException {
+    if (consumer == null) {
+      return;
+    }
+    Set<TopicPartition> assignment = consumer.assignment();
+    if (assignment.isEmpty()) {
+      return;
+    }
+    // Polling is what tells Kafka the consumer is alive. With every partition paused the poll
+    // returns no record, so the position does not move past events that are not handled yet.
+    consumer.pause(assignment);
+    if (!consumer.poll(Duration.ZERO).isEmpty()) {
+      // The pause was lost (for example after a rebalance). The records are not handled, so the
+      // session is replaced and they are read again from the committed offset.
+      throw new InternalServerErrorException(
+          "The keep-alive poll returned records that were not handled");
+    }
   }
 
   @Override
