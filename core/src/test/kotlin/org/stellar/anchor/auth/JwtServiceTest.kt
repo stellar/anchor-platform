@@ -1,8 +1,12 @@
 package org.stellar.anchor.auth
 
 import io.jsonwebtoken.JwtException
+import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.MalformedJwtException
+import io.jsonwebtoken.UnsupportedJwtException
+import io.jsonwebtoken.io.CompressionAlgorithm
 import io.mockk.mockk
+import java.util.Date
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -11,11 +15,16 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.TestConstants.Companion.TEST_CLIENT_NAME
 import org.stellar.anchor.TestConstants.Companion.TEST_HOME_DOMAIN
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.auth.ApiAuthJwt.PlatformAuthJwt
 import org.stellar.anchor.auth.JwtService.*
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.setupMock
+import org.stellar.anchor.util.KeyUtil
+import org.stellar.sdk.KeyPair
+import org.stellar.walletsdk.horizon.SigningKeyPair
+import org.stellar.walletsdk.util.toJava
 
 internal class JwtServiceTest {
   companion object {
@@ -212,5 +221,85 @@ internal class JwtServiceTest {
     val platformCipher = collidingService.encode(platformToken)
 
     assertThrows<JwtException> { collidingService.decode(platformCipher, Sep10Jwt::class.java) }
+  }
+
+  private val headerKp = SigningKeyPair(KeyPair.random())
+
+  private fun headerToken(signer: SigningKeyPair, zip: CompressionAlgorithm?): String {
+    val builder = Jwts.builder().subject(TEST_SUB).claim("account", TEST_ACCOUNT)
+    if (zip != null) builder.compressWith(zip)
+    return builder.signWith(signer.toJava().private, Jwts.SIG.EdDSA).compact()
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["DEF", "GZIP"])
+  fun `a header JWT correctly signed by the signing key is refused when it is compressed`(
+    zipId: String
+  ) {
+    val jwtService = JwtService(secretConfig)
+    val token = headerToken(headerKp, Jwts.ZIP.get().forKey(zipId))
+
+    val ex =
+      assertThrows<SepValidationException> { jwtService.getHeaderJwt(headerKp.address, token) }
+    assertEquals("Invalid header signature", ex.message)
+  }
+
+  @Test
+  fun `an uncompressed header JWT correctly signed by the signing key returns its claims`() {
+    val jwtService = JwtService(secretConfig)
+    val token = headerToken(headerKp, null)
+
+    val claims = jwtService.getHeaderJwt(headerKp.address, token).payload
+    assertEquals(TEST_SUB, claims.subject)
+    assertEquals(TEST_ACCOUNT, claims["account"])
+  }
+
+  @Test
+  fun `a compressed header JWT signed by the wrong key is refused as an invalid signature`() {
+    val jwtService = JwtService(secretConfig)
+    val token = headerToken(SigningKeyPair(KeyPair.random()), Jwts.ZIP.DEF)
+
+    val ex =
+      assertThrows<SepValidationException> { jwtService.getHeaderJwt(headerKp.address, token) }
+    assertEquals("Invalid header signature", ex.message)
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["DEF", "GZIP"])
+  fun `a sep10 token signed with the sep10 secret and audience is refused when it is compressed`(
+    zipId: String
+  ) {
+    val sep10Secret = "sep10_unique_secret_value_32_chars_____"
+    val jwtService =
+      JwtService(
+        "sep6_more_info_unique_secret_32_chars__",
+        sep10Secret,
+        "sep45_unique_secret_value_32_chars_____",
+        "sep24_interactive_unique_secret_32_chars",
+        "sep24_more_info_unique_secret_32_chars__",
+        "callback_unique_secret_value_32_chars___",
+        "platform_unique_secret_value_32_chars___",
+      )
+    fun sep10Cipher(zip: CompressionAlgorithm?): String {
+      val builder =
+        Jwts.builder()
+          .subject(TEST_SUB)
+          .issuer(TEST_ISS)
+          .expiration(Date((TEST_EXP) * 1000))
+          .audience()
+          .add(AUD_SEP10)
+          .and()
+      if (zip != null) builder.compressWith(zip)
+      return builder.signWith(KeyUtil.toSecretKeySpecOrNull(sep10Secret), Jwts.SIG.HS256).compact()
+    }
+
+    // Control: the same token uncompressed is accepted, so the refusal below is the compression.
+    assertEquals(TEST_SUB, jwtService.decode(sep10Cipher(null), Sep10Jwt::class.java).sub)
+
+    val ex =
+      assertThrows<UnsupportedJwtException> {
+        jwtService.decode(sep10Cipher(Jwts.ZIP.get().forKey(zipId)), Sep10Jwt::class.java)
+      }
+    assertEquals("Compressed JWTs are not supported", ex.message)
   }
 }
