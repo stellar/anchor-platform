@@ -33,6 +33,7 @@ import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep31Transaction;
 import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
+import org.stellar.anchor.platform.utils.SepTransactionLogSummary;
 import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24Transaction;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
@@ -79,7 +80,7 @@ public abstract class RpcTransactionStatusHandler<T extends RpcMethodParamsReque
         getRpcMethod(),
         request.getTransactionId());
     JdbcSepTransaction txn = getTransaction(request.getTransactionId());
-    Log.debugF("SEP transaction before request is executed {}", txn);
+    Log.debugF("SEP transaction before request is executed: {}", SepTransactionLogSummary.of(txn));
 
     if (txn == null) {
       throw new InvalidRequestException(
@@ -110,7 +111,7 @@ public abstract class RpcTransactionStatusHandler<T extends RpcMethodParamsReque
 
     updateTransaction(txn, request);
 
-    Log.debugF("Transaction after update is executed {}", txn);
+    Log.debugF("Transaction after update is executed: {}", SepTransactionLogSummary.of(txn));
 
     GetTransactionResponse txResponse = toGetTransactionResponse(txn, assetService);
 
