@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 
 /**
  * The scheduled stale-pin check (HackerOne #4215161): `scripts/check-jdk-pin.sh` compares the
@@ -53,6 +54,42 @@ class CheckJdkPinScriptTest {
       )
     assertEquals(2, exit, output)
     assertTrue(output.contains("could not read the latest release"), output)
+  }
+
+  @Test
+  fun `reads the first release of the Adoptium answer as the latest`(@TempDir dir: File) {
+    val answer = File(dir, "release_names.json")
+    answer.writeText("""{"releases":["jdk-17.0.22+5","jdk-17.0.21.1+2"]}""")
+    val env = mapOf("ADOPTIUM_RELEASE_NAMES_URL" to answer.toURI().toString())
+
+    assertEquals(0, run("jdk-17.0.22+5", env = env).first)
+    val (exit, output) = run("jdk-17.0.21.1+2", env = env)
+    assertEquals(1, exit, output)
+    assertTrue(output.contains("jdk-17.0.22+5"), output)
+  }
+
+  @Test
+  fun `the workflow hands the Dockerfile pin to the script`() {
+    val workflow =
+      YAMLMapper().readTree(File(repoRoot(), ".github/workflows/jdk-pin-check.yml").readText())
+    val step =
+      workflow["jobs"]
+        .elements()
+        .asSequence()
+        .flatMap { it["steps"].elements().asSequence() }
+        .mapNotNull { it["run"]?.asText() }
+        .first { it.contains("scripts/check-jdk-pin.sh") }
+
+    val (exit, output) =
+      ProcessBuilder("bash", "-c", step.replace("scripts/check-jdk-pin.sh", "echo"))
+        .directory(repoRoot())
+        .redirectErrorStream(true)
+        .start()
+        .let { p -> p.inputStream.bufferedReader().readText().trim().let { p.waitFor() to it } }
+    val pin =
+      Regex("""(?m)^ARG TEMURIN_RELEASE=(\S+)$""").find(File(repoRoot(), "Dockerfile").readText())!!
+    assertEquals(0, exit, output)
+    assertEquals(pin.groupValues[1], output)
   }
 
   @Test
