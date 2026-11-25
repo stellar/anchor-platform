@@ -71,7 +71,8 @@ internal class JwtUtilTest {
 
   // Extends InputStream, not ByteArrayInputStream: InputStream's bulk methods (readAllBytes,
   // readNBytes, transferTo, skip) all go through the two read methods below, so none escapes the
-  // count.
+  // count. mark/reset/available pass through so the stream looks like the ByteArrayInputStream
+  // jjwt hands to decompress, and a refusal that inflates only on such a stream is still caught.
   private class CountingInputStream(bytes: ByteArray) : InputStream() {
     private val source = ByteArrayInputStream(bytes)
     var bytesRead = 0L
@@ -80,5 +81,13 @@ internal class JwtUtilTest {
 
     override fun read(b: ByteArray, off: Int, len: Int): Int =
       source.read(b, off, len).also { if (it > 0) bytesRead += it }
+
+    override fun available(): Int = source.available()
+
+    override fun markSupported(): Boolean = source.markSupported()
+
+    override fun mark(readlimit: Int) = source.mark(readlimit)
+
+    override fun reset() = source.reset()
   }
 }
