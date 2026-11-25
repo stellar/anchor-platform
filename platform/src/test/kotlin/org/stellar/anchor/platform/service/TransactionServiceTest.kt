@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.EnumSource
@@ -17,6 +18,8 @@ import org.junit.jupiter.params.provider.ValueSource
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode.LENIENT
 import org.springframework.dao.OptimisticLockingFailureException
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.asset.Sep31Info
 import org.stellar.anchor.api.exception.AnchorException
@@ -33,6 +36,7 @@ import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
 import org.stellar.anchor.event.EventService.Session
 import org.stellar.anchor.platform.data.*
+import org.stellar.anchor.platform.utils.CapturingLogger
 import org.stellar.anchor.sep24.Sep24DepositInfoGenerator
 import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31TransactionStore
@@ -40,10 +44,12 @@ import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.sep6.Sep6DepositInfoGenerator
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.Log
 import org.stellar.anchor.util.MemoHelper
 import org.stellar.sdk.Memo
 
 @Suppress("unused")
+@ExtendWith(LockAndMockTest::class)
 class TransactionServiceTest {
   companion object {
     private const val fiatUSD = "iso4217:USD"
@@ -467,6 +473,95 @@ class TransactionServiceTest {
 
     assertEquals("1000", txn.amountIn)
     assertEquals("1000", txn.amountExpected)
+  }
+
+  // TXLOG-01..05: the deprecated PATCH /transactions logs identifiers, never the SEP-6 entity
+  private fun sep6TransactionWithCustomerData() =
+    JdbcSep6Transaction().apply {
+      kind = "withdrawal"
+      status = SepTransactionStatus.PENDING_USR_TRANSFER_START.toString()
+      memo = "sentinel-memo-7731"
+      memoType = "text"
+      requestClientIpAddress = "203.0.113.77"
+      fields = mapOf("dest" to "DE89370400440532013000", "dest_extra" to "COBADEFFXXX")
+    }
+
+  private fun patchSep6Status() =
+    PatchTransactionsRequest.builder()
+      .records(
+        listOf(
+          PatchTransactionRequest(
+            PlatformTransactionData().apply {
+              id = "testTxId"
+              status = SepTransactionStatus.PENDING_USR_TRANSFER_START
+            }
+          )
+        )
+      )
+      .build()
+
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `patching a SEP-6 transaction logs identifiers and no customer data`() {
+    val logger = CapturingLogger()
+    every { Log.getLogger() } returns logger
+    val txn = sep6TransactionWithCustomerData().apply { id = "sep6-log-id" }
+    stubOnly("6", txn)
+
+    transactionService.patchTransactions(patchSep6Status())
+
+    // TXLOG-03: an INFO line carries the id, kind and status
+    assertTrue(logger.infoLines.isNotEmpty())
+    val line = logger.infoLines.single { it.contains("Updating SEP-6 transaction") }
+    assertTrue(line.contains("sep6-log-id"), line)
+    assertTrue(line.contains("withdrawal"), line)
+    assertTrue(line.contains("pending_user_transfer_start"), line)
+
+    // TXLOG-01 and TXLOG-02: no fields value, no memo, no client IP at any level
+    val everything = logger.allLines.joinToString("\n")
+    listOf("DE89370400440532013000", "COBADEFFXXX", "sentinel-memo-7731", "203.0.113.77").forEach {
+      assertFalse(everything.contains(it), "log leaked $it:\n$everything")
+    }
+  }
+
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `patching a SEP-6 transaction without fields, memo or client IP still logs`() {
+    val logger = CapturingLogger()
+    every { Log.getLogger() } returns logger
+    val txn =
+      JdbcSep6Transaction().apply {
+        id = "sep6-bare-id"
+        kind = "deposit"
+        status = SepTransactionStatus.INCOMPLETE.toString()
+      }
+    stubOnly("6", txn)
+
+    transactionService.patchTransactions(patchSep6Status())
+
+    // TXLOG-04
+    val line = logger.infoLines.single { it.contains("Updating SEP-6 transaction") }
+    assertTrue(line.contains("sep6-bare-id"), line)
+    assertTrue(line.contains("pending_user_transfer_start"), line)
+  }
+
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `patching a SEP-6 transaction still stores it and publishes the event`() {
+    every { Log.getLogger() } returns CapturingLogger()
+    val txn = sep6TransactionWithCustomerData().apply { id = "sep6-save-id" }
+    stubOnly("6", txn)
+
+    transactionService.patchTransactions(patchSep6Status())
+
+    // TXLOG-05
+    verify(exactly = 1) { sep6TransactionStore.save(txn) }
+    verify(exactly = 1) { eventSession.publish(any()) }
+    assertEquals("pending_user_transfer_start", txn.status)
+    assertEquals(
+      mapOf("dest" to "DE89370400440532013000", "dest_extra" to "COBADEFFXXX"),
+      txn.fields
+    )
   }
 
   private fun refundsWith(

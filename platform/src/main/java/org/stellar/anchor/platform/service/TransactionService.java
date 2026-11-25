@@ -61,6 +61,7 @@ import org.stellar.anchor.platform.data.JdbcSep6Transaction;
 import org.stellar.anchor.platform.data.JdbcSepTransaction;
 import org.stellar.anchor.platform.utils.AssetValidationUtils;
 import org.stellar.anchor.platform.utils.PlatformTransactionHelper;
+import org.stellar.anchor.platform.utils.SepTransactionLogSummary;
 import org.stellar.anchor.sep24.Sep24DepositInfoGenerator;
 import org.stellar.anchor.sep24.Sep24Refunds;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
@@ -285,8 +286,7 @@ public class TransactionService {
     switch (txn.getProtocol()) {
       case "6":
         JdbcSep6Transaction sep6Transaction = (JdbcSep6Transaction) txn;
-        Log.infoF(
-            "Updating SEP-6 transaction: {}", GsonUtils.getInstance().toJson(sep6Transaction));
+        Log.infoF("Updating SEP-6 transaction: {}", SepTransactionLogSummary.of(sep6Transaction));
 
         boolean shouldCreateWithdrawTxn =
             ImmutableSet.of(Kind.WITHDRAWAL, Kind.WITHDRAWAL_EXCHANGE)
