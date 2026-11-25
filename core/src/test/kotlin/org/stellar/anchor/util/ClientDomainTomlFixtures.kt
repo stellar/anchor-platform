@@ -50,6 +50,34 @@ object ClientDomainTomlFixtures {
     return sb.toString()
   }
 
+  /**
+   * HackerOne #4210811, step 2: one dotted key inside an inline table, `x={` + `a.` x [repeats] +
+   * `a={}}`. 100,009 bytes at the reporter's 50,000 repeats.
+   */
+  fun inlineTableDocument(repeats: Int = 50_000): String = "x={" + "a.".repeat(repeats) + "a={}}\n"
+
+  /**
+   * HackerOne #4210811, step 4: a table header whose single-quoted key holds a backslash before the
+   * closing quote, `['x\'].'` + `.a` x [repeats] + `]`. 100,010 bytes at 50,000 repeats.
+   */
+  fun escapedQuoteHeaderDocument(repeats: Int = 50_000): String =
+    "['x\\'].'" + ".a".repeat(repeats) + "]\n"
+
+  /**
+   * Other inline-key shapes that reach the same toml4j key-path construction as #4210811's step 2:
+   * a dotted key `a` + `.a` x [repeats] inside an inline table in an array, inside nested inline
+   * tables, as a bare top-level key line, and inside an inline table after a table header.
+   */
+  fun otherInlineShapes(repeats: Int = 49_000): Map<String, String> {
+    val key = "a" + ".a".repeat(repeats)
+    return linkedMapOf(
+      "inline table in an array" to "x=[{$key=1}]\n",
+      "nested inline tables" to "x={y={$key=1}}\n",
+      "bare dotted key line" to "$key=1\n",
+      "inline table after a header" to "[t]\nx={$key=1}\n",
+    )
+  }
+
   /** An ordinary stellar.toml of exactly [bytes] bytes with its key at the top. */
   fun ordinaryDocument(key: String, bytes: Int = 99_944): String {
     val sb = StringBuilder()
