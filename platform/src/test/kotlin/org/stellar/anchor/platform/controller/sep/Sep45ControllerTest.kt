@@ -206,7 +206,8 @@ class Sep45ControllerTest {
     Log.debug("request:", request)
     Log.trace("request:", request)
 
-    assertEquals(3, logger.allLines.size)
+    // other threads may share the mocked logger, so look only at this test's own lines
+    assertEquals(3, logger.allLines.count { it.startsWith("request:") })
     assertFalse(logger.allLines.joinToString("\n").contains(entries))
   }
 }

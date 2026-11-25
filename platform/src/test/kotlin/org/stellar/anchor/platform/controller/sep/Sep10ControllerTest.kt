@@ -3,6 +3,7 @@ package org.stellar.anchor.platform.controller.sep
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -61,7 +62,9 @@ class Sep10ControllerTest {
     Log.debug("request:", request)
     Log.trace("request:", request)
 
-    assertTrue(logger.allLines.size == 3)
+    // other threads may share the mocked logger, so look only at this test's own lines
+    val ownLines = logger.allLines.filter { it.startsWith("request:") }
+    assertEquals(3, ownLines.size)
     assertFalse(logger.allLines.joinToString("\n").contains(challenge))
   }
 }

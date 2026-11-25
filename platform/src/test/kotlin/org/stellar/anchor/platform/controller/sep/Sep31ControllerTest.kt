@@ -123,8 +123,10 @@ class Sep31ControllerTest {
     Log.debug("patch:", request)
     Log.trace("patch:", request)
 
-    assertEquals(3, logger.allLines.size)
-    val allLogged = logger.allLines.joinToString("\n")
+    // other threads may share the mocked logger, so look only at this test's own lines
+    val ownLines = logger.allLines.filter { it.startsWith("patch:") }
+    assertEquals(3, ownLines.size)
+    val allLogged = ownLines.joinToString("\n")
     assertTrue(allLogged.contains("txn-1"))
     assertFalse(allLogged.contains("123456789012345678"))
     assertFalse(allLogged.contains("021000021"))

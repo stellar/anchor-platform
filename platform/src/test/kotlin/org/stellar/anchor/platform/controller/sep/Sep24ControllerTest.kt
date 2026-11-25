@@ -173,7 +173,8 @@ class Sep24ControllerTest {
     val withdrawRequest = requestWithToken()
     every { withdrawRequest.parameterMap } returns parameterMap
     controller.withdrawAllType(withdrawRequest)
-    assertEquals(2, capturing.debugLines.count { it.contains("USDC") })
+    assertEquals(1, capturing.debugLines.count { it.startsWith("/deposit") })
+    assertEquals(1, capturing.debugLines.count { it.startsWith("/withdraw") })
     assertSanitizedDebugLine()
   }
 
