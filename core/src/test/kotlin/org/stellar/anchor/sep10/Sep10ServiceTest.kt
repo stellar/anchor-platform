@@ -50,6 +50,7 @@ import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.ledger.LedgerClient
 import org.stellar.anchor.setupMock
 import org.stellar.anchor.util.ClientDomainHelper
+import org.stellar.anchor.util.ClientDomainTomlFixtures
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.NetUtil
 import org.stellar.sdk.*
@@ -1759,6 +1760,22 @@ internal class Sep10ServiceTest {
 
     assertThrows<SepValidationException> {
       sep10Service.validateAuthorizationToken(req, "Bearer 1234", null)
+    }
+  }
+
+  // HackerOne #4209933: the real helper, no static mock. The document is one table header of a
+  // single 68,000-character segment followed by thousands of inline tables; it has no SIGNING_KEY.
+  @Test
+  fun `Test the client_domain fetch refuses the one-long-header document as missing within 2500 ms`() {
+    ClientDomainTomlFixtures.withTomlServer(
+      ClientDomainTomlFixtures.reportDocument().toByteArray()
+    ) { host ->
+      val start = System.nanoTime()
+      val ex =
+        assertThrows<SepException> { sep10Service.fetchSigningKeyFromClientDomainBounded(host) }
+      val ms = (System.nanoTime() - start) / 1_000_000
+      assertEquals("SIGNING_KEY not present in 'client_domain' TOML", ex.message)
+      assertTrue(ms < 2_500, "took ${ms}ms")
     }
   }
 }
