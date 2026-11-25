@@ -910,6 +910,24 @@ class HorizonPaymentObserverTest {
   private fun ledgerTransactionOf(hash: String): LedgerTransaction =
     LedgerTransaction.builder().hash(hash).ledger(7L).operations(listOf()).build()
 
+  /** A transaction whose every compared field differs from the default, for equality checks. */
+  private fun richLedgerTransactionOf(hash: String): LedgerTransaction =
+    LedgerTransaction.builder()
+      .hash(hash)
+      .ledger(7L)
+      .applicationOrder(3)
+      .sourceAccount(KeyPair.random().accountId)
+      .memo(textMemo("rich-memo"))
+      .operations(
+        listOf(
+          LedgerTransaction.LedgerOperation.builder().type(OperationType.PAYMENT).build(),
+          LedgerTransaction.LedgerOperation.builder()
+            .type(OperationType.PATH_PAYMENT_STRICT_SEND)
+            .build(),
+        )
+      )
+      .build()
+
   private fun paymentOf(index: Int, hash: String): PaymentOperationResponse {
     val op = mockk<PaymentOperationResponse>()
     every { op.to } returns KeyPair.random().accountId
@@ -951,7 +969,7 @@ class HorizonPaymentObserverTest {
   @Test
   fun `HZC-01 fetches the transaction once for 100 observed payments of one transaction`() {
     givenObserving()
-    val fetched = ledgerTransactionOf("txA")
+    val fetched = richLedgerTransactionOf("txA")
     every { horizon.getTransaction("txA") } returns fetched
 
     val events =
@@ -970,7 +988,7 @@ class HorizonPaymentObserverTest {
   @Test
   fun `HZC-02 fetches the transaction once for 100 observed path payments of one transaction`() {
     givenObserving()
-    val fetched = ledgerTransactionOf("txB")
+    val fetched = richLedgerTransactionOf("txB")
     every { horizon.getTransaction("txB") } returns fetched
 
     val events =
@@ -1107,6 +1125,44 @@ class HorizonPaymentObserverTest {
   }
 
   @Test
+  fun `the events of one contract operation share one transaction copy`() {
+    givenObserving()
+    val fetched = ledgerTransactionOf("txHash6")
+    every { horizon.getTransaction("txHash6") } returns fetched
+    val sender = KeyPair.random().accountId
+
+    val events =
+      observer.toPaymentTransferEvents(
+        contractOperation(
+          balanceChange(sender, KeyPair.random().accountId, "1.0"),
+          balanceChange(sender, KeyPair.random().accountId, "2.0"),
+        )
+      )
+
+    assertEquals(2, events.size)
+    assertSame(events[0].ledgerTransaction, events[1].ledgerTransaction)
+    assertNotSame(fetched, events[0].ledgerTransaction)
+    assertEquals(
+      listOf("777"),
+      events[0].ledgerTransaction.operations.map { it.invokeHostFunctionOperation.id }
+    )
+  }
+
+  @Test
+  fun `a contract event is built from a fetched transaction that has no operations list`() {
+    givenObserving()
+    every { horizon.getTransaction("txC") } returns
+      LedgerTransaction.builder().hash("txC").operations(null).build()
+
+    val event = observer.toPaymentTransferEvents(contractOf(1, "txC")).single()
+
+    assertEquals(
+      listOf("3001"),
+      event.ledgerTransaction.operations.map { it.invokeHostFunctionOperation.id },
+    )
+  }
+
+  @Test
   fun `HZC-13 rethrows a decode failure for later operations of the same transaction without refetching`() {
     givenObserving()
     every { horizon.getTransaction("txA") } throws
@@ -1119,7 +1175,8 @@ class HorizonPaymentObserverTest {
         }
       }
 
-    failures.forEach { assertEquals("cannot decode txA", it.message) }
+    failures.forEach { assertSame(failures[0], it) }
+    assertEquals("cannot decode txA", failures[0].message)
     verify(exactly = 1) { horizon.getTransaction("txA") }
   }
 
