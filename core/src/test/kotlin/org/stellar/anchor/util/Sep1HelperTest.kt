@@ -1,5 +1,9 @@
 package org.stellar.anchor.util
 
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -147,6 +151,187 @@ class Sep1HelperTest {
     val content = Sep1Helper.parse(toml)
     assertTrue(
       content.getString("SIGNING_KEY") == "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+    )
+  }
+
+  // ---- extractSigningKey (ANCHOR-1533): the client_domain path never hands the document to toml4j
+
+  private val signingKey = "GACYKME36AI6UYAV7A5ZUA6MG4C4K2VAPNYMW5YLOM6E7GS6FSHDPV4F"
+
+  /** Each header shape from reports 4196233, 4217496, 4227934 and 4234079, `n` dotted repeats. */
+  private fun attackHeaders(n: Int): Map<String, String> =
+    mapOf(
+      "unclosed quote [\"'" to "[\"'" + ".c".repeat(n) + "]",
+      "unclosed quote [\"b'" to "[\"b'" + ".a".repeat(n) + "]",
+      "escaped quote in the middle" to "[a.\"\\\"\"" + ".c".repeat(n) + "]",
+      "mixed quotes '\"" to "[a.'\"" + ".c".repeat(n) + "]",
+      "mixed quotes \"'" to "[a.\"'" + ".c".repeat(n) + "]",
+      "leading escaped quote" to "[\"\\\"\"" + ".x".repeat(n) + "]",
+      "escape before closing bracket" to "[\"a\\\"]\"" + ".x".repeat(n) + "]",
+      "plain unquoted control" to "[a" + ".c".repeat(n) + "]",
+      "plain array of tables" to "[[a" + ".c".repeat(n) + "]]",
+      "unterminated quote" to "[a.\"" + ".c".repeat(n) + "]",
+    )
+
+  private fun inlineTableDocument(n: Int) = "x = {a" + ".a".repeat(n) + " = {}}\n"
+
+  private fun crOnlyDocument(n: Int) = "x=1\r[a" + ".c".repeat(n) + "]\n"
+
+  private fun elapsedMs(block: () -> Unit): Long {
+    val start = System.nanoTime()
+    block()
+    return (System.nanoTime() - start) / 1_000_000
+  }
+
+  @Test
+  fun `test extractSigningKey returns the key whatever attack header follows it`() {
+    for ((name, header) in attackHeaders(49_000)) {
+      val doc = "SIGNING_KEY=\"$signingKey\"\n$header\n"
+      assertTrue(doc.length in 98_000..100_300, "$name document is ${doc.length} bytes")
+      var result: String? = null
+      val ms = elapsedMs { result = Sep1Helper.extractSigningKey(doc) }
+      assertEquals(signingKey, result, name)
+      assertTrue(ms < 1000, "$name took ${ms}ms")
+    }
+  }
+
+  @Test
+  fun `test extractSigningKey returns null in under a second for every attack document without a key`() {
+    val docs = attackHeaders(49_000).mapValues { it.value + "\n" }.toMutableMap()
+    docs["inline table dotted key"] = inlineTableDocument(50_000)
+    docs["CR-only line endings"] = crOnlyDocument(49_000)
+    for ((name, doc) in docs) {
+      assertTrue(doc.length in 98_000..100_300, "$name document is ${doc.length} bytes")
+      var result: String? = "unset"
+      val ms = elapsedMs { result = Sep1Helper.extractSigningKey(doc) }
+      assertNull(result, name)
+      assertTrue(ms < 1000, "$name took ${ms}ms")
+    }
+  }
+
+  @Test
+  fun `test extractSigningKey accepts every accepted key line form`() {
+    val forms =
+      listOf(
+        "SIGNING_KEY=\"$signingKey\"",
+        "SIGNING_KEY = \"$signingKey\"",
+        "SIGNING_KEY\t=\t\"$signingKey\"",
+        "SIGNING_KEY='$signingKey'",
+        "SIGNING_KEY = '$signingKey'",
+        "       SIGNING_KEY=\"$signingKey\"",
+        "SIGNING_KEY = \"$signingKey\" # the signing key",
+        "SIGNING_KEY = \"$signingKey\"#c",
+        "SIGNING_KEY = \"$signingKey\"\r",
+      )
+    for (form in forms) {
+      assertEquals(signingKey, Sep1Helper.extractSigningKey("$form\n"), form)
+    }
+  }
+
+  @Test
+  fun `test extractSigningKey returns after 8 concurrent attack documents in under 2 seconds`() {
+    val docs = attackHeaders(49_000).values.take(8).map { "$it\n" }
+    val pool = Executors.newFixedThreadPool(8)
+    try {
+      val start = System.nanoTime()
+      val futures = docs.map { doc -> pool.submit<String?> { Sep1Helper.extractSigningKey(doc) } }
+      val results = futures.map { it.get(10, TimeUnit.SECONDS) }
+      val ms = (System.nanoTime() - start) / 1_000_000
+      assertEquals(8, results.size)
+      assertTrue(results.all { it == null })
+      assertTrue(ms < 2000, "8 concurrent scans took ${ms}ms")
+    } finally {
+      pool.shutdownNow()
+    }
+  }
+
+  @Test
+  fun `test extractSigningKey reads the committed test_stellar toml fixture`() {
+    val tomlText =
+      Sep1HelperTest::class.java.classLoader.getResource("test_stellar.toml")!!.readText()
+    assertEquals(
+      "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR",
+      Sep1Helper.extractSigningKey(tomlText)
+    )
+  }
+
+  @Test
+  fun `test extractSigningKey returns null when the key comes after a table header`() {
+    val toml = "[DOCUMENTATION]\nSIGNING_KEY = \"$signingKey\"\n"
+    assertNull(Sep1Helper.extractSigningKey(toml))
+  }
+
+  @Test
+  fun `test extractSigningKey returns null when the first real line is a header even if the key follows`() {
+    val toml = "# top comment\n\n   [X]\nSIGNING_KEY = \"$signingKey\"\n"
+    assertNull(Sep1Helper.extractSigningKey(toml))
+  }
+
+  @Test
+  fun `test extractSigningKey returns the key when it comes before the first header`() {
+    val toml =
+      "VERSION = \"0.1.0\"\nSIGNING_KEY = \"$signingKey\"\n[DOCUMENTATION]\nORG_NAME = \"x\"\n"
+    assertEquals(signingKey, Sep1Helper.extractSigningKey(toml))
+  }
+
+  @Test
+  fun `test extractSigningKey rejects a duplicate top-level SIGNING_KEY`() {
+    val toml = "SIGNING_KEY = \"$signingKey\"\nSIGNING_KEY = \"$signingKey\"\n"
+    val ex = assertThrows(InvalidConfigException::class.java) { Sep1Helper.extractSigningKey(toml) }
+    assertEquals("Failed to parse TOML content. Invalid Config.", ex.message)
+  }
+
+  @Test
+  fun `test extractSigningKey rejects every SIGNING_KEY value shape other than a single-line string`() {
+    val q3 = "\"\"\""
+    val s3 = "'''"
+    val values =
+      listOf(
+        "SIGNING_KEY = $signingKey",
+        "SIGNING_KEY = \"$signingKey",
+        "SIGNING_KEY = '$signingKey",
+        "SIGNING_KEY = $q3$signingKey$q3",
+        "SIGNING_KEY = $s3$signingKey$s3",
+        "SIGNING_KEY = \"GACYKME36AI6UYAV7A5ZUA6MG4C4K2VAPNYMW5YLOM6E7GS6FSHDPV4\\u0046\"",
+        "SIGNING_KEY = \"$signingKey\" trailing",
+        "SIGNING_KEY = \"$signingKey\"\"",
+        "SIGNING_KEY =",
+        "SIGNING_KEY = 5",
+        "SIGNING_KEY = [\"$signingKey\"]",
+      )
+    for (line in values) {
+      val ex =
+        assertThrows(
+          InvalidConfigException::class.java,
+          { Sep1Helper.extractSigningKey("$line\n") },
+          line
+        )
+      assertEquals("Failed to parse TOML content. Invalid Config.", ex.message, line)
+    }
+  }
+
+  @Test
+  fun `test extractSigningKey returns null for an empty document and for a document without the key`() {
+    assertNull(Sep1Helper.extractSigningKey(""))
+    assertNull(Sep1Helper.extractSigningKey("VERSION = \"0.1.0\"\nNETWORK_PASSPHRASE = \"x\"\n"))
+  }
+
+  @Test
+  fun `test extractSigningKey ignores a commented SIGNING_KEY line`() {
+    assertNull(Sep1Helper.extractSigningKey("# SIGNING_KEY = \"$signingKey\"\n"))
+    assertEquals(
+      signingKey,
+      Sep1Helper.extractSigningKey("# SIGNING_KEY = \"OLD\"\nSIGNING_KEY = \"$signingKey\"\n")
+    )
+  }
+
+  @Test
+  fun `test extractSigningKey does not treat a longer or prefixed key name as SIGNING_KEY`() {
+    val toml = "SIGNING_KEY_OTHER = \"OTHER\"\nXSIGNING_KEY = \"PREFIXED\"\nSIGNING_KEY2 = \"N\"\n"
+    assertNull(Sep1Helper.extractSigningKey(toml))
+    assertEquals(
+      signingKey,
+      Sep1Helper.extractSigningKey("SIGNING_KEY_OTHER = \"OTHER\"\nSIGNING_KEY = \"$signingKey\"\n")
     )
   }
 }
