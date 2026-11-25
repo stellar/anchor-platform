@@ -13,6 +13,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.event.AnchorEvent
+import org.stellar.anchor.api.exception.InternalServerErrorException
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.platform.GetTransactionResponse
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
@@ -222,4 +223,160 @@ class ClientStatusCallbackProcessorTest {
       server.shutdown()
     }
   }
+
+  private fun rejectedBatchSetup(
+    events: List<AnchorEvent>,
+    batchSize: Int = 50,
+    failAckAt: Int? = null,
+  ): RecordingSession {
+    every { eventProcessor.httpErrorBackoffTimer } returns httpErrorBackoffTimer
+    every { eventProcessor.networkBackoffTimer } returns networkErrorBackoffTimer
+    val session =
+      RecordingSession(
+        events.chunked(batchSize),
+        failAckAt,
+        onExhausted = { eventProcessor.stop() }
+      )
+    every { eventService.createSession(any(), any()) } returns session
+    return session
+  }
+
+  private fun anchorEvents(count: Int, sep: String = "24") =
+    (1..count).map { AnchorEvent.builder().id("e$it").sep(sep).build() }
+
+  @Test
+  fun `150 events the wallet rejects are each handled three times and committed one by one`() {
+    // #4184521 scenario A: the wallet answers an error for every event it did not create.
+    every { eventHandler.handleEvent(any()) } returns false
+    val session = rejectedBatchSetup(anchorEvents(150))
+
+    eventProcessor.run()
+
+    verify(exactly = 450) { eventHandler.handleEvent(any()) }
+    verify(exactly = 300) { httpErrorBackoffTimer.backoff() }
+    val expectedAcks = (1..3).flatMap { (1..50).map { n -> "ack:$n" } + "ack:batch" }
+    assertEquals(expectedAcks, session.calls.filter { it.startsWith("ack") })
+    // one keep-alive after each of the 2 waits per event and one after each event
+    assertEquals(450, session.calls.count { it == "keepAlive" })
+  }
+
+  @Test
+  fun `700 events the wallet accepts are each handled once and committed one by one`() {
+    // #4184521 scenario B: the wallet answers 200 but slowly, 500+ records in a poll.
+    val handledCount = mutableMapOf<String, Int>()
+    every { eventHandler.handleEvent(any()) } answers
+      {
+        handledCount.merge(firstArg<AnchorEvent>().id, 1, Int::plus)
+        true
+      }
+    val session = rejectedBatchSetup(anchorEvents(700))
+
+    eventProcessor.run()
+
+    assertEquals(700, handledCount.size)
+    assertEquals(setOf(1), handledCount.values.toSet())
+    assertEquals(
+      (1..14).flatMap { (1..50).map { n -> "ack:$n" } + "ack:batch" },
+      session.calls.filter { it.startsWith("ack") },
+    )
+  }
+
+  @Test
+  fun `events committed before a failed commit are not handled again by the next session`() {
+    val handledCount = mutableMapOf<String, Int>()
+    every { eventHandler.handleEvent(any()) } answers
+      {
+        handledCount.merge(firstArg<AnchorEvent>().id, 1, Int::plus)
+        true
+      }
+    val events = anchorEvents(50)
+    every { eventProcessor.httpErrorBackoffTimer } returns httpErrorBackoffTimer
+    every { eventProcessor.networkBackoffTimer } returns networkErrorBackoffTimer
+    val first = RecordingSession(listOf(events), failAckAt = 30, onExhausted = {})
+    // Kafka re-reads from the committed offset: the 30th event was handled but not committed.
+    val second = RecordingSession(listOf(events.drop(29)), onExhausted = { eventProcessor.stop() })
+    every { eventService.createSession(any(), any()) } returnsMany listOf(first, second)
+
+    eventProcessor.run()
+    eventProcessor.run()
+
+    assertEquals(50, handledCount.size)
+    assertEquals(setOf(1), events.take(29).map { handledCount[it.id] }.toSet())
+    assertEquals(2, handledCount["e30"])
+    assertEquals(setOf(1), events.drop(30).map { handledCount[it.id] }.toSet())
+  }
+
+  @Test
+  fun `a SEP-6, a SEP-31 and a SEP-12 event are each committed once`() {
+    every { eventHandler.handleEvent(any()) } returns true
+    val events =
+      listOf("6", "31", "12").map { AnchorEvent.builder().id("event-sep$it").sep(it).build() }
+    val session = rejectedBatchSetup(events)
+
+    eventProcessor.run()
+
+    verify(exactly = 3) { eventHandler.handleEvent(any()) }
+    assertEquals(
+      listOf("ack:1", "ack:2", "ack:3", "ack:batch"),
+      session.calls.filter { it.startsWith("ack") },
+    )
+  }
+
+  @Test
+  fun `a connection error keeps the consumer alive after each wait and before the commit`() {
+    every { eventHandler.handleEvent(any()) } answers { throw IOException("down") }
+    val session = rejectedBatchSetup(anchorEvents(1))
+
+    eventProcessor.run()
+
+    verify(exactly = 2) { networkErrorBackoffTimer.backoff() }
+    assertEquals(
+      listOf("read", "keepAlive", "keepAlive", "ack:1", "keepAlive", "ack:batch", "read"),
+      session.calls.takeWhile { it != "close" },
+    )
+  }
+}
+
+private class RecordingSession(
+  private val batches: List<List<AnchorEvent>>,
+  private val failAckAt: Int? = null,
+  private val onExhausted: () -> Unit,
+) : EventService.Session {
+  val calls = mutableListOf<String>()
+  private var nextBatch = 0
+
+  private fun response(list: List<AnchorEvent>) =
+    object : EventService.ReadResponse {
+      override fun getEvents(): List<AnchorEvent> = list
+    }
+
+  override fun publish(event: AnchorEvent) {}
+
+  override fun read(): EventService.ReadResponse {
+    calls += "read"
+    if (nextBatch >= batches.size) {
+      onExhausted()
+      return response(emptyList())
+    }
+    return response(batches[nextBatch++])
+  }
+
+  override fun ack(readResponse: EventService.ReadResponse) {
+    calls += "ack:batch"
+  }
+
+  override fun ack(readResponse: EventService.ReadResponse, handledCount: Int) {
+    calls += "ack:$handledCount"
+    if (handledCount == failAckAt) throw InternalServerErrorException("commit failed")
+  }
+
+  override fun keepAlive() {
+    calls += "keepAlive"
+  }
+
+  override fun close() {
+    calls += "close"
+  }
+
+  override fun getSessionName() = "recording"
 }
