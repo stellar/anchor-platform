@@ -31,6 +31,7 @@ import org.stellar.anchor.ledger.LedgerClientHelper;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPayment;
 import org.stellar.anchor.metrics.MetricsService;
+import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep31Transaction;
 import org.stellar.anchor.platform.data.JdbcSep6Transaction;
@@ -41,6 +42,7 @@ import org.stellar.anchor.platform.utils.LedgerPaymentMatcher.ExpectedPayment;
 import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
+import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
 
 public class NotifyOnchainFundsReceivedHandler
@@ -48,6 +50,8 @@ public class NotifyOnchainFundsReceivedHandler
 
   private final LedgerClient ledgerClient;
   private final SacToAssetMapper sacToAssetMapper;
+  private final Sep38QuoteStore sep38QuoteStore;
+  private final RpcConfig rpcConfig;
 
   public NotifyOnchainFundsReceivedHandler(
       Sep6TransactionStore txn6Store,
@@ -58,7 +62,9 @@ public class NotifyOnchainFundsReceivedHandler
       AssetService assetService,
       EventService eventService,
       MetricsService metricsService,
-      SacToAssetMapper sacToAssetMapper) {
+      SacToAssetMapper sacToAssetMapper,
+      Sep38QuoteStore sep38QuoteStore,
+      RpcConfig rpcConfig) {
     super(
         txn6Store,
         txn24Store,
@@ -70,6 +76,8 @@ public class NotifyOnchainFundsReceivedHandler
         NotifyOnchainFundsReceivedRequest.class);
     this.ledgerClient = ledgerClient;
     this.sacToAssetMapper = sacToAssetMapper;
+    this.sep38QuoteStore = sep38QuoteStore;
+    this.rpcConfig = rpcConfig;
   }
 
   @Override

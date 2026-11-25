@@ -45,6 +45,7 @@ import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation
 import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.metrics.MetricsService
+import org.stellar.anchor.platform.config.RpcConfig
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep24TransactionStore
 import org.stellar.anchor.platform.data.JdbcSep31Transaction
@@ -59,6 +60,7 @@ import org.stellar.anchor.platform.utils.toRate
 import org.stellar.anchor.platform.validator.RequestValidator
 import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31TransactionStore
+import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.MemoHelper
@@ -134,6 +136,10 @@ class NotifyOnchainFundsReceivedHandlerTest {
 
   @MockK(relaxed = true) private lateinit var metricsService: MetricsService
 
+  @MockK(relaxed = true) private lateinit var sep38QuoteStore: Sep38QuoteStore
+
+  @MockK(relaxed = true) private lateinit var rpcConfig: RpcConfig
+
   @MockK(relaxed = true) private lateinit var eventSession: Session
 
   @MockK(relaxed = true) private lateinit var sepTransactionCounter: Counter
@@ -155,7 +161,9 @@ class NotifyOnchainFundsReceivedHandlerTest {
         assetService,
         eventService,
         metricsService,
-        mockk<SacToAssetMapper>()
+        mockk<SacToAssetMapper>(),
+        sep38QuoteStore,
+        rpcConfig
       )
   }
 
