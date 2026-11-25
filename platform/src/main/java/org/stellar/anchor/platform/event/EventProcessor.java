@@ -28,6 +28,10 @@ public abstract class EventProcessor implements Runnable {
   private ScheduledFuture<?> processingTask = null;
   // The flag to indicate if the processor is stopped.
   private boolean stopped = false;
+  // The session being read by the current run, for keepAlive().
+  private volatile EventService.Session activeSession = null;
+  // Set when the queue refused a keep-alive, so the current run must end and be replaced.
+  private volatile boolean sessionLost = false;
 
   protected EventProcessor(
       String name, EventService.EventQueue eventQueue, EventService eventService) {
@@ -51,32 +55,72 @@ public abstract class EventProcessor implements Runnable {
   @SneakyThrows
   @Override
   public void run() {
+    sessionLost = false;
     infoF(
         "The EventProcessor listening task is starting for the {} time.",
         getConsumerRestartCount() + 1);
     EventService.Session queueSession = eventService.createSession(name, eventQueue);
+    activeSession = queueSession;
     try {
-      while (!currentThread().isInterrupted() && !stopped) {
+      while (isRunning()) {
         EventService.ReadResponse readResponse = queueSession.read();
         List<AnchorEvent> events = readResponse.getEvents();
         Metrics.counter(EVENT_RECEIVED, QUEUE, toMetricTag(eventQueue.name()))
             .increment(events.size());
         debugF("Received {} events from queue", events.size());
+        int handled = 0;
         for (AnchorEvent event : events) {
+          if (!isRunning()) break;
           handleEventWithRetry(event);
-          if (currentThread().isInterrupted()) break;
+          // An interrupt or a lost session ends the retry loops before the event is handled, so
+          // the event must not be committed.
+          if (currentThread().isInterrupted() || sessionLost) break;
+          handled++;
+          // Commit this event now so that a slow or failing event later in the batch cannot make
+          // the queue deliver it again.
+          queueSession.ack(readResponse, handled);
+          keepAlive();
         }
-        queueSession.ack(readResponse);
+        if (handled == events.size() && isRunning()) {
+          // Also commits records of the batch that were skipped because they were not events.
+          queueSession.ack(readResponse);
+        }
       }
-
-      queueSession.close();
     } catch (Exception ex) {
       // This is unexpected, so we need to restart the consumer.
       Log.errorEx(ex);
     } finally {
+      activeSession = null;
+      if (sessionLost && !stopped) {
+        // The loop was interrupted only to end this run. Clear the flag so the next scheduled run
+        // starts clean, and so that closing the session is not interrupted.
+        Thread.interrupted();
+      }
       queueSession.close();
       infoF("Closing queue session [{}]", queueSession.getSessionName());
     }
+  }
+
+  /**
+   * Tells the queue that the consumer is still alive. Processors call this after every wait while
+   * they retry an event. If the queue refuses, the session is marked as lost and the current thread
+   * is interrupted, which ends the retry loop; {@link #run()} then closes the session and the
+   * scheduler starts a new one.
+   */
+  protected void keepAlive() {
+    EventService.Session session = activeSession;
+    if (session == null) return;
+    try {
+      session.keepAlive();
+    } catch (Exception ex) {
+      Log.errorEx(ex);
+      sessionLost = true;
+      currentThread().interrupt();
+    }
+  }
+
+  private boolean isRunning() {
+    return !currentThread().isInterrupted() && !stopped && !sessionLost;
   }
 
   abstract void handleEventWithRetry(AnchorEvent event);
