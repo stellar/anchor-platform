@@ -94,15 +94,31 @@ class Sep24ControllerTest {
       "a2392add-87c9-42f0-a5c1-5f1728030b68",
     )
 
-  private fun sensitiveRequest() =
-    hashMapOf(
+  private val allowlisted =
+    mapOf(
       "asset_code" to "USDC",
+      "asset_issuer" to "GISSUER4207658",
       "amount" to "98.76",
-      "email_address" to "victim@example.com",
-      "customer_id" to "cust-4207658",
-      "memo" to "memo-4207658",
-      "account" to "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO",
-      "bank_account_number" to "123456789012",
+      "lang" to "pt-BR",
+      "memo_type" to "hash",
+      "refund_memo_type" to "text",
+      "quote_id" to "quote-4207658",
+      "source_asset" to "iso4217:BRL",
+      "destination_asset" to "stellar:USDC:GISSUER4207658",
+      "claimable_balance_supported" to "true",
+    )
+
+  private fun sensitiveRequest() =
+    HashMap(
+      allowlisted +
+        mapOf(
+          "email_address" to "victim@example.com",
+          "customer_id" to "cust-4207658",
+          "memo" to "memo-4207658",
+          "refund_memo" to "refund-memo-4207658",
+          "account" to "GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO",
+          "bank_account_number" to "123456789012",
+        )
     )
 
   private fun assertSanitizedDebugLine() {
@@ -111,22 +127,16 @@ class Sep24ControllerTest {
     assertFalse(allLogged.contains("victim@example.com"))
     assertFalse(allLogged.contains("cust-4207658"))
     assertFalse(allLogged.contains("memo-4207658"))
+    assertFalse(allLogged.contains("refund-memo-4207658"))
     assertFalse(allLogged.contains("GBLGJA4TUN5XOGTV6WO2BWYUI2OZR5GYQ5PDPCRMQ5XEPJOYWB2X4CJO"))
     assertFalse(allLogged.contains("123456789012"))
-    // allowlisted values and the names of every received key stay visible
-    assertTrue(allLogged.contains("USDC"))
-    assertTrue(allLogged.contains("98.76"))
-    for (name in
-      listOf(
-        "asset_code",
-        "amount",
-        "email_address",
-        "customer_id",
-        "memo",
-        "account",
-        "bank_account_number",
-      )) {
-      assertTrue(allLogged.contains(name), "missing key name $name")
+    // every allowlisted value stays visible
+    for ((name, value) in allowlisted) {
+      assertTrue(allLogged.contains("\"$name\":\"$value\""), "missing allowlisted $name")
+    }
+    // the name of every received key stays visible, matched as a whole quoted string
+    for (name in sensitiveRequest().keys) {
+      assertTrue(allLogged.contains("\"$name\""), "missing key name $name")
     }
   }
 
@@ -181,14 +191,18 @@ class Sep24ControllerTest {
   // DBGLOG-09
   @Test
   @LockAndMockStatic([Log::class])
-  fun `test deposit with an empty body logs an empty key list without throwing`() {
+  fun `test deposit and withdraw with an empty body log an empty key list without throwing`() {
     every { Log.getLogger() } returns capturing
     every { sep24Service.deposit(any(), any()) } returns interactiveResponse
+    every { sep24Service.withdraw(any(), any()) } returns interactiveResponse
 
     controller.deposit(requestWithToken(), HashMap())
+    controller.withdraw(requestWithToken(), HashMap())
 
-    assertTrue(capturing.debugLines.any { it.contains("/deposit") })
-    assertTrue(capturing.debugLines.joinToString("\n").contains("[]"))
+    for (flow in listOf("/deposit", "/withdraw")) {
+      val line = capturing.debugLines.single { it.startsWith(flow) }
+      assertTrue(line.contains("\"receivedFields\":[]"), line)
+    }
   }
 
   // Edge cases: an unknown SEP-9 key shows its name only; a null allowlisted value is omitted

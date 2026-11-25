@@ -47,11 +47,11 @@ class Sep31ControllerTest {
     controller = Sep31Controller(sep31Service, rateLimiter)
   }
 
-  private fun requestWithToken(): HttpServletRequest {
+  private fun requestWithToken(clientIp: String? = "203.0.113.9"): HttpServletRequest {
     val request = mockk<HttpServletRequest>(relaxed = true)
     every { request.getAttribute(any()) } returns null
     every { request.getAttribute(JWT_TOKEN) } returns mockk<WebAuthJwt>(relaxed = true)
-    every { request.getAttribute(ATTRIBUTE_CLIENT_IP_ADDRESS) } returns "203.0.113.9"
+    every { request.getAttribute(ATTRIBUTE_CLIENT_IP_ADDRESS) } returns clientIp
     return request
   }
 
@@ -62,7 +62,7 @@ class Sep31ControllerTest {
     every { Log.getLogger() } returns logger
 
     val request = Sep31PostTransactionRequest()
-    request.amount = "100"
+    request.amount = "100.4207"
     request.assetCode = "USD"
     request.quoteId = "quote-4207658"
     request.fields = receiverFields
@@ -74,9 +74,28 @@ class Sep31ControllerTest {
     assertFalse(allLogged.contains("123456789012345678"))
     assertFalse(allLogged.contains("021000021"))
     assertFalse(allLogged.contains("203.0.113.9"))
-    assertTrue(allLogged.contains("100"))
+    assertTrue(allLogged.contains("100.4207"))
     assertTrue(allLogged.contains("USD"))
     assertTrue(allLogged.contains("quote-4207658"))
+  }
+
+  // Edge case: the client IP is null when the request logger is disabled (the shipped default)
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test postTransaction with a null client IP logs the line without throwing`() {
+    every { Log.getLogger() } returns logger
+
+    val request = Sep31PostTransactionRequest()
+    request.amount = "100.4207"
+    request.assetCode = "USD"
+    request.fields = receiverFields
+
+    controller.postTransaction(requestWithToken(clientIp = null), request)
+
+    assertTrue(logger.debugLines.isNotEmpty())
+    val allLogged = logger.debugLines.joinToString("\n")
+    assertTrue(allLogged.contains("100.4207"))
+    assertFalse(allLogged.contains("123456789012345678"))
   }
 
   // DBGLOG-03, DBGLOG-04
