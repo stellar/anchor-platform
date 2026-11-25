@@ -13,7 +13,6 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.event.AnchorEvent
-import org.stellar.anchor.api.exception.InternalServerErrorException
 import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.platform.GetTransactionResponse
 import org.stellar.anchor.api.platform.PlatformTransactionData.Kind
@@ -335,48 +334,4 @@ class ClientStatusCallbackProcessorTest {
       session.calls.takeWhile { it != "close" },
     )
   }
-}
-
-private class RecordingSession(
-  private val batches: List<List<AnchorEvent>>,
-  private val failAckAt: Int? = null,
-  private val onExhausted: () -> Unit,
-) : EventService.Session {
-  val calls = mutableListOf<String>()
-  private var nextBatch = 0
-
-  private fun response(list: List<AnchorEvent>) =
-    object : EventService.ReadResponse {
-      override fun getEvents(): List<AnchorEvent> = list
-    }
-
-  override fun publish(event: AnchorEvent) {}
-
-  override fun read(): EventService.ReadResponse {
-    calls += "read"
-    if (nextBatch >= batches.size) {
-      onExhausted()
-      return response(emptyList())
-    }
-    return response(batches[nextBatch++])
-  }
-
-  override fun ack(readResponse: EventService.ReadResponse) {
-    calls += "ack:batch"
-  }
-
-  override fun ack(readResponse: EventService.ReadResponse, handledCount: Int) {
-    calls += "ack:$handledCount"
-    if (handledCount == failAckAt) throw InternalServerErrorException("commit failed")
-  }
-
-  override fun keepAlive() {
-    calls += "keepAlive"
-  }
-
-  override fun close() {
-    calls += "close"
-  }
-
-  override fun getSessionName() = "recording"
 }
