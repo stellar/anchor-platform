@@ -74,7 +74,10 @@ public abstract class RpcTransactionStatusHandler<T extends RpcMethodParamsReque
 
   public Object handle(Object requestParams) throws AnchorException {
     T request = gson.fromJson(gson.toJson(requestParams), requestType);
-    Log.infoF("Processing RPC request {}", request);
+    Log.infoF(
+        "Processing RPC request: method={}, transaction_id={}",
+        getRpcMethod(),
+        request.getTransactionId());
     JdbcSepTransaction txn = getTransaction(request.getTransactionId());
     Log.debugF("SEP transaction before request is executed {}", txn);
 
