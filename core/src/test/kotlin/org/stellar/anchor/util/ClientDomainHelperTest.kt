@@ -813,6 +813,59 @@ class ClientDomainHelperTest {
       assertEquals("Unable to read client_domain's SIGNING_KEY", ex.message)
     }
   }
+
+  // HackerOne #4210811: the inline-table document (step 2) and the escaped-quote header (step 4),
+  // served at the reporter's size.
+  private fun assertFetchMissing(document: String) {
+    ClientDomainTomlFixtures.withTomlServer(document.toByteArray()) { host ->
+      val (ex, ms) =
+        timed {
+          assertThrows(SepException::class.java) {
+            ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true)
+          }
+        }
+      assertEquals(notPresent, ex.message)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+    }
+  }
+
+  private fun assertFetchReturnsKey(document: String) {
+    val body =
+      ClientDomainTomlFixtures.withSigningKeyFirst(
+          ClientDomainTomlFixtures.VALID_SIGNING_KEY,
+          document,
+        )
+        .toByteArray()
+    ClientDomainTomlFixtures.withTomlServer(body) { host ->
+      val (key, ms) = timed { ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true) }
+      assertEquals(ClientDomainTomlFixtures.VALID_SIGNING_KEY, key)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+    }
+  }
+
+  @Test
+  fun `test fetch of the inline-table document without a key fails as missing within 2500 ms`() {
+    val doc = ClientDomainTomlFixtures.inlineTableDocument()
+    assertEquals(100_009, doc.length)
+    assertFetchMissing(doc)
+  }
+
+  @Test
+  fun `test fetch of a key followed by the inline-table document returns the key within 2500 ms`() {
+    assertFetchReturnsKey(ClientDomainTomlFixtures.inlineTableDocument())
+  }
+
+  @Test
+  fun `test fetch of the escaped-quote header document without a key fails as missing within 2500 ms`() {
+    val doc = ClientDomainTomlFixtures.escapedQuoteHeaderDocument()
+    assertEquals(100_010, doc.length)
+    assertFetchMissing(doc)
+  }
+
+  @Test
+  fun `test fetch of a key followed by the escaped-quote header document returns the key within 2500 ms`() {
+    assertFetchReturnsKey(ClientDomainTomlFixtures.escapedQuoteHeaderDocument())
+  }
 }
 
 private class StubHangingResolver : org.xbill.DNS.Resolver {
