@@ -266,6 +266,48 @@ class Sep31CustomerOwnershipTests : IntegrationTestBase(TestConfig()) {
       callerSep12Client.getCustomer(transactionId = txn.id, type = "sep31-receiver")
     assertEquals(receiverCustomer.id, fetchedCustomer?.id)
   }
+
+  // `walletKeyPair` is the signing key of the custodial client `referenceCustodial`: every memo
+  // under it is one end user of that client, told apart only by the memo.
+  private fun postSep31TransactionAs(jwt: String, receiverId: String) {
+    val sep31 = Sep31Client(toml.getString("DIRECT_PAYMENT_SERVER"), jwt)
+    val sep38 = Sep38Client(toml.getString("ANCHOR_QUOTE_SERVER"), jwt)
+    val quote =
+      sep38.postQuote(
+        "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+        "10",
+        "stellar:JPYC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP",
+      )
+    val txnRequest = gson.fromJson(postTxnRequestTemplate, Sep31PostTransactionRequest::class.java)
+    txnRequest.receiverId = receiverId
+    txnRequest.quoteId = quote.id
+    sep31.postTransaction(txnRequest)
+  }
+
+  @Test
+  fun `test an end user of a custodial client cannot use a receiver_id owned by another end user of the same client`() {
+    val victimJwt = authenticateWithMemo(walletKeyPair, 7001UL)
+    val attackerJwt = authenticateWithMemo(walletKeyPair, 7002UL)
+    val receiverCustomerRequest =
+      GsonUtils.getInstance().fromJson(testCustomer2Json, Sep12PutCustomerRequest::class.java)
+    val victimReceiver =
+      Sep12Client(toml.getString("KYC_SERVER"), victimJwt).putCustomer(receiverCustomerRequest)!!
+
+    assertThrows<SepNotAuthorizedException> {
+      postSep31TransactionAs(attackerJwt, victimReceiver.id)
+    }
+  }
+
+  @Test
+  fun `test an end user of a custodial client can use a receiver_id it owns`() {
+    val ownerJwt = authenticateWithMemo(walletKeyPair, 7003UL)
+    val receiverCustomerRequest =
+      GsonUtils.getInstance().fromJson(testCustomer2Json, Sep12PutCustomerRequest::class.java)
+    val receiver =
+      Sep12Client(toml.getString("KYC_SERVER"), ownerJwt).putCustomer(receiverCustomerRequest)!!
+
+    assertDoesNotThrow { postSep31TransactionAs(ownerJwt, receiver.id) }
+  }
 }
 
 private const val sep24DepositWithKycFieldsJson =

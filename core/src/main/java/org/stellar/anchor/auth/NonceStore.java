@@ -21,7 +21,14 @@ public interface NonceStore {
    */
   boolean insertIfAbsent(Nonce nonce);
 
-  void deleteExpiredNonces();
+  /**
+   * Delete every nonce whose expiry is strictly before {@code now}. The caller supplies the instant
+   * (from a {@link java.time.Clock}) so the comparison never depends on the database session's time
+   * zone.
+   *
+   * @param now the instant to compare each nonce's expiry against
+   */
+  void deleteExpiredNonces(Instant now);
 
   int markAsUsed(String id, Instant now);
 }
