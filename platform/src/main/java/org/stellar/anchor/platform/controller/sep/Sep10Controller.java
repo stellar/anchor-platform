@@ -66,7 +66,7 @@ public class Sep10Controller {
       method = {RequestMethod.POST})
   public ValidationResponse validateChallenge(
       @RequestParam(name = "transaction") String transaction) throws SepException, IOException {
-    debugF("POST /auth transaction={}", transaction);
+    debugF("POST /auth");
     return validateChallenge(ValidationRequest.of(transaction));
   }
 

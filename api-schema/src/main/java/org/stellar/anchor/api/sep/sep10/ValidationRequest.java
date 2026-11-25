@@ -1,6 +1,7 @@
 package org.stellar.anchor.api.sep.sep10;
 
 import lombok.Data;
+import org.stellar.anchor.config.PII;
 
 /**
  * The request body of the validation of the SEP-10 authentication flow.
@@ -10,7 +11,7 @@ import lombok.Data;
  */
 @Data
 public class ValidationRequest {
-  String transaction;
+  @PII String transaction;
 
   public static ValidationRequest of(String transaction) {
     ValidationRequest validationRequest = new ValidationRequest();

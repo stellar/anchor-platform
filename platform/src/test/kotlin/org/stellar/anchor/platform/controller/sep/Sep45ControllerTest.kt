@@ -3,8 +3,12 @@ package org.stellar.anchor.platform.controller.sep
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
 import org.springframework.http.MediaType
 import org.springframework.http.converter.json.GsonHttpMessageConverter
 import org.springframework.test.web.servlet.MockMvc
@@ -13,6 +17,8 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.sep.sep45.ChallengeResponse
 import org.stellar.anchor.api.sep.sep45.ValidationRequest
 import org.stellar.anchor.api.sep.sep45.ValidationResponse
@@ -20,6 +26,7 @@ import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.sep45.Sep45Service
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.Log
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Network
 
@@ -29,6 +36,7 @@ import org.stellar.sdk.Network
  * set up standalone with the same converter (see `Sep1ControllerTest`); a body is sent as raw JSON,
  * never through the DTO, because a wrong key is symmetric when a client shares the DTO.
  */
+@ExtendWith(LockAndMockTest::class)
 class Sep45ControllerTest {
   private val spec = "spec-entries"
 
@@ -147,5 +155,58 @@ class Sep45ControllerTest {
       )
       .andExpect(status().isBadRequest)
       .andExpect(jsonPath("$.error").value("authorization_entries is required"))
+  }
+
+  // ANCHOR-1540 (HackerOne #4207658): the authorization entries are a credential; they must not
+  // reach the DEBUG log through either variant of POST /auth.
+  private val entries = "AAAAAQAAAAAA-authorization-entries-4207658"
+
+  // DBGLOG-12, DBGLOG-13, DBGLOG-15
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test form validate DEBUG line omits the authorization entries`() {
+    val logger = CapturingLogger()
+    every { Log.getLogger() } returns logger
+    val service = mockk<Sep45Service>(relaxed = true)
+
+    Sep45Controller(service).validate(entries)
+
+    assertTrue(logger.debugLines.isNotEmpty())
+    assertFalse(logger.allLines.joinToString("\n").contains(entries))
+    assertTrue(logger.debugLines.any { it.contains("POST /auth") })
+    verify { service.validate(match { it.authorizationEntries == entries }) }
+  }
+
+  // DBGLOG-12, DBGLOG-13, DBGLOG-15
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test JSON validate DEBUG line omits the authorization entries`() {
+    val logger = CapturingLogger()
+    every { Log.getLogger() } returns logger
+    val service = mockk<Sep45Service>(relaxed = true)
+
+    Sep45Controller(service)
+      .validate(ValidationRequest.builder().authorizationEntries(entries).build())
+
+    assertTrue(logger.debugLines.isNotEmpty())
+    assertFalse(logger.allLines.joinToString("\n").contains(entries))
+    assertTrue(logger.debugLines.any { it.contains("POST /auth") })
+    verify { service.validate(match { it.authorizationEntries == entries }) }
+  }
+
+  // DBGLOG-14
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test sep45 ValidationRequest authorizationEntries is excluded by every JSON Log method`() {
+    val logger = CapturingLogger()
+    every { Log.getLogger() } returns logger
+    val request = ValidationRequest.builder().authorizationEntries(entries).build()
+
+    Log.info("request:", request)
+    Log.debug("request:", request)
+    Log.trace("request:", request)
+
+    assertEquals(3, logger.allLines.size)
+    assertFalse(logger.allLines.joinToString("\n").contains(entries))
   }
 }
