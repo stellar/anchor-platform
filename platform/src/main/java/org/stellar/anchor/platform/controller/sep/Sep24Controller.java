@@ -52,7 +52,7 @@ public class Sep24Controller {
   public InteractiveTransactionResponse deposit(
       HttpServletRequest request, @RequestBody HashMap<String, String> requestData)
       throws AnchorException, MalformedURLException, URISyntaxException {
-    debug("/deposit", requestData);
+    debug("/deposit", Sep24RequestLogView.from(requestData));
     WebAuthJwt token = SepRequestHelper.getToken(request);
     rateLimiter.checkAndRecord(token);
     requestData.put(ATTRIBUTE_CLIENT_IP_ADDRESS, SepRequestHelper.getClientIpAddress(request));
@@ -86,7 +86,7 @@ public class Sep24Controller {
   public InteractiveTransactionResponse withdraw(
       HttpServletRequest request, @RequestBody HashMap<String, String> requestData)
       throws AnchorException, MalformedURLException, URISyntaxException {
-    debug("/withdraw", requestData);
+    debug("/withdraw", Sep24RequestLogView.from(requestData));
     WebAuthJwt token = SepRequestHelper.getToken(request);
     rateLimiter.checkAndRecord(token);
     requestData.put(ATTRIBUTE_CLIENT_IP_ADDRESS, SepRequestHelper.getClientIpAddress(request));
