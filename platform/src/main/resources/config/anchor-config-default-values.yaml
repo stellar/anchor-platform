@@ -546,6 +546,12 @@ events:
   # Whether to enable event delivery. If false, the events will not be sent to the event publisher.
   enabled: false
 
+  # Event delivery is at-least-once. If the consumer loses its place in the queue (for example the
+  # Kafka commit of the event being handled fails), that one event is read and delivered again.
+  # A receiver tells a repeat by the event `id` and must not act on the same `id` twice.
+  # The Kafka consumer reads at most 50 records per poll, commits after each handled event, and
+  # allows 15 minutes between two polls.
+
   # The configuration of the event queue.
   queue:
     # The type of the queue.
