@@ -7,6 +7,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.lang.management.ManagementFactory
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -33,6 +34,30 @@ internal class JwtUtilTest {
 
     val ex = assertThrows<UnsupportedJwtException> { parse(bomb) }
     assertEquals("Compressed JWTs are not supported", ex.message)
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = ["DEF", "GZIP"])
+  fun `refusing a signed bomb allocates far less than its inflated size`(zipId: String) {
+    // Black-box check through jjwt's own payload stream: inflating the 5,000,000-byte payload
+    // allocates at least that much, whatever the decompress implementation looks like.
+    val bomb =
+      jwtsBuilder()
+        .claim("pad", "A".repeat(5_000_000))
+        .compressWith(Jwts.ZIP.get().forKey(zipId))
+        .signWith(key, Jwts.SIG.HS256)
+        .compact()
+    val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+    assertTrue(threads.isThreadAllocatedMemorySupported && threads.isThreadAllocatedMemoryEnabled)
+    val thread = Thread.currentThread().id
+    assertThrows<UnsupportedJwtException> { parse(bomb) } // warm-up: class loading, parser setup
+
+    val before = threads.getThreadAllocatedBytes(thread)
+    val ex = assertThrows<UnsupportedJwtException> { parse(bomb) }
+    val allocated = threads.getThreadAllocatedBytes(thread) - before
+
+    assertEquals("Compressed JWTs are not supported", ex.message)
+    assertTrue(allocated < 1_000_000, "refusal allocated $allocated bytes")
   }
 
   @ParameterizedTest
