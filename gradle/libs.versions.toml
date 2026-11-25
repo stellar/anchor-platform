@@ -54,6 +54,7 @@ spring-context = "6.1.11"
 spring-kafka = "3.2.1"
 spring-retry = "2.0.6"
 stellar-wallet-sdk = "2.0.0"
+testcontainers = "2.0.5"
 
 # Plugin versions
 spotless = "7.2.1"
@@ -80,6 +81,7 @@ dotenv = { module = "io.github.cdimascio:dotenv-kotlin", version.ref = "dotenv" 
 exposed = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
 flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway-core" }
+flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway-core" }
 google-gson = { module = "com.google.code.gson:gson", version.ref = "google-gson" }
 google-guava = { module = "com.google.guava:guava", version.ref = "google-guava" }
 hibernate-types = { module = "io.hypersistence:hypersistence-utils-hibernate-63", version.ref = "hibernate-types" }
@@ -137,6 +139,8 @@ spring-data-commons = { module = "org.springframework.data:spring-data-commons",
 spring-kafka = { module = "org.springframework.kafka:spring-kafka", version.ref = "spring-kafka" }
 spring-retry = { module = "org.springframework.retry:spring-retry", version.ref = "spring-retry" }
 stellar-wallet-sdk = { module = "org.stellar:wallet-sdk", version.ref = "stellar-wallet-sdk" }
+testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter", version.ref = "testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
 
 [bundles]
 junit = ["junit-api", "junit-engine", "junit-params", "junit-suite-engine", "kotlin-stdlib", "kotlin-junit", "mockk"]

@@ -19,13 +19,16 @@ public interface JdbcNonceRepo extends CrudRepository<JdbcNonce, String> {
   int insertIfAbsent(
       @Param("id") String id, @Param("used") boolean used, @Param("expiresAt") Instant expiresAt);
 
-  @Query("SELECT COUNT(n) FROM JdbcNonce n WHERE n.expiresAt < CURRENT_TIMESTAMP")
-  int countExpired();
-
+  /**
+   * Deletes the rows whose {@code expires_at} is strictly before {@code now} and returns how many
+   * were removed. {@code expires_at} is {@code TIMESTAMP WITHOUT TIME ZONE} holding UTC wall-clock
+   * time, so the instant is bound rather than read from the database: the database's own clock
+   * follows the JVM's default zone, not UTC.
+   */
   @Transactional
   @Modifying
-  @Query("DELETE FROM JdbcNonce n WHERE n.expiresAt < CURRENT_TIMESTAMP")
-  void deleteAllExpired();
+  @Query("DELETE FROM JdbcNonce n WHERE n.expiresAt < :now")
+  int deleteExpired(@Param("now") Instant now);
 
   @Transactional
   @Modifying

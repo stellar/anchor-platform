@@ -1,10 +1,12 @@
 package org.stellar.anchor.platform.data
 
 import io.mockk.MockKAnnotations
+import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.verify
 import java.time.Instant
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -28,6 +30,27 @@ class JdbcNonceStoreTest {
       this.used = used
       this.expiresAt = expiresAt
     }
+
+  @Test
+  fun `deleteExpiredNonces issues one delete bound to the given instant and nothing else`() {
+    val now = Instant.parse("2026-11-12T10:34:58Z")
+    every { repo.deleteExpired(now) } returns 3
+
+    store.deleteExpiredNonces(now)
+
+    verify(exactly = 1) { repo.deleteExpired(now) }
+    confirmVerified(repo)
+  }
+
+  @Test
+  fun `deleteExpiredNonces completes when no row is expired`() {
+    val now = Instant.parse("2026-11-12T10:34:58Z")
+    every { repo.deleteExpired(now) } returns 0
+
+    assertDoesNotThrow { store.deleteExpiredNonces(now) }
+    verify(exactly = 1) { repo.deleteExpired(now) }
+    confirmVerified(repo)
+  }
 
   @Test
   fun `insertIfAbsent returns true when the row is newly inserted`() {
