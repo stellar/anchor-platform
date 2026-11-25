@@ -7,6 +7,7 @@ import io.mockk.spyk
 import io.mockk.verify
 import java.util.*
 import org.apache.kafka.clients.CommonClientConfigs.SECURITY_PROTOCOL_CONFIG
+import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.config.SaslConfigs.SASL_MECHANISM
 import org.apache.kafka.common.config.SslConfigs.*
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -43,6 +44,22 @@ class KafkaSessionTest {
   fun setUp() {
     MockKAnnotations.init(this, relaxUnitFun = true)
     kafkaSession = spyk(KafkaSession(kafkaConfig, "test", eventQueue))
+  }
+
+  @Test
+  fun `consumer config sets max poll records to 50`() {
+    every { kafkaConfig.bootstrapServer } returns "localhost:9092"
+    every { kafkaConfig.securityProtocol } returns PLAINTEXT
+    val props = kafkaSession.createConsumerConfig()
+    assertEquals(50, props[ConsumerConfig.MAX_POLL_RECORDS_CONFIG])
+  }
+
+  @Test
+  fun `consumer config sets max poll interval to 15 minutes`() {
+    every { kafkaConfig.bootstrapServer } returns "localhost:9092"
+    every { kafkaConfig.securityProtocol } returns PLAINTEXT
+    val props = kafkaSession.createConsumerConfig()
+    assertEquals(900000, props[ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG])
   }
 
   @Test

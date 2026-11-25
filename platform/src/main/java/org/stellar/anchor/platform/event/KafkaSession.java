@@ -41,6 +41,13 @@ import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
 
 public class KafkaSession implements EventService.Session {
+  // The most records one poll returns, which bounds the events at risk if a commit fails.
+  static final int MAX_POLL_RECORDS = 50;
+  // The longest the consumer may go without polling before Kafka removes it from its group. It
+  // is above the 10-minute HTTP timeouts of the callback handlers, so one blocking callback between
+  // two keep-alive polls cannot evict the consumer.
+  static final int MAX_POLL_INTERVAL_MS = 900_000;
+
   final KafkaConfig kafkaConfig;
   final String sessionName;
   final String topic;
@@ -193,6 +200,10 @@ public class KafkaSession implements EventService.Session {
   }
 
   Consumer<String, String> createConsumer() throws InvalidConfigException {
+    return new KafkaConsumer<>(createConsumerConfig());
+  }
+
+  Properties createConsumerConfig() throws InvalidConfigException {
     Properties props = new Properties();
 
     props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfig.getBootstrapServer());
@@ -202,12 +213,14 @@ public class KafkaSession implements EventService.Session {
     props.put(ConsumerConfig.GROUP_ID_CONFIG, "group-" + sessionName);
     props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
     props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+    props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
+    props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, MAX_POLL_INTERVAL_MS);
     props.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
     props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
     props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
     configureAuth(props);
 
-    return new KafkaConsumer<>(props);
+    return props;
   }
 
   void configureAuthSaslLogin(Properties props) throws InvalidConfigException {
