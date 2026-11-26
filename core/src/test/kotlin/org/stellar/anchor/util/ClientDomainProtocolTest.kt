@@ -1,9 +1,15 @@
 package org.stellar.anchor.util
 
+import java.io.InputStream
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.UnknownHostException
+import java.nio.channels.ServerSocketChannel
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.function.BiFunction
 import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLSocket
 import okhttp3.Dns
@@ -15,6 +21,7 @@ import okhttp3.tls.HeldCertificate
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -173,6 +180,75 @@ class ClientDomainProtocolTest {
     }
   }
 
+  // CDPROTO-08 (DNS) and the client-to-branch mapping of CDPROTO-01..03
+  @Test
+  fun `the mainnet client rejects non-public addresses and the shared client delegates to dns`() {
+    val loopback = listOf(InetAddress.getByName("127.0.0.1"))
+    val publicAddress = listOf(InetAddress.getByName("8.8.8.8"))
+
+    withDns(stubDns { loopback }) {
+      assertThrows(UnknownHostException::class.java) {
+        ClientDomainHelper.fetchClient(false).dns.lookup("any.example.test")
+      }
+      assertEquals(loopback, ClientDomainHelper.fetchClient(true).dns.lookup("any.example.test"))
+    }
+    withDns(stubDns { publicAddress }) {
+      assertEquals(
+        publicAddress,
+        ClientDomainHelper.fetchClient(false).dns.lookup("any.example.test")
+      )
+      assertEquals(
+        publicAddress,
+        ClientDomainHelper.fetchClient(true).dns.lookup("any.example.test")
+      )
+    }
+  }
+
+  // CDPROTO-09
+  @Test
+  fun `the mainnet branch refuses a host that rebinds to a non-public address after validation`() {
+    val lookups = AtomicInteger()
+    val rebinding = stubDns {
+      if (lookups.incrementAndGet() == 1) listOf(InetAddress.getByName("8.8.8.8"))
+      else listOf(InetAddress.getByName("127.0.0.1"))
+    }
+    val listener =
+      ServerSocketChannel.open().bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0))
+    listener.configureBlocking(false)
+    try {
+      val port = (listener.localAddress as InetSocketAddress).port
+
+      withDns(rebinding) {
+        val e =
+          assertThrows(SepException::class.java) {
+            ClientDomainHelper.fetchSigningKeyFromClientDomain("rebind.example.test:$port", false)
+          }
+        assertEquals("Unable to read client_domain's SIGNING_KEY", e.message)
+      }
+
+      assertEquals(2, lookups.get())
+      // A connection that had been opened sits in the accept queue; none may be there.
+      assertNull(listener.accept())
+    } finally {
+      listener.close()
+    }
+  }
+
+  private fun stubDns(addresses: () -> List<InetAddress>): Dns =
+    object : Dns {
+      override fun lookup(hostname: String): List<InetAddress> = addresses()
+    }
+
+  private fun withDns(stub: Dns, block: () -> Unit) {
+    val original = ClientDomainHelper.dns
+    ClientDomainHelper.dns = stub
+    try {
+      block()
+    } finally {
+      ClientDomainHelper.dns = original
+    }
+  }
+
   private fun fetchProtocol(client: OkHttpClient, server: AlpnTlsServer): Protocol {
     val request = Request.Builder().url("https://127.0.0.1:${server.port}/").build()
     client.newCall(request).execute().use {
@@ -237,11 +313,10 @@ internal class AlpnTlsServer(
 
   private fun serve(socket: SSLSocket) {
     try {
-      socket.handshakeApplicationProtocolSelector =
-        java.util.function.BiFunction { _, offered ->
-          offeredByClient.add(offered.toList())
-          serverAlpn.firstOrNull { offered.contains(it) }
-        }
+      socket.handshakeApplicationProtocolSelector = BiFunction { _, offered ->
+        offeredByClient.add(offered.toList())
+        serverAlpn.firstOrNull { offered.contains(it) }
+      }
       socket.startHandshake()
       val protocol = socket.applicationProtocol
       negotiated.add(protocol)
@@ -258,7 +333,7 @@ internal class AlpnTlsServer(
     val output = socket.outputStream
     val body = "SIGNING_KEY=\"$signingKey\"\n".toByteArray()
     do {
-      readUntilBlankLine(input) ?: return
+      if (!readUntilBlankLine(input)) return
       output.write(
         ("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${body.size}\r\n\r\n")
           .toByteArray()
@@ -268,16 +343,17 @@ internal class AlpnTlsServer(
     } while (keepAlive)
   }
 
-  private fun readUntilBlankLine(input: java.io.InputStream): Unit? {
+  /** Reads one request head; false when the client closed the connection first. */
+  private fun readUntilBlankLine(input: InputStream): Boolean {
     var matched = 0
     val end =
       byteArrayOf('\r'.code.toByte(), '\n'.code.toByte(), '\r'.code.toByte(), '\n'.code.toByte())
     while (matched < end.size) {
       val b = input.read()
-      if (b < 0) return null
+      if (b < 0) return false
       matched = if (b.toByte() == end[matched]) matched + 1 else if (b.toByte() == end[0]) 1 else 0
     }
-    return Unit
+    return true
   }
 
   private fun flood(socket: SSLSocket) {
