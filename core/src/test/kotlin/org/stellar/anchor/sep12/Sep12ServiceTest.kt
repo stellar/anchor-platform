@@ -7,19 +7,26 @@ import io.mockk.impl.annotations.MockK
 import java.time.Instant
 import kotlin.test.assertNotNull
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.NullSource
 import org.junit.jupiter.params.provider.ValueSource
 import org.skyscreamer.jsonassert.JSONAssert
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.callback.*
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.exception.*
+import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.platform.GetTransactionResponse
 import org.stellar.anchor.api.sep.sep12.Sep12CustomerRequestBase
 import org.stellar.anchor.api.sep.sep12.Sep12GetCustomerRequest
@@ -39,8 +46,10 @@ import org.stellar.anchor.client.CustodialClient
 import org.stellar.anchor.client.NonCustodialClient
 import org.stellar.anchor.event.EventService
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
+import org.stellar.anchor.util.Log
 import org.stellar.anchor.util.StringHelper.json
 
+@ExtendWith(LockAndMockTest::class)
 class Sep12ServiceTest {
   companion object {
     private const val TEST_ACCOUNT = "GBFZNZTFSI6TWLVAID7VOLCIFX2PMUOS2X7U6H4TNK4PAPSHPWMMUIZG"
@@ -435,6 +444,31 @@ class Sep12ServiceTest {
     }
     assertInstanceOf(SepValidationException::class.java, ex)
     assertEquals("Invalid 'memo' for 'memo_type'", ex.message)
+  }
+
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test an invalid memo is not written to the log`() {
+    val loggedArgs = mutableListOf<Any?>()
+    every { Log.infoF(any(), *anyVararg()) } answers
+      {
+        loggedArgs.addAll((args[1] as Array<*>).toList())
+        Unit
+      }
+    val hugeMemo = "9".repeat(1_000_000)
+    val request = mockk<Sep12CustomerRequestBase>(relaxed = true)
+    every { request.memo } returns hugeMemo
+    every { request.memoType } returns "id"
+
+    assertThrows<SepValidationException> {
+      sep12Service.updateRequestMemoAndMemoType(request, createJwtToken(TEST_ACCOUNT))
+    }
+    assertThrows<SepNotAuthorizedException> {
+      sep12Service.validateRequestAndTokenMemos(request, createJwtToken("$TEST_ACCOUNT:$TEST_MEMO"))
+    }
+
+    assertTrue(loggedArgs.contains(hugeMemo.length))
+    assertFalse(loggedArgs.any { it.toString().contains("9".repeat(100)) })
   }
 
   @ParameterizedTest
