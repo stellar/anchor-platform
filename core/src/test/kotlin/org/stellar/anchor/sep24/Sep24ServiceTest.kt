@@ -7,6 +7,7 @@ import io.mockk.impl.annotations.MockK
 import java.net.URI
 import java.nio.charset.Charset
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import org.apache.hc.core5.net.URLEncodedUtils
 import org.junit.jupiter.api.Assertions.*
@@ -405,6 +406,21 @@ internal class Sep24ServiceTest {
         sep24Service.withdraw(createTestWebAuthJwt(), notANumber)
       }
     assertEquals("Invalid memo not-a-number of type: MEMO_ID", notANumberEx.message)
+
+    verify(exactly = 0) { txnStore.save(any()) }
+  }
+
+  @Test
+  fun `test withdraw rejects a 1MB memo id before parsing it`() {
+    val request = createTestTransactionRequest()
+    request["memo"] = "9".repeat(1_000_000)
+    request["memo_type"] = "id"
+
+    assertTimeoutPreemptively(Duration.ofSeconds(1)) {
+      assertThrows<SepValidationException> {
+        sep24Service.withdraw(createTestWebAuthJwt(), request)
+      }
+    }
 
     verify(exactly = 0) { txnStore.save(any()) }
   }

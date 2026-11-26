@@ -6,16 +6,20 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
+import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.config.SecretConfig;
 import org.stellar.anchor.platform.configurator.SecretManager;
 import org.stellar.anchor.util.KeyUtil;
 import org.stellar.anchor.util.Log;
 import org.stellar.anchor.util.PublishedSecrets;
 
-public class PropertySecretConfig implements SecretConfig, Validator {
+public class PropertySecretConfig implements SecretConfig, Validator, InitializingBean {
 
   public static final String SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET =
       "secret.sep6.more_info_url.jwt_secret";
@@ -98,6 +102,22 @@ public class PropertySecretConfig implements SecretConfig, Validator {
   @Override
   public String getRpcAuthSecret() {
     return SecretManager.getInstance().get(SECRET_RPC_AUTH_SECRET);
+  }
+
+  /**
+   * The bean is not bound with {@code @ConfigurationProperties}, so Spring never calls {@link
+   * #validate}. Running it here stops the start on a published, repeated or weak secret.
+   */
+  @Override
+  public void afterPropertiesSet() throws InvalidConfigException {
+    Errors errors = new BeanPropertyBindingResult(this, "secret");
+    validate(this, errors);
+    if (errors.hasErrors()) {
+      throw new InvalidConfigException(
+          errors.getAllErrors().stream()
+              .map(error -> error.getCode() + ": " + error.getDefaultMessage())
+              .collect(Collectors.toList()));
+    }
   }
 
   @Override

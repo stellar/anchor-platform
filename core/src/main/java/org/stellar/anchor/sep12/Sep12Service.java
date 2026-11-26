@@ -354,11 +354,12 @@ public class Sep12Service {
       isIdPath = true;
 
       if (customerIdOwnerStore.isClaimed(requestBase.getId())) {
+        // Same relaxation as SEP-31 `sender_id`/`receiver_id`, except for a custodial client, whose
+        // owner key is shared by every end user so the memo alone keeps them apart.
+        OwnerKeyResolver.Owner owner = ownerKeyResolver.resolve(token);
+        boolean ignoreMemo = isSep31TransactionLookup && !owner.custodial();
         if (!customerIdOwnerStore.verify(
-                requestBase.getId(),
-                ownerKeyResolver.ownerKey(token),
-                token.getOwnerMemo(),
-                isSep31TransactionLookup)
+                requestBase.getId(), owner.key(), token.getOwnerMemo(), ignoreMemo)
             && !CustomerOwnershipReconciliation.tryReconcile(
                 customerIdOwnerStore,
                 ownerKeyResolver,
@@ -456,8 +457,8 @@ public class Sep12Service {
     }
 
     infoF(
-        "request memo ({}) does not match token memo ID ({}) authorized via SEP-10",
-        requestMemo,
+        "request memo (length {}) does not match token memo ID ({}) authorized via SEP-10",
+        requestMemo == null ? 0 : requestMemo.length(),
         tokenMemo);
     throw new SepNotAuthorizedException(
         "The memo specified does not match the memo ID authorized via SEP-10");
@@ -481,7 +482,7 @@ public class Sep12Service {
     try {
       MemoHelper.makeMemo(memo, memoType);
     } catch (Exception e) {
-      infoF("Invalid memo ({}) for memo_type ({})", memo, memoType);
+      infoF("Invalid memo (length {}) for memo_type ({})", memo.length(), memoType);
       Log.warnEx(e);
       throw new SepValidationException("Invalid 'memo' for 'memo_type'");
     }

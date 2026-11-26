@@ -15,6 +15,9 @@ import org.stellar.sdk.Memo;
 import org.stellar.sdk.xdr.*;
 
 public class MemoHelper {
+  static final int MAX_MEMO_ID_LENGTH = 20;
+  static final int MAX_MEMO_ECHO_LENGTH = 64;
+
   public static String memoTypeAsString(MemoType memoType) {
     switch (memoType) {
       case MEMO_ID:
@@ -96,7 +99,7 @@ public class MemoHelper {
       }
     } catch (NumberFormatException nfex) {
       throw new SepValidationException(
-          String.format("Invalid memo %s of type: %s", memo, memoType), nfex);
+          String.format("Invalid memo %s of type: %s", abbreviate(memo), memoType), nfex);
     }
   }
 
@@ -105,6 +108,9 @@ public class MemoHelper {
    * 18,446,744,073,709,551,615) as defined by the Stellar protocol.
    */
   public static MemoId makeMemoId(String memo) {
+    if (memo == null || memo.length() > MAX_MEMO_ID_LENGTH) {
+      throw new NumberFormatException("memo id must be at most 20 digits");
+    }
     try {
       return new MemoId(new BigInteger(memo));
     } catch (IllegalArgumentException e) {
@@ -112,6 +118,13 @@ public class MemoHelper {
       nfe.initCause(e);
       throw nfe;
     }
+  }
+
+  private static String abbreviate(String memo) {
+    if (memo == null || memo.length() <= MAX_MEMO_ECHO_LENGTH) {
+      return memo;
+    }
+    return memo.substring(0, MAX_MEMO_ECHO_LENGTH) + "...";
   }
 
   public static String convertBase64ToHex(String memo) {
