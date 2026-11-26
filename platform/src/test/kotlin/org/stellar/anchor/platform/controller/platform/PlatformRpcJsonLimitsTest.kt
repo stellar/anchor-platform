@@ -159,6 +159,14 @@ class PlatformRpcJsonLimitsTest {
   }
 
   @Test
+  fun `an object where the batch array is expected answers the generic 400 and never reaches the service`() {
+    send("{}")
+      .andExpect(status().isBadRequest)
+      .andExpect(content().json("""{"error":"Your request body is wrong in some way."}""", true))
+    verify(exactly = 0) { rpcService.handle(any()) }
+  }
+
+  @Test
   fun `a body over both the byte cap and the node limit is refused with 413`() {
     // 600,000 empty objects is about 1.8 MB: the byte filter answers before any parsing
     send(emptiesBody(600_000))
