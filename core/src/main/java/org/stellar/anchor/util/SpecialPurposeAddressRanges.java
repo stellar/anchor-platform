@@ -22,6 +22,9 @@ import java.util.List;
  *       an IETF-protocol block.
  *   <li>{@code 64:ff9b::/96} (NAT64) and {@code 2002::/16} (6to4) are blocked outright, whatever
  *       IPv4 address they embed.
+ *   <li>{@code ::ffff:0:0:0/96} (IPv4-translated, RFC 2765) is blocked outright although the IANA
+ *       registries do not list it: only a host with a SIIT translator for that prefix would route
+ *       it, and then it reaches an IPv4 host chosen by the caller.
  *   <li>{@code ::ffff:0:0/96} (IPv4-mapped) is not listed: {@link InetAddress} turns every mapped
  *       address into an IPv4 address, so the IPv4 rows decide it.
  *   <li>The standalone globally reachable blocks ({@code 192.31.196.0/24}, {@code 192.52.193.0/24},
@@ -51,6 +54,7 @@ final class SpecialPurposeAddressRanges {
           // IPv6
           "::/128", // Unspecified Address
           "::1/128", // Loopback Address
+          "::ffff:0:0:0/96", // IPv4-translated (SIIT, RFC 2765); not in the IANA registries
           "64:ff9b::/96", // NAT64 well-known prefix (RFC 6052)
           "64:ff9b:1::/48", // NAT64 local-use prefix (RFC 8215)
           "100::/64", // Discard-Only Address Block

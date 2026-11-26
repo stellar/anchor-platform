@@ -113,6 +113,13 @@ class ClientDomainClassESsrfTest {
     assertRefused("::ffff:240.0.0.5")
   }
 
+  // CDSSRF-12
+  @Test
+  fun `an IPv4-translated IPv6 literal carrying a loopback or Class E address is refused`() {
+    assertRefused("::ffff:0:7f00:1")
+    assertRefused("[::ffff:0:f000:5]:8443")
+  }
+
   // CDSSRF-10 (SEP-10 and SEP-45 both call this entry point)
   @Test
   fun `the bounded entry point shared by SEP-10 and SEP-45 refuses Class E with a port`() {

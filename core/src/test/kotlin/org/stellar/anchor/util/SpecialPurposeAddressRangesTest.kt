@@ -13,10 +13,10 @@ import org.junit.jupiter.api.Test
  * The expected data below is the test's own copy of the registry, written from the two IANA pages,
  * not read from the implementation: a block missing from [SpecialPurposeAddressRanges] must fail
  * here. Each entry is a block that is not globally reachable (or deprecated), plus multicast, which
- * the unicast registries do not list. Two entries are blocked by decision although the registry
- * lists them as globally reachable or N/A: 64:ff9b::/96 (NAT64) and 2002::/16 (6to4) are refused
- * outright, and 192.0.0.0/24 and 2001::/23 are refused whole, including their reachable anycast
- * sub-entries.
+ * the unicast registries do not list, and ::ffff:0:0:0/96 (IPv4-translated, RFC 2765), which no
+ * registry lists. Two entries are blocked by decision although the registry lists them as globally
+ * reachable or N/A: 64:ff9b::/96 (NAT64) and 2002::/16 (6to4) are refused outright, and
+ * 192.0.0.0/24 and 2001::/23 are refused whole, including their reachable anycast sub-entries.
  */
 class SpecialPurposeAddressRangesTest {
 
@@ -68,6 +68,7 @@ class SpecialPurposeAddressRangesTest {
     listOf(
       Range("::/128", "Unspecified Address"),
       Range("::1/128", "Loopback Address"),
+      Range("::ffff:0:0:0/96", "IPv4-translated (RFC 2765), not in the IANA registries"),
       Range("64:ff9b::/96", "IPv4-IPv6 Translat. (RFC 6052)"),
       Range("64:ff9b:1::/48", "IPv4-IPv6 Translat. (RFC 8215)"),
       Range("100::/64", "Discard-Only Address Block"),
@@ -162,6 +163,13 @@ class SpecialPurposeAddressRangesTest {
     assertTrue(blocked("::ffff:240.0.0.5"))
     assertTrue(blocked("::ffff:10.0.0.1"))
     assertFalse(blocked("::ffff:8.8.8.8"))
+  }
+
+  @Test
+  fun `IPv4-translated IPv6 literals are refused whatever IPv4 address they carry`() {
+    for (h in listOf("::ffff:0:7f00:1", "::ffff:0:a00:1", "::ffff:0:f000:5", "::ffff:0:808:808")) {
+      assertTrue(blocked(h), "$h is in ::ffff:0:0:0/96 and must be refused")
+    }
   }
 
   @Test
