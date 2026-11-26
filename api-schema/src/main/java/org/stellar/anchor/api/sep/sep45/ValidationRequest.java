@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.gson.annotations.SerializedName;
 import lombok.Builder;
 import lombok.Data;
+import org.stellar.anchor.config.PII;
 
 /**
  * The request body of the validation of the SEP-45 authentication flow.
@@ -16,5 +17,6 @@ import lombok.Data;
 public class ValidationRequest {
   @JsonProperty("authorization_entries")
   @SerializedName("authorization_entries")
+  @PII
   private String authorizationEntries;
 }

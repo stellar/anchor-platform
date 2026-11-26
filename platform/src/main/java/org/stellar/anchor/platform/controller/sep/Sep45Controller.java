@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.controller.sep;
 
+import static org.stellar.anchor.util.Log.debug;
 import static org.stellar.anchor.util.Log.debugF;
 import static org.stellar.anchor.util.Log.errorEx;
 
@@ -56,7 +57,7 @@ public class Sep45Controller {
   public ValidationResponse validate(
       @RequestParam(name = "authorization_entries") String authorizationEntries)
       throws AnchorException {
-    debugF("POST /auth authorization_entries", authorizationEntries);
+    debugF("POST /auth");
     return sep45Service.validate(
         ValidationRequest.builder().authorizationEntries(authorizationEntries).build());
   }
@@ -69,7 +70,7 @@ public class Sep45Controller {
       method = {RequestMethod.POST})
   public ValidationResponse validate(@RequestBody ValidationRequest validationRequest)
       throws AnchorException {
-    debugF("POST /auth {}", validationRequest);
+    debug("POST /auth details:", validationRequest);
     return sep45Service.validate(validationRequest);
   }
 

@@ -12,6 +12,7 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeSet;
 import lombok.SneakyThrows;
 import org.apache.http.client.utils.URIBuilder;
 import org.stellar.anchor.api.asset.AssetInfo;
@@ -132,7 +133,8 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
 
     token.claim("data", data);
 
-    debugF("Attaching data to the token: {}", data);
+    // names only: the values come from the request body and the configured txn fields
+    debugF("Attaching data to the token, fields: {}", new TreeSet<>(data.keySet()));
 
     return jwtService.encode(token);
   }
