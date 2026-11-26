@@ -262,9 +262,16 @@ public class RequestOnchainFundsHandler
     return Collections.emptySet();
   }
 
+  /** The account and memo a payment for the transaction must carry, already validated. */
+  private record Destination(String account, String memo, String memoType) {}
+
   @Override
   protected void updateTransactionWithRpcRequest(
       JdbcSepTransaction txn, RequestOnchainFundsRequest request) throws AnchorException {
+    // Everything that can reject the request runs before the first setter, so a rejected request
+    // leaves the transaction as it was (ANCHOR-1587).
+    Destination destination = resolveDestination(txn, request);
+
     if (request.getAmountIn() != null) {
       txn.setAmountIn(request.getAmountIn().getAmount());
       txn.setAmountInAsset(request.getAmountIn().getAsset());
@@ -289,24 +296,10 @@ public class RequestOnchainFundsHandler
           txn6.setAmountExpected(request.getAmountIn().getAmount());
         }
 
-        if (sep6DepositInfoGenerator instanceof Sep6DepositInfoNoneGenerator) {
-          Memo memo = makeMemo(request.getMemo(), MEMO_ID);
-          assertMemoNotPending(txn6, request.getDestinationAccount(), memoAsString(memo));
-          txn6.setMemo(memoAsString(memo));
-          txn6.setMemoType(memoTypeString(memoType(memo)));
-          sepRequestValidator.validateDestinationAccount(
-              txn6.getWebAuthAccount(), request.getDestinationAccount());
-          txn6.setWithdrawAnchorAccount(request.getDestinationAccount());
-          txn6.setToAccount(request.getDestinationAccount());
-        } else {
-          SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(txn6);
-          assertMemoNotPending(
-              txn6, sep6DepositInfo.getStellarAddress(), sep6DepositInfo.getMemo());
-          txn6.setToAccount(sep6DepositInfo.getStellarAddress());
-          txn6.setWithdrawAnchorAccount(sep6DepositInfo.getStellarAddress());
-          txn6.setMemo(sep6DepositInfo.getMemo());
-          txn6.setMemoType("id");
-        }
+        txn6.setMemo(destination.memo());
+        txn6.setMemoType(destination.memoType());
+        txn6.setWithdrawAnchorAccount(destination.account());
+        txn6.setToAccount(destination.account());
         break;
       case SEP_24:
         JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
@@ -317,22 +310,10 @@ public class RequestOnchainFundsHandler
           txn24.setAmountExpected(request.getAmountIn().getAmount());
         }
 
-        if (sep24DepositInfoGenerator instanceof Sep24DepositInfoNoneGenerator) {
-          Memo memo = makeMemo(request.getMemo(), MEMO_ID);
-          assertMemoNotPending(txn24, request.getDestinationAccount(), memoAsString(memo));
-          txn24.setMemo(memoAsString(memo));
-          txn24.setMemoType(memoTypeString(memoType(memo)));
-          txn24.setWithdrawAnchorAccount(request.getDestinationAccount());
-          txn24.setToAccount(request.getDestinationAccount());
-        } else {
-          SepDepositInfo sep24DepositInfo = sep24DepositInfoGenerator.generate(txn24);
-          assertMemoNotPending(
-              txn24, sep24DepositInfo.getStellarAddress(), sep24DepositInfo.getMemo());
-          txn24.setToAccount(sep24DepositInfo.getStellarAddress());
-          txn24.setWithdrawAnchorAccount(sep24DepositInfo.getStellarAddress());
-          txn24.setMemo(sep24DepositInfo.getMemo());
-          txn24.setMemoType("id");
-        }
+        txn24.setMemo(destination.memo());
+        txn24.setMemoType(destination.memoType());
+        txn24.setWithdrawAnchorAccount(destination.account());
+        txn24.setToAccount(destination.account());
         break;
       case SEP_31:
         JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
@@ -343,25 +324,66 @@ public class RequestOnchainFundsHandler
           txn31.setAmountExpected(request.getAmountIn().getAmount());
         }
 
-        if (sep31DepositInfoGenerator instanceof Sep31DepositInfoNoneGenerator) {
-          Memo memo = makeMemo(request.getMemo(), MEMO_ID);
-          assertMemoNotPending(txn31, request.getDestinationAccount(), memoAsString(memo));
-          txn31.setStellarMemo(memoAsString(memo));
-          txn31.setStellarMemoType(memoTypeString(memoType(memo)));
-          txn31.setToAccount(request.getDestinationAccount());
-        } else {
-          SepDepositInfo sep31DepositInfo = sep31DepositInfoGenerator.generate(txn31);
-          assertMemoNotPending(
-              txn31, sep31DepositInfo.getStellarAddress(), sep31DepositInfo.getMemo());
-          txn31.setToAccount(sep31DepositInfo.getStellarAddress());
-          txn31.setStellarMemo(sep31DepositInfo.getMemo());
-          txn31.setStellarMemoType("id");
-        }
+        txn31.setStellarMemo(destination.memo());
+        txn31.setStellarMemoType(destination.memoType());
+        txn31.setToAccount(destination.account());
 
         Log.infoF("Memo set to {} {}", txn31.getStellarMemoType(), txn31.getStellarMemo());
         break;
       default:
         break;
+    }
+  }
+
+  /**
+   * Works out the destination account and memo of the transaction and runs every check that can
+   * reject them. Changes nothing on the transaction.
+   */
+  private Destination resolveDestination(JdbcSepTransaction txn, RequestOnchainFundsRequest request)
+      throws AnchorException {
+    switch (Sep.from(txn.getProtocol())) {
+      case SEP_6:
+        JdbcSep6Transaction txn6 = (JdbcSep6Transaction) txn;
+        if (sep6DepositInfoGenerator instanceof Sep6DepositInfoNoneGenerator) {
+          Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          assertMemoNotPending(txn6, request.getDestinationAccount(), memoAsString(memo));
+          sepRequestValidator.validateDestinationAccount(
+              txn6.getWebAuthAccount(), request.getDestinationAccount());
+          return new Destination(
+              request.getDestinationAccount(), memoAsString(memo), memoTypeString(memoType(memo)));
+        }
+        SepDepositInfo sep6DepositInfo = sep6DepositInfoGenerator.generate(txn6);
+        assertMemoNotPending(txn6, sep6DepositInfo.getStellarAddress(), sep6DepositInfo.getMemo());
+        return new Destination(
+            sep6DepositInfo.getStellarAddress(), sep6DepositInfo.getMemo(), "id");
+      case SEP_24:
+        JdbcSep24Transaction txn24 = (JdbcSep24Transaction) txn;
+        if (sep24DepositInfoGenerator instanceof Sep24DepositInfoNoneGenerator) {
+          Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          assertMemoNotPending(txn24, request.getDestinationAccount(), memoAsString(memo));
+          return new Destination(
+              request.getDestinationAccount(), memoAsString(memo), memoTypeString(memoType(memo)));
+        }
+        SepDepositInfo sep24DepositInfo = sep24DepositInfoGenerator.generate(txn24);
+        assertMemoNotPending(
+            txn24, sep24DepositInfo.getStellarAddress(), sep24DepositInfo.getMemo());
+        return new Destination(
+            sep24DepositInfo.getStellarAddress(), sep24DepositInfo.getMemo(), "id");
+      case SEP_31:
+        JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
+        if (sep31DepositInfoGenerator instanceof Sep31DepositInfoNoneGenerator) {
+          Memo memo = makeMemo(request.getMemo(), MEMO_ID);
+          assertMemoNotPending(txn31, request.getDestinationAccount(), memoAsString(memo));
+          return new Destination(
+              request.getDestinationAccount(), memoAsString(memo), memoTypeString(memoType(memo)));
+        }
+        SepDepositInfo sep31DepositInfo = sep31DepositInfoGenerator.generate(txn31);
+        assertMemoNotPending(
+            txn31, sep31DepositInfo.getStellarAddress(), sep31DepositInfo.getMemo());
+        return new Destination(
+            sep31DepositInfo.getStellarAddress(), sep31DepositInfo.getMemo(), "id");
+      default:
+        return null;
     }
   }
 
