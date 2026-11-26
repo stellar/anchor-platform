@@ -7,6 +7,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.exception.SepException
+import org.stellar.sdk.KeyPair
 
 class ClientDomainHelperTest {
 
@@ -164,6 +166,32 @@ class ClientDomainHelperTest {
           false,
         )
       }
+    } finally {
+      server.stop(0)
+    }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain on a non-public network retries over plain http`() {
+    val signingKey = KeyPair.random().accountId
+    val requests = AtomicInteger()
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/.well-known/stellar.toml") { exchange ->
+      requests.incrementAndGet()
+      val body = "SIGNING_KEY=\"$signingKey\"".toByteArray()
+      exchange.sendResponseHeaders(200, body.size.toLong())
+      exchange.responseBody.use { it.write(body) }
+    }
+    server.start()
+    try {
+      val key =
+        ClientDomainHelper.fetchSigningKeyFromClientDomain(
+          "127.0.0.1:${server.address.port}",
+          true,
+        )
+
+      assertEquals(signingKey, key)
+      assertEquals(1, requests.get())
     } finally {
       server.stop(0)
     }
