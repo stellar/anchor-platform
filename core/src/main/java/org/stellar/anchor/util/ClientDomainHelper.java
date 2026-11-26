@@ -18,6 +18,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import okhttp3.ConnectionPool;
 import okhttp3.Dns;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
@@ -114,7 +115,14 @@ public class ClientDomainHelper {
   }
 
   private static OkHttpClient http1Only(OkHttpClient client) {
-    return client.newBuilder().protocols(List.of(Protocol.HTTP_1_1)).build();
+    // No idle connection is kept: OkHttp reuses an idle HTTP/1.1 connection for a GET without
+    // checking that the host still has it open, and these clients do not retry, so a host that
+    // drops idle connections would fail every other fetch.
+    return client
+        .newBuilder()
+        .protocols(List.of(Protocol.HTTP_1_1))
+        .connectionPool(new ConnectionPool(0, 1, TimeUnit.SECONDS))
+        .build();
   }
 
   static String fetchSigningKeyFromClientDomain(

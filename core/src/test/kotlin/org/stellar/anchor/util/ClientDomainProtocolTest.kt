@@ -115,7 +115,7 @@ class ClientDomainProtocolTest {
         true,
         client
       )
-    // The flood host's connection is pooled and open (keep-alive) while the honest fetch runs.
+    // The flood host keeps its socket open (keep-alive) while the honest fetch runs.
     val startedAt = System.nanoTime()
     val honestKey =
       ClientDomainHelper.fetchSigningKeyFromClientDomain(
@@ -164,6 +164,26 @@ class ClientDomainProtocolTest {
 
     assertEquals(signingKey, key)
     assertEquals(listOf("http/1.1"), server.negotiated)
+  }
+
+  // CDPROTO-10
+  @Test
+  fun `a host that closes its connection after each response can be fetched again`() {
+    for (allowHttpRetry in listOf(true, false)) {
+      // The fixture closes the socket right after answering, as hosts with a short idle timeout do.
+      val server = startServer(listOf("http/1.1"))
+      val client = productionClient(allowHttpRetry)
+
+      repeat(3) {
+        val key =
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(
+            "127.0.0.1:${server.port}",
+            allowHttpRetry,
+            client,
+          )
+        assertEquals(signingKey, key)
+      }
+    }
   }
 
   // CDPROTO-08
