@@ -2,9 +2,13 @@ package org.stellar.anchor.platform.configurator
 
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.springframework.context.support.GenericApplicationContext
+import org.stellar.anchor.platform.config.PropertySecretConfig.SECRET_SEP_10_JWT_SECRET
 
 /**
  * ANCHOR-1576 (HackerOne 4235840): the JVM decodes environment values with the locale's charset
@@ -86,5 +90,38 @@ class EnvironmentDecodingTest {
   @Test
   fun `test a JVM in a C locale reads the 25 letters as 50 replacement characters`() {
     assertEquals(List(50) { 0xFFFD }, decodeInChildJvm(mapOf("LC_ALL" to "C")))
+  }
+
+  @AfterEach
+  fun tearDown() {
+    SecretManager.getInstance().props.clear()
+    ConfigEnvironment.rebuild()
+  }
+
+  /** Hands the SEP-10 secret, as the child JVM decoded it, to the secret manager at startup. */
+  private fun startWithSecret(codePoints: List<Int>): GenericApplicationContext {
+    val secret = String(codePoints.toIntArray(), 0, codePoints.size)
+    ConfigEnvironment.rebuild(mapOf(SECRET_SEP_10_JWT_SECRET to secret))
+    return GenericApplicationContext().also { SecretManager.getInstance().initialize(it) }
+  }
+
+  @Test
+  fun `test the report's secret decoded in a C locale stops the start`() {
+    val decoded = decodeInChildJvm(mapOf("LC_ALL" to "C"))
+
+    assertFailsWith<IllegalStateException> { startWithSecret(decoded) }
+  }
+
+  @Test
+  fun `test the report's secret decoded with the image locale starts with the value as typed`() {
+    val lang = dockerfileLang()
+    assertNotNull(lang, "the final stage of the Dockerfile sets no LANG")
+
+    val context = startWithSecret(decodeInChildJvm(mapOf("LANG" to lang)))
+
+    assertEquals(
+      String(cyrillic.toIntArray(), 0, cyrillic.size),
+      context.environment.getProperty(SECRET_SEP_10_JWT_SECRET),
+    )
   }
 }
