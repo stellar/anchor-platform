@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 public class RpcConfig {
   private CustomMessages customMessages;
   private int batchSizeLimit;
+  private int maxJsonNodes;
 
   @Data
   @AllArgsConstructor

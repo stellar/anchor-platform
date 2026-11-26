@@ -205,6 +205,13 @@ platform_server:
   max_request_body_size: 1048576
   # The maximum number of records a single PATCH /transactions request can update.
   max_patch_records: 1000
+  # The maximum number of JSON values (objects, arrays, strings, numbers, booleans, nulls) a
+  # request body on the Platform server may hold. A body is rejected with HTTP 400 as soon as it
+  # reads past the limit. Each value costs about 110 bytes of heap while the body is bound, so the
+  # worst case is this number x 110 bytes x the number of concurrent requests.
+  max_json_nodes: 50000
+  # The maximum nesting depth of a request body on the Platform server.
+  max_json_depth: 32
 
 ######################
 # Rate Limit Configuration
@@ -773,3 +780,6 @@ rpc:
     outgoing_payment_sent: "Outgoing payment sent"
   ## Batch size limit
   batch_size_limit: 40
+  ## The maximum number of JSON values a JSON-RPC request body may hold. Checked while the body is
+  ## read, so it also bounds the memory a body can make the server build.
+  max_json_nodes: 10000
