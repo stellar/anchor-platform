@@ -1,6 +1,7 @@
 package org.stellar.anchor.platform.controller.sep
 
 import io.mockk.mockk
+import io.mockk.spyk
 import io.mockk.verify
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -40,13 +41,14 @@ class OriginHeaderRoutesTest {
 
   private val healthCheckService = mockk<HealthCheckService>(relaxed = true)
   private val sep10Service = mockk<Sep10Service>(relaxed = true)
+  private val sep1Config = PropertySep1Config(true, TomlConfig(STRING, toml))
+  private val sep1Service = spyk(Sep1Service(sep1Config))
 
   private val attackOrigin = "//" + "@".repeat(400) + "#" + '\u0085'
 
   private fun mvc(): MockMvc {
-    val sep1Config = PropertySep1Config(true, TomlConfig(STRING, toml))
     return MockMvcBuilders.standaloneSetup(
-        Sep1Controller(sep1Config, Sep1Service(sep1Config)),
+        Sep1Controller(sep1Config, sep1Service),
         SepHealthController(healthCheckService),
         Sep10Controller(sep10Service),
       )
@@ -65,6 +67,8 @@ class OriginHeaderRoutesTest {
       .perform(get("/.well-known/stellar.toml").header("Origin", attackOrigin))
       .andExpect(status().isBadRequest)
       .andExpect(content().string("""{"error":"Invalid Origin header."}"""))
+
+    verify(exactly = 0) { sep1Service.getToml() }
   }
 
   // ORIGIN-06 (a preflight runs the same CORS check)
