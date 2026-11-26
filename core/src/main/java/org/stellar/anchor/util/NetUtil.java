@@ -8,13 +8,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import okhttp3.Call;
+import okhttp3.HttpUrl;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -118,34 +117,30 @@ public class NetUtil {
     }
   }
 
-  private static final Set<String> LOOPBACK_HOSTS = Set.of("localhost", "127.0.0.1", "[::1]");
+  /** As {@link HttpUrl#host()} reports them: lower case, IPv6 without the brackets. */
+  private static final Set<String> LOOPBACK_HOSTS = Set.of("localhost", "127.0.0.1", "::1");
 
   /**
    * Tells whether a URL travels over a channel that a certificate protects: {@code https} on any
    * host, or {@code http} on exactly {@code localhost}, {@code 127.0.0.1} or {@code [::1]}.
    *
-   * <p>The host is the one {@link URI} parses, so a loopback name in the userinfo, a subdomain or
-   * the query ({@code http://localhost@evil.example}, {@code http://localhost.evil.example}) does
-   * not count. Any other scheme, an unparsable value or a missing host returns false.
+   * <p>The URL is parsed by OkHttp's {@link HttpUrl}, the parser of the client that sends the
+   * request, so the host checked is the host connected to. A parser that disagrees with the client
+   * (a {@code |} in the query that {@link java.net.URL} rejects, an underscore host that {@link
+   * java.net.URI} gives no host) would let a URL through the check that the client still sends. A
+   * loopback name in the userinfo, a subdomain or the query ({@code http://localhost@evil.example},
+   * {@code http://localhost.evil.example}) does not count. Any other scheme or an unparsable value
+   * returns false.
    */
   public static boolean isHttpsOrLoopbackHttp(String url) {
     if (isEmpty(url)) {
       return false;
     }
-    try {
-      URI uri = new URI(url);
-      String scheme = uri.getScheme();
-      String host = uri.getHost();
-      if (scheme == null || host == null) {
-        return false;
-      }
-      if (scheme.equalsIgnoreCase("https")) {
-        return true;
-      }
-      return scheme.equalsIgnoreCase("http") && LOOPBACK_HOSTS.contains(host.toLowerCase());
-    } catch (URISyntaxException e) {
+    HttpUrl parsed = HttpUrl.parse(url);
+    if (parsed == null) {
       return false;
     }
+    return parsed.isHttps() || LOOPBACK_HOSTS.contains(parsed.host());
   }
 
   public static boolean isServerPortValid(String serverPort, boolean hostnameLookup) {

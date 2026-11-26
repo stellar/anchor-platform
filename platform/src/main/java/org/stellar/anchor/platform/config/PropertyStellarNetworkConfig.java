@@ -69,8 +69,7 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
                     "The stellar_network.horizon_url:%s is not in valid format.",
                     config.getHorizonUrl()));
           } else if (!NetUtil.isHttpsOrLoopbackHttp(config.getHorizonUrl())) {
-            errors.rejectValue(
-                "horizonUrl", "horizon-url-insecure", insecureUrlMessage("horizon_url"));
+            errors.reject("horizon-url-insecure", insecureUrlMessage("horizon_url"));
           }
         }
         break;
@@ -103,14 +102,21 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
             String.format("The stellar_network.type:%s is not valid.", config.getType()));
     }
 
-    // The RPC URL is a trusted channel under any type: SEP-45 and the SAC mapper use it too.
+    // The RPC URL is a trusted channel under any type: SEP-45 and the SAC mapper use it too. The
+    // check follows what the HTTP client parses, not NetUtil.isUrlValid: under type horizon a value
+    // that java.net.URL rejects but OkHttp still sends must not skip it. Under type rpc an invalid
+    // value already has its rpc-url-invalid error above.
     String rpcUrl = config.getRpcUrl();
-    if (!isEmpty(rpcUrl) && NetUtil.isUrlValid(rpcUrl) && !NetUtil.isHttpsOrLoopbackHttp(rpcUrl)) {
-      errors.rejectValue("rpcUrl", "rpc-url-insecure", insecureUrlMessage("rpc_url"));
+    boolean alreadyInvalid = config.getType() == ProviderType.RPC && !NetUtil.isUrlValid(rpcUrl);
+    if (!isEmpty(rpcUrl) && !alreadyInvalid && !NetUtil.isHttpsOrLoopbackHttp(rpcUrl)) {
+      errors.reject("rpc-url-insecure", insecureUrlMessage("rpc_url"));
     }
   }
 
-  /** The message never contains the URL: it may carry an API key or credentials. */
+  /**
+   * The message never contains the URL (it may carry an API key or credentials), and the error is a
+   * global one: Spring Boot's startup report prints the rejected value of a field error.
+   */
   private static String insecureUrlMessage(String key) {
     return String.format(
         "The stellar_network.%s must use https. Plain http is accepted only for localhost,"

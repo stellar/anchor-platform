@@ -224,7 +224,9 @@ internal class NetUtilTest {
         "https://horizon-testnet.stellar.org",
         "HTTPS://Horizon.Stellar.Org",
         "https://203.0.113.7:8000/x",
-        "https://localhost"
+        "https://localhost",
+        "https://rpc.example.test/rpc?k=a|b",
+        "https://stellar_rpc.internal/rpc"
       ]
   )
   @LockStatic([NetUtil::class])
@@ -242,7 +244,10 @@ internal class NetUtilTest {
         "http://127.0.0.1:8000",
         "http://127.0.0.1",
         "http://[::1]:8000",
-        "http://[::1]"
+        "http://[::1]",
+        // Spelled differently, but OkHttp connects to ::1 and 127.0.0.1: still loopback.
+        "http://[0:0:0:0:0:0:0:1]:8000",
+        "http://[::ffff:127.0.0.1]"
       ]
   )
   @LockStatic([NetUtil::class])
@@ -260,7 +265,13 @@ internal class NetUtilTest {
         "http://127.0.0.2",
         "http://0.0.0.0",
         "http://host.docker.internal",
-        "http://foo.localhost"
+        "http://foo.localhost",
+        // The word "https" in the host or the query does not make the connection https.
+        "http://https.evil.example/",
+        "http://evil.example/?next=https://x",
+        "http://rpc.example.test/rpc?k=a|b",
+        "http://127.1",
+        "http://127.0.0.1.nip.io"
       ]
   )
   @LockStatic([NetUtil::class])

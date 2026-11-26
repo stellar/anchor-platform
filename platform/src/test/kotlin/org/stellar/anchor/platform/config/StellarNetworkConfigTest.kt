@@ -133,6 +133,7 @@ class StellarNetworkConfigTest {
       "http://localhost@evil.example",
       "http://localhost.evil.example",
       "http://127.0.0.1.evil.example",
+      "http://https.evil.example/",
     )
 
   private val secureUrls =
@@ -152,7 +153,8 @@ class StellarNetworkConfigTest {
       config.horizonUrl = url
       config.validateConfig(config, errors)
       assertEquals(1, errors.errorCount, url)
-      assertEquals("horizon-url-insecure", errors.getFieldError("horizonUrl")?.code, url)
+      assertEquals("horizon-url-insecure", errors.allErrors[0].code, url)
+      assertTrue(errors.fieldErrors.isEmpty(), "a field error would carry the rejected URL: $url")
     }
   }
 
@@ -173,7 +175,8 @@ class StellarNetworkConfigTest {
       useRpc(url)
       config.validateConfig(config, errors)
       assertEquals(1, errors.errorCount, url)
-      assertEquals("rpc-url-insecure", errors.getFieldError("rpcUrl")?.code, url)
+      assertEquals("rpc-url-insecure", errors.allErrors[0].code, url)
+      assertTrue(errors.fieldErrors.isEmpty(), "a field error would carry the rejected URL: $url")
     }
   }
 
@@ -185,8 +188,37 @@ class StellarNetworkConfigTest {
       config.rpcUrl = url
       config.validateConfig(config, errors)
       assertEquals(1, errors.errorCount, url)
-      assertEquals("rpc-url-insecure", errors.getFieldError("rpcUrl")?.code, url)
+      assertEquals("rpc-url-insecure", errors.allErrors[0].code, url)
+      assertTrue(errors.fieldErrors.isEmpty(), "a field error would carry the rejected URL: $url")
     }
+  }
+
+  @Test
+  fun `test rpc_url that the HTTP client parses but java net URL rejects is still checked`() {
+    // OkHttp sends this request; java.net.URL rejects the '|'. The rule must follow OkHttp.
+    config.type = HORIZON
+    config.rpcUrl = "http://rpc.example.test/rpc?k=a|b"
+    config.validateConfig(config, errors)
+    assertEquals(1, errors.errorCount)
+    assertEquals("rpc-url-insecure", errors.allErrors[0].code)
+
+    errors = BindException(config, "config")
+    config.rpcUrl = "https://rpc.example.test/rpc?k=a|b"
+    config.validateConfig(config, errors)
+    assertFalse(errors.hasErrors())
+  }
+
+  @Test
+  fun `test https url with an underscore host is accepted`() {
+    config.horizonUrl = "https://stellar_horizon.internal"
+    config.validateConfig(config, errors)
+    assertFalse(errors.hasErrors())
+
+    errors = BindException(config, "config")
+    config.type = HORIZON
+    config.rpcUrl = "https://stellar_rpc.internal/rpc"
+    config.validateConfig(config, errors)
+    assertFalse(errors.hasErrors())
   }
 
   @Test
@@ -262,22 +294,31 @@ class StellarNetworkConfigTest {
 
     config.horizonUrl = secretUrl
     config.validateConfig(config, errors)
-    val horizonMessage = errors.getFieldError("horizonUrl")!!.defaultMessage!!
+    val horizonMessage = errors.globalError!!.defaultMessage!!
     assertTrue(horizonMessage.contains("stellar_network.horizon_url"), horizonMessage)
     assertTrue(horizonMessage.contains("https"), horizonMessage)
-    assertFalse(horizonMessage.contains("SECRET"), horizonMessage)
-    assertFalse(horizonMessage.contains("abc123"), horizonMessage)
-    assertFalse(horizonMessage.contains("host.example"), horizonMessage)
+    assertNothingEchoesTheUrl(errors)
 
     errors = BindException(config, "config")
     useRpc(secretUrl)
     config.validateConfig(config, errors)
-    val rpcMessage = errors.getFieldError("rpcUrl")!!.defaultMessage!!
+    val rpcMessage = errors.globalError!!.defaultMessage!!
     assertTrue(rpcMessage.contains("stellar_network.rpc_url"), rpcMessage)
     assertTrue(rpcMessage.contains("https"), rpcMessage)
-    assertFalse(rpcMessage.contains("SECRET"), rpcMessage)
-    assertFalse(rpcMessage.contains("abc123"), rpcMessage)
-    assertFalse(rpcMessage.contains("host.example"), rpcMessage)
+    assertNothingEchoesTheUrl(errors)
+  }
+
+  /**
+   * Spring Boot's startup report prints the rejected value of a field error, so the whole `Errors`
+   * object is checked, not only the message: no field error, and no error text with the URL.
+   */
+  private fun assertNothingEchoesTheUrl(errors: Errors) {
+    assertTrue(errors.fieldErrors.isEmpty(), "a field error carries the rejected URL")
+    errors.allErrors.forEach { error ->
+      listOf("SECRET", "abc123", "host.example", "user:").forEach { fragment ->
+        assertFalse(error.toString().contains(fragment), "$fragment found in $error")
+      }
+    }
   }
 
   @Test
