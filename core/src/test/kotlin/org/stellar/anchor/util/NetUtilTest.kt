@@ -216,4 +216,83 @@ internal class NetUtilTest {
   fun `test bad URLs for getDomainFromURL`(testUrl: String) {
     org.junit.jupiter.api.assertThrows<MalformedURLException> { getDomainFromURL(testUrl) }
   }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "https://horizon-testnet.stellar.org",
+        "HTTPS://Horizon.Stellar.Org",
+        "https://203.0.113.7:8000/x",
+        "https://localhost"
+      ]
+  )
+  @LockStatic([NetUtil::class])
+  fun `test https URLs pass isHttpsOrLoopbackHttp for any host`(testValue: String) {
+    assertTrue(isHttpsOrLoopbackHttp(testValue))
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "http://localhost",
+        "http://LOCALHOST:8000/path",
+        "HTTP://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1",
+        "http://[::1]:8000",
+        "http://[::1]"
+      ]
+  )
+  @LockStatic([NetUtil::class])
+  fun `test http loopback URLs pass isHttpsOrLoopbackHttp`(testValue: String) {
+    assertTrue(isHttpsOrLoopbackHttp(testValue))
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "http://horizon-testnet.stellar.org",
+        "http://192.168.100.1",
+        "http://10.0.0.5:8000",
+        "http://127.0.0.2",
+        "http://0.0.0.0",
+        "http://host.docker.internal",
+        "http://foo.localhost"
+      ]
+  )
+  @LockStatic([NetUtil::class])
+  fun `test http non-loopback URLs fail isHttpsOrLoopbackHttp`(testValue: String) {
+    assertFalse(isHttpsOrLoopbackHttp(testValue))
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+    strings =
+      [
+        "http://localhost@evil.example",
+        "http://localhost:80@evil.example",
+        "http://localhost.evil.example",
+        "http://127.0.0.1.evil.example",
+        "http://evil.example/?h=localhost",
+        "http://evil.example/localhost"
+      ]
+  )
+  @LockStatic([NetUtil::class])
+  fun `test loopback lookalikes fail isHttpsOrLoopbackHttp`(testValue: String) {
+    assertFalse(isHttpsOrLoopbackHttp(testValue))
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(
+    strings =
+      ["ftp://localhost", "file:///etc/passwd", "ws://localhost", "localhost:8000", "", "http://"]
+  )
+  @LockStatic([NetUtil::class])
+  fun `test other schemes and unparsable values fail isHttpsOrLoopbackHttp`(testValue: String?) {
+    assertFalse(isHttpsOrLoopbackHttp(testValue))
+  }
 }

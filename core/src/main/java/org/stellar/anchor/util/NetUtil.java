@@ -8,9 +8,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 import okhttp3.Call;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -111,6 +114,36 @@ public class NetUtil {
       new URL(url).toURI();
       return true;
     } catch (Exception e) {
+      return false;
+    }
+  }
+
+  private static final Set<String> LOOPBACK_HOSTS = Set.of("localhost", "127.0.0.1", "[::1]");
+
+  /**
+   * Tells whether a URL travels over a channel that a certificate protects: {@code https} on any
+   * host, or {@code http} on exactly {@code localhost}, {@code 127.0.0.1} or {@code [::1]}.
+   *
+   * <p>The host is the one {@link URI} parses, so a loopback name in the userinfo, a subdomain or
+   * the query ({@code http://localhost@evil.example}, {@code http://localhost.evil.example}) does
+   * not count. Any other scheme, an unparsable value or a missing host returns false.
+   */
+  public static boolean isHttpsOrLoopbackHttp(String url) {
+    if (isEmpty(url)) {
+      return false;
+    }
+    try {
+      URI uri = new URI(url);
+      String scheme = uri.getScheme();
+      String host = uri.getHost();
+      if (scheme == null || host == null) {
+        return false;
+      }
+      if (scheme.equalsIgnoreCase("https")) {
+        return true;
+      }
+      return scheme.equalsIgnoreCase("http") && LOOPBACK_HOSTS.contains(host.toLowerCase());
+    } catch (URISyntaxException e) {
       return false;
     }
   }
