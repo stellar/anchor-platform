@@ -68,6 +68,9 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
                 String.format(
                     "The stellar_network.horizon_url:%s is not in valid format.",
                     config.getHorizonUrl()));
+          } else if (!NetUtil.isHttpsOrLoopbackHttp(config.getHorizonUrl())) {
+            errors.rejectValue(
+                "horizonUrl", "horizon-url-insecure", insecureUrlMessage("horizon_url"));
           }
         }
         break;
@@ -99,6 +102,20 @@ public class PropertyStellarNetworkConfig implements StellarNetworkConfig, Valid
             "stellar-network-type-invalid",
             String.format("The stellar_network.type:%s is not valid.", config.getType()));
     }
+
+    // The RPC URL is a trusted channel under any type: SEP-45 and the SAC mapper use it too.
+    String rpcUrl = config.getRpcUrl();
+    if (!isEmpty(rpcUrl) && NetUtil.isUrlValid(rpcUrl) && !NetUtil.isHttpsOrLoopbackHttp(rpcUrl)) {
+      errors.rejectValue("rpcUrl", "rpc-url-insecure", insecureUrlMessage("rpc_url"));
+    }
+  }
+
+  /** The message never contains the URL: it may carry an API key or credentials. */
+  private static String insecureUrlMessage(String key) {
+    return String.format(
+        "The stellar_network.%s must use https. Plain http is accepted only for localhost,"
+            + " 127.0.0.1 and [::1].",
+        key);
   }
 
   @Override
