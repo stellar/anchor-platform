@@ -13,7 +13,10 @@ import org.junit.jupiter.api.Test
  * The expected data below is the test's own copy of the registry, written from the two IANA pages,
  * not read from the implementation: a block missing from [SpecialPurposeAddressRanges] must fail
  * here. Each entry is a block that is not globally reachable (or deprecated), plus multicast, which
- * the unicast registries do not list.
+ * the unicast registries do not list. Two entries are blocked by decision although the registry
+ * lists them as globally reachable or N/A: 64:ff9b::/96 (NAT64) and 2002::/16 (6to4) are refused
+ * outright, and 192.0.0.0/24 and 2001::/23 are refused whole, including their reachable anycast
+ * sub-entries.
  */
 class SpecialPurposeAddressRangesTest {
 
