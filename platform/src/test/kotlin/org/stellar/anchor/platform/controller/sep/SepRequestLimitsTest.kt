@@ -77,4 +77,20 @@ class SepRequestLimitsTest {
       SepBeans().sepRequestBodySizeLimitFilter(SepServerConfig().apply { maxRequestBodySize = 0 })
     }
   }
+
+  @Test
+  fun `the sep multipart config bounds file and request size to the configured size`() {
+    val config =
+      SepBeans().sepMultipartConfigElement(SepServerConfig().apply { maxRequestBodySize = 2048 })
+
+    assertEquals(2048L, config.maxFileSize)
+    assertEquals(2048L, config.maxRequestSize)
+  }
+
+  @Test
+  fun `a non-positive sep max body size fails multipart config startup`() {
+    assertThrows<InvalidConfigException> {
+      SepBeans().sepMultipartConfigElement(SepServerConfig().apply { maxRequestBodySize = 0 })
+    }
+  }
 }

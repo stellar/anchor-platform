@@ -1,12 +1,15 @@
 package org.stellar.anchor.platform.component.sep;
 
 import jakarta.servlet.Filter;
+import jakarta.servlet.MultipartConfigElement;
 import java.time.Clock;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.boot.web.servlet.MultipartConfigFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.unit.DataSize;
 import org.stellar.anchor.MoreInfoUrlConstructor;
 import org.stellar.anchor.api.callback.CustomerIntegration;
 import org.stellar.anchor.api.callback.RateIntegration;
@@ -109,6 +112,20 @@ public class SepBeans {
           "sep_server.max_request_body_size must be a positive number of bytes");
     }
     return RequestBodySizeLimitFilter.registration(maxRequestBodySize);
+  }
+
+  @Bean
+  public MultipartConfigElement sepMultipartConfigElement(SepServerConfig sepServerConfig)
+      throws InvalidConfigException {
+    long maxRequestBodySize = sepServerConfig.getMaxRequestBodySize();
+    if (maxRequestBodySize <= 0) {
+      throw new InvalidConfigException(
+          "sep_server.max_request_body_size must be a positive number of bytes");
+    }
+    MultipartConfigFactory factory = new MultipartConfigFactory();
+    factory.setMaxFileSize(DataSize.ofBytes(maxRequestBodySize));
+    factory.setMaxRequestSize(DataSize.ofBytes(maxRequestBodySize));
+    return factory.createMultipartConfig();
   }
 
   /**
