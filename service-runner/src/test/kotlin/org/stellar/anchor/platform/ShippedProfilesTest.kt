@@ -41,10 +41,14 @@ class ShippedProfilesTest {
   }
 
   @Test
-  fun `the profile scan inspects every profile that has a config env`() {
-    val directoriesWithConfig =
-      profilesDir.listFiles { f -> f.isDirectory && File(f, "config.env").isFile }!!.size
-    assertTrue(directoriesWithConfig > 0, "no profile with a config.env found under $profilesDir")
-    assertEquals(directoriesWithConfig, profileConfigs().size)
+  fun `the profile scan inspects every config env file under the profiles directory`() {
+    // A recursive walk, independent of the one-level scan the URL test uses: a config.env placed
+    // deeper than profiles/<name>/ would be missed by that scan and fail here.
+    val allConfigFiles = profilesDir.walkTopDown().filter { it.isFile && it.name == "config.env" }
+    assertTrue(allConfigFiles.count() > 0, "no config.env found under $profilesDir")
+    assertEquals(
+      allConfigFiles.map { it.path }.sorted().toList(),
+      profileConfigs().map { it.path }.sorted()
+    )
   }
 }
