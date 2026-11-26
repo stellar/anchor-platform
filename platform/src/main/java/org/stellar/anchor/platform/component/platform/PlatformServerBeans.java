@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.component.platform;
 
+import com.google.gson.Gson;
 import jakarta.servlet.Filter;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.CommandLineRunner;
@@ -8,6 +9,7 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.http.converter.json.GsonHttpMessageConverter;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
@@ -21,8 +23,10 @@ import org.stellar.anchor.filter.NoneFilter;
 import org.stellar.anchor.filter.PlatformAuthJwtFilter;
 import org.stellar.anchor.platform.config.PlatformApiConfig;
 import org.stellar.anchor.platform.config.PlatformServerConfig;
+import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.JdbcClientConfigRepo;
 import org.stellar.anchor.platform.service.*;
+import org.stellar.anchor.platform.utils.BoundedGsonHttpMessageConverter;
 import org.stellar.anchor.platform.utils.RequestBodySizeLimitFilter;
 import org.stellar.anchor.sep24.Sep24DepositInfoGenerator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
@@ -84,6 +88,35 @@ public class PlatformServerBeans {
     registrationBean.addUrlPatterns("/*");
     registrationBean.setOrder(Ordered.HIGHEST_PRECEDENCE);
     return registrationBean;
+  }
+
+  /**
+   * Binds every Platform server JSON body through a reader that refuses a body as soon as it holds
+   * too many values, nests too deep, or carries too many JSON-RPC requests or PATCH records. A bean
+   * of this type replaces Spring Boot's own Gson converter.
+   */
+  @Bean
+  public GsonHttpMessageConverter boundedGsonHttpMessageConverter(
+      Gson gson, PlatformServerConfig platformServerConfig, RpcConfig rpcConfig)
+      throws InvalidConfigException {
+    if (platformServerConfig.getMaxJsonNodes() <= 0) {
+      throw new InvalidConfigException("platform_server.max_json_nodes must be positive");
+    }
+    if (platformServerConfig.getMaxJsonDepth() <= 0) {
+      throw new InvalidConfigException("platform_server.max_json_depth must be positive");
+    }
+    if (rpcConfig.getMaxJsonNodes() <= 0) {
+      throw new InvalidConfigException("rpc.max_json_nodes must be positive");
+    }
+    return new BoundedGsonHttpMessageConverter(
+        gson,
+        BoundedGsonHttpMessageConverter.Limits.builder()
+            .maxNodes(platformServerConfig.getMaxJsonNodes())
+            .maxDepth(platformServerConfig.getMaxJsonDepth())
+            .rpcMaxNodes(rpcConfig.getMaxJsonNodes())
+            .batchSizeLimit(rpcConfig.getBatchSizeLimit())
+            .maxPatchRecords(platformServerConfig.getMaxPatchRecords())
+            .build());
   }
 
   @Bean

@@ -7,6 +7,8 @@ public class PlatformServerConfig {
   String contextPath;
   long maxRequestBodySize;
   int maxPatchRecords;
+  int maxJsonNodes;
+  int maxJsonDepth;
   PropertySecretConfig secretConfig;
 
   public PlatformServerConfig(PropertySecretConfig secretConfig) {

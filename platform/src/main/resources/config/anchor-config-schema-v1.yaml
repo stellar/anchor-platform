@@ -69,6 +69,8 @@ platform_api.auth.type:
 platform_api.base_url:
 platform_server.context_path:
 platform_server.management_server_port:
+platform_server.max_json_depth:
+platform_server.max_json_nodes:
 platform_server.max_patch_records:
 platform_server.max_request_body_size:
 platform_server.port:
@@ -78,6 +80,7 @@ rate_limit.window_seconds:
 rpc.batch_size_limit:
 rpc.custom_messages.incoming_payment_received:
 rpc.custom_messages.outgoing_payment_sent:
+rpc.max_json_nodes:
 sentry.debug:
 sentry.dsn:
 sentry.environment:
