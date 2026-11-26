@@ -7,9 +7,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.stellar.anchor.MoreInfoUrlConstructor;
 import org.stellar.anchor.api.callback.CustomerIntegration;
 import org.stellar.anchor.api.callback.RateIntegration;
+import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.auth.JwtService;
@@ -26,6 +28,7 @@ import org.stellar.anchor.platform.condition.OnAllSepsEnabled;
 import org.stellar.anchor.platform.condition.OnAnySepsEnabled;
 import org.stellar.anchor.platform.config.*;
 import org.stellar.anchor.platform.service.SimpleInteractiveUrlConstructor;
+import org.stellar.anchor.platform.utils.FormBodySizeLimitFilter;
 import org.stellar.anchor.platform.utils.TransactionCreationRateLimiter;
 import org.stellar.anchor.sep1.Sep1Service;
 import org.stellar.anchor.sep10.Sep10Service;
@@ -96,6 +99,23 @@ public class SepBeans {
       SecretConfig secretConfig,
       ClientService clientService) {
     return new PropertySep45Config(stellarNetworkConfig, secretConfig, clientService);
+  }
+
+  @Bean
+  public FilterRegistrationBean<FormBodySizeLimitFilter> formBodySizeLimitFilter(
+      SepServerConfig sepServerConfig) throws InvalidConfigException {
+    long maxFormBodySize = sepServerConfig.getMaxFormBodySize();
+    if (maxFormBodySize <= 0) {
+      throw new InvalidConfigException(
+          "sep_server.max_form_body_size must be a positive number of bytes");
+    }
+    FilterRegistrationBean<FormBodySizeLimitFilter> registrationBean =
+        new FilterRegistrationBean<>();
+    registrationBean.setFilter(new FormBodySizeLimitFilter(maxFormBodySize));
+    registrationBean.addUrlPatterns("/*");
+    // Must run before Spring's FormContentFilter, which parses the form body.
+    registrationBean.setOrder(Ordered.HIGHEST_PRECEDENCE);
+    return registrationBean;
   }
 
   /**
