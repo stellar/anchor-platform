@@ -18,6 +18,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode
 import org.stellar.anchor.api.event.AnchorEvent
 import org.stellar.anchor.api.event.AnchorEvent.Type.TRANSACTION_STATUS_CHANGED
 import org.stellar.anchor.api.exception.BadRequestException
+import org.stellar.anchor.api.exception.SepValidationException
 import org.stellar.anchor.api.exception.rpc.InvalidParamsException
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException
 import org.stellar.anchor.api.platform.GetTransactionResponse
@@ -2655,5 +2656,74 @@ class RequestOnchainFundsHandlerTest {
     assertEquals(PENDING_USR_TRANSFER_START.toString(), first.status)
     assertEquals(INCOMPLETE.toString(), second.status)
     assertNull(second.memo)
+  }
+
+  // --- A rejected request changes no field of the transaction (ANCHOR-1587, HackerOne #4241206)
+  // ---
+
+  /** The whole object, so a field written before the rejection shows up whichever field it is. */
+  private fun snapshotOf(txn: JdbcSepTransaction): String = gson.toJson(txn)
+
+  /** A withdrawal that already holds amounts, which a rejected request must not overwrite. */
+  private fun seededWithdrawal(protocol: String): JdbcSepTransaction =
+    newWithdrawal(protocol).also {
+      it.amountIn = "10"
+      it.amountOut = "9"
+      it.amountFee = "1"
+      when (it) {
+        is JdbcSep6Transaction -> it.amountExpected = "10"
+        is JdbcSep24Transaction -> it.amountExpected = "10"
+        is JdbcSep31Transaction -> it.amountExpected = "10"
+      }
+    }
+
+  @Test
+  fun test_handle_memo_in_use_changes_no_field_with_business_server_memo() {
+    for ((target, pendingProtocol) in listOf("24" to "6", "6" to "31", "31" to "24")) {
+      resetRecordedCalls()
+      val txn = seededWithdrawal(target)
+      val before = snapshotOf(txn)
+      serveTransaction(target, txn)
+      stubPendingRows(mapOf(pendingProtocol to pendingRow(pendingProtocol, "other-row")))
+
+      val ex =
+        assertThrows<BadRequestException> { handler.handle(businessServerMemoRequest(ID_MEMO)) }
+
+      assertEquals(memoInUseMessage, ex.message, "SEP-$target vs pending SEP-$pendingProtocol")
+      assertEquals(before, snapshotOf(txn), "SEP-$target transaction after the rejection")
+    }
+  }
+
+  @Test
+  fun test_handle_memo_in_use_changes_no_field_with_deposit_info_generator() {
+    for ((target, pendingProtocol) in listOf("24" to "6", "6" to "31", "31" to "24")) {
+      resetRecordedCalls()
+      val txn = seededWithdrawal(target)
+      val before = snapshotOf(txn)
+      serveTransaction(target, txn)
+      stubPendingRows(mapOf(pendingProtocol to pendingRow(pendingProtocol, "other-row")))
+
+      val ex =
+        assertThrows<BadRequestException> { selfGeneratorHandler().handle(selfGeneratorRequest()) }
+
+      assertEquals(memoInUseMessage, ex.message, "SEP-$target vs pending SEP-$pendingProtocol")
+      assertEquals(before, snapshotOf(txn), "SEP-$target transaction after the rejection")
+    }
+  }
+
+  @Test
+  fun test_handle_sep6_destination_mismatch_changes_no_field() {
+    val txn = seededWithdrawal("6")
+    val before = snapshotOf(txn)
+    serveTransaction("6", txn)
+    every { sepRequestValidator.validateDestinationAccount(any<String>(), any()) } throws
+      SepValidationException("destination account is not the authenticated account")
+
+    val ex =
+      assertThrows<SepValidationException> { handler.handle(businessServerMemoRequest(ID_MEMO)) }
+
+    assertEquals("destination account is not the authenticated account", ex.message)
+    assertEquals(before, snapshotOf(txn))
+    assertNothingSaved()
   }
 }
