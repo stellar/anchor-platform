@@ -457,8 +457,8 @@ public class Sep12Service {
     }
 
     infoF(
-        "request memo ({}) does not match token memo ID ({}) authorized via SEP-10",
-        requestMemo,
+        "request memo (length {}) does not match token memo ID ({}) authorized via SEP-10",
+        requestMemo == null ? 0 : requestMemo.length(),
         tokenMemo);
     throw new SepNotAuthorizedException(
         "The memo specified does not match the memo ID authorized via SEP-10");
@@ -482,7 +482,7 @@ public class Sep12Service {
     try {
       MemoHelper.makeMemo(memo, memoType);
     } catch (Exception e) {
-      infoF("Invalid memo ({}) for memo_type ({})", memo, memoType);
+      infoF("Invalid memo (length {}) for memo_type ({})", memo.length(), memoType);
       Log.warnEx(e);
       throw new SepValidationException("Invalid 'memo' for 'memo_type'");
     }
