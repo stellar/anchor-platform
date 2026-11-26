@@ -248,7 +248,7 @@ public class ClientDomainHelper {
     }
   }
 
-  private static Dns validatingDns() {
+  static Dns validatingDns() {
     return hostname -> {
       List<InetAddress> addresses = dns.lookup(hostname);
       for (InetAddress address : addresses) {
@@ -261,111 +261,34 @@ public class ClientDomainHelper {
     };
   }
 
+  /**
+   * True when the address is in any block of the IANA special-purpose table (see {@link
+   * SpecialPurposeAddressRanges}). An IPv4-compatible IPv6 address ({@code ::a.b.c.d}) is judged on
+   * the IPv4 address it embeds; NAT64 and 6to4 addresses are refused outright by the table.
+   */
   private static boolean isNonPublicAddress(InetAddress address) {
-    InetAddress unwrapped = unwrapEmbeddedIPv4(address);
-    return unwrapped.isLoopbackAddress()
-        || unwrapped.isSiteLocalAddress()
-        || unwrapped.isLinkLocalAddress()
-        || unwrapped.isAnyLocalAddress()
-        || isCarrierGradeNat(unwrapped)
-        || isIpv6UniqueLocal(unwrapped)
-        || isIetfProtocolAssignment(unwrapped)
-        || isBenchmarkingRange(unwrapped)
-        || isThisNetwork(unwrapped)
-        || isNat64WellKnown(address)
-        || isNat64LocalUse(address)
-        || is6to4(address);
+    return SpecialPurposeAddressRanges.isNonPublic(unwrapIpv4Compatible(address));
   }
 
-  private static InetAddress unwrapEmbeddedIPv4(InetAddress address) {
+  private static InetAddress unwrapIpv4Compatible(InetAddress address) {
     byte[] a = address.getAddress();
-    if (a.length != 16) {
+    if (a.length != 16 || !isIpv4Compatible(a)) {
       return address;
     }
-
-    byte[] embedded;
-    if (isNat64WellKnown(address)) {
-      embedded = new byte[] {a[12], a[13], a[14], a[15]};
-    } else if (is6to4(address)) {
-      embedded = new byte[] {a[2], a[3], a[4], a[5]};
-    } else if (isIpv4Compatible(a)) {
-      embedded = new byte[] {a[12], a[13], a[14], a[15]};
-    } else {
-      return address;
-    }
-
     try {
-      return InetAddress.getByAddress(embedded);
+      return InetAddress.getByAddress(new byte[] {a[12], a[13], a[14], a[15]});
     } catch (UnknownHostException e) {
       return address;
     }
   }
 
   private static boolean isIpv4Compatible(byte[] a) {
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 12; i++) {
       if (a[i] != 0) {
         return false;
       }
     }
-    return a[10] == 0 && a[11] == 0;
-  }
-
-  private static boolean isThisNetwork(InetAddress address) {
-    byte[] a = address.getAddress();
-    return a.length == 4 && (a[0] & 0xFF) == 0;
-  }
-
-  private static boolean isNat64WellKnown(InetAddress address) {
-    byte[] a = address.getAddress();
-    if (a.length != 16) {
-      return false;
-    }
-    byte[] prefix = {0, 0x64, (byte) 0xff, (byte) 0x9b, 0, 0, 0, 0, 0, 0, 0, 0};
-    for (int i = 0; i < prefix.length; i++) {
-      if (a[i] != prefix[i]) {
-        return false;
-      }
-    }
     return true;
-  }
-
-  private static boolean isNat64LocalUse(InetAddress address) {
-    byte[] a = address.getAddress();
-    if (a.length != 16) {
-      return false;
-    }
-    byte[] prefix = {0, 0x64, (byte) 0xff, (byte) 0x9b, 0, 1};
-    for (int i = 0; i < prefix.length; i++) {
-      if (a[i] != prefix[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  private static boolean is6to4(InetAddress address) {
-    byte[] a = address.getAddress();
-    return a.length == 16 && (a[0] & 0xFF) == 0x20 && (a[1] & 0xFF) == 0x02;
-  }
-
-  private static boolean isCarrierGradeNat(InetAddress address) {
-    byte[] a = address.getAddress();
-    return a.length == 4 && (a[0] & 0xFF) == 100 && (a[1] & 0xC0) == 0x40;
-  }
-
-  private static boolean isIpv6UniqueLocal(InetAddress address) {
-    byte[] a = address.getAddress();
-    return a.length == 16 && (a[0] & 0xFE) == 0xFC;
-  }
-
-  private static boolean isIetfProtocolAssignment(InetAddress address) {
-    byte[] a = address.getAddress();
-    return a.length == 4 && (a[0] & 0xFF) == 192 && (a[1] & 0xFF) == 0 && (a[2] & 0xFF) == 0;
-  }
-
-  private static boolean isBenchmarkingRange(InetAddress address) {
-    byte[] a = address.getAddress();
-    return a.length == 4 && (a[0] & 0xFF) == 198 && (a[1] & 0xFE) == 18;
   }
 
   /**
