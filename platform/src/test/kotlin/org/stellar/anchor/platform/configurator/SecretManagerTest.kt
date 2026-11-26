@@ -111,6 +111,26 @@ class SecretManagerTest {
   }
 
   @Test
+  fun `test neither the message nor the log line states the length of the rejected value`() {
+    val logger = RecordingLogger().install()
+
+    val failure = rejection(SECRET_SEP_10_JWT_SECRET to replacement.repeat(50))
+
+    assertTrue(logger.lines.any { it.contains(SECRET_SEP_10_JWT_SECRET) }, "no error line logged")
+    listOf(failure.message!!).plus(logger.lines).forEach { text ->
+      assertFalse(text.contains("50"), text)
+      assertFalse(text.contains("150"), text)
+    }
+  }
+
+  @Test
+  fun `test a single replacement character is rejected`() {
+    val failure = rejection(SECRET_SEP_10_JWT_SECRET to replacement)
+
+    assertTrue(failure.message!!.contains(SECRET_SEP_10_JWT_SECRET), failure.message)
+  }
+
+  @Test
   fun `test nothing is registered when a value is rejected, not even the valid ones`() {
     val context = GenericApplicationContext()
     ConfigEnvironment.rebuild(
@@ -153,6 +173,15 @@ class SecretManagerTest {
       context.environment.getProperty(SECRET_SEP_6_MORE_INFO_URL_JWT_SECRET)
     )
     assertEquals(cyrillic, manager.get(SECRET_SEP_10_JWT_SECRET))
+  }
+
+  @Test
+  fun `test a value with leading and trailing spaces is registered unchanged`() {
+    val padded = " $validSecret "
+
+    val context = initialize(SECRET_SEP_10_JWT_SECRET to padded)
+
+    assertEquals(padded, context.environment.getProperty(SECRET_SEP_10_JWT_SECRET))
   }
 
   @Test
