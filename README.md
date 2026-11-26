@@ -95,6 +95,21 @@ started, create and fund a new account, then add a new asset with the following 
 
 Now you can deposit and withdraw USDC using the Stellar Demo Wallet.
 
+## JVM options for the official image
+
+The image starts the platform with `scripts/docker-start.sh`, which runs `java $JVM_FLAGS -jar ...`, so extra JVM
+options go in the `JVM_FLAGS` environment variable.
+
+JDK 17 from 17.0.6 up to, but not including, 17.0.21.1 has CVE-2026-114938, a memory-safety flaw in the accelerated
+`java.util.Base64` decoder. Images are built on a fixed JDK. If you run an older image tag, or your own JDK below
+17.0.21.1, upgrade, and until then disable the accelerated decoder:
+
+```shell
+JVM_FLAGS=-XX:-UseBASE64Intrinsics
+```
+
+The option needs no other flag and takes effect on restart.
+
 ## References
 
 [SEP-1](https://stellar.org/protocol/sep-6): Stellar Info File
