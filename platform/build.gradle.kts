@@ -8,6 +8,11 @@ plugins {
   id("io.sentry.jvm.gradle") version "5.3.0" // Sentry plugin
 }
 
+// The Spring Boot 3.2.4 BOM manages org.testcontainers:testcontainers at 1.19.7, whose docker-java
+// client is rejected by Docker Engine 29 (minimum API 1.40). Overriding the BOM property keeps the
+// core artifact in step with the testcontainers-* modules declared below.
+extra["testcontainers.version"] = libs.versions.testcontainers.get()
+
 dependencies {
   api(libs.lombok)
 
@@ -55,7 +60,10 @@ dependencies {
 
   testImplementation("org.springframework.boot:spring-boot-starter-test")
   testImplementation(libs.okhttp3.mockserver)
+  testImplementation(libs.flyway.database.postgresql)
   testImplementation(libs.okhttp3.tls)
+  testImplementation(libs.testcontainers.junit.jupiter)
+  testImplementation(libs.testcontainers.postgresql)
 }
 
 tasks.test {
