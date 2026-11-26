@@ -174,14 +174,15 @@ public abstract class RpcTransactionStatusHandler<T extends RpcMethodParamsReque
     boolean shouldClearMessageStatus =
         !isErrorStatus(nextStatus) && isErrorStatus(SepTransactionStatus.from(txn.getStatus()));
 
+    updateTransactionWithRpcRequest(txn, request);
+
+    // Written only after the method's own update succeeded, so a rejected request leaves no trace.
     txn.setUserActionRequiredBy(null);
     if (request instanceof SupportsUserActionRequiredBy
         && ((SupportsUserActionRequiredBy) request).getUserActionRequiredBy() != null) {
       txn.setUserActionRequiredBy(
           ((SupportsUserActionRequiredBy) request).getUserActionRequiredBy());
     }
-
-    updateTransactionWithRpcRequest(txn, request);
 
     txn.setUpdatedAt(Instant.now());
     txn.setStatus(nextStatus.toString());

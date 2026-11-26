@@ -4,6 +4,7 @@ import io.mockk.MockKAnnotations
 import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.verify
+import java.time.Instant
 import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -11,6 +12,7 @@ import kotlin.test.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.stellar.anchor.api.exception.rpc.InvalidParamsException
 import org.stellar.anchor.api.exception.rpc.InvalidRequestException
 import org.stellar.anchor.api.rpc.method.NotifyInteractiveFlowCompletedRequest
 import org.stellar.anchor.api.rpc.method.RpcMethod
@@ -57,10 +59,14 @@ class RpcTransactionStatusHandlerTest {
       return setOf(INCOMPLETE, ERROR)
     }
 
+    var rejectInUpdate = false
+
     override fun updateTransactionWithRpcRequest(
       txn: JdbcSepTransaction?,
       request: NotifyInteractiveFlowCompletedRequest?
-    ) {}
+    ) {
+      if (rejectInUpdate) throw InvalidParamsException("rejected by the method")
+    }
 
     override fun getNextStatus(
       txn: JdbcSepTransaction?,
@@ -88,7 +94,7 @@ class RpcTransactionStatusHandlerTest {
 
   @MockK(relaxed = true) private lateinit var metricsService: MetricsService
 
-  private lateinit var handler: RpcTransactionStatusHandler<NotifyInteractiveFlowCompletedRequest>
+  private lateinit var handler: RpcTransactionStatusHandlerTestImpl
 
   @BeforeEach
   fun setup() {
@@ -139,5 +145,54 @@ class RpcTransactionStatusHandlerTest {
     Arrays.stream(SepTransactionStatus.values())
       .filter { s -> !setOf(REFUNDED, COMPLETED).contains(s) }
       .forEach { s -> assertFalse(handler.isFinalStatus(s)) }
+  }
+
+  private fun txnWithUserActionRequiredBy(value: Instant?) =
+    JdbcSep24Transaction().apply {
+      status = INCOMPLETE.toString()
+      userActionRequiredBy = value
+    }
+
+  private fun requestWithUserActionRequiredBy(value: Instant?) =
+    NotifyInteractiveFlowCompletedRequest.builder()
+      .transactionId(TX_ID)
+      .userActionRequiredBy(value)
+      .build()
+
+  // ANCHOR-1587 (HackerOne #4241206): a request the method rejects must not leave its
+  // user_action_required_by on the transaction object.
+  @Test
+  fun `updateTransaction leaves user_action_required_by unchanged when the method update throws`() {
+    val before = Instant.parse("2031-01-01T00:00:00Z")
+    val requested = Instant.parse("2032-02-02T00:00:00Z")
+    handler.rejectInUpdate = true
+
+    listOf(null, before).forEach { prior ->
+      val txn = txnWithUserActionRequiredBy(prior)
+      assertThrows<InvalidParamsException> {
+        handler.updateTransaction(txn, requestWithUserActionRequiredBy(requested))
+      }
+      assertEquals(prior, txn.userActionRequiredBy)
+    }
+    verify(exactly = 0) { txn24Store.save(any()) }
+  }
+
+  @Test
+  fun `updateTransaction stores the request user_action_required_by when the update succeeds`() {
+    val requested = Instant.now().plusSeconds(3600)
+    val txn = txnWithUserActionRequiredBy(Instant.parse("2031-01-01T00:00:00Z"))
+
+    handler.updateTransaction(txn, requestWithUserActionRequiredBy(requested))
+
+    assertEquals(requested, txn.userActionRequiredBy)
+  }
+
+  @Test
+  fun `updateTransaction clears user_action_required_by when the request has none`() {
+    val txn = txnWithUserActionRequiredBy(Instant.parse("2031-01-01T00:00:00Z"))
+
+    handler.updateTransaction(txn, requestWithUserActionRequiredBy(null))
+
+    assertEquals(null, txn.userActionRequiredBy)
   }
 }
