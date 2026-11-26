@@ -204,6 +204,21 @@ class ClientDomainProtocolTest {
     }
   }
 
+  // CDPROTO-08 (DNS, "include": the offender is not always the first address)
+  @Test
+  fun `the mainnet client rejects a lookup that includes a non-public address in any position`() {
+    val publicAddress = InetAddress.getByName("8.8.8.8")
+    val loopback = InetAddress.getByName("127.0.0.1")
+
+    for (mixed in listOf(listOf(publicAddress, loopback), listOf(loopback, publicAddress))) {
+      withDns(stubDns { mixed }) {
+        assertThrows(UnknownHostException::class.java) {
+          ClientDomainHelper.fetchClient(false).dns.lookup("any.example.test")
+        }
+      }
+    }
+  }
+
   // CDPROTO-09
   @Test
   fun `the mainnet branch refuses a host that rebinds to a non-public address after validation`() {
