@@ -4,7 +4,6 @@ import java.util.UUID
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
@@ -248,28 +247,40 @@ class SepTransactionLookupIndexesMigrationTest {
   }
 
   @Test
-  fun `V38 keeps an index an operator created under one of its names`() {
+  fun `V38 keeps the indexes an operator created under each of its eight names`() {
     val schema = "pre"
     flyway(schema, "37").migrate()
     val pre = jdbcFor(schema)
-    val name = indexName("sep24_transaction", "transaction_id")
-    pre.execute("CREATE INDEX $name ON sep24_transaction (transaction_id)")
-    val oidBefore = pre.queryForObject("SELECT '$schema.$name'::regclass::oid", Long::class.java)
+    // Every statement of the migration must tolerate its index existing, so all eight are created
+    // by hand first. A table whose name is `<table>` and a suffix `<s>` give `idx_<table>_<s>`.
+    val oidsBefore =
+      tables.flatMap { table ->
+        SepIndexSupport.indexColumns.map { (suffix, columns) ->
+          val name = indexName(table, suffix)
+          pre.execute("CREATE INDEX $name ON $table (${columns.replace(",", ", ")})")
+          name to pre.queryForObject("SELECT '$schema.$name'::regclass::oid", Long::class.java)
+        }
+      }
 
     flyway(schema).migrate()
 
-    assertEquals(
-      oidBefore,
-      pre.queryForObject("SELECT '$schema.$name'::regclass::oid", Long::class.java)
-    )
-    val indexes = SepIndexSupport.catalog(pre, schema, "sep24_transaction")
-    assertEquals(
-      IndexInfo(valid = true, method = "btree", columns = "transaction_id"),
-      indexes[name],
-    )
-    SepIndexSupport.indexColumns.keys
-      .filter { it != "transaction_id" }
-      .forEach { assertNotNull(indexes[indexName("sep24_transaction", it)], "missing $it") }
+    oidsBefore.forEach { (name, oid) ->
+      assertEquals(
+        oid,
+        pre.queryForObject("SELECT '$schema.$name'::regclass::oid", Long::class.java),
+        "$name must be the index the operator created",
+      )
+    }
+    tables.forEach { table ->
+      val lookupIndexes =
+        SepIndexSupport.catalog(pre, schema, table).filterKeys { it.startsWith("idx_${table}_") }
+      assertEquals(
+        SepIndexSupport.indexColumns.keys.map { indexName(table, it) }.toSet(),
+        lookupIndexes.keys,
+        "indexes of $table",
+      )
+      assertTrue(lookupIndexes.values.all { it.valid && it.method == "btree" })
+    }
   }
 
   // EDGE-01
@@ -324,10 +335,13 @@ class SepTransactionLookupIndexesMigrationTest {
   }
 
   @Test
-  fun `an empty id still scans the index`() =
+  fun `an empty id and an id outside the alphabet still scan the index`() =
     tables.forEach { table ->
-      val plan = SepIndexSupport.plan(jdbc, SepIndexSupport.lookupSql(table, "transaction_id"), "")
-      assertIndexed(plan, table, indexName(table, "transaction_id"))
+      listOf("", "../'; DROP TABLE x;-- % é").forEach { id ->
+        val plan =
+          SepIndexSupport.plan(jdbc, SepIndexSupport.lookupSql(table, "transaction_id"), id)
+        assertIndexed(plan, table, indexName(table, "transaction_id"))
+      }
     }
 
   @Test
