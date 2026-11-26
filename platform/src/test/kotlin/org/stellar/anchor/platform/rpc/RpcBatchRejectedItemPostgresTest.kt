@@ -30,6 +30,7 @@ import org.springframework.orm.jpa.support.OpenEntityManagerInViewInterceptor
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter
 import org.springframework.web.context.request.ServletWebRequest
 import org.stellar.anchor.api.exception.SepValidationException
+import org.stellar.anchor.api.platform.GetTransactionResponse
 import org.stellar.anchor.api.rpc.RpcErrorCode
 import org.stellar.anchor.api.rpc.RpcRequest
 import org.stellar.anchor.api.rpc.RpcResponse
@@ -52,8 +53,12 @@ import org.stellar.anchor.platform.service.RpcService
 import org.stellar.anchor.platform.service.Sep24DepositInfoNoneGenerator
 import org.stellar.anchor.platform.service.Sep31DepositInfoNoneGenerator
 import org.stellar.anchor.platform.service.Sep6DepositInfoNoneGenerator
+import org.stellar.anchor.platform.service.TransactionService
 import org.stellar.anchor.platform.utils.RpcUtil.JSON_RPC_VERSION
 import org.stellar.anchor.platform.validator.RequestValidator
+import org.stellar.anchor.sep24.Sep24DepositInfoGenerator
+import org.stellar.anchor.sep38.Sep38QuoteStore
+import org.stellar.anchor.sep6.Sep6DepositInfoGenerator
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.SepRequestValidator
 import org.testcontainers.junit.jupiter.Container
@@ -185,13 +190,14 @@ class RpcBatchRejectedItemPostgresTest {
     val accountsManager: PaymentObservingAccountsManager = mockk(relaxed = true)
     every { accountsManager.upsertOrThrow(UNSTORABLE_DESTINATION, any()) } throws
       RuntimeException("observing account could not be stored")
+    val assetService = DefaultAssetService.fromJsonResource("test_assets.json")
     val handler =
       RequestOnchainFundsHandler(
         store6,
         store24,
         store31,
         mockk<RequestValidator>(relaxed = true),
-        DefaultAssetService.fromJsonResource("test_assets.json"),
+        assetService,
         mockk<Sep6DepositInfoNoneGenerator>(relaxed = true),
         mockk<Sep24DepositInfoNoneGenerator>(relaxed = true),
         mockk<Sep31DepositInfoNoneGenerator>(relaxed = true),
@@ -202,7 +208,20 @@ class RpcBatchRejectedItemPostgresTest {
       )
     val rpcConfig: RpcConfig = mockk(relaxed = true)
     every { rpcConfig.batchSizeLimit } returns 10
-    rpcService = RpcService(listOf(handler), rpcConfig)
+    val getTransactionHandler =
+      GetTransactionHandler(
+        TransactionService(
+          store6,
+          store24,
+          store31,
+          mockk<Sep38QuoteStore>(relaxed = true),
+          assetService,
+          eventService,
+          mockk<Sep6DepositInfoGenerator>(relaxed = true),
+          mockk<Sep24DepositInfoGenerator>(relaxed = true),
+        )
+      )
+    rpcService = RpcService(listOf(handler, getTransactionHandler), rpcConfig)
   }
 
   // --- Fixtures ---------------------------------------------------------------------------------
@@ -635,5 +654,60 @@ class RpcBatchRejectedItemPostgresTest {
     assertNotNull(responses[1].result)
     assertEquals(untouchedRow("10", "9"), row("target-txn-1"))
     assertAcceptedRow("benign-txn-2", "888888")
+  }
+
+  private fun getTransaction(rpcId: Int, transactionId: String) =
+    RpcRequest.builder()
+      .jsonrpc(JSON_RPC_VERSION)
+      .id(rpcId)
+      .method("get_transaction")
+      .params(gson.fromJson("""{"transaction_id":"$transactionId"}""", Map::class.java))
+      .build()
+
+  /**
+   * Edge case: the rejected item and the committing item are on the same transaction id. The second
+   * item must apply on the stored row, not on a leftover of the first (RPCB-09).
+   */
+  @ParameterizedTest(name = "open-in-view bound = {0}")
+  @ValueSource(booleans = [true, false])
+  fun `an accepted item after a rejected one on the same transaction applies to the stored row`(
+    openInView: Boolean
+  ) {
+    seedWithdrawal("target-txn-1", "10", "9")
+
+    val responses =
+      handleBatch(
+        openInView,
+        rejectedForDestination(1, "target-txn-1"),
+        accepted(2, "target-txn-1", "888888"),
+      )
+
+    assertRejectedForDestination(responses[0])
+    assertNotNull(responses[1].result)
+    assertNull(responses[1].error)
+    assertAcceptedRow("target-txn-1", "888888")
+  }
+
+  /** Edge case: a read after a rejected item in the same batch sees the unchanged row. */
+  @ParameterizedTest(name = "open-in-view bound = {0}")
+  @ValueSource(booleans = [true, false])
+  fun `get_transaction after a rejected item returns the unchanged transaction`(
+    openInView: Boolean
+  ) {
+    seedWithdrawal("target-txn-1", "10", "9")
+
+    val responses =
+      handleBatch(
+        openInView,
+        rejectedForDestination(1, "target-txn-1"),
+        getTransaction(2, "target-txn-1"),
+      )
+
+    assertRejectedForDestination(responses[0])
+    val read = responses[1].result as GetTransactionResponse
+    assertEquals("10", read.amountIn.amount)
+    assertEquals("9", read.amountOut.amount)
+    assertEquals("pending_anchor", read.status.toString())
+    assertEquals(untouchedRow("10", "9"), row("target-txn-1"))
   }
 }
