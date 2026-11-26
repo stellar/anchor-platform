@@ -10,7 +10,7 @@ RUN gradle --no-daemon clean bootJar -Pkotlin.compiler.execution.strategy=in-pro
 # Build final image
 FROM ubuntu:24.04
 # The only place the JDK version is written. Keep it on the latest GA Temurin 17 release
-# (scripts/check-jdk-pin.sh checks weekly; CVE-2026-114938 affects earlier builds).
+# (CVE-2026-114938 affects earlier builds).
 ARG TEMURIN_RELEASE=jdk-17.0.21.1+2
 ARG TARGETARCH=amd64
 
