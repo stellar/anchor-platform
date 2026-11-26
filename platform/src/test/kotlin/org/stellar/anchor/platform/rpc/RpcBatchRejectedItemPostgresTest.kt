@@ -37,8 +37,10 @@ import org.stellar.anchor.event.EventService
 import org.stellar.anchor.event.EventService.EventQueue.TRANSACTION
 import org.stellar.anchor.metrics.MetricsService
 import org.stellar.anchor.platform.config.RpcConfig
+import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep24TransactionRepo
 import org.stellar.anchor.platform.data.JdbcSep24TransactionStore
+import org.stellar.anchor.platform.data.JdbcSep31Transaction
 import org.stellar.anchor.platform.data.JdbcSep31TransactionRepo
 import org.stellar.anchor.platform.data.JdbcSep31TransactionStore
 import org.stellar.anchor.platform.data.JdbcSep6Transaction
@@ -154,13 +156,19 @@ class RpcBatchRejectedItemPostgresTest {
 
   private lateinit var jdbc: JdbcTemplate
   private lateinit var store6: JdbcSep6TransactionStore
+  private lateinit var store24: JdbcSep24TransactionStore
+  private lateinit var store31: JdbcSep31TransactionStore
   private lateinit var rpcService: RpcService
 
   @BeforeEach
   fun setUp() {
     jdbc = JdbcTemplate(context.getBean(DataSource::class.java))
     jdbc.execute("DELETE FROM sep6_transaction")
+    jdbc.execute("DELETE FROM sep24_transaction")
+    jdbc.execute("DELETE FROM sep31_transaction")
     store6 = JdbcSep6TransactionStore(context.getBean(JdbcSep6TransactionRepo::class.java))
+    store24 = JdbcSep24TransactionStore(context.getBean(JdbcSep24TransactionRepo::class.java))
+    store31 = JdbcSep31TransactionStore(context.getBean(JdbcSep31TransactionRepo::class.java))
 
     val eventService: EventService = mockk(relaxed = true)
     every { eventService.createSession(any(), TRANSACTION) } returns mockk(relaxed = true)
@@ -174,8 +182,8 @@ class RpcBatchRejectedItemPostgresTest {
     val handler =
       RequestOnchainFundsHandler(
         store6,
-        JdbcSep24TransactionStore(context.getBean(JdbcSep24TransactionRepo::class.java)),
-        JdbcSep31TransactionStore(context.getBean(JdbcSep31TransactionRepo::class.java)),
+        store24,
+        store31,
         mockk<RequestValidator>(relaxed = true),
         DefaultAssetService.fromJsonResource("test_assets.json"),
         mockk<Sep6DepositInfoNoneGenerator>(relaxed = true),
@@ -202,6 +210,36 @@ class RpcBatchRejectedItemPostgresTest {
         it.requestAssetCode = USDC_CODE
         it.requestAssetIssuer = USDC_ISSUER
         it.webAuthAccount = WEB_AUTH_ACCOUNT
+        it.amountIn = amountIn
+        it.amountOut = amountOut
+        it.amountExpected = amountIn
+        it.amountFee = "1"
+      }
+    )
+  }
+
+  private fun seedSep24Withdrawal(id: String, amountIn: String, amountOut: String) {
+    store24.save(
+      JdbcSep24Transaction().also {
+        // The SEP-24 store looks rows up by transaction_id and copies it into the key on save.
+        it.transactionId = id
+        it.status = "pending_anchor"
+        it.kind = "withdrawal"
+        it.requestAssetCode = USDC_CODE
+        it.requestAssetIssuer = USDC_ISSUER
+        it.amountIn = amountIn
+        it.amountOut = amountOut
+        it.amountExpected = amountIn
+        it.amountFee = "1"
+      }
+    )
+  }
+
+  private fun seedSep31Receive(id: String, amountIn: String, amountOut: String) {
+    store31.save(
+      JdbcSep31Transaction().also {
+        it.id = id
+        it.status = "pending_receiver"
         it.amountIn = amountIn
         it.amountOut = amountOut
         it.amountExpected = amountIn
@@ -335,6 +373,42 @@ class RpcBatchRejectedItemPostgresTest {
     assertEquals(MEMO_IN_USE_MESSAGE, response.error.message)
   }
 
+  private fun sep24Row(id: String): Map<String, Any?> =
+    jdbc.queryForMap(
+      """
+      SELECT status, amount_in, amount_out, amount_expected, amount_fee, memo, memo_type,
+             to_account, withdraw_anchor_account, version
+      FROM sep24_transaction WHERE id = ?
+      """,
+      id,
+    )
+
+  private fun sep31Row(id: String): Map<String, Any?> =
+    jdbc.queryForMap(
+      """
+      SELECT status, amount_in, amount_out, amount_expected, amount_fee, stellar_memo,
+             stellar_memo_type, to_account, version
+      FROM sep31_transaction WHERE id = ?
+      """,
+      id,
+    )
+
+  private fun untouchedSep24Row(amountIn: String, amountOut: String) =
+    untouchedRow(amountIn, amountOut)
+
+  private fun untouchedSep31Row(amountIn: String, amountOut: String): Map<String, Any?> =
+    mapOf(
+      "status" to "pending_receiver",
+      "amount_in" to amountIn,
+      "amount_out" to amountOut,
+      "amount_expected" to amountIn,
+      "amount_fee" to "1",
+      "stellar_memo" to null,
+      "stellar_memo_type" to null,
+      "to_account" to null,
+      "version" to 0,
+    )
+
   // --- Scenarios --------------------------------------------------------------------------------
 
   /** The report: item 1 is rejected for its destination, item 2 commits (RPCB-02, RPCB-08). */
@@ -456,5 +530,78 @@ class RpcBatchRejectedItemPostgresTest {
     }
     assertAcceptedRow("benign-txn-1", "888881")
     assertAcceptedRow("benign-txn-2", "888882")
+  }
+
+  /** The sibling SEP-24 branch of the method has the same order of writes (RPCB-04). */
+  @ParameterizedTest(name = "open-in-view bound = {0}")
+  @ValueSource(booleans = [true, false])
+  fun `a rejected SEP-24 item before a committing item leaves the first row untouched`(
+    openInView: Boolean
+  ) {
+    seedSep24Withdrawal("target-txn-1", "10", "9")
+    seedSep24Withdrawal("benign-txn-2", "20", "19")
+    seedHolderOfBusyMemo()
+
+    val responses =
+      handleBatch(
+        openInView,
+        rejectedForMemoInUse(1, "target-txn-1"),
+        accepted(2, "benign-txn-2", "888888"),
+      )
+
+    assertRejectedForMemoInUse(responses[0])
+    assertNotNull(responses[1].result)
+    assertEquals(untouchedSep24Row("10", "9"), sep24Row("target-txn-1"))
+    assertEquals(
+      mapOf(
+        "status" to "pending_user_transfer_start",
+        "amount_in" to "20",
+        "amount_out" to "19",
+        "amount_expected" to "20",
+        "amount_fee" to "1",
+        "memo" to "888888",
+        "memo_type" to "id",
+        "to_account" to OWN_DESTINATION,
+        "withdraw_anchor_account" to OWN_DESTINATION,
+        "version" to 1,
+      ),
+      sep24Row("benign-txn-2"),
+    )
+  }
+
+  /** The sibling SEP-31 branch (RPCB-04). */
+  @ParameterizedTest(name = "open-in-view bound = {0}")
+  @ValueSource(booleans = [true, false])
+  fun `a rejected SEP-31 item before a committing item leaves the first row untouched`(
+    openInView: Boolean
+  ) {
+    seedSep31Receive("target-txn-1", "10", "9")
+    seedSep31Receive("benign-txn-2", "20", "19")
+    seedHolderOfBusyMemo()
+
+    val responses =
+      handleBatch(
+        openInView,
+        rejectedForMemoInUse(1, "target-txn-1"),
+        accepted(2, "benign-txn-2", "888888"),
+      )
+
+    assertRejectedForMemoInUse(responses[0])
+    assertNotNull(responses[1].result)
+    assertEquals(untouchedSep31Row("10", "9"), sep31Row("target-txn-1"))
+    assertEquals(
+      mapOf(
+        "status" to "pending_sender",
+        "amount_in" to "20",
+        "amount_out" to "19",
+        "amount_expected" to "20",
+        "amount_fee" to "1",
+        "stellar_memo" to "888888",
+        "stellar_memo_type" to "id",
+        "to_account" to OWN_DESTINATION,
+        "version" to 1,
+      ),
+      sep31Row("benign-txn-2"),
+    )
   }
 }
