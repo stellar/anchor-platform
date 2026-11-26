@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
@@ -127,6 +128,8 @@ class RpcBatchRejectedItemPostgresTest {
     // The destination the platform refuses for the first item (not the authenticated account).
     private const val MISMATCHED_DESTINATION = "GMISMATCHEDDESTINATION"
     private const val OWN_DESTINATION = "GOWNDESTINATION"
+    // The destination whose observing account cannot be stored, after the request was accepted.
+    private const val UNSTORABLE_DESTINATION = "GUNSTORABLEDESTINATION"
     private const val BUSY_DESTINATION = "GBUSYDESTINATION"
     private const val BUSY_MEMO = "555555"
 
@@ -179,6 +182,9 @@ class RpcBatchRejectedItemPostgresTest {
           throw SepValidationException("destination account is not the authenticated account")
         }
       }
+    val accountsManager: PaymentObservingAccountsManager = mockk(relaxed = true)
+    every { accountsManager.upsertOrThrow(UNSTORABLE_DESTINATION, any()) } throws
+      RuntimeException("observing account could not be stored")
     val handler =
       RequestOnchainFundsHandler(
         store6,
@@ -189,7 +195,7 @@ class RpcBatchRejectedItemPostgresTest {
         mockk<Sep6DepositInfoNoneGenerator>(relaxed = true),
         mockk<Sep24DepositInfoNoneGenerator>(relaxed = true),
         mockk<Sep31DepositInfoNoneGenerator>(relaxed = true),
-        mockk<PaymentObservingAccountsManager>(relaxed = true),
+        accountsManager,
         eventService,
         mockk<MetricsService>(relaxed = true),
         sepRequestValidator,
@@ -603,5 +609,31 @@ class RpcBatchRejectedItemPostgresTest {
       ),
       sep31Row("benign-txn-2"),
     )
+  }
+
+  /**
+   * The failure ordering cannot cover (RPCB-05): the request is accepted, every field of the
+   * transaction is already changed, and arming the observing account then fails. Only a request
+   * without a shared persistence context keeps those changes out of the next item's commit, which
+   * is how the Platform server runs (see DataConfigAdapterTest).
+   */
+  @Test
+  fun `a failure while arming the destination leaves the first row untouched`() {
+    seedWithdrawal("target-txn-1", "10", "9")
+    seedWithdrawal("benign-txn-2", "20", "19")
+
+    val responses =
+      handleBatch(
+        false,
+        requestOnchainFunds(1, "target-txn-1", "500", "499", "777777", UNSTORABLE_DESTINATION),
+        accepted(2, "benign-txn-2", "888888"),
+      )
+
+    assertNull(responses[0].result)
+    assertEquals(RpcErrorCode.INTERNAL_ERROR.errorCode, responses[0].error.code)
+    assertEquals("observing account could not be stored", responses[0].error.message)
+    assertNotNull(responses[1].result)
+    assertEquals(untouchedRow("10", "9"), row("target-txn-1"))
+    assertAcceptedRow("benign-txn-2", "888888")
   }
 }

@@ -52,7 +52,7 @@ import org.stellar.anchor.util.Log;
  * spring.jpa.hibernate.naming.physical-strategy:      Fully qualified name of the physical naming strategy.
  * spring.jpa.hibernate.use-new-id-generator-mappings: Whether to use Hibernate's newer IdentifierGenerator for AUTO, TABLE and SEQUENCE. This is actually a shortcut for the "hibernate.id.new_generator_mappings" property. When not specified will default to "true".
  * spring.jpa.mapping-resources:                       Mapping resources (equivalent to "mapping-file" entries in persistence.xml).
- * spring.jpa.open-in-view:                            Register OpenEntityManagerInViewInterceptor. Binds a JPA EntityManager to the thread for the entire processing of the request. : true
+ * spring.jpa.open-in-view:                            Register OpenEntityManagerInViewInterceptor. Binds a JPA EntityManager to the thread for the entire processing of the request. : false
  * spring.jpa.show-sql:                                Show SQL : false
  * </pre>
  */
@@ -279,7 +279,9 @@ public class DataConfigAdapter extends SpringConfigAdapter {
     set("spring.jpa.defer-datasource-initialization", false);
     set("spring.jpa.generate-ddl", false);
     set("spring.jpa.hibernate.use-new-id-generator-mappings", true);
-    set("spring.jpa.open-in-view", true);
+    // Off: one persistence context for the whole request would let the commit of one JSON-RPC batch
+    // item write the pending changes of another item that was rejected (ANCHOR-1587).
+    set("spring.jpa.open-in-view", false);
     set("spring.jpa.show-sql", false);
 
     set("spring.flyway.enabled", false);
