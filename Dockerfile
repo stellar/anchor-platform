@@ -9,8 +9,8 @@ RUN gradle --no-daemon clean bootJar -Pkotlin.compiler.execution.strategy=in-pro
 
 # Build final image
 FROM ubuntu:24.04
-ARG JDK_VER=17.0.16_8
-ARG TEMURIN_RELEASE=jdk-17.0.16+8
+ARG JDK_VER=17.0.21.1_2
+ARG TEMURIN_RELEASE=jdk-17.0.21.1+2
 ARG TARGETARCH=amd64
 
 RUN bash -c 'echo "Building for arch: $TARGETARCH"'
@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates tar unzip \
  && rm -rf /var/lib/apt/lists/*
 
-# ---- Install Temurin JDK 17.0.16+8 ----
+# ---- Install Temurin JDK 17.0.21.1+2 ----
 RUN case "$TARGETARCH" in \
       amd64|x86_64) DOWNLOAD_URL="https://github.com/adoptium/temurin17-binaries/releases/download/${TEMURIN_RELEASE}/OpenJDK17U-jdk_x64_linux_hotspot_${JDK_VER}.tar.gz" ;; \
       arm64|aarch64) DOWNLOAD_URL="https://github.com/adoptium/temurin17-binaries/releases/download/${TEMURIN_RELEASE}/OpenJDK17U-jdk_aarch64_linux_hotspot_${JDK_VER}.tar.gz" ;; \

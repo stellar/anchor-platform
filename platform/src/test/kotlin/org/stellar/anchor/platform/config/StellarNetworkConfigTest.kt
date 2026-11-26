@@ -2,7 +2,9 @@ package org.stellar.anchor.platform.config
 
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -114,5 +116,223 @@ class StellarNetworkConfigTest {
     every { secretConfig.rpcAuthSecret } returns ""
     config.validate(config, errors)
     assertErrorCode(errors, "rpc-auth-secret-empty")
+  }
+
+  private fun useRpc(url: String?) {
+    config.type = RPC
+    config.rpcUrl = url
+    config.rpcAuth = RpcAuthConfig().apply { type = RpcAuthConfig.RpcAuthType.NONE }
+  }
+
+  private val insecureUrls =
+    listOf(
+      "http://horizon-testnet.stellar.org",
+      "http://192.168.100.1:8000",
+      "ftp://horizon.example",
+      "file:///etc/passwd",
+      "http://localhost@evil.example",
+      "http://localhost.evil.example",
+      "http://127.0.0.1.evil.example",
+      "http://https.evil.example/",
+    )
+
+  private val secureUrls =
+    listOf(
+      "https://horizon-testnet.stellar.org",
+      "HTTPS://Horizon.Stellar.Org",
+      "http://localhost:8000",
+      "http://LOCALHOST",
+      "http://127.0.0.1:8000/path",
+      "http://[::1]:8000",
+    )
+
+  @Test
+  fun `test insecure horizon_url is rejected with horizon-url-insecure`() {
+    insecureUrls.forEach { url ->
+      errors = BindException(config, "config")
+      config.horizonUrl = url
+      config.validateConfig(config, errors)
+      assertEquals(1, errors.errorCount, url)
+      assertEquals("horizon-url-insecure", errors.allErrors[0].code, url)
+      assertTrue(errors.fieldErrors.isEmpty(), "a field error would carry the rejected URL: $url")
+    }
+  }
+
+  @Test
+  fun `test https and loopback http horizon_url are accepted`() {
+    secureUrls.forEach { url ->
+      errors = BindException(config, "config")
+      config.horizonUrl = url
+      config.validateConfig(config, errors)
+      assertFalse(errors.hasErrors(), url)
+    }
+  }
+
+  @Test
+  fun `test insecure rpc_url is rejected with rpc-url-insecure when type is RPC`() {
+    insecureUrls.forEach { url ->
+      errors = BindException(config, "config")
+      useRpc(url)
+      config.validateConfig(config, errors)
+      assertEquals(1, errors.errorCount, url)
+      assertEquals("rpc-url-insecure", errors.allErrors[0].code, url)
+      assertTrue(errors.fieldErrors.isEmpty(), "a field error would carry the rejected URL: $url")
+    }
+  }
+
+  @Test
+  fun `test insecure rpc_url is rejected when type is HORIZON`() {
+    insecureUrls.forEach { url ->
+      errors = BindException(config, "config")
+      config.type = HORIZON
+      config.rpcUrl = url
+      config.validateConfig(config, errors)
+      assertEquals(1, errors.errorCount, url)
+      assertEquals("rpc-url-insecure", errors.allErrors[0].code, url)
+      assertTrue(errors.fieldErrors.isEmpty(), "a field error would carry the rejected URL: $url")
+    }
+  }
+
+  @Test
+  fun `test rpc_url that the HTTP client parses but java net URL rejects is still checked`() {
+    // OkHttp sends this request; java.net.URL rejects the '|'. The rule must follow OkHttp.
+    config.type = HORIZON
+    config.rpcUrl = "http://rpc.example.test/rpc?k=a|b"
+    config.validateConfig(config, errors)
+    assertEquals(1, errors.errorCount)
+    assertEquals("rpc-url-insecure", errors.allErrors[0].code)
+
+    errors = BindException(config, "config")
+    config.rpcUrl = "https://rpc.example.test/rpc?k=a|b"
+    config.validateConfig(config, errors)
+    assertFalse(errors.hasErrors())
+  }
+
+  @Test
+  fun `test https url with an underscore host is accepted`() {
+    config.horizonUrl = "https://stellar_horizon.internal"
+    config.validateConfig(config, errors)
+    assertFalse(errors.hasErrors())
+
+    errors = BindException(config, "config")
+    config.type = HORIZON
+    config.rpcUrl = "https://stellar_rpc.internal/rpc"
+    config.validateConfig(config, errors)
+    assertFalse(errors.hasErrors())
+  }
+
+  @Test
+  fun `test https and loopback http rpc_url are accepted`() {
+    secureUrls.forEach { url ->
+      errors = BindException(config, "config")
+      useRpc(url)
+      config.validateConfig(config, errors)
+      assertFalse(errors.hasErrors(), url)
+    }
+  }
+
+  @Test
+  fun `test horizon_url is not checked when type is RPC`() {
+    config.horizonUrl = "http://horizon-testnet.stellar.org"
+    useRpc("https://soroban-testnet.stellar.org")
+    config.validateConfig(config, errors)
+    assertFalse(errors.hasErrors())
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = [""])
+  fun `test empty rpc_url adds no error when type is HORIZON`(url: String?) {
+    config.rpcUrl = url
+    config.validateConfig(config, errors)
+    assertFalse(errors.hasErrors())
+  }
+
+  @Test
+  fun `test empty and malformed urls keep their existing error and no insecure error`() {
+    config.horizonUrl = "abc"
+    config.validateConfig(config, errors)
+    assertEquals(1, errors.errorCount)
+    assertErrorCode(errors, "horizon-url-invalid")
+
+    errors = BindException(config, "config")
+    config.horizonUrl = ""
+    config.validateConfig(config, errors)
+    assertEquals(1, errors.errorCount)
+    assertErrorCode(errors, "horizon-url-empty")
+
+    errors = BindException(config, "config")
+    useRpc("stellar.org")
+    config.validateConfig(config, errors)
+    assertEquals(1, errors.errorCount)
+    assertErrorCode(errors, "rpc-url-invalid")
+
+    errors = BindException(config, "config")
+    useRpc("")
+    config.validateConfig(config, errors)
+    assertEquals(1, errors.errorCount)
+    assertErrorCode(errors, "rpc-url-empty")
+  }
+
+  @Test
+  fun `test a scheme java net URL does not know is invalid, not insecure`() {
+    config.horizonUrl = "ws://localhost:8000"
+    config.validateConfig(config, errors)
+    assertEquals(1, errors.errorCount)
+    assertEquals("horizon-url-invalid", errors.getFieldError("horizonUrl")?.code)
+
+    errors = BindException(config, "config")
+    useRpc("ws://soroban-testnet.stellar.org")
+    config.validateConfig(config, errors)
+    assertEquals(1, errors.errorCount)
+    assertEquals("rpc-url-invalid", errors.getFieldError("rpcUrl")?.code)
+  }
+
+  @Test
+  fun `test insecure error names the key and https but never echoes the url`() {
+    val secretUrl = "http://user:SECRET@host.example/path?key=abc123"
+
+    config.horizonUrl = secretUrl
+    config.validateConfig(config, errors)
+    val horizonMessage = errors.globalError!!.defaultMessage!!
+    assertTrue(horizonMessage.contains("stellar_network.horizon_url"), horizonMessage)
+    assertTrue(horizonMessage.contains("https"), horizonMessage)
+    assertNothingEchoesTheUrl(errors)
+
+    errors = BindException(config, "config")
+    useRpc(secretUrl)
+    config.validateConfig(config, errors)
+    val rpcMessage = errors.globalError!!.defaultMessage!!
+    assertTrue(rpcMessage.contains("stellar_network.rpc_url"), rpcMessage)
+    assertTrue(rpcMessage.contains("https"), rpcMessage)
+    assertNothingEchoesTheUrl(errors)
+  }
+
+  /**
+   * Spring Boot's startup report prints the rejected value of a field error, so the whole `Errors`
+   * object is checked, not only the message: no field error, and no error text with the URL.
+   */
+  private fun assertNothingEchoesTheUrl(errors: Errors) {
+    assertTrue(errors.fieldErrors.isEmpty(), "a field error carries the rejected URL")
+    errors.allErrors.forEach { error ->
+      listOf("SECRET", "abc123", "host.example", "user:").forEach { fragment ->
+        assertFalse(error.toString().contains(fragment), "$fragment found in $error")
+      }
+    }
+  }
+
+  @Test
+  fun `test validate records the insecure error so startup fails`() {
+    config.horizonUrl = "http://horizon-testnet.stellar.org"
+    config.rpcAuth = RpcAuthConfig().apply { type = RpcAuthConfig.RpcAuthType.NONE }
+    config.validate(config, errors)
+    assertTrue(errors.hasErrors())
+    assertErrorCode(errors, "horizon-url-insecure")
+
+    errors = BindException(config, "config")
+    useRpc("http://soroban-testnet.stellar.org")
+    config.validate(config, errors)
+    assertTrue(errors.hasErrors())
+    assertErrorCode(errors, "rpc-url-insecure")
   }
 }

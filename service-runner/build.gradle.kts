@@ -30,6 +30,14 @@ dependencies {
 
 tasks { bootJar { archiveBaseName.set("anchor-platform-runner") } }
 
+// CheckJdkPinScriptTest and ShippedProfilesTest read files outside the module; declare them so a
+// change to the script, the Dockerfile or a shipped profile re-runs the tests instead of reusing
+// an up-to-date result.
+tasks.test {
+  inputs.file(rootProject.file("scripts/check-jdk-pin.sh"))
+  inputs.file(rootProject.file("Dockerfile"))
+}
+
 application { mainClass.set("org.stellar.anchor.platform.ServiceRunner") }
 
 /** Start all the servers based on the `default` test configuration. */
