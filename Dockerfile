@@ -37,6 +37,10 @@ RUN case "$TARGETARCH" in \
 ENV JAVA_HOME=/usr/lib/jvm/temurin-17
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
+# Without a UTF-8 locale the JVM decodes environment values as US-ASCII and replaces every
+# non-ASCII byte of a secret with U+FFFD.
+ENV LANG=C.UTF-8
+
 # Sanity check
 RUN java --version
 
