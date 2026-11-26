@@ -51,6 +51,16 @@ public class AfterCommitEventSession implements EventService.Session {
   }
 
   @Override
+  public void ack(EventService.ReadResponse readResponse, int handledCount) throws AnchorException {
+    delegate.ack(readResponse, handledCount);
+  }
+
+  @Override
+  public void keepAlive() throws AnchorException {
+    delegate.keepAlive();
+  }
+
+  @Override
   public void close() throws AnchorException {
     delegate.close();
   }

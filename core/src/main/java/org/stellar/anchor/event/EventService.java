@@ -26,6 +26,10 @@ import org.stellar.anchor.api.exception.AnchorException;
  *     eventService = null;
  * </pre>
  *
+ * <p>Delivery is at-least-once. If an acknowledgement fails, for example because the consumer was
+ * removed from its group, the event that was being handled is read and delivered again. A receiver
+ * identifies a repeat by the event {@code id}.
+ *
  * <p>Publish event example
  *
  * <pre>
@@ -70,6 +74,32 @@ public interface EventService {
      * @throws AnchorException if the events could not be acknowledged.
      */
     void ack(ReadResponse readResponse) throws AnchorException;
+
+    /**
+     * Acknowledges the first {@code handledCount} events returned by the read() method, so that a
+     * failure later in the batch does not make the already handled events be read again.
+     *
+     * <p>The default does nothing until every event of the response is handled, then acknowledges
+     * the whole response.
+     *
+     * @param readResponse the read response object.
+     * @param handledCount the number of events, counted from the start of the response, that have
+     *     been handled.
+     * @throws AnchorException if the events could not be acknowledged.
+     */
+    default void ack(ReadResponse readResponse, int handledCount) throws AnchorException {
+      if (handledCount >= readResponse.getEvents().size()) {
+        ack(readResponse);
+      }
+    }
+
+    /**
+     * Tells the queue that the consumer is still alive while it handles events, without reading new
+     * ones. The default does nothing.
+     *
+     * @throws AnchorException if the session can no longer be used and must be replaced.
+     */
+    default void keepAlive() throws AnchorException {}
 
     /**
      * Closes the session.

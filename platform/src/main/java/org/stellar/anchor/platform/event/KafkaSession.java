@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import lombok.AllArgsConstructor;
@@ -25,6 +26,7 @@ import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -32,6 +34,7 @@ import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.stellar.anchor.api.event.AnchorEvent;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.EventPublishException;
+import org.stellar.anchor.api.exception.InternalServerErrorException;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.event.EventService;
 import org.stellar.anchor.event.EventService.EventQueue;
@@ -41,6 +44,13 @@ import org.stellar.anchor.util.GsonUtils;
 import org.stellar.anchor.util.Log;
 
 public class KafkaSession implements EventService.Session {
+  // The most records one poll returns, which bounds the events at risk if a commit fails.
+  static final int MAX_POLL_RECORDS = 50;
+  // The longest the consumer may go without polling before Kafka removes it from its group. It
+  // is above the 10-minute HTTP timeouts of the callback handlers, so one blocking callback between
+  // two keep-alive polls cannot evict the consumer.
+  static final int MAX_POLL_INTERVAL_MS = 900_000;
+
   final KafkaConfig kafkaConfig;
   final String sessionName;
   final String topic;
@@ -102,9 +112,13 @@ public class KafkaSession implements EventService.Session {
       consumer.subscribe(java.util.Collections.singletonList(topic));
     }
 
+    // A previous keepAlive() paused the partitions; they must be live to return records.
+    consumer.resume(consumer.paused());
     ConsumerRecords<String, String> consumerRecords =
         consumer.poll(Duration.ofSeconds(kafkaConfig.getPollTimeoutSeconds()));
     ArrayList<AnchorEvent> events = new ArrayList<>(consumerRecords.count());
+    ArrayList<ConsumerRecord<String, String>> eventRecords =
+        new ArrayList<>(consumerRecords.count());
     if (consumerRecords.isEmpty()) {
       debugF("Received {} Kafka records", consumerRecords.count());
     } else {
@@ -117,6 +131,7 @@ public class KafkaSession implements EventService.Session {
             throw new EventPublishException("null event type");
           }
           events.add(deserialized);
+          eventRecords.add(record);
         } catch (JsonSyntaxException | AnchorException ex) {
           Log.debugF(
               "Skipping mal-formatted event from Kafka. ex={}, message={}", ex, ex.getMessage());
@@ -124,12 +139,14 @@ public class KafkaSession implements EventService.Session {
       }
       // TOOD: emit metrics here.
     }
-    return new KafkaReadResponse(events);
+    return new KafkaReadResponse(events, eventRecords);
   }
 
   @AllArgsConstructor
   public static class KafkaReadResponse implements EventService.ReadResponse {
     private final List<AnchorEvent> events;
+    // The record each event was built from, in the same order as the events.
+    private final List<ConsumerRecord<String, String>> records;
 
     @Override
     public List<AnchorEvent> getEvents() {
@@ -141,6 +158,41 @@ public class KafkaSession implements EventService.Session {
   public void ack(EventService.ReadResponse readResponse) throws AnchorException {
     if (consumer != null) {
       consumer.commitSync();
+    }
+  }
+
+  @Override
+  public void ack(EventService.ReadResponse readResponse, int handledCount) throws AnchorException {
+    List<ConsumerRecord<String, String>> records = ((KafkaReadResponse) readResponse).records;
+    if (consumer == null || handledCount <= 0 || records.isEmpty()) {
+      return;
+    }
+    // Events are handled in the order they were read, so committing the offset after the last
+    // handled record of its own partition never skips a record that was not handled.
+    ConsumerRecord<String, String> last = records.get(Math.min(handledCount, records.size()) - 1);
+    consumer.commitSync(
+        Map.of(
+            new TopicPartition(last.topic(), last.partition()),
+            new OffsetAndMetadata(last.offset() + 1)));
+  }
+
+  @Override
+  public void keepAlive() throws AnchorException {
+    if (consumer == null) {
+      return;
+    }
+    Set<TopicPartition> assignment = consumer.assignment();
+    if (assignment.isEmpty()) {
+      return;
+    }
+    // Polling is what tells Kafka the consumer is alive. With every partition paused the poll
+    // returns no record, so the position does not move past events that are not handled yet.
+    consumer.pause(assignment);
+    if (!consumer.poll(Duration.ZERO).isEmpty()) {
+      // The pause was lost (for example after a rebalance). The records are not handled, so the
+      // session is replaced and they are read again from the committed offset.
+      throw new InternalServerErrorException(
+          "The keep-alive poll returned records that were not handled");
     }
   }
 
@@ -193,6 +245,10 @@ public class KafkaSession implements EventService.Session {
   }
 
   Consumer<String, String> createConsumer() throws InvalidConfigException {
+    return new KafkaConsumer<>(createConsumerConfig());
+  }
+
+  Properties createConsumerConfig() throws InvalidConfigException {
     Properties props = new Properties();
 
     props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfig.getBootstrapServer());
@@ -202,12 +258,14 @@ public class KafkaSession implements EventService.Session {
     props.put(ConsumerConfig.GROUP_ID_CONFIG, "group-" + sessionName);
     props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
     props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+    props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, MAX_POLL_RECORDS);
+    props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, MAX_POLL_INTERVAL_MS);
     props.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
     props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
     props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
     configureAuth(props);
 
-    return new KafkaConsumer<>(props);
+    return props;
   }
 
   void configureAuthSaslLogin(Properties props) throws InvalidConfigException {

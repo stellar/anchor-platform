@@ -57,6 +57,7 @@ public class ClientStatusCallbackProcessor extends EventProcessor {
             // retry.
             try {
               getHttpErrorBackoffTimer().backoff();
+              keepAlive();
             } catch (InterruptedException e) {
               // The thread is interrupted, so we need to stop the processor. This will
               // break the while loop.
@@ -73,6 +74,7 @@ public class ClientStatusCallbackProcessor extends EventProcessor {
         if (++retryAttempts < MAX_RETRIES) {
           try {
             getNetworkBackoffTimer().backoff();
+            keepAlive();
           } catch (InterruptedException e) {
             // The thread is interrupted, so we need to stop the processor. This will
             // break the while loop.

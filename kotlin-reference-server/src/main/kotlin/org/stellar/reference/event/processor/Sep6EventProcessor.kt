@@ -133,22 +133,27 @@ class Sep6EventProcessor(
           return
         }
 
-        lateinit var stellarTxnId: String
-        transactionWithRetry {
-          stellarTxnId =
-            paymentClient.send(
-              transaction.destinationAccount,
-              Asset.create(transaction.amountExpected.asset.toAssetId()),
-              // If no amount was specified at transaction initialization, assume the user
-              // transferred 1 USD to the Anchor's bank account
-              if (transaction.amountExpected.amount.equals("0")) {
-                "1"
-              } else {
-                transaction.amountOut.amount
-              },
-            )
+        // The platform delivers an event at least once, so this event can arrive again for a
+        // deposit that is already paid. Pay once per transaction.
+        if (onchainPayments[transaction.id] == null) {
+          lateinit var paymentId: String
+          transactionWithRetry {
+            paymentId =
+              paymentClient.send(
+                transaction.destinationAccount,
+                Asset.create(transaction.amountExpected.asset.toAssetId()),
+                // If no amount was specified at transaction initialization, assume the user
+                // transferred 1 USD to the Anchor's bank account
+                if (transaction.amountExpected.amount.equals("0")) {
+                  "1"
+                } else {
+                  transaction.amountOut.amount
+                },
+              )
+          }
+          onchainPayments[transaction.id] = paymentId
         }
-        onchainPayments[transaction.id] = stellarTxnId
+        val stellarTxnId = onchainPayments[transaction.id]!!
 
         log.info { "Waiting for transaction $stellarTxnId to be available..." }
         run loop@{

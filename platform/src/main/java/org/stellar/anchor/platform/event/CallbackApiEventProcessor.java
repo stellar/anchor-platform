@@ -11,7 +11,11 @@ import org.stellar.anchor.util.Log;
 
 public class CallbackApiEventProcessor extends EventProcessor {
   private final CallbackApiEventHandler eventHandler;
-  private final ExponentialBackoffTimer backoffTimer = new ExponentialBackoffTimer();
+  // The longest wait between two attempts. The consumer is kept alive after every wait, so this
+  // bounds the time between two polls while an event is being retried.
+  static final long MAX_BACKOFF_SECONDS = 30;
+  private final ExponentialBackoffTimer backoffTimer =
+      new ExponentialBackoffTimer(1, MAX_BACKOFF_SECONDS);
 
   public CallbackApiEventProcessor(
       String name,
@@ -36,6 +40,7 @@ public class CallbackApiEventProcessor extends EventProcessor {
         } else {
           try {
             getBackoffTimer().backoff();
+            keepAlive();
           } catch (InterruptedException e) {
             currentThread().interrupt();
           }
@@ -44,6 +49,7 @@ public class CallbackApiEventProcessor extends EventProcessor {
         Log.errorEx(ioex);
         try {
           getBackoffTimer().backoff();
+          keepAlive();
         } catch (InterruptedException e) {
           currentThread().interrupt();
         }

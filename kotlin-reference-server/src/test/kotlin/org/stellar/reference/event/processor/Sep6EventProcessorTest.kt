@@ -3,6 +3,7 @@ package org.stellar.reference.event.processor
 import io.mockk.Called
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
@@ -26,10 +27,12 @@ import org.stellar.reference.client.PaymentClient
 import org.stellar.reference.client.PlatformClient
 import org.stellar.reference.data.Config
 import org.stellar.reference.data.NotifyOffchainFundsReceivedRequest
+import org.stellar.reference.data.NotifyOnchainFundsSentRequest
 import org.stellar.reference.data.RpcActionParamsRequest
 import org.stellar.reference.data.SendEventRequest
 import org.stellar.reference.data.SendEventRequestPayload
 import org.stellar.reference.service.SepHelper
+import org.stellar.sdk.responses.sorobanrpc.GetTransactionResponse as StellarTransactionResponse
 
 class Sep6EventProcessorTest {
   private val sepHelper: SepHelper = mockk(relaxed = true)
@@ -198,5 +201,109 @@ class Sep6EventProcessorTest {
       val method = slot<String>()
       coVerify(exactly = 1) { sepHelper.rpcAction(capture(method), any()) }
       assertEquals(RpcMethod.REQUEST_OFFCHAIN_FUNDS.toString(), method.captured)
+    }
+
+  private val usdc = "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+
+  private fun pendingAnchorDeposit(id: String) =
+    SendEventRequest(
+      id = UUID.randomUUID().toString(),
+      type = "transaction_status_changed",
+      timestamp = "2026-10-01T00:00:00Z",
+      payload =
+        SendEventRequestPayload(
+          transaction =
+            GetTransactionResponse.builder()
+              .id(id)
+              .kind(Kind.DEPOSIT)
+              .status(SepTransactionStatus.PENDING_ANCHOR)
+              .destinationAccount("GDESTINATION")
+              .amountExpected(Amount("100", usdc))
+              .amountOut(Amount("100", usdc))
+              .customers(
+                Customers.builder()
+                  .sender(StellarId.builder().account("GSENDER").build())
+                  .receiver(StellarId.builder().account("GSENDER").build())
+                  .build()
+              )
+              .build(),
+          quote = null,
+          customer = null,
+        ),
+    )
+
+  private class DepositFixture {
+    val sepHelper: SepHelper = mockk(relaxed = true)
+    val paymentClient: PaymentClient = mockk()
+    val onchainPayments = mutableMapOf<String, String>()
+    val processor: Sep6EventProcessor
+
+    init {
+      val customerService: CustomerService = mockk()
+      val allKyc = Sep6EventProcessor.requiredKyc + Sep6EventProcessor.depositRequiredKyc
+      coEvery { customerService.getCustomer(any()) } returns
+        GetCustomerResponse.builder()
+          .providedFields(allKyc.associateWith { ProvidedCustomerField.builder().build() })
+          .build()
+      // each call to the ledger would produce a different payment id
+      every { paymentClient.send(any(), any(), any(), any()) } returnsMany
+        listOf("stellar-tx-1", "stellar-tx-2")
+      every { paymentClient.getTransaction(any()) } returns
+        mockk<StellarTransactionResponse> {
+          every { status } returns StellarTransactionResponse.GetTransactionStatus.SUCCESS
+        }
+      processor =
+        Sep6EventProcessor(
+          mockk<Config>(relaxed = true),
+          mockk<PlatformClient>(relaxed = true),
+          paymentClient,
+          customerService,
+          sepHelper,
+          onchainPayments,
+        )
+    }
+
+    fun notifiedStellarIds(): List<String> {
+      val params = mutableListOf<RpcActionParamsRequest>()
+      coVerify { sepHelper.rpcAction(any(), capture(params)) }
+      return params.filterIsInstance<NotifyOnchainFundsSentRequest>().map {
+        it.stellarTransactionId
+      }
+    }
+  }
+
+  @Test
+  fun `the first pending_anchor deposit event pays once and stores the payment id`() = runBlocking {
+    val fixture = DepositFixture()
+    val id = newId()
+
+    fixture.processor.onTransactionStatusChanged(pendingAnchorDeposit(id))
+
+    verify(exactly = 1) { fixture.paymentClient.send(any(), any(), any(), any()) }
+    assertEquals("stellar-tx-1", fixture.onchainPayments[id])
+  }
+
+  @Test
+  fun `a repeated pending_anchor deposit event does not pay again`() = runBlocking {
+    val fixture = DepositFixture()
+    val id = newId()
+
+    fixture.processor.onTransactionStatusChanged(pendingAnchorDeposit(id))
+    fixture.processor.onTransactionStatusChanged(pendingAnchorDeposit(id))
+
+    verify(exactly = 1) { fixture.paymentClient.send(any(), any(), any(), any()) }
+    assertEquals("stellar-tx-1", fixture.onchainPayments[id])
+  }
+
+  @Test
+  fun `a repeated pending_anchor deposit event still notifies with the stored payment id`() =
+    runBlocking {
+      val fixture = DepositFixture()
+      val id = newId()
+
+      fixture.processor.onTransactionStatusChanged(pendingAnchorDeposit(id))
+      fixture.processor.onTransactionStatusChanged(pendingAnchorDeposit(id))
+
+      assertEquals(listOf("stellar-tx-1", "stellar-tx-1"), fixture.notifiedStellarIds())
     }
 }
