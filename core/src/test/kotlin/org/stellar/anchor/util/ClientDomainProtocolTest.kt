@@ -95,6 +95,36 @@ class ClientDomainProtocolTest {
     assertEquals(listOf("http/1.1"), server.negotiated)
   }
 
+  // CDPROTO-04
+  @Test
+  fun `a host that floods HTTP 2 frames is served over HTTP 1_1 and does not slow an honest fetch`() {
+    val floodHost = startServer(listOf("h2", "http/1.1"), floodMillis = 3_000, keepAlive = true)
+    val honestHost = startServer(listOf("http/1.1"))
+    val client = productionClient(true)
+
+    val floodedKey =
+      ClientDomainHelper.fetchSigningKeyFromClientDomain(
+        "127.0.0.1:${floodHost.port}",
+        true,
+        client
+      )
+    // The flood host's connection is pooled and open (keep-alive) while the honest fetch runs.
+    val startedAt = System.nanoTime()
+    val honestKey =
+      ClientDomainHelper.fetchSigningKeyFromClientDomain(
+        "127.0.0.1:${honestHost.port}",
+        true,
+        client,
+      )
+    val honestMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
+
+    assertEquals(signingKey, floodedKey)
+    assertEquals(listOf("http/1.1"), floodHost.negotiated)
+    assertFalse(floodHost.negotiated.contains("h2"))
+    assertEquals(signingKey, honestKey)
+    assertTrue(honestMillis < 1_500, "honest fetch took $honestMillis ms")
+  }
+
   // CDPROTO-05
   @Test
   fun `a host that accepts only h2 cannot be fetched`() {
@@ -111,6 +141,22 @@ class ClientDomainProtocolTest {
     assertEquals("Unable to read client_domain's SIGNING_KEY", e.message)
     assertTrue(millis < 2_500, "fetch took $millis ms")
     assertTrue(server.negotiated.isEmpty(), "negotiated ${server.negotiated}")
+  }
+
+  // CDPROTO-06
+  @Test
+  fun `a valid stellar toml over TLS HTTP 1_1 returns its SIGNING_KEY`() {
+    val server = startServer(listOf("http/1.1"))
+
+    val key =
+      ClientDomainHelper.fetchSigningKeyFromClientDomain(
+        "127.0.0.1:${server.port}",
+        false,
+        productionClient(false),
+      )
+
+    assertEquals(signingKey, key)
+    assertEquals(listOf("http/1.1"), server.negotiated)
   }
 
   // CDPROTO-08
