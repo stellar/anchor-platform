@@ -243,6 +243,20 @@ class StellarNetworkConfigTest {
   }
 
   @Test
+  fun `test a scheme java net URL does not know is invalid, not insecure`() {
+    config.horizonUrl = "ws://localhost:8000"
+    config.validateConfig(config, errors)
+    assertEquals(1, errors.errorCount)
+    assertEquals("horizon-url-invalid", errors.getFieldError("horizonUrl")?.code)
+
+    errors = BindException(config, "config")
+    useRpc("ws://soroban-testnet.stellar.org")
+    config.validateConfig(config, errors)
+    assertEquals(1, errors.errorCount)
+    assertEquals("rpc-url-invalid", errors.getFieldError("rpcUrl")?.code)
+  }
+
+  @Test
   fun `test insecure error names the key and https but never echoes the url`() {
     val secretUrl = "http://user:SECRET@host.example/path?key=abc123"
 
