@@ -77,6 +77,22 @@ class PlatformServerBeansConverterTest {
   }
 
   @Test
+  fun `the smallest valid value of each limit is accepted`() {
+    assertInstanceOf(
+      BoundedGsonHttpMessageConverter::class.java,
+      converter(platformConfig(nodes = 1), rpcConfig()),
+    )
+    assertInstanceOf(
+      BoundedGsonHttpMessageConverter::class.java,
+      converter(platformConfig(depth = 1), rpcConfig()),
+    )
+    assertInstanceOf(
+      BoundedGsonHttpMessageConverter::class.java,
+      converter(platformConfig(), rpcConfig(nodes = 1)),
+    )
+  }
+
+  @Test
   fun `zero and negative platform_server max_json_nodes fail startup naming the key`() {
     listOf(0, -1).forEach {
       val ex =
