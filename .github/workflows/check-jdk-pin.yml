@@ -1,0 +1,56 @@
+name: Check the JDK pin
+
+# The Dockerfile downloads Temurin with curl, which Dependabot's docker ecosystem cannot see. This
+# workflow compares the pin with the latest Temurin 17 release and opens an issue when it is behind.
+# It never edits the Dockerfile.
+
+on:
+  schedule:
+    - cron: '0 14 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check_jdk_pin:
+    name: Compare the Dockerfile JDK with the latest Temurin 17
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v5
+        with:
+          show-progress: false
+
+      - name: Check the pin and open an issue when it is behind
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set +e
+          output=$(scripts/check-jdk-pin.sh Dockerfile)
+          code=$?
+          set -e
+          echo "$output"
+
+          # Exit 0: current. Exit 2 (mismatched ARGs) or 3 (no answer from Adoptium): fail the run
+          # and create no issue.
+          if [ "$code" -eq 0 ]; then
+            exit 0
+          elif [ "$code" -ne 1 ]; then
+            echo "::error::scripts/check-jdk-pin.sh exited with $code"
+            exit "$code"
+          fi
+
+          pinned=$(sed -n 's/^pinned: //p' <<<"$output")
+          latest=$(sed -n 's/^latest: //p' <<<"$output")
+          body="The Dockerfile pins Temurin $pinned and the latest Temurin 17 release is $latest. Update \`JDK_VER\` and \`TEMURIN_RELEASE\` in the Dockerfile, read the release notes for trust store changes first, and confirm the image builds."
+
+          gh label create jdk-pin --description "The Dockerfile JDK pin is behind the latest Temurin 17" --color D93F0B 2>/dev/null || true
+          existing=$(gh issue list --label jdk-pin --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --label jdk-pin --title "The JDK pin is behind: $pinned, latest is $latest" --body "$body"
+          fi
