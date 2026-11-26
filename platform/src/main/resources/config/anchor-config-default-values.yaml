@@ -42,7 +42,8 @@ stellar_network:
   #   `rpc`: Use the Soroban RPC API to connect to the Stellar network.
   type: horizon
 
-  # The rpc server endpoint.
+  # The rpc server endpoint. It must use `https`; plain `http` is accepted only for `localhost`,
+  # `127.0.0.1` and `[::1]`. Any other `http` URL stops the platform at startup.
   # example:
   #   rpc_url: https://soroban-testnet.stellar.org
   rpc_url:
@@ -58,7 +59,8 @@ stellar_network:
       # The HTTP header name of the Bearer token.
       name: Authorization
 
-  # The horizon server endpoint.
+  # The horizon server endpoint. It must use `https`; plain `http` is accepted only for `localhost`,
+  # `127.0.0.1` and `[::1]`. Any other `http` URL stops the platform at startup.
   horizon_url: https://horizon-testnet.stellar.org
 
 ##############################
