@@ -65,6 +65,79 @@ class BoundedJsonReaderTest {
   }
 
   @Test
+  fun `an array that follows the records array under another member is not limited by it`() {
+    val r =
+      reader(
+        """{"records":[{}],"other":[{},{},{}]}""",
+        arrayLimit = BoundedJsonReader.ArrayLimit.member("records", 2),
+      )
+    readObject(r)
+  }
+
+  @Test
+  fun `a second records member is limited like the first`() {
+    val r =
+      reader(
+        """{"records":[{}],"records":[{},{},{}]}""",
+        arrayLimit = BoundedJsonReader.ArrayLimit.member("records", 2),
+      )
+    val ex = assertThrows(JsonArrayLimitException::class.java) { readObject(r) }
+    assertEquals("records", ex.member)
+  }
+
+  @Test
+  fun `an array nested inside the records member is not limited`() {
+    val r =
+      reader(
+        """{"records":{"x":[{},{},{}]}}""",
+        arrayLimit = BoundedJsonReader.ArrayLimit.member("records", 2),
+      )
+    readObject(r)
+  }
+
+  class Numbers {
+    var i: Int = 0
+    var l: Long = 0
+    var d: Double = 0.0
+  }
+
+  @Test
+  fun `typed int long and double reads each count as a value`() {
+    // object + three numbers = 4 values
+    val body = """{"i":1,"l":2,"d":3.5}"""
+    val numbers: Numbers =
+      gson.fromJson(reader(body, maxNodes = 4), Numbers::class.java as java.lang.reflect.Type)
+    assertEquals(1, numbers.i)
+    assertEquals(2L, numbers.l)
+    assertEquals(3.5, numbers.d)
+    assertThrows(JsonStructureLimitException::class.java) {
+      gson.fromJson<Numbers>(
+        reader(body, maxNodes = 3),
+        Numbers::class.java as java.lang.reflect.Type
+      )
+    }
+    // each kind on its own: the limit is hit by that kind alone
+    assertThrows(JsonStructureLimitException::class.java) {
+      gson.fromJson<Numbers>(
+        reader("""{"l":2}""", maxNodes = 1),
+        Numbers::class.java as java.lang.reflect.Type
+      )
+    }
+    assertThrows(JsonStructureLimitException::class.java) {
+      gson.fromJson<Numbers>(
+        reader("""{"d":3.5}""", maxNodes = 1),
+        Numbers::class.java as java.lang.reflect.Type
+      )
+    }
+    assertThrows(JsonStructureLimitException::class.java) {
+      gson.fromJson<Numbers>(
+        reader("""{"i":1}""", maxNodes = 1),
+        Numbers::class.java as java.lang.reflect.Type
+      )
+    }
+  }
+
+  @Test
   fun `member names read through a map adapter are not counted`() {
     // Gson's Map adapter reads each name through nextString(); {"a":{"b":1}} is 3 values
     val mapType =
