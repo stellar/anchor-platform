@@ -7,10 +7,13 @@ import java.util.stream.Stream
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import org.springframework.web.util.UriComponentsBuilder
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.asset.AssetInfo
 import org.stellar.anchor.api.callback.CustomerIntegration
 import org.stellar.anchor.api.callback.GetCustomerResponse
@@ -29,13 +32,16 @@ import org.stellar.anchor.client.DefaultClientService
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.platform.callback.PlatformIntegrationHelperTest.Companion.TEST_HOME_DOMAIN
 import org.stellar.anchor.platform.config.PropertySep24Config
+import org.stellar.anchor.platform.controller.sep.CapturingLogger
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.service.SimpleInteractiveUrlConstructor.FORWARD_KYC_CUSTOMER_TYPE
 import org.stellar.anchor.platform.utils.setupMock
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.Log
 
 @Suppress("UNCHECKED_CAST")
+@ExtendWith(LockAndMockTest::class)
 class SimpleInteractiveUrlConstructorTest {
   companion object {
     private val gson = GsonUtils.getInstance()
@@ -139,6 +145,29 @@ class SimpleInteractiveUrlConstructorTest {
       jwtService,
       customerIdOwnerStore,
     )
+
+  // ANCHOR-1540 (HackerOne #4207658 follow-up): the token data is built from the SEP-24 request
+  // body, which Sep24Controller no longer logs; this line must not write its values either.
+  @Test
+  @LockAndMockStatic([Log::class])
+  fun `test the token data DEBUG line omits request values and keeps the key names`() {
+    val logger = CapturingLogger()
+    every { Log.getLogger() } returns logger
+    request["customer_id"] = "cust-4207658"
+    request["amount"] = "100.4207"
+
+    newConstructor().construct(txn, request, testAsset, webAuthJwt)
+
+    val attaching = logger.debugLines.filter { it.startsWith("Attaching data to the token") }
+    assertEquals(1, attaching.size)
+    val allLogged = logger.debugLines.joinToString("\n")
+    assertFalse(allLogged.contains("cust-4207658"))
+    assertFalse(allLogged.contains("100.4207"))
+    assertFalse(allLogged.contains("john_doe@stellar.org"))
+    // the names of the attached fields stay visible
+    assertTrue(attaching.single().contains("customer_id"))
+    assertTrue(attaching.single().contains("amount"))
+  }
 
   @Test
   fun `data client_domain is absent when the transaction has no verified client_domain even if the request carries one`() {
