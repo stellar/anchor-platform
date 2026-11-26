@@ -18,9 +18,11 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import okhttp3.ConnectionPool;
 import okhttp3.Dns;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import org.stellar.anchor.api.exception.InvalidConfigException;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.sdk.KeyPair;
@@ -43,10 +45,13 @@ public class ClientDomainHelper {
   private static final long BOUNDED_FETCH_TIMEOUT_MS = 2_500;
   private static final long FETCH_CALL_TIMEOUT_MS = 1_000;
   static Dns dns = BoundedDnsResolver.getDefault();
+  // The fetched host is chosen by the caller. HTTP/2 is never offered: a host that selects h2 can
+  // keep the connection busy with SETTINGS and PING frames that OkHttp queues under a JVM-wide
+  // lock, which pins a core and starves every other fetch.
   private static final OkHttpClient FETCH_CLIENT =
-      OkHttpUtil.buildClient(hostname -> dns.lookup(hostname), FETCH_CALL_TIMEOUT_MS);
+      http1Only(OkHttpUtil.buildClient(hostname -> dns.lookup(hostname), FETCH_CALL_TIMEOUT_MS));
   private static final OkHttpClient PUBLIC_FETCH_CLIENT =
-      OkHttpUtil.buildClient(validatingDns(), FETCH_CALL_TIMEOUT_MS);
+      http1Only(OkHttpUtil.buildClient(validatingDns(), FETCH_CALL_TIMEOUT_MS));
 
   private static class ClientDomainThreadFactory implements ThreadFactory {
     private final AtomicInteger counter = new AtomicInteger();
@@ -98,12 +103,30 @@ public class ClientDomainHelper {
     // allowHttpRetry is true for non-public networks (testnet/dev) and false for mainnet.
     // We only enforce SSRF protection on public network because test/dev environments
     // legitimately use localhost and internal addresses as client_domain.
-    OkHttpClient client = FETCH_CLIENT;
     if (!allowHttpRetry) {
       validateDomainNotPrivateNetwork(clientDomain);
-      client = PUBLIC_FETCH_CLIENT;
     }
+    return fetchSigningKeyFromClientDomain(
+        clientDomain, allowHttpRetry, fetchClient(allowHttpRetry));
+  }
 
+  static OkHttpClient fetchClient(boolean allowHttpRetry) {
+    return allowHttpRetry ? FETCH_CLIENT : PUBLIC_FETCH_CLIENT;
+  }
+
+  private static OkHttpClient http1Only(OkHttpClient client) {
+    // No idle connection is kept: OkHttp reuses an idle HTTP/1.1 connection for a GET without
+    // checking that the host still has it open, and these clients do not retry, so a host that
+    // drops idle connections would fail every other fetch.
+    return client
+        .newBuilder()
+        .protocols(List.of(Protocol.HTTP_1_1))
+        .connectionPool(new ConnectionPool(0, 1, TimeUnit.SECONDS))
+        .build();
+  }
+
+  static String fetchSigningKeyFromClientDomain(
+      String clientDomain, boolean allowHttpRetry, OkHttpClient client) throws SepException {
     String clientSigningKey = "";
     String url = "https://" + clientDomain + "/.well-known/stellar.toml";
     try {

@@ -42,6 +42,7 @@ dependencies {
   testImplementation(libs.coroutines.core)
   testImplementation(libs.jackson.annotations)
   testImplementation(libs.okhttp3.mockserver)
+  testImplementation(libs.okhttp3.tls)
   testImplementation(libs.servlet.api)
   testImplementation(libs.slf4j.api)
   testImplementation(libs.stellar.wallet.sdk)
