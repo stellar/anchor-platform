@@ -160,6 +160,23 @@ class JsonLimitExceptionHandlerTest {
   }
 
   @Test
+  fun `a batch limit refusal logs one warning naming rpc batch_size_limit and its value`() {
+    RequestContextHolder.setRequestAttributes(
+      ServletRequestAttributes(MockHttpServletRequest("POST", "/"))
+    )
+
+    handler.handleRandomException(unreadable(JsonArrayLimitException(null, 40)))
+
+    val warnings = logged.filter { it.startsWith("WARN") }
+    assertEquals(
+      listOf(
+        "WARN Rejecting POST /: the request body exceeds the limit rpc.batch_size_limit of 40"
+      ),
+      warnings,
+    )
+  }
+
+  @Test
   fun `a refusal outside a request logs the route as unknown`() {
     handler.handleRandomException(unreadable(JsonArrayLimitException("records", 1000)))
 
