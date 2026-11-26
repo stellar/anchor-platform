@@ -70,6 +70,13 @@ class CheckJdkPinScriptTest {
   }
 
   @Test
+  fun `pin that is not numeric exits 3 and does not claim the pin is current`() {
+    val r = run(fixture("Dockerfile.non-numeric"), fixture("api-latest-17.0.21+9.json"))
+    assertEquals(3, r.exitCode, r.output)
+    assertFalse(r.output.contains("up to date"), r.output)
+  }
+
+  @Test
   fun `pin behind a newer patch release exits 1`() {
     val r = run(fixture("Dockerfile.current"), fixture("api-latest-17.0.22+5.json"))
     assertEquals(1, r.exitCode, r.output)
