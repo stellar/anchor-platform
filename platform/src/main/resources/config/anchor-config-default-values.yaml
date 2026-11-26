@@ -688,8 +688,10 @@ clients:
   #
   # Option 4: Store clients in the database, managed via the /clients REST API.
   # Specify the type as 'db'. If value is also set to an existing file path, or an inline
-  # yaml/json string, its clients are imported into the database once on startup (existing
-  # database rows are left untouched). Leave value empty to skip the import.
+  # yaml/json string, its clients are imported into the database only on the first startup,
+  # while the client table is still empty. Once any client exists in the database the import
+  # is skipped on every later startup, so changes made through the /clients API are never
+  # overwritten. Leave value empty to skip the import.
   #
   # type: db
   # value: path/to/file.yaml

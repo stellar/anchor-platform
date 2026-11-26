@@ -2743,8 +2743,8 @@ private const val VALIDATIONS_AND_ERRORS_RESPONSES =
                 "asset": "%TESTPAYMENT_ASSET_CIRCLE_USDC%"
               },
               "payment_type": "payment",
-              "source_account": "GABCKCYPAGDDQMSCTMSBO7C2L34NU3XXCW7LR4VVSWCCXMAJY3B4YCZP",
-              "destination_account": "GBDYDBJKQBJK4GY4V7FAONSFF2IBJSKNTBYJ65F5KCGBY2BIGPGGLJOH"
+              "source_account": "%TESTPAYMENT_SRC_ACCOUNT%",
+              "destination_account": "%TESTPAYMENT_DEST_ACCOUNT%"
             }
           ]
         }

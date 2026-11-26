@@ -21,12 +21,29 @@ public class OwnerKeyResolver {
     this.clientService = clientService;
   }
 
+  /**
+   * The owner key of a caller and whether it came from a custodial client, decided by one registry
+   * lookup. A caller that applies both (the key and a memo rule that depends on the client type)
+   * must use this, not two calls: a lookup that fails between them would pair a custodial key with
+   * the non-custodial memo rule.
+   */
+  public record Owner(String key, boolean custodial) {}
+
   public String ownerKey(WebAuthJwt token) {
+    return resolve(token).key();
+  }
+
+  /**
+   * Resolves the owner of the token. A custodial client's key is shared by every end user, so the
+   * owner memo is the only thing that tells them apart. An unregistered client or a failing
+   * registry lookup is not custodial.
+   */
+  public Owner resolve(WebAuthJwt token) {
     String clientName = token.getClientName();
     if (clientName != null && isCustodial(clientName)) {
-      return clientName;
+      return new Owner(clientName, true);
     }
-    return token.getOwnerKey();
+    return new Owner(token.getOwnerKey(), false);
   }
 
   private boolean isCustodial(String clientName) {
