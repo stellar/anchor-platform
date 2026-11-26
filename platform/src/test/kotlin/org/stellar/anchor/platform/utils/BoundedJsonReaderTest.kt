@@ -65,6 +65,17 @@ class BoundedJsonReaderTest {
   }
 
   @Test
+  fun `member names read through a map adapter are not counted`() {
+    // Gson's Map adapter reads each name through nextString(); {"a":{"b":1}} is 3 values
+    val mapType =
+      object : com.google.gson.reflect.TypeToken<Map<String, Map<String, Int>>>() {}.type
+    val r = reader("""{"a":{"b":1}}""", maxNodes = 3)
+    val map: Map<String, Map<String, Int>> = gson.fromJson(r, mapType)
+    assertEquals(mapOf("a" to mapOf("b" to 1)), map)
+    assertEquals(3, r.nodeCount())
+  }
+
+  @Test
   fun `nesting of exactly maxDepth is read`() {
     val r = reader("[[[]]]", maxDepth = 3)
     assertEquals(listOf(listOf(listOf<Any>())), readObject(r))

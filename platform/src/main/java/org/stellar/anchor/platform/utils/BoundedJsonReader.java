@@ -47,6 +47,8 @@ public class BoundedJsonReader extends JsonReader {
   // For each open container: whether it is an array, and how many values it has received.
   private boolean[] isArray = new boolean[16];
   private int[] elements = new int[16];
+  // For each open object: whether its next token is a member name (not yet read as a value).
+  private boolean[] expectName = new boolean[16];
   // The depth (1-based) of the array that arrayLimit applies to, or 0 when none is open.
   private int limitedDepth;
   private boolean rootIsObject;
@@ -95,16 +97,30 @@ public class BoundedJsonReader extends JsonReader {
   @Override
   public String nextName() throws IOException {
     String name = super.nextName();
+    if (depth > 0) {
+      expectName[depth - 1] = false;
+    }
+    trackName(name);
+    return name;
+  }
+
+  private void trackName(String name) {
     if (depth == 1) {
       rootMemberName = name;
     }
-    return name;
   }
 
   @Override
   public String nextString() throws IOException {
     String value = super.nextString();
-    countValue();
+    if (depth > 0 && !isArray[depth - 1] && expectName[depth - 1]) {
+      // Gson's map adapter promotes each member name to a value and reads it through nextString().
+      // A name is not a value: it is tracked like nextName() and not counted.
+      expectName[depth - 1] = false;
+      trackName(value);
+    } else {
+      countValue();
+    }
     return value;
   }
 
@@ -144,6 +160,9 @@ public class BoundedJsonReader extends JsonReader {
 
   /** Counts one value that has just been consumed, in the container that is currently open. */
   private void countValue() {
+    if (depth > 0) {
+      expectName[depth - 1] = true;
+    }
     if (depth > 0 && isArray[depth - 1] && depth == limitedDepth) {
       if (++elements[depth - 1] > arrayLimit.max) {
         // the value just consumed is the one over the limit; its children are never read
@@ -165,9 +184,11 @@ public class BoundedJsonReader extends JsonReader {
     if (depth == isArray.length) {
       isArray = Arrays.copyOf(isArray, depth * 2);
       elements = Arrays.copyOf(elements, depth * 2);
+      expectName = Arrays.copyOf(expectName, depth * 2);
     }
     isArray[depth] = array;
     elements[depth] = 0;
+    expectName[depth] = true;
     depth++;
     if (depth == 1) {
       rootIsObject = !array;
