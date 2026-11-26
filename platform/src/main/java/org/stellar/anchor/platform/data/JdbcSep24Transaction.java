@@ -15,7 +15,22 @@ import org.stellar.anchor.sep24.Sep24Transaction;
 @Setter
 @Entity
 @Access(AccessType.FIELD)
-@Table(name = "sep24_transaction")
+// The same indexes as V38__sep24_sep6_lookup_indexes.sql, for deployments where Hibernate creates
+// the schema (data.flyway_enabled false). Keep names and columns in step with the migration.
+@Table(
+    name = "sep24_transaction",
+    indexes = {
+      @Index(name = "idx_sep24_transaction_transaction_id", columnList = "transaction_id"),
+      @Index(
+          name = "idx_sep24_transaction_stellar_transaction_id",
+          columnList = "stellar_transaction_id"),
+      @Index(
+          name = "idx_sep24_transaction_external_transaction_id",
+          columnList = "external_transaction_id"),
+      @Index(
+          name = "idx_sep24_transaction_web_auth_account_started_at",
+          columnList = "web_auth_account, started_at")
+    })
 @NoArgsConstructor
 public class JdbcSep24Transaction extends JdbcSepTransaction implements Sep24Transaction {
   public String getProtocol() {
