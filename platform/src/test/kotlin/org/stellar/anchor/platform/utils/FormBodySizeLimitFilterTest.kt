@@ -206,4 +206,67 @@ class FormBodySizeLimitFilterTest {
     }
     assertEquals("started", response.contentAsString)
   }
+
+  // Edge case: output buffered but not yet sent is replaced by the 413 body, not mixed with it.
+  @Test
+  fun `a limit hit after output was buffered answers exactly the 413 body`() {
+    val buffering = Filter { _, res, _ ->
+      res.writer.write("partial")
+      throw RequestBodySizeLimitFilter.RequestBodyTooLargeException(limit)
+    }
+    val response = MockHttpServletResponse()
+    MockFilterChain(route, FormBodySizeLimitFilter(limit), buffering)
+      .doFilter(request("PUT", "a=b".toByteArray(), chunked = true), response)
+    assertEquals(413, response.status)
+    assertEquals(FormBodySizeLimitFilter.TOO_LARGE_BODY, response.contentAsString)
+  }
+
+  // Edge case: the container may wrap the limit exception; the cause chain is searched.
+  @Test
+  fun `a limit exception wrapped in a ServletException is still answered 413`() {
+    val wrapping = Filter { _, _, _ ->
+      throw jakarta.servlet.ServletException(
+        RequestBodySizeLimitFilter.RequestBodyTooLargeException(limit)
+      )
+    }
+    val response = MockHttpServletResponse()
+    MockFilterChain(route, FormBodySizeLimitFilter(limit), wrapping)
+      .doFilter(request("PUT", "a=b".toByteArray(), chunked = true), response)
+    assertEquals(413, response.status)
+    assertEquals(FormBodySizeLimitFilter.TOO_LARGE_BODY, response.contentAsString)
+  }
+
+  // Edge case: any other failure is not turned into a 413.
+  @Test
+  fun `an unrelated IOException is rethrown, not answered 413`() {
+    val failing = Filter { _, _, _ -> throw java.io.IOException("disk") }
+    assertThrows(java.io.IOException::class.java) {
+      MockFilterChain(route, FormBodySizeLimitFilter(limit), failing)
+        .doFilter(request("PUT", "a=b".toByteArray()), MockHttpServletResponse())
+    }
+  }
+
+  // FORM-01: an oversized Content-Length is refused before the body is read at all.
+  @Test
+  fun `an oversized Content-Length is refused without entering the rest of the chain`() {
+    val entered = AtomicInteger()
+    val spy = Filter { req, res, chain ->
+      entered.incrementAndGet()
+      chain.doFilter(req, res)
+    }
+    assertRefused(run(request("PUT", oversized()), spy))
+    assertEquals(0, entered.get())
+  }
+
+  // FORM-04/FORM-08: the chunked boundary is the same as the Content-Length one.
+  @Test
+  fun `a chunked body of exactly the limit passes and one byte more is refused`() {
+    val exact = "a=" + "b".repeat(limit.toInt() - 2)
+    assertEquals(200, run(request("PUT", exact.toByteArray(), chunked = true)).status)
+    assertEquals(1, route.reached.get())
+    assertEquals(1, route.parameterCount)
+
+    route = StubRoute()
+    assertRefused(run(request("PUT", (exact + "b").toByteArray(), chunked = true)))
+  }
 }
