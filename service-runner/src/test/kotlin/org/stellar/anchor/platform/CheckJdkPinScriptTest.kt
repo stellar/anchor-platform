@@ -56,6 +56,20 @@ class CheckJdkPinScriptTest {
   }
 
   @Test
+  fun `build number is compared as a number, so 17_0_21+9 is behind 17_0_21+10`() {
+    val r = run(fixture("Dockerfile.older"), fixture("api-latest-17.0.21+10.json"))
+    assertEquals(1, r.exitCode, r.output)
+    assertTrue(r.output.contains("latest: 17.0.21+10"), r.output)
+  }
+
+  @Test
+  fun `release name that is not numeric exits 3 and does not claim the pin is current`() {
+    val r = run(fixture("Dockerfile.older"), fixture("api-non-numeric-release.json"))
+    assertEquals(3, r.exitCode, r.output)
+    assertFalse(r.output.contains("up to date"), r.output)
+  }
+
+  @Test
   fun `pin behind a newer patch release exits 1`() {
     val r = run(fixture("Dockerfile.current"), fixture("api-latest-17.0.22+5.json"))
     assertEquals(1, r.exitCode, r.output)

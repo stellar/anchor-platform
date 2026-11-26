@@ -62,6 +62,13 @@ fi
 echo "pinned: $pinned"
 echo "latest: $latest"
 
+# Both versions must be numeric (17.0.21+9, 17.0.21.1+2); anything else cannot be compared.
+version_re='^[0-9]+(\.[0-9]+)*(\+[0-9]+)?$'
+if ! [[ "$pinned" =~ $version_re ]] || ! [[ "$latest" =~ $version_re ]]; then
+  echo "cannot compare the versions: expected a numeric version such as 17.0.21+9" >&2
+  exit 3
+fi
+
 # Version tuple: the dotted part padded to four components, then the build number.
 # 17.0.21+9 -> 17 0 21 0 9; 17.0.21.1+2 -> 17 0 21 1 2. A string compare orders these wrongly.
 tuple() {
