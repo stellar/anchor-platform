@@ -365,14 +365,38 @@ class NotifyOffchainFundsPendingHandlerTest {
   }
 
   @Test
+  fun test_handle_sep31_transferNotReceived() {
+    val request = NotifyOffchainFundsPendingRequest.builder().transactionId(TX_ID).build()
+    val txn31 = JdbcSep31Transaction()
+    txn31.status = PENDING_RECEIVER.toString()
+
+    every { txn6Store.findByTransactionId(any()) } returns null
+    every { txn24Store.findByTransactionId(any()) } returns null
+    every { txn31Store.findByTransactionId(TX_ID) } returns txn31
+
+    val ex = assertThrows<InvalidRequestException> { handler.handle(request) }
+    assertEquals(
+      "RPC method[notify_offchain_funds_pending] is not supported. Status[pending_receiver], kind[receive], protocol[31], funds received[false]",
+      ex.message
+    )
+
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { sepTransactionCounter.increment() }
+  }
+
+  @Test
   fun test_handle_ok_sep31_deposit_withExternalTxId() {
     val request =
       NotifyOffchainFundsPendingRequest.builder()
         .transactionId(TX_ID)
         .externalTransactionId(EXTERNAL_TX_ID)
         .build()
+    val transferReceivedAt = Instant.now()
     val txn31 = JdbcSep31Transaction()
     txn31.status = PENDING_RECEIVER.toString()
+    txn31.transferReceivedAt = transferReceivedAt
     val sep31TxnCapture = slot<JdbcSep31Transaction>()
     val anchorEventCapture = slot<AnchorEvent>()
 
@@ -396,6 +420,7 @@ class NotifyOffchainFundsPendingHandlerTest {
     expectedSep31Txn.status = PENDING_EXTERNAL.toString()
     expectedSep31Txn.updatedAt = sep31TxnCapture.captured.updatedAt
     expectedSep31Txn.externalTransactionId = EXTERNAL_TX_ID
+    expectedSep31Txn.transferReceivedAt = transferReceivedAt
 
     JSONAssert.assertEquals(
       gson.toJson(expectedSep31Txn),
@@ -408,6 +433,7 @@ class NotifyOffchainFundsPendingHandlerTest {
     expectedResponse.kind = RECEIVE
     expectedResponse.status = PENDING_EXTERNAL
     expectedResponse.externalTransactionId = EXTERNAL_TX_ID
+    expectedResponse.transferReceivedAt = transferReceivedAt
     expectedResponse.updatedAt = sep31TxnCapture.captured.updatedAt
     expectedResponse.amountIn = Amount()
     expectedResponse.amountOut = Amount()

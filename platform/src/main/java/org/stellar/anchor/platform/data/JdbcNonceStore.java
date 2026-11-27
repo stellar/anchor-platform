@@ -29,10 +29,9 @@ public class JdbcNonceStore implements NonceStore {
         == 1;
   }
 
-  public void deleteExpiredNonces() {
-    int expired = jdbcNonceRepo.countExpired();
-    jdbcNonceRepo.deleteAllExpired();
-    Log.debug("Deleted " + expired + " expired nonces");
+  public void deleteExpiredNonces(Instant now) {
+    int deleted = jdbcNonceRepo.deleteExpired(now);
+    Log.debug("Deleted " + deleted + " expired nonces");
   }
 
   public int markAsUsed(String id, Instant now) {

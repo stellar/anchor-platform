@@ -138,8 +138,10 @@ public class NotifyOffchainFundsSentHandler
         }
         break;
       case SEP_31:
-        supportedStatuses.add(PENDING_RECEIVER);
-        supportedStatuses.add(PENDING_EXTERNAL);
+        if (areFundsReceived(txn)) {
+          supportedStatuses.add(PENDING_RECEIVER);
+          supportedStatuses.add(PENDING_EXTERNAL);
+        }
         break;
     }
     return supportedStatuses;

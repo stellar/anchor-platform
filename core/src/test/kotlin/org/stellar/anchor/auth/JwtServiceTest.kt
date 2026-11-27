@@ -1,6 +1,7 @@
 package org.stellar.anchor.auth
 
 import io.jsonwebtoken.JwtException
+import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.MalformedJwtException
 import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -11,11 +12,13 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.stellar.anchor.TestConstants.Companion.TEST_CLIENT_NAME
 import org.stellar.anchor.TestConstants.Companion.TEST_HOME_DOMAIN
+import org.stellar.anchor.auth.ApiAuthJwt.CallbackAuthJwt
 import org.stellar.anchor.auth.ApiAuthJwt.PlatformAuthJwt
 import org.stellar.anchor.auth.JwtService.*
 import org.stellar.anchor.auth.MoreInfoUrlJwt.Sep24MoreInfoUrlJwt
 import org.stellar.anchor.config.SecretConfig
 import org.stellar.anchor.setupMock
+import org.stellar.anchor.util.KeyUtil
 
 internal class JwtServiceTest {
   companion object {
@@ -212,5 +215,21 @@ internal class JwtServiceTest {
     val platformCipher = collidingService.encode(platformToken)
 
     assertThrows<JwtException> { collidingService.decode(platformCipher, Sep10Jwt::class.java) }
+  }
+
+  @Test
+  fun `callback token carries exactly the callback_api audience the reference server requires`() {
+    val jwtService = JwtService(secretConfig)
+
+    val cipher = jwtService.encode(CallbackAuthJwt(TEST_IAT, TEST_EXP))
+
+    val claims =
+      Jwts.parser()
+        .verifyWith(KeyUtil.toSecretKeySpecOrNull(secretConfig.callbackAuthSecret))
+        .build()
+        .parseSignedClaims(cipher)
+        .payload
+    assertEquals(setOf("callback_api"), claims.audience)
+    assertEquals("callback_api", JwtService.AUD_CALLBACK_API)
   }
 }
