@@ -7,4 +7,5 @@ import lombok.Data;
 @Data
 public class SepServerConfig {
   List<String> trustedProxies = new ArrayList<>();
+  long maxRequestBodySize;
 }

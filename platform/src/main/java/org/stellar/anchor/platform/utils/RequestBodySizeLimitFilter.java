@@ -15,6 +15,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.core.Ordered;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 public class RequestBodySizeLimitFilter extends OncePerRequestFilter {
@@ -24,6 +26,15 @@ public class RequestBodySizeLimitFilter extends OncePerRequestFilter {
 
   public RequestBodySizeLimitFilter(long maxBodySize) {
     this.maxBodySize = maxBodySize;
+  }
+
+  public static FilterRegistrationBean<RequestBodySizeLimitFilter> registration(long maxBodySize) {
+    FilterRegistrationBean<RequestBodySizeLimitFilter> registrationBean =
+        new FilterRegistrationBean<>();
+    registrationBean.setFilter(new RequestBodySizeLimitFilter(maxBodySize));
+    registrationBean.addUrlPatterns("/*");
+    registrationBean.setOrder(Ordered.HIGHEST_PRECEDENCE);
+    return registrationBean;
   }
 
   @Override

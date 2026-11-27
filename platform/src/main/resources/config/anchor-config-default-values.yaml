@@ -230,6 +230,11 @@ sep_server:
   # The management_server_port is the port used by Spring actuator.
   # https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html
   management_server_port: 9080
+  # The maximum size, in bytes, of a request body the SEP server accepts, including multipart
+  # uploads such as SEP-12 KYC documents. Oversized requests are rejected before the body is read
+  # into memory (HTTP 413, or 400 for an oversized multipart body). Raise this to allow larger
+  # KYC document uploads.
+  max_request_body_size: 1048576
   # The proxies whose `X-Forwarded-For` header the SEP server believes when it records the client IP address
   # (`request_client_ip_address`) of a SEP-6, SEP-24 or SEP-31 transaction. Each item is an IPv4 or IPv6
   # address or a CIDR range, compared against the TCP peer address of the request.
