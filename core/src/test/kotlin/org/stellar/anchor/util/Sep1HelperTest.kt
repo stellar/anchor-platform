@@ -334,4 +334,51 @@ class Sep1HelperTest {
       Sep1Helper.extractSigningKey("SIGNING_KEY_OTHER = \"OTHER\"\nSIGNING_KEY = \"$signingKey\"\n")
     )
   }
+
+  // HackerOne #4209933: one table header made of a single long segment, then thousands of inline
+  // tables. The ANCHOR-1388 guard counts it as one segment; toml4j re-split it for every inline
+  // table and parsed for minutes.
+  @Test
+  fun `test extractSigningKey returns null in under a second for the one-long-header document`() {
+    val doc = ClientDomainTomlFixtures.reportDocument()
+    assertTrue(doc.length in 100_000..102_400, "document is ${doc.length} bytes")
+    var result: String? = "unset"
+    val ms = elapsedMs { result = Sep1Helper.extractSigningKey(doc) }
+    assertNull(result)
+    assertTrue(ms < 1000, "took ${ms}ms")
+  }
+
+  @Test
+  fun `test extractSigningKey returns the key that precedes the one-long-header document`() {
+    val doc =
+      ClientDomainTomlFixtures.withSigningKeyFirst(
+        signingKey,
+        ClientDomainTomlFixtures.reportDocument(),
+      )
+    var result: String? = null
+    val ms = elapsedMs { result = Sep1Helper.extractSigningKey(doc) }
+    assertEquals(signingKey, result)
+    assertTrue(ms < 1000, "took ${ms}ms")
+  }
+
+  @Test
+  fun `test extractSigningKey returns the key before inline-table lines that have no header`() {
+    val doc = ClientDomainTomlFixtures.inlineTablesOnly(signingKey)
+    assertTrue(doc.length >= 100_000, "document is ${doc.length} bytes")
+    var result: String? = null
+    val ms = elapsedMs { result = Sep1Helper.extractSigningKey(doc) }
+    assertEquals(signingKey, result)
+    assertTrue(ms < 1000, "took ${ms}ms")
+  }
+
+  @Test
+  fun `test extractSigningKey returns null in under a second at every header length of the report`() {
+    for (headerLength in listOf(1_000, 8_000, 32_000, 68_000)) {
+      val doc = ClientDomainTomlFixtures.reportDocument(headerLength = headerLength)
+      var result: String? = "unset"
+      val ms = elapsedMs { result = Sep1Helper.extractSigningKey(doc) }
+      assertNull(result, "header length $headerLength")
+      assertTrue(ms < 1000, "header length $headerLength took ${ms}ms")
+    }
+  }
 }

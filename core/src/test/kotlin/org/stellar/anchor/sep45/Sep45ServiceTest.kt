@@ -1,6 +1,7 @@
 package org.stellar.anchor.sep45
 
 import io.mockk.*
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -9,6 +10,7 @@ import org.stellar.anchor.LockAndMockStatic
 import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.InternalServerErrorException
+import org.stellar.anchor.api.exception.SepException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest
 import org.stellar.anchor.api.sep.sep45.ValidationRequest
@@ -22,6 +24,7 @@ import org.stellar.anchor.config.Sep45Config
 import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.util.ClientDomainHelper
+import org.stellar.anchor.util.ClientDomainTomlFixtures
 import org.stellar.anchor.util.GsonUtils
 import org.stellar.sdk.Asset
 import org.stellar.sdk.Auth
@@ -697,4 +700,127 @@ class Sep45ServiceTest {
       }    
         """
       .trimIndent()
+
+  // HackerOne #4209933: the real ClientDomainHelper (no static mock) against the report's document,
+  // one table header of a single 68,000-character segment followed by thousands of inline tables,
+  // with no SIGNING_KEY.
+  private val clientDomainNotPresent = "SIGNING_KEY not present in 'client_domain' TOML"
+
+  private fun authEntriesWithClientDomain(
+    clientDomain: String,
+    clientDomainAccount: String,
+  ): ValidationRequest {
+    val signingKp =
+      KeyPair.fromSecretSeed("SAX3AH622R2XT6DXWWSRIDCMMUCCMATBZ5U6XKJWDO7M2EJUBFC3AW5X")
+    val network = Network(Network.TESTNET.networkPassphrase)
+    val entries =
+      SorobanAuthorizationEntries.fromXdrBase64(VALID_AUTH_ENTRIES_XDR).sorobanAuthorizationEntries
+    val rewritten =
+      entries.map { entry ->
+        val args = entry.rootInvocation.function.contractFn.args
+        val kept = args[0].map.scMap.toMutableList()
+        kept.add(
+          SCMapEntry.builder()
+            .key(Scv.toSymbol("client_domain"))
+            .`val`(Scv.toString(clientDomain))
+            .build()
+        )
+        kept.add(
+          SCMapEntry.builder()
+            .key(Scv.toSymbol("client_domain_account"))
+            .`val`(Scv.toString(clientDomainAccount))
+            .build()
+        )
+        args[0].map = SCMap(kept.sortedBy { it.key.sym.scSymbol.toString() }.toTypedArray())
+        val isServerEntry =
+          entry.credentials.address.address.discriminant == SCAddressType.SC_ADDRESS_TYPE_ACCOUNT &&
+            KeyPair.fromXdrPublicKey(entry.credentials.address.address.accountId.accountID)
+              .accountId == signingKp.accountId
+        if (isServerEntry) Auth.authorizeEntry(entry, signingKp, 123465L, network) else entry
+      }
+    return ValidationRequest.builder()
+      .authorizationEntries(SorobanAuthorizationEntries(rewritten.toTypedArray()).toXdrBase64())
+      .build()
+  }
+
+  @Test
+  fun `test getChallenge refuses the one-long-header client_domain document as missing and creates no nonce`() {
+    every { sep45Config.clientAllowList } returns null
+    every { sep45Config.allowedClientDomains } returns emptyList()
+    ClientDomainTomlFixtures.withTomlServer(
+      ClientDomainTomlFixtures.reportDocument().toByteArray()
+    ) { host ->
+      val challengeRequest =
+        ChallengeRequest.builder()
+          .account(TEST_CONTRACT_ID)
+          .homeDomain("http://localhost:8080")
+          .clientDomain(host)
+          .build()
+
+      val tasksBefore = ClientDomainTomlFixtures.clientDomainCompletedTasks()
+      val start = System.nanoTime()
+      val ex =
+        assertThrows(SepException::class.java) { sep45Service.getChallenge(challengeRequest) }
+      val ms = (System.nanoTime() - start) / 1_000_000
+
+      assertEquals(clientDomainNotPresent, ex.message)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+      assertTrue(
+        ClientDomainTomlFixtures.awaitClientDomainTaskCompleted(tasksBefore),
+        "the fetch did not run on the bounded client_domain pool",
+      )
+      verify(exactly = 0) { nonceManager.create(any()) }
+    }
+  }
+
+  @Test
+  fun `test validate refuses the one-long-header client_domain document as missing and consumes no nonce`() {
+    every { sep45Config.clientAllowList } returns null
+    every { sep45Config.allowedClientDomains } returns emptyList()
+    ClientDomainTomlFixtures.withTomlServer(
+      ClientDomainTomlFixtures.reportDocument().toByteArray()
+    ) { host ->
+      val request =
+        authEntriesWithClientDomain(
+          host,
+          "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+        )
+
+      val tasksBefore = ClientDomainTomlFixtures.clientDomainCompletedTasks()
+      val start = System.nanoTime()
+      val ex = assertThrows(SepException::class.java) { sep45Service.validate(request) }
+      val ms = (System.nanoTime() - start) / 1_000_000
+
+      assertEquals(clientDomainNotPresent, ex.message)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+      assertTrue(
+        ClientDomainTomlFixtures.awaitClientDomainTaskCompleted(tasksBefore),
+        "the fetch did not run on the bounded client_domain pool",
+      )
+      verify(exactly = 0) { nonceManager.verifyAndUse(any()) }
+    }
+  }
+
+  @Test
+  fun `test validate rejects client_domain outside an explicit allow list without fetching it`() {
+    every { sep45Config.clientAllowList } returns listOf("known-wallet")
+    every { sep45Config.allowedClientDomains } returns listOf("known-wallet.example.com")
+    val requests = AtomicInteger()
+    ClientDomainTomlFixtures.withTomlServer(
+      ClientDomainTomlFixtures.reportDocument().toByteArray(),
+      requests,
+    ) { host ->
+      val request =
+        authEntriesWithClientDomain(
+          host,
+          "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+        )
+
+      val ex =
+        assertThrows(SepNotAuthorizedException::class.java) { sep45Service.validate(request) }
+
+      assertEquals("client_domain is not allow-listed", ex.message)
+      assertEquals(0, requests.get())
+    }
+  }
 }

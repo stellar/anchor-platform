@@ -665,6 +665,154 @@ class ClientDomainHelperTest {
       assertEquals("Unable to read client_domain's SIGNING_KEY", ex.message)
     }
   }
+
+  // HackerOne #4209933: the report's one-long-header document, fetched from a local server.
+  private val notPresent = "SIGNING_KEY not present in 'client_domain' TOML"
+  private val hostileBody = ClientDomainTomlFixtures.reportDocument().toByteArray()
+
+  private fun <T> timed(block: () -> T): Pair<T, Long> {
+    val start = System.nanoTime()
+    val result = block()
+    return Pair(result, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start))
+  }
+
+  @Test
+  fun `test fetch of the one-long-header document without a key fails as missing within 2500 ms`() {
+    ClientDomainTomlFixtures.withTomlServer(hostileBody) { host ->
+      val (ex, ms) =
+        timed {
+          assertThrows(SepException::class.java) {
+            ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true)
+          }
+        }
+      assertEquals(notPresent, ex.message)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+    }
+  }
+
+  @Test
+  fun `test fetch of a key followed by the one-long-header document returns the key within 2500 ms`() {
+    val body =
+      ClientDomainTomlFixtures.withSigningKeyFirst(
+          ClientDomainTomlFixtures.VALID_SIGNING_KEY,
+          ClientDomainTomlFixtures.reportDocument(),
+        )
+        .toByteArray()
+    ClientDomainTomlFixtures.withTomlServer(body) { host ->
+      val (key, ms) = timed { ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true) }
+      assertEquals(ClientDomainTomlFixtures.VALID_SIGNING_KEY, key)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+    }
+  }
+
+  @Test
+  fun `test fetch of an ordinary 99944-byte document returns its key within 2500 ms`() {
+    val doc = ClientDomainTomlFixtures.ordinaryDocument(ClientDomainTomlFixtures.VALID_SIGNING_KEY)
+    assertEquals(99_944, doc.length)
+    ClientDomainTomlFixtures.withTomlServer(doc.toByteArray()) { host ->
+      val (key, ms) = timed { ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true) }
+      assertEquals(ClientDomainTomlFixtures.VALID_SIGNING_KEY, key)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+    }
+  }
+
+  @Test
+  fun `test eight sequential hostile requests do not stop a well-behaved wallet`() {
+    ClientDomainTomlFixtures.withTomlServer(hostileBody) { hostile ->
+      ClientDomainTomlFixtures.withTomlServer(TEST_CLIENT_TOML.toByteArray()) { wallet ->
+        repeat(8) { i ->
+          val ex =
+            assertThrows(SepException::class.java) {
+              ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(hostile, true)
+            }
+          assertEquals(notPresent, ex.message, "hostile request ${i + 1}")
+        }
+        val (key, ms) =
+          timed { ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(wallet, true) }
+        assertEquals(ClientDomainTomlFixtures.VALID_SIGNING_KEY, key)
+        assertTrue(ms < 2_500, "well-behaved request took ${ms}ms")
+      }
+    }
+  }
+
+  /** Eight hostile requests at the same time (the pool's maximum); returns each one's message. */
+  private fun eightConcurrentHostileRequests(hostile: String): List<String?> {
+    val callers = Executors.newFixedThreadPool(8)
+    try {
+      val start = CountDownLatch(1)
+      val results =
+        (1..8).map {
+          callers.submit<String?> {
+            start.await()
+            try {
+              ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(hostile, true)
+            } catch (e: SepException) {
+              e.message
+            }
+          }
+        }
+      start.countDown()
+      return results.map { it.get(10, TimeUnit.SECONDS) }
+    } finally {
+      callers.shutdownNow()
+    }
+  }
+
+  @Test
+  fun `test eight concurrent hostile requests are each answered as a missing key, none as unavailable`() {
+    ClientDomainTomlFixtures.withTomlServer(hostileBody) { hostile ->
+      val messages = eightConcurrentHostileRequests(hostile)
+      assertEquals(List(8) { notPresent }, messages)
+    }
+  }
+
+  @Test
+  fun `test the client domain workers are idle after eight concurrent hostile requests`() {
+    val executor = ClientDomainHelper.CLIENT_DOMAIN_EXECUTOR
+    ClientDomainTomlFixtures.withTomlServer(hostileBody) { hostile ->
+      ClientDomainTomlFixtures.withTomlServer(TEST_CLIENT_TOML.toByteArray()) { wallet ->
+        eightConcurrentHostileRequests(hostile)
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+        while (executor.activeCount > 0 && System.nanoTime() < deadline) {
+          Thread.sleep(10)
+        }
+        assertEquals(0, executor.activeCount)
+        assertEquals(
+          ClientDomainTomlFixtures.VALID_SIGNING_KEY,
+          ClientDomainHelper.fetchSigningKeyFromClientDomainBounded(wallet, true),
+        )
+      }
+    }
+  }
+
+  @Test
+  fun `test a one-long-header document of exactly 102400 bytes is read and reported as missing`() {
+    val body = ClientDomainTomlFixtures.documentOfExactSize(102_400).toByteArray()
+    assertEquals(102_400, body.size)
+    ClientDomainTomlFixtures.withTomlServer(body) { host ->
+      val (ex, ms) =
+        timed {
+          assertThrows(SepException::class.java) {
+            ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true)
+          }
+        }
+      assertEquals(notPresent, ex.message)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+    }
+  }
+
+  @Test
+  fun `test a one-long-header document of 102401 bytes is refused as unreadable`() {
+    val body = ClientDomainTomlFixtures.documentOfExactSize(102_401).toByteArray()
+    assertEquals(102_401, body.size)
+    ClientDomainTomlFixtures.withTomlServer(body) { host ->
+      val ex =
+        assertThrows(SepException::class.java) {
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true)
+        }
+      assertEquals("Unable to read client_domain's SIGNING_KEY", ex.message)
+    }
+  }
 }
 
 private class StubHangingResolver : org.xbill.DNS.Resolver {
