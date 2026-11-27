@@ -1,9 +1,11 @@
 package org.stellar.anchor.platform.component.share
 
+import io.mockk.unmockkStatic
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.util.Calendar
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -25,6 +27,7 @@ import org.springframework.boot.autoconfigure.web.servlet.ServletWebServerFactor
 import org.springframework.boot.autoconfigure.web.servlet.WebMvcAutoConfiguration
 import org.springframework.boot.autoconfigure.web.servlet.error.ErrorMvcAutoConfiguration
 import org.springframework.boot.builder.SpringApplicationBuilder
+import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Import
@@ -73,18 +76,27 @@ class OriginHeaderContainerTest {
   private lateinit var management: String
   private val client = HttpClient.newHttpClient()
 
+  /**
+   * `PlatformIntegrationHelperTest` mocks `java.util.Calendar` statically and never undoes it,
+   * which leaves the class instrumented for the rest of the Gradle test JVM and keeps Tomcat from
+   * starting (`NoClassDefFoundError: Rfc6265CookieProcessor`). Undo it before starting a server.
+   */
+  private fun launch(vararg properties: String): ConfigurableApplicationContext {
+    unmockkStatic(Calendar::class)
+    return SpringApplicationBuilder(App::class.java)
+      .web(WebApplicationType.SERVLET)
+      .properties(
+        "server.port=0",
+        "management.endpoints.web.exposure.include=health",
+        "spring.main.banner-mode=off",
+        *properties,
+      )
+      .run()
+  }
+
   @BeforeAll
   fun start() {
-    context =
-      SpringApplicationBuilder(App::class.java)
-        .web(WebApplicationType.SERVLET)
-        .properties(
-          "server.port=0",
-          "management.server.port=0",
-          "management.endpoints.web.exposure.include=health",
-          "spring.main.banner-mode=off",
-        )
-        .run()
+    context = launch("management.server.port=0")
     main = "http://localhost:" + context.environment.getProperty("local.server.port")
     management = "http://localhost:" + context.environment.getProperty("local.management.port")
   }
@@ -179,5 +191,32 @@ class OriginHeaderContainerTest {
     val refused = send(main, "/ping", origin = attackOrigin)
     assertEquals(400, refused.status)
     assertTrue(refused.millis < 1000) { "took ${refused.millis} ms" }
+  }
+
+  // ORIGIN-16 (no separate management port: the actuator is served by the main context, which the
+  // main registration already covers; the management registration must not add a second one)
+  @Test
+  fun `the actuator on the main port is guarded once and still answers a valid origin`() {
+    val shared = launch()
+    try {
+      val port = "http://localhost:" + shared.environment.getProperty("local.server.port")
+
+      assertEquals(
+        1,
+        shared.getBeansOfType(FilterRegistrationBean::class.java).count {
+          it.key == "originHeaderFilter"
+        }
+      )
+      for (method in listOf("GET", "OPTIONS")) {
+        val refused =
+          send(port, "/actuator/health", method, attackOrigin, preflight = method == "OPTIONS")
+        assertEquals(400, refused.status, "$method; body: ${refused.body.take(200)}")
+        assertEquals(rejection, refused.body)
+      }
+      assertEquals(200, send(port, "/actuator/health", origin = "https://wallet.example").status)
+      assertEquals(200, send(port, "/actuator/health").status)
+    } finally {
+      shared.close()
+    }
   }
 }
