@@ -320,6 +320,13 @@ public class StellarRpcPaymentObserver extends AbstractPaymentObserver {
       // If neither from nor to accounts are being observed, skip processing this event.
       return builder().event(event).shouldProcess(false).build();
     }
+    if (sacToAssetMapper.isKnownNonSac(event.getContractId())) {
+      debugF(
+          "Skipping transfer event {} from contract {}, not a Stellar Asset Contract",
+          event.getId(),
+          event.getContractId());
+      return builder().event(event).shouldProcess(false).build();
+    }
     return decoded;
   }
 
