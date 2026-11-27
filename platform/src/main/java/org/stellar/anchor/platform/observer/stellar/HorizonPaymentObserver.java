@@ -26,6 +26,7 @@ import org.stellar.anchor.api.platform.HealthCheckResult;
 import org.stellar.anchor.api.platform.HealthCheckStatus;
 import org.stellar.anchor.ledger.Horizon;
 import org.stellar.anchor.ledger.LedgerTransaction;
+import org.stellar.anchor.ledger.LedgerTransaction.LedgerOperation;
 import org.stellar.anchor.ledger.PaymentTransferEvent;
 import org.stellar.anchor.platform.config.PaymentObserverConfig.StellarPaymentObserverConfig;
 import org.stellar.anchor.platform.observer.PaymentListener;
@@ -359,7 +360,9 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
       }
       String operationId = String.valueOf(invokeOp.getId());
       if (ledgerTransaction == null) {
-        ledgerTransaction = requireLedgerTransaction(invokeOp.getTransactionHash());
+        // withInvokeHostFunctionOperation appends to the transaction it gets, so this operation
+        // takes its own copy and leaves the cached one, shared with other operations, untouched.
+        ledgerTransaction = copyOf(requireLedgerTransaction(invokeOp.getTransactionHash()));
       }
       events.add(
           PaymentTransferEvent.builder()
@@ -376,16 +379,56 @@ public class HorizonPaymentObserver extends AbstractPaymentObserver {
   }
 
   /**
-   * Fetches the ledger transaction of an operation seen on the stream. It exists, so a missing one
-   * means the queried Horizon replica is behind: throw so the cursor is held and the operation is
-   * delivered again, instead of handing the listener an event it would skip as handled.
+   * The last transaction resolved from Horizon. The operations of one transaction arrive one after
+   * another on the stream, so a single entry is enough to fetch and decode a transaction once, not
+   * once per operation. Only the stream callback thread writes it; the volatile reference keeps a
+   * reconnected stream safe.
+   */
+  private volatile ResolvedTransaction lastResolvedTransaction;
+
+  /** Either the transaction of {@code hash} or the decode failure that fetching it ended in. */
+  private record ResolvedTransaction(
+      String hash, LedgerTransaction transaction, LedgerDecodeException decodeFailure) {}
+
+  /**
+   * Fetches the ledger transaction of an operation seen on the stream, once per transaction. It
+   * exists, so a missing one means the queried Horizon replica is behind: throw so the cursor is
+   * held and the operation is delivered again, instead of handing the listener an event it would
+   * skip as handled.
+   *
+   * <p>A fetched transaction and a decode failure are remembered, as a ledger transaction never
+   * changes. A missing transaction and any other failure are not, so the redelivery fetches again.
+   * The returned transaction is shared between the operations of one transaction: read it, and copy
+   * it before changing it.
    */
   private LedgerTransaction requireLedgerTransaction(String txHash) throws LedgerException {
-    LedgerTransaction ledgerTransaction = horizon.getTransaction(txHash);
+    ResolvedTransaction resolved = lastResolvedTransaction;
+    if (resolved != null && resolved.hash().equals(txHash)) {
+      if (resolved.decodeFailure() != null) {
+        throw resolved.decodeFailure();
+      }
+      return resolved.transaction();
+    }
+    LedgerTransaction ledgerTransaction;
+    try {
+      ledgerTransaction = horizon.getTransaction(txHash);
+    } catch (LedgerDecodeException dex) {
+      lastResolvedTransaction = new ResolvedTransaction(txHash, null, dex);
+      throw dex;
+    }
     if (ledgerTransaction == null) {
       throw new LedgerException("Transaction is not yet available: " + txHash);
     }
+    lastResolvedTransaction = new ResolvedTransaction(txHash, ledgerTransaction, null);
     return ledgerTransaction;
+  }
+
+  /** A copy that owns its operations list; the operations themselves are shared. */
+  private static LedgerTransaction copyOf(LedgerTransaction ledgerTransaction) {
+    List<LedgerOperation> operations = ledgerTransaction.getOperations();
+    return ledgerTransaction.toBuilder()
+        .operations(operations == null ? null : new ArrayList<>(operations))
+        .build();
   }
 
   static String toMuxedAddress(AssetContractBalanceChange assetBalanceChange) {
