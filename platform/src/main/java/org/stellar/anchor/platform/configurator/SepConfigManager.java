@@ -47,6 +47,7 @@ class SepServerConfigAdapter extends SpringConfigAdapter {
   void updateSpringEnv(ConfigMap config) throws InvalidConfigException {
     copy(config, "sep_server.context_path", "server.servlet.context-path");
     copy(config, "sep_server.port", "server.port");
+    set("server.forward-headers-strategy", "none");
     set("spring.mvc.converters.preferred-json-mapper", "gson");
     // Enable the management server for Spring Actuator
     copy(config, "sep_server.management_server_port", "management.server.port");
