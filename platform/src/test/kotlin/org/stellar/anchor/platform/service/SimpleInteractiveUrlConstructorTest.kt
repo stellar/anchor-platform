@@ -66,6 +66,8 @@ class SimpleInteractiveUrlConstructorTest {
     every { testAsset.id } returns
       "stellar:USDC:GDQOE23CFSUMSVQK4Y5JHPPYK73VYCNHZHA7ENKCV37P6SUEO6XQBKPP"
     every { webAuthJwt.homeDomain } returns TEST_HOME_DOMAIN
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("123").build()
 
     jwtService = JwtService(secretConfig)
     sep24Config = gson.fromJson(SEP24_CONFIG_JSON_1, PropertySep24Config::class.java)
@@ -232,14 +234,28 @@ class SimpleInteractiveUrlConstructorTest {
   }
 
   @Test
-  fun `an unclaimed customer_id is signed unchanged without an ownership verification`() {
+  fun `an unclaimed customer_id owned by the caller is signed after a business-server check`() {
     givenCaller("vibrant")
     every { customerIdOwnerStore.isClaimed("123") }.returns(false)
+    every { customerIntegration.getCustomer(any()) }
+      .returns(GetCustomerResponse.builder().id("123").build())
 
     val jwt = parseJwtFromUrl(newConstructor().construct(txn, request, testAsset, webAuthJwt))
 
     assertEquals("123", (jwt.claims()["data"] as Map<String, String>)["customer_id"])
+    verify(exactly = 1) { customerIntegration.getCustomer(any()) }
     verify(exactly = 0) { customerIdOwnerStore.verify(any(), any(), any()) }
+  }
+
+  @Test
+  fun `an unclaimed customer_id not owned by the caller is refused`() {
+    givenCaller("vibrant")
+    every { customerIdOwnerStore.isClaimed("123") }.returns(false)
+    every { customerIntegration.getCustomer(any()) }.returns(null)
+
+    assertThrows(SepNotAuthorizedException::class.java) {
+      newConstructor().construct(txn, request, testAsset, webAuthJwt)
+    }
   }
 
   @Test
@@ -345,6 +361,8 @@ class SimpleInteractiveUrlConstructorTest {
   @Test
   fun `when kycFieldsForwarding is disabled, the customerIntegration should not receive the kyc fields`() {
     val customerIntegration: CustomerIntegration = mockk()
+    every { customerIntegration.getCustomer(any()) } returns
+      GetCustomerResponse.builder().id("123").build()
     val constructor =
       SimpleInteractiveUrlConstructor(
         assetService,
