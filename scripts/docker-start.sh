@@ -1,2 +1,2 @@
 #!/user/bin/env bash
-java $JVM_FLAGS -jar /app/anchor-platform-runner.jar "$@"
+java -XX:+ExitOnOutOfMemoryError $JVM_FLAGS -jar /app/anchor-platform-runner.jar "$@"

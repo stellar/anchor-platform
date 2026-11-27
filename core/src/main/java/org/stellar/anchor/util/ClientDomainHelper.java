@@ -107,8 +107,7 @@ public class ClientDomainHelper {
     String clientSigningKey = "";
     String url = "https://" + clientDomain + "/.well-known/stellar.toml";
     try {
-      Sep1Helper.TomlContent toml = tryRead(url, allowHttpRetry, client);
-      clientSigningKey = toml.getString("SIGNING_KEY");
+      clientSigningKey = tryReadSigningKey(url, allowHttpRetry, client);
       if (clientSigningKey == null) {
         infoF("SIGNING_KEY not present in 'client_domain' TOML.");
         throw new SepException("SIGNING_KEY not present in 'client_domain' TOML");
@@ -131,17 +130,17 @@ public class ClientDomainHelper {
     }
   }
 
-  private static Sep1Helper.TomlContent tryRead(String url, boolean allowHttp, OkHttpClient client)
+  private static String tryReadSigningKey(String url, boolean allowHttp, OkHttpClient client)
       throws IOException, InvalidConfigException {
     try {
       debugF("Fetching {}", url);
-      return Sep1Helper.readToml(url, client);
+      return Sep1Helper.readSigningKey(url, client);
     } catch (Exception e) {
       if (allowHttp) {
         try {
           var httpUrl = url.replaceFirst("^https://", "http://");
           debugF("Fetching {}", httpUrl);
-          return Sep1Helper.readToml(httpUrl, client);
+          return Sep1Helper.readSigningKey(httpUrl, client);
         } catch (Exception ignored) {
         }
       }

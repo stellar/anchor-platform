@@ -15,6 +15,11 @@ public class Sep1Helper {
   // parsing a single key or table header with n dotted segments costs O(n^2). Reject pathologically
   // deep segment chains before the string ever reaches toml4j. No stellar.toml table header needs
   // more than one segment (CURRENCIES, DOCUMENTATION, PRINCIPALS).
+  //
+  // This check re-implements part of toml4j's lexer and is NOT a boundary for untrusted input: it
+  // can be bypassed with quoting shapes it reads differently from toml4j. It only covers
+  // operator-controlled content (the anchor's own stellar.toml). A document fetched from a
+  // client_domain must go through readSigningKey / extractSigningKey and never reach toml4j.
   private static final int MAX_KEY_SEGMENTS = 20;
 
   public static TomlContent readToml(String url) throws IOException, InvalidConfigException {
@@ -34,11 +39,18 @@ public class Sep1Helper {
     }
   }
 
-  public static TomlContent readToml(String url, OkHttpClient client)
+  /**
+   * Fetches a stellar.toml served by an untrusted {@code client_domain} and returns its top-level
+   * {@code SIGNING_KEY}. The document is never given to a TOML parser, see {@link
+   * #extractSigningKey}.
+   *
+   * @return the signing key text, or {@code null} if the document has none.
+   */
+  public static String readSigningKey(String url, OkHttpClient client)
       throws IOException, InvalidConfigException {
     try {
       String tomlValue = NetUtil.fetch(url, DEFAULT_MAX_RESPONSE_SIZE, client);
-      return new TomlContent(tomlValue);
+      return extractSigningKey(tomlValue);
     } catch (IOException e) {
       String obfuscatedMessage =
           String.format("An error occurred while fetching the TOML from %s", url);
@@ -50,6 +62,111 @@ public class Sep1Helper {
       Log.errorEx(obfuscatedMessage, e);
       throw new InvalidConfigException(List.of(obfuscatedMessage), e);
     }
+  }
+
+  private static final String SIGNING_KEY_NAME = "SIGNING_KEY";
+  private static final String INVALID_TOML_MESSAGE =
+      "Failed to parse TOML content. Invalid Config.";
+
+  /**
+   * Reads the top-level {@code SIGNING_KEY} from a stellar.toml without building a TOML parser.
+   *
+   * <p>This is the only reader for documents served by a {@code client_domain}, which is attacker
+   * controlled: the cost is one pass over the document, whatever the document contains. It scans
+   * line by line, stops at the first line that starts with {@code [} (everything after a table
+   * header is not top-level), and interprets only the {@code SIGNING_KEY} line: a single-line
+   * {@code "..."} string without a backslash, or a single-line {@code '...'} string, optionally
+   * followed by a {@code #} comment. It is not a TOML validator.
+   *
+   * @return the key's text, or {@code null} when no top-level {@code SIGNING_KEY} line exists.
+   * @throws InvalidConfigException if the key appears twice or its value is not such a string.
+   */
+  public static String extractSigningKey(String toml) throws InvalidConfigException {
+    String found = null;
+    int length = toml.length();
+    int lineStart = 0;
+    while (lineStart <= length) {
+      int lineEnd = toml.indexOf('\n', lineStart);
+      if (lineEnd < 0) {
+        lineEnd = length;
+      }
+      int i = skipBlanks(toml, lineStart, lineEnd);
+      if (i < lineEnd && toml.charAt(i) == '[') {
+        return found;
+      }
+      if (i < lineEnd
+          && toml.charAt(i) != '#'
+          && toml.startsWith(SIGNING_KEY_NAME, i)
+          && !isBareKeyChar(toml, i + SIGNING_KEY_NAME.length(), lineEnd)) {
+        if (found != null) {
+          throw invalidToml("duplicate SIGNING_KEY");
+        }
+        found = readSigningKeyValue(toml, i + SIGNING_KEY_NAME.length(), lineEnd);
+      }
+      lineStart = lineEnd + 1;
+    }
+    return found;
+  }
+
+  private static String readSigningKeyValue(String toml, int from, int lineEnd)
+      throws InvalidConfigException {
+    int i = skipBlanks(toml, from, lineEnd);
+    if (i >= lineEnd || toml.charAt(i) != '=') {
+      throw invalidToml("SIGNING_KEY is not followed by '='");
+    }
+    i = skipBlanks(toml, i + 1, lineEnd);
+    if (i >= lineEnd) {
+      throw invalidToml("SIGNING_KEY has no value");
+    }
+    char quote = toml.charAt(i);
+    if (quote != '"' && quote != '\'') {
+      throw invalidToml("SIGNING_KEY value is not a quoted string");
+    }
+    if (toml.startsWith("" + quote + quote + quote, i)) {
+      throw invalidToml("SIGNING_KEY value is a multi-line string");
+    }
+    int valueStart = i + 1;
+    int valueEnd = valueStart;
+    while (valueEnd < lineEnd && toml.charAt(valueEnd) != quote) {
+      if (quote == '"' && toml.charAt(valueEnd) == '\\') {
+        throw invalidToml("SIGNING_KEY value contains an escape");
+      }
+      valueEnd++;
+    }
+    if (valueEnd >= lineEnd) {
+      throw invalidToml("SIGNING_KEY value is not terminated");
+    }
+    int after = skipBlanks(toml, valueEnd + 1, lineEnd);
+    if (after < lineEnd && toml.charAt(after) != '#') {
+      throw invalidToml("SIGNING_KEY value is followed by other text");
+    }
+    return toml.substring(valueStart, valueEnd);
+  }
+
+  /** First index in [from, end) that is not whitespace, or {@code end}. */
+  private static int skipBlanks(String s, int from, int end) {
+    int i = from;
+    while (i < end && Character.isWhitespace(s.charAt(i))) {
+      i++;
+    }
+    return i;
+  }
+
+  private static boolean isBareKeyChar(String s, int index, int end) {
+    if (index >= end) {
+      return false;
+    }
+    char c = s.charAt(index);
+    return (c >= 'A' && c <= 'Z')
+        || (c >= 'a' && c <= 'z')
+        || (c >= '0' && c <= '9')
+        || c == '_'
+        || c == '-';
+  }
+
+  private static InvalidConfigException invalidToml(String reason) {
+    infoF("Rejected TOML document: {}.", reason);
+    return new InvalidConfigException(INVALID_TOML_MESSAGE);
   }
 
   public static TomlContent parse(String tomlString) throws InvalidConfigException {

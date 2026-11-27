@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.stellar.anchor.TestConstants.Companion.TEST_CLIENT_TOML
 import org.stellar.anchor.api.exception.SepException
 
 class ClientDomainHelperTest {
@@ -551,6 +552,117 @@ class ClientDomainHelperTest {
       }
     } finally {
       server.stop(0)
+    }
+  }
+
+  // ---- ANCHOR-1533: the fetched client_domain document is never handed to toml4j
+
+  private val clientSigningKey = "GACYKME36AI6UYAV7A5ZUA6MG4C4K2VAPNYMW5YLOM6E7GS6FSHDPV4F"
+
+  private fun withTomlServer(status: Int = 200, body: ByteArray, block: (String) -> Unit) {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/.well-known/stellar.toml") { exchange ->
+      exchange.sendResponseHeaders(status, if (body.isEmpty()) -1 else body.size.toLong())
+      if (body.isNotEmpty()) exchange.responseBody.use { it.write(body) }
+      exchange.close()
+    }
+    server.start()
+    try {
+      block("127.0.0.1:${server.address.port}")
+    } finally {
+      server.stop(0)
+    }
+  }
+
+  private fun attackHeader(shape: String, n: Int): String =
+    when (shape) {
+      "unclosed quote" -> "[\"'" + ".c".repeat(n) + "]"
+      "escaped quote in the middle" -> "[a.\"\\\"\"" + ".c".repeat(n) + "]"
+      "leading escaped quote" -> "[\"\\\"\"" + ".x".repeat(n) + "]"
+      "escape before closing bracket" -> "[\"a\\\"]\"" + ".x".repeat(n) + "]"
+      "inline table" -> "x = {a" + ".a".repeat(n) + " = {}}"
+      else -> throw IllegalArgumentException(shape)
+    }
+
+  private val attackShapes =
+    listOf(
+      "unclosed quote",
+      "escaped quote in the middle",
+      "leading escaped quote",
+      "escape before closing bracket",
+      "inline table",
+    )
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain returns the key from a 98 KB document with an attack header`() {
+    for (shape in attackShapes) {
+      val doc = "SIGNING_KEY=\"$clientSigningKey\"\n${attackHeader(shape, 49_000)}\n"
+      assertTrue(doc.length in 98_000..100_300, "$shape document is ${doc.length} bytes")
+      withTomlServer(body = doc.toByteArray()) { host ->
+        assertEquals(
+          clientSigningKey,
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true),
+          shape,
+        )
+      }
+    }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain reports a missing key for a 98 KB attack document within 2500 ms`() {
+    for (shape in attackShapes) {
+      val doc = attackHeader(shape, 49_000) + "\n"
+      assertTrue(doc.length in 98_000..100_300, "$shape document is ${doc.length} bytes")
+      withTomlServer(body = doc.toByteArray()) { host ->
+        val start = System.nanoTime()
+        val ex =
+          assertThrows(SepException::class.java) {
+            ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true)
+          }
+        val ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+        assertEquals("SIGNING_KEY not present in 'client_domain' TOML", ex.message, shape)
+        assertTrue(ms < 2_500, "$shape took ${ms}ms")
+      }
+    }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain reads the key from the standard client toml`() {
+    withTomlServer(body = TEST_CLIENT_TOML.toByteArray()) { host ->
+      assertEquals(
+        "GACYKME36AI6UYAV7A5ZUA6MG4C4K2VAPNYMW5YLOM6E7GS6FSHDPV4F",
+        ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true),
+      )
+    }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain rejects a SIGNING_KEY that is not a Stellar account id`() {
+    withTomlServer(body = "SIGNING_KEY=\"BADKEY\"\n".toByteArray()) { host ->
+      val ex =
+        assertThrows(SepException::class.java) {
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true)
+        }
+      assertEquals("SIGNING_KEY BADKEY is not a valid Stellar account Id.", ex.message)
+    }
+  }
+
+  @Test
+  fun `test fetchSigningKeyFromClientDomain keeps the unable to read message for a failed fetch`() {
+    withTomlServer(status = 500, body = ByteArray(0)) { host ->
+      val ex =
+        assertThrows(SepException::class.java) {
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true)
+        }
+      assertEquals("Unable to read client_domain's SIGNING_KEY", ex.message)
+    }
+    val tooBig = "SIGNING_KEY=\"$clientSigningKey\"\n" + "#".repeat(101 * 1024)
+    withTomlServer(body = tooBig.toByteArray()) { host ->
+      val ex =
+        assertThrows(SepException::class.java) {
+          ClientDomainHelper.fetchSigningKeyFromClientDomain(host, true)
+        }
+      assertEquals("Unable to read client_domain's SIGNING_KEY", ex.message)
     }
   }
 }
