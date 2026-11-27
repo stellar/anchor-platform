@@ -1,6 +1,8 @@
 package org.stellar.anchor.api.rpc.method;
 
 import com.google.gson.annotations.SerializedName;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,13 +16,13 @@ import lombok.experimental.SuperBuilder;
 @EqualsAndHashCode(callSuper = false)
 public class NotifyRefundSentRequest extends RpcMethodParamsRequest {
 
-  private Refund refund;
+  @Valid private Refund refund;
 
   @Data
   @Builder
   public static class Refund {
 
-    @NotNull private String id;
+    @NotBlank private String id;
     @NotNull private AmountAssetRequest amount;
 
     @SerializedName("amount_fee")

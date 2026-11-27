@@ -148,7 +148,7 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
             // stored payment with the request's id is replaced, any other id is added.
             totalRefunded =
                 Arrays.stream(refunds.getPayments())
-                    .filter(payment -> !payment.getId().equals(refund.getId()))
+                    .filter(payment -> !Objects.equals(payment.getId(), refund.getId()))
                     .map(
                         payment ->
                             sum(
@@ -170,7 +170,7 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
               // make sure refund, provided in request, was sent on refund_pending
               Arrays.stream(payments)
                   .map(org.stellar.anchor.api.shared.RefundPayment::getId)
-                  .filter(id -> id.equals(refund.getId()))
+                  .filter(id -> Objects.equals(id, refund.getId()))
                   .findFirst()
                   .orElseThrow(() -> new InvalidParamsException("Invalid refund id"));
 
@@ -178,7 +178,7 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
                   Arrays.stream(payments)
                       .map(
                           payment -> {
-                            if (payment.getId().equals(request.getRefund().getId())) {
+                            if (Objects.equals(payment.getId(), request.getRefund().getId())) {
                               return sum(
                                   assetInfo,
                                   refund.getAmount().getAmount(),
@@ -208,7 +208,7 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
             // stored payment with the request's id is replaced, any other id is added.
             totalRefunded =
                 sep24Refunds.getRefundPayments().stream()
-                    .filter(payment -> !payment.getId().equals(refund.getId()))
+                    .filter(payment -> !Objects.equals(payment.getId(), refund.getId()))
                     .map(payment -> sum(assetInfo, payment.getAmount(), payment.getFee()))
                     .reduce(
                         sum(
@@ -225,7 +225,7 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
               // make sure refund, provided in request, was sent on refund_pending
               payments.stream()
                   .map(Sep24RefundPayment::getId)
-                  .filter(id -> id.equals(refund.getId()))
+                  .filter(id -> Objects.equals(id, refund.getId()))
                   .findFirst()
                   .orElseThrow(() -> new InvalidParamsException("Invalid refund id"));
 
@@ -233,7 +233,7 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
                   payments.stream()
                       .map(
                           payment -> {
-                            if (payment.getId().equals(request.getRefund().getId())) {
+                            if (Objects.equals(payment.getId(), request.getRefund().getId())) {
                               return sum(
                                   assetInfo,
                                   refund.getAmount().getAmount(),
@@ -356,7 +356,8 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
           } else {
             List<org.stellar.anchor.api.shared.RefundPayment> payments =
                 new ArrayList<>(Arrays.asList(refunds.getPayments()));
-            payments.removeIf(payment -> payment.getId().equals(request.getRefund().getId()));
+            payments.removeIf(
+                payment -> Objects.equals(payment.getId(), request.getRefund().getId()));
             payments.add(refundPayment);
             refunds.setPayments(
                 payments.toArray(new org.stellar.anchor.api.shared.RefundPayment[0]));
@@ -416,7 +417,8 @@ public class NotifyRefundSentHandler extends RpcTransactionStatusHandler<NotifyR
             sep24Refunds.setRefundPayments(List.of(sep24RefundPayment));
           } else {
             List<Sep24RefundPayment> payments = sep24Refunds.getRefundPayments();
-            payments.removeIf(payment -> payment.getId().equals(request.getRefund().getId()));
+            payments.removeIf(
+                payment -> Objects.equals(payment.getId(), request.getRefund().getId()));
             payments.add(sep24RefundPayment);
             sep24Refunds.setRefundPayments(payments);
           }

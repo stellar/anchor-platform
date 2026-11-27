@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import org.stellar.anchor.api.asset.AssetInfo;
 import org.stellar.anchor.api.exception.BadRequestException;
@@ -128,7 +129,7 @@ public class NotifyRefundPendingHandler
         BigDecimal otherPayments =
             refunds instanceof Refunds
                 ? Arrays.stream(((Refunds) refunds).getPayments())
-                    .filter(payment -> !payment.getId().equals(requestRefundId))
+                    .filter(payment -> !Objects.equals(payment.getId(), requestRefundId))
                     .map(
                         payment ->
                             sum(
@@ -138,7 +139,7 @@ public class NotifyRefundPendingHandler
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
                 : ((Sep24Refunds) refunds)
                     .getRefundPayments().stream()
-                        .filter(payment -> !payment.getId().equals(requestRefundId))
+                        .filter(payment -> !Objects.equals(payment.getId(), requestRefundId))
                         .map(payment -> sum(assetInfo, payment.getAmount(), payment.getFee()))
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
         totalRefunded = totalRefunded.add(otherPayments);
@@ -236,7 +237,8 @@ public class NotifyRefundPendingHandler
         List<RefundPayment> sep6RefundPayments =
             new ArrayList<>(Arrays.asList(refunds.getPayments()));
         // A repeated refund id replaces the stored payment, as notify_refund_sent does.
-        sep6RefundPayments.removeIf(payment -> payment.getId().equals(requestRefund.getId()));
+        sep6RefundPayments.removeIf(
+            payment -> Objects.equals(payment.getId(), requestRefund.getId()));
         sep6RefundPayments.add(requestPayment);
         refunds.setPayments(sep6RefundPayments.toArray(new RefundPayment[0]));
 
@@ -294,7 +296,8 @@ public class NotifyRefundPendingHandler
         }
         List<Sep24RefundPayment> sep24RefundPayments = sep24Refunds.getRefundPayments();
         // A repeated refund id replaces the stored payment, as notify_refund_sent does.
-        sep24RefundPayments.removeIf(payment -> payment.getId().equals(requestRefund.getId()));
+        sep24RefundPayments.removeIf(
+            payment -> Objects.equals(payment.getId(), requestRefund.getId()));
         sep24RefundPayments.add(refundPayment);
         sep24Refunds.setRefundPayments(sep24RefundPayments);
 
