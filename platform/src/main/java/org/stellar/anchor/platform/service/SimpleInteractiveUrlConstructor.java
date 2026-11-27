@@ -140,7 +140,11 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
   void verifyCustomerIdOwnership(Map<String, String> request, WebAuthJwt jwt)
       throws SepNotAuthorizedException {
     String customerId = request.get("customer_id");
-    if (isEmpty(customerId) || !customerIdOwnerStore.isClaimed(customerId)) {
+    if (isEmpty(customerId)) {
+      return;
+    }
+    if (!customerIdOwnerStore.isClaimed(customerId)) {
+      verifyUnclaimedCustomerIdOwnership(customerId, jwt);
       return;
     }
     if (!customerIdOwnerStore.verify(customerId, ownerKeyResolver.ownerKey(jwt), jwt.getOwnerMemo())
@@ -152,6 +156,28 @@ public class SimpleInteractiveUrlConstructor extends InteractiveUrlConstructor {
             jwt,
             FORWARD_KYC_CUSTOMER_TYPE)) {
       throw new SepNotAuthorizedException("customer id already claimed by another client");
+    }
+  }
+
+  private void verifyUnclaimedCustomerIdOwnership(String customerId, WebAuthJwt jwt)
+      throws SepNotAuthorizedException {
+    GetCustomerResponse owned;
+    try {
+      owned =
+          customerIntegration.getCustomer(
+              GetCustomerRequest.builder()
+                  .account(jwt.getAccount())
+                  .memo(jwt.getOwnerMemo())
+                  .memoType(jwt.getOwnerMemo() != null ? "id" : null)
+                  .type(FORWARD_KYC_CUSTOMER_TYPE)
+                  .build());
+    } catch (Exception e) {
+      Log.warnEx(e);
+      owned = null;
+    }
+    if (owned == null || !customerId.equals(owned.getId())) {
+      throw new SepNotAuthorizedException(
+          "customer id does not belong to the authenticated client");
     }
   }
 
