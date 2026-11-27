@@ -181,7 +181,9 @@ public class RpcActionBeans {
       AssetService assetService,
       EventService eventService,
       MetricsService metricsService,
-      SacToAssetMapper sacToAssetMapper) {
+      SacToAssetMapper sacToAssetMapper,
+      Sep38QuoteStore sep38QuoteStore,
+      RpcConfig rpcConfig) {
     return new NotifyOnchainFundsReceivedHandler(
         txn6Store,
         txn24Store,
@@ -191,7 +193,9 @@ public class RpcActionBeans {
         assetService,
         eventService,
         metricsService,
-        sacToAssetMapper);
+        sacToAssetMapper,
+        sep38QuoteStore,
+        rpcConfig);
   }
 
   @Bean

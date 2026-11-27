@@ -45,10 +45,12 @@ import org.stellar.anchor.ledger.LedgerTransaction.LedgerPathPaymentOperation
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPaymentOperation
 import org.stellar.anchor.ledger.PaymentTransferEvent
 import org.stellar.anchor.metrics.MetricsService
+import org.stellar.anchor.platform.config.RpcConfig
 import org.stellar.anchor.platform.data.JdbcSep24Transaction
 import org.stellar.anchor.platform.data.JdbcSep24TransactionStore
 import org.stellar.anchor.platform.data.JdbcSep31Transaction
 import org.stellar.anchor.platform.data.JdbcSep31TransactionStore
+import org.stellar.anchor.platform.data.JdbcSep38Quote
 import org.stellar.anchor.platform.data.JdbcSep6Transaction
 import org.stellar.anchor.platform.data.JdbcSep6TransactionStore
 import org.stellar.anchor.platform.data.JdbcSepTransaction
@@ -59,8 +61,10 @@ import org.stellar.anchor.platform.utils.toRate
 import org.stellar.anchor.platform.validator.RequestValidator
 import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31TransactionStore
+import org.stellar.anchor.sep38.Sep38QuoteStore
 import org.stellar.anchor.sep6.Sep6TransactionStore
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.anchor.util.Log
 import org.stellar.anchor.util.MemoHelper
 import org.stellar.sdk.Memo
 import org.stellar.sdk.xdr.Asset
@@ -134,6 +138,10 @@ class NotifyOnchainFundsReceivedHandlerTest {
 
   @MockK(relaxed = true) private lateinit var metricsService: MetricsService
 
+  @MockK(relaxed = true) private lateinit var sep38QuoteStore: Sep38QuoteStore
+
+  @MockK(relaxed = true) private lateinit var rpcConfig: RpcConfig
+
   @MockK(relaxed = true) private lateinit var eventSession: Session
 
   @MockK(relaxed = true) private lateinit var sepTransactionCounter: Counter
@@ -155,7 +163,9 @@ class NotifyOnchainFundsReceivedHandlerTest {
         assetService,
         eventService,
         metricsService,
-        mockk<SacToAssetMapper>()
+        mockk<SacToAssetMapper>(),
+        sep38QuoteStore,
+        rpcConfig
       )
   }
 
@@ -1398,14 +1408,18 @@ class NotifyOnchainFundsReceivedHandlerTest {
       )
       .build()
 
-  private fun ledgerOf(memo: Memo?, vararg operations: LedgerOperation): LedgerTransaction =
+  private fun ledgerOf(
+    memo: Memo?,
+    vararg operations: LedgerOperation,
+    createdAt: Instant? = Instant.parse(STELLAR_PAYMENT_DATE)
+  ): LedgerTransaction =
     LedgerTransaction.builder()
       .hash(STELLAR_TX_ID)
       .ledger(1L)
       .applicationOrder(1)
       .memo(memo?.let { MemoHelper.toXdr(it) })
       .sourceAccount("testFrom")
-      .createdAt(Instant.parse(STELLAR_PAYMENT_DATE))
+      .createdAt(createdAt)
       .fee(100)
       .envelopeXdr("testEnvelopeXdr")
       .operations(operations.toList())
@@ -1905,6 +1919,275 @@ class NotifyOnchainFundsReceivedHandlerTest {
 
     assertEquals(Instant.parse(STELLAR_PAYMENT_DATE), sep24TxnCapture.captured.transferReceivedAt)
     assertEquals(STELLAR_TX_ID, sep24TxnCapture.captured.stellarTransactionId)
+  }
+
+  // ---- A payment after the firm quote's expiry (spec QEXP) ----
+
+  private val quoteId = "q1"
+  private val quoteExpiresAt = Instant.parse("2026-11-19T12:43:39Z")
+  private val lateLedgerTime = Instant.parse("2026-11-19T12:44:08Z")
+  private val lateMessage =
+    "Payment received after the firm quote expired: quote q1 expired at " +
+      "2026-11-19T12:43:39Z, payment ledger time 2026-11-19T12:44:08Z"
+
+  private fun bindQuote(txn: JdbcSepTransaction, expiresAt: Instant?) {
+    when (txn) {
+      is JdbcSep24Transaction -> txn.quoteId = quoteId
+      is JdbcSep6Transaction -> txn.quoteId = quoteId
+      is JdbcSep31Transaction -> txn.quoteId = quoteId
+    }
+    every { sep38QuoteStore.findByQuoteId(quoteId) } returns
+      JdbcSep38Quote().also {
+        it.id = quoteId
+        it.expiresAt = expiresAt
+      }
+  }
+
+  private fun messageOf(txn: JdbcSepTransaction): String? =
+    when (txn) {
+      is JdbcSep24Transaction -> txn.message
+      is JdbcSep6Transaction -> txn.message
+      is JdbcSep31Transaction -> txn.requiredInfoMessage
+      else -> null
+    }
+
+  private fun normalNextStatus(protocol: String) =
+    if (protocol == "31") PENDING_RECEIVER.toString() else PENDING_ANCHOR.toString()
+
+  /** Pays a transaction bound to a quote that expires at [expiresAt]; returns the stored object. */
+  private fun payWithQuote(
+    protocol: String,
+    expiresAt: Instant? = quoteExpiresAt,
+    ledgerTime: Instant? = lateLedgerTime,
+    status: String? = null
+  ): JdbcSepTransaction {
+    val txn = stubTransaction(protocol, status = status)
+    bindQuote(txn, expiresAt)
+    accept(ledgerOf(Memo.id(12345), payment(), createdAt = ledgerTime))
+    return txn
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_late_payment_is_recorded_and_held_in_error(protocol: String) {
+    val txn = payWithQuote(protocol)
+
+    assertEquals(ERROR.toString(), txn.status)
+    assertEquals(lateMessage, messageOf(txn))
+    assertEquals(lateLedgerTime, txn.transferReceivedAt)
+    assertEquals(STELLAR_TX_ID, txn.stellarTransactions.single().id)
+  }
+
+  @Test
+  fun test_handle_late_payment_sep6_withdrawal_exchange_is_held_in_error() {
+    val txn = stubTransaction("6") as JdbcSep6Transaction
+    txn.kind = WITHDRAWAL_EXCHANGE.kind
+    bindQuote(txn, quoteExpiresAt)
+
+    accept(ledgerOf(Memo.id(12345), payment(), createdAt = lateLedgerTime))
+
+    assertEquals(ERROR.toString(), txn.status)
+    assertEquals(lateMessage, txn.message)
+  }
+
+  @Test
+  fun test_handle_late_payment_sep31_records_the_sender() {
+    val txn = payWithQuote("31") as JdbcSep31Transaction
+
+    assertEquals("testFrom", txn.fromAccount)
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_late_payment_publishes_one_error_status_event(protocol: String) {
+    val events = mutableListOf<AnchorEvent>()
+    val txn = stubTransaction(protocol)
+    every { eventSession.publish(capture(events)) } just Runs
+    bindQuote(txn, quoteExpiresAt)
+
+    accept(ledgerOf(Memo.id(12345), payment(), createdAt = lateLedgerTime))
+
+    val event = events.single()
+    assertEquals(TRANSACTION_STATUS_CHANGED, event.type)
+    assertEquals(ERROR.toString(), event.transaction.status.toString())
+    assertEquals(lateMessage, event.transaction.message)
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_payment_one_nanosecond_before_the_expiry_advances_as_before(protocol: String) {
+    val stubbed = stubTransaction(protocol)
+    bindQuote(stubbed, quoteExpiresAt)
+
+    accept(ledgerOf(Memo.id(12345), payment(), createdAt = quoteExpiresAt.minusNanos(1)))
+
+    assertEquals(normalNextStatus(protocol), stubbed.status)
+    assertNull(messageOf(stubbed))
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_payment_at_the_exact_expiry_is_late(protocol: String) {
+    val txn = payWithQuote(protocol, ledgerTime = quoteExpiresAt)
+
+    assertEquals(ERROR.toString(), txn.status)
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_payment_without_a_quote_advances_as_before(protocol: String) {
+    val txn = stubTransaction(protocol)
+
+    accept(ledgerOf(Memo.id(12345), payment(), createdAt = lateLedgerTime))
+
+    assertEquals(normalNextStatus(protocol), txn.status)
+    verify(exactly = 0) { sep38QuoteStore.findByQuoteId(any()) }
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_payment_with_a_quote_that_never_expires_advances_as_before(protocol: String) {
+    val txn = payWithQuote(protocol, expiresAt = null)
+
+    assertEquals(normalNextStatus(protocol), txn.status)
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_payment_with_a_missing_quote_advances_and_logs_a_warning(protocol: String) {
+    mockkStatic(Log::class)
+    try {
+      every { Log.warnF(any(), *anyVararg()) } just Runs
+      val txn = stubTransaction(protocol)
+      bindQuote(txn, quoteExpiresAt)
+      every { sep38QuoteStore.findByQuoteId(quoteId) } returns null
+
+      accept(ledgerOf(Memo.id(12345), payment(), createdAt = lateLedgerTime))
+
+      assertEquals(normalNextStatus(protocol), txn.status)
+      verify(exactly = 1) { Log.warnF(match { it.contains("was not found") }, quoteId, TX_ID) }
+    } finally {
+      unmockkStatic(Log::class)
+    }
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_payment_without_a_ledger_time_uses_the_current_instant(protocol: String) {
+    val txn = payWithQuote(protocol, ledgerTime = null)
+
+    assertEquals(ERROR.toString(), txn.status)
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_late_payment_is_honored_when_the_operator_opts_in(protocol: String) {
+    mockkStatic(Log::class)
+    try {
+      every { Log.warnF(any(), *anyVararg()) } just Runs
+      every { rpcConfig.isHonorLateQuotePayments } returns true
+      val txn = stubTransaction(protocol)
+      bindQuote(txn, quoteExpiresAt)
+
+      accept(ledgerOf(Memo.id(12345), payment(), createdAt = lateLedgerTime))
+
+      assertEquals(normalNextStatus(protocol), txn.status)
+      verify(exactly = 1) {
+        Log.warnF(
+          match { it.contains("Honoring a payment after the firm quote expired") },
+          quoteId,
+          quoteExpiresAt,
+          lateLedgerTime
+        )
+      }
+    } finally {
+      unmockkStatic(Log::class)
+    }
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_second_delivery_on_a_held_transaction_is_rejected(protocol: String) {
+    val txn = stubTransaction(protocol, status = ERROR.toString())
+    bindQuote(txn, quoteExpiresAt)
+    every { ledgerClient.getTransaction(STELLAR_TX_ID) } returns
+      ledgerOf(Memo.id(12345), payment(), createdAt = lateLedgerTime)
+
+    val ex = assertThrows<InvalidRequestException> { handler.handle(hashRequest()) }
+
+    assertContains(ex.message!!, "Status[error]")
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+  }
+
+  @CsvSource(value = ["24", "6"])
+  @ParameterizedTest
+  fun test_handle_late_payment_on_a_withdrawal_on_hold_is_held_in_error(protocol: String) {
+    val txn = payWithQuote(protocol, status = ON_HOLD.toString())
+
+    assertEquals(ERROR.toString(), txn.status)
+    assertEquals(lateLedgerTime, txn.transferReceivedAt)
+  }
+
+  @Test
+  fun test_handle_late_payment_stores_the_amounts_of_the_request() {
+    val txn24 = stubTransaction("24") as JdbcSep24Transaction
+    txn24.requestAssetCode = FIAT_USD_CODE
+    txn24.amountInAsset = STELLAR_USDC
+    txn24.amountOutAsset = FIAT_USD
+    txn24.amountFeeAsset = STELLAR_USDC
+    bindQuote(txn24, quoteExpiresAt)
+    every { ledgerClient.getTransaction(STELLAR_TX_ID) } returns
+      ledgerOf(Memo.id(12345), payment(), createdAt = lateLedgerTime)
+
+    handler.handle(
+      NotifyOnchainFundsReceivedRequest.builder()
+        .transactionId(TX_ID)
+        .stellarTransactionId(STELLAR_TX_ID)
+        .amountIn(AmountRequest("15"))
+        .amountOut(AmountRequest("9"))
+        .feeDetails(FeeDetails("1", STELLAR_USDC))
+        .build()
+    )
+
+    assertEquals(ERROR.toString(), txn24.status)
+    assertEquals("15", txn24.amountIn)
+    assertEquals("9", txn24.amountOut)
+    assertEquals("1", txn24.amountFee)
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_late_quote_with_a_hash_that_holds_no_payment_for_the_transaction_changes_nothing(
+    protocol: String
+  ) {
+    val txn = stubTransaction(protocol)
+    bindQuote(txn, quoteExpiresAt)
+    val before = gson.toJson(txn)
+
+    rejection(ledgerOf(Memo.id(12345), payment(to = "someoneElse"), createdAt = lateLedgerTime))
+
+    assertEquals(before, gson.toJson(txn))
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
+    verify(exactly = 0) { eventSession.publish(any()) }
+  }
+
+  @CsvSource(value = ["24", "6", "31"])
+  @ParameterizedTest
+  fun test_handle_late_quote_with_an_unknown_ledger_transaction_is_not_found(protocol: String) {
+    val txn = stubTransaction(protocol)
+    bindQuote(txn, quoteExpiresAt)
+    every { ledgerClient.getTransaction(STELLAR_TX_ID) } throws LedgerException("not found")
+
+    val ex = assertThrows<NotFoundException> { handler.handle(hashRequest()) }
+
+    assertEquals("Transaction (hash=stellarTxId) not found", ex.message)
+    verify(exactly = 0) { txn6Store.save(any()) }
+    verify(exactly = 0) { txn24Store.save(any()) }
+    verify(exactly = 0) { txn31Store.save(any()) }
   }
 }
 

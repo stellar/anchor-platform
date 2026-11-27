@@ -9,8 +9,10 @@ import static org.stellar.anchor.platform.utils.PaymentHelper.addStellarTransact
 import static org.stellar.anchor.platform.utils.PaymentHelper.getLedgerPayment;
 
 import com.google.common.collect.ImmutableSet;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.BadRequestException;
@@ -31,6 +33,7 @@ import org.stellar.anchor.ledger.LedgerClientHelper;
 import org.stellar.anchor.ledger.LedgerTransaction;
 import org.stellar.anchor.ledger.LedgerTransaction.LedgerPayment;
 import org.stellar.anchor.metrics.MetricsService;
+import org.stellar.anchor.platform.config.RpcConfig;
 import org.stellar.anchor.platform.data.JdbcSep24Transaction;
 import org.stellar.anchor.platform.data.JdbcSep31Transaction;
 import org.stellar.anchor.platform.data.JdbcSep6Transaction;
@@ -38,16 +41,22 @@ import org.stellar.anchor.platform.data.JdbcSepTransaction;
 import org.stellar.anchor.platform.observer.stellar.SacToAssetMapper;
 import org.stellar.anchor.platform.utils.AssetValidationUtils;
 import org.stellar.anchor.platform.utils.LedgerPaymentMatcher.ExpectedPayment;
+import org.stellar.anchor.platform.utils.QuotePaymentTime;
 import org.stellar.anchor.platform.validator.RequestValidator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
 import org.stellar.anchor.sep31.Sep31TransactionStore;
+import org.stellar.anchor.sep38.Sep38Quote;
+import org.stellar.anchor.sep38.Sep38QuoteStore;
 import org.stellar.anchor.sep6.Sep6TransactionStore;
+import org.stellar.anchor.util.Log;
 
 public class NotifyOnchainFundsReceivedHandler
     extends RpcTransactionStatusHandler<NotifyOnchainFundsReceivedRequest> {
 
   private final LedgerClient ledgerClient;
   private final SacToAssetMapper sacToAssetMapper;
+  private final Sep38QuoteStore sep38QuoteStore;
+  private final RpcConfig rpcConfig;
 
   public NotifyOnchainFundsReceivedHandler(
       Sep6TransactionStore txn6Store,
@@ -58,7 +67,9 @@ public class NotifyOnchainFundsReceivedHandler
       AssetService assetService,
       EventService eventService,
       MetricsService metricsService,
-      SacToAssetMapper sacToAssetMapper) {
+      SacToAssetMapper sacToAssetMapper,
+      Sep38QuoteStore sep38QuoteStore,
+      RpcConfig rpcConfig) {
     super(
         txn6Store,
         txn24Store,
@@ -70,6 +81,8 @@ public class NotifyOnchainFundsReceivedHandler
         NotifyOnchainFundsReceivedRequest.class);
     this.ledgerClient = ledgerClient;
     this.sacToAssetMapper = sacToAssetMapper;
+    this.sep38QuoteStore = sep38QuoteStore;
+    this.rpcConfig = rpcConfig;
   }
 
   @Override
@@ -120,7 +133,12 @@ public class NotifyOnchainFundsReceivedHandler
 
   @Override
   protected SepTransactionStatus getNextStatus(
-      JdbcSepTransaction txn, NotifyOnchainFundsReceivedRequest request)
+      JdbcSepTransaction txn, NotifyOnchainFundsReceivedRequest request) throws AnchorException {
+    SepTransactionStatus nextStatus = getNormalNextStatus(txn);
+    return holdsLatePayment(txn, request) ? ERROR : nextStatus;
+  }
+
+  private SepTransactionStatus getNormalNextStatus(JdbcSepTransaction txn)
       throws InvalidRequestException {
     switch (Sep.from(txn.getProtocol())) {
       case SEP_6:
@@ -133,6 +151,69 @@ public class NotifyOnchainFundsReceivedHandler
             String.format(
                 "RPC method[%s] is not supported for protocol[%s]",
                 getRpcMethod(), txn.getProtocol()));
+    }
+  }
+
+  /**
+   * Whether the payment reached the ledger at or after the expiry of the firm quote bound to the
+   * transaction and must be held in the error status. A late payment is honored, with a warning,
+   * when the operator opted in. When held, the late message replaces the request's message: the
+   * base class requires a message for the error status.
+   */
+  private boolean holdsLatePayment(
+      JdbcSepTransaction txn, NotifyOnchainFundsReceivedRequest request) throws AnchorException {
+    String quoteId = getQuoteId(txn);
+    if (quoteId == null) {
+      return false;
+    }
+    Sep38Quote quote = sep38QuoteStore.findByQuoteId(quoteId);
+    if (quote == null) {
+      Log.warnF(
+          "Firm quote {} bound to transaction {} was not found; the payment is not checked against an expiry",
+          quoteId,
+          txn.getId());
+      return false;
+    }
+    Instant expiresAt = quote.getExpiresAt();
+    if (expiresAt == null) {
+      return false;
+    }
+    Instant paymentTime =
+        Optional.ofNullable(loadLedgerTransaction(request.getStellarTransactionId()).getCreatedAt())
+            .orElse(Instant.now());
+    if (!QuotePaymentTime.isLate(expiresAt, paymentTime)) {
+      return false;
+    }
+    if (rpcConfig.isHonorLateQuotePayments()) {
+      Log.warnF(
+          "Honoring a payment after the firm quote expired: quote {} expired at {}, payment ledger time {}",
+          quoteId,
+          expiresAt,
+          paymentTime);
+      return false;
+    }
+    request.setMessage(QuotePaymentTime.lateMessage(quoteId, expiresAt, paymentTime));
+    return true;
+  }
+
+  private static String getQuoteId(JdbcSepTransaction txn) {
+    switch (Sep.from(txn.getProtocol())) {
+      case SEP_6:
+        return ((JdbcSep6Transaction) txn).getQuoteId();
+      case SEP_24:
+        return ((JdbcSep24Transaction) txn).getQuoteId();
+      case SEP_31:
+        return ((JdbcSep31Transaction) txn).getQuoteId();
+      default:
+        return null;
+    }
+  }
+
+  private LedgerTransaction loadLedgerTransaction(String stellarTxnId) throws NotFoundException {
+    try {
+      return LedgerClientHelper.waitForTransactionAvailable(ledgerClient, stellarTxnId);
+    } catch (LedgerException ex) {
+      throw new NotFoundException(String.format("Transaction (hash=%s) not found", stellarTxnId));
     }
   }
 
@@ -183,27 +264,21 @@ public class NotifyOnchainFundsReceivedHandler
   @Override
   protected void updateTransactionWithRpcRequest(
       JdbcSepTransaction txn, NotifyOnchainFundsReceivedRequest request) throws AnchorException {
-    String stellarTxnId = request.getStellarTransactionId();
-    try {
-      LedgerTransaction ledgerTxn =
-          LedgerClientHelper.waitForTransactionAvailable(ledgerClient, stellarTxnId);
-      // The hash is recorded as the received payment only when it holds one for this transaction.
-      requirePayment(sacToAssetMapper, ledgerTxn, expectedPayment(txn));
-      addStellarTransaction(sacToAssetMapper, ledgerTxn, txn);
+    LedgerTransaction ledgerTxn = loadLedgerTransaction(request.getStellarTransactionId());
+    // The hash is recorded as the received payment only when it holds one for this transaction.
+    requirePayment(sacToAssetMapper, ledgerTxn, expectedPayment(txn));
+    addStellarTransaction(sacToAssetMapper, ledgerTxn, txn);
 
-      if (Sep.SEP_31.equals(Sep.from(txn.getProtocol()))) {
-        JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
-        LedgerPayment payment =
-            ledgerTxn.getOperations().stream()
-                .map(op -> getLedgerPayment(op))
-                .filter(Objects::nonNull)
-                .filter(p -> txn31.getToAccount() != null && txn31.getToAccount().equals(p.getTo()))
-                .findFirst()
-                .orElse(null);
-        if (payment != null) txn31.setFromAccount(payment.getFrom());
-      }
-    } catch (LedgerException ex) {
-      throw new NotFoundException(String.format("Transaction (hash=%s) not found", stellarTxnId));
+    if (Sep.SEP_31.equals(Sep.from(txn.getProtocol()))) {
+      JdbcSep31Transaction txn31 = (JdbcSep31Transaction) txn;
+      LedgerPayment payment =
+          ledgerTxn.getOperations().stream()
+              .map(op -> getLedgerPayment(op))
+              .filter(Objects::nonNull)
+              .filter(p -> txn31.getToAccount() != null && txn31.getToAccount().equals(p.getTo()))
+              .findFirst()
+              .orElse(null);
+      if (payment != null) txn31.setFromAccount(payment.getFrom());
     }
 
     if (request.getAmountIn() != null) {

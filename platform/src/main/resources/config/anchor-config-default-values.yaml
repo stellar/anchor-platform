@@ -773,3 +773,10 @@ rpc:
     outgoing_payment_sent: "Outgoing payment sent"
   ## Batch size limit
   batch_size_limit: 40
+  ## What to do with a payment that reaches the ledger at or after its firm quote's expiry
+  ## (SEP-6/24 withdrawals and SEP-31 transactions bound to a quote).
+  ## false: record the payment and put the transaction in the `error` status with a message that
+  ##        names the quote's expiry and the payment's ledger time. The business server continues
+  ##        it with `notify_transaction_recovery`.
+  ## true:  honor the payment at the quoted amounts, as before, and log a warning.
+  honor_late_quote_payments: false
