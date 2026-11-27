@@ -1,5 +1,9 @@
 package org.stellar.anchor.util
 
+import java.net.Inet6Address
+import java.net.InetAddress
+import java.net.UnknownHostException
+import okhttp3.Dns
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -13,6 +17,27 @@ class SsrfBlocklistBypassTest {
     } catch (e: SepException) {
       e.message?.contains("non-public") == true
     }
+
+  private fun mappedIpv6(vararg ipv4: Int): Inet6Address {
+    val bytes =
+      byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF.toByte(), 0xFF.toByte()) +
+        ipv4.map { it.toByte() }.toByteArray()
+    return Inet6Address.getByAddress("mapped", bytes, 0)
+  }
+
+  private fun withDns(resolve: Map<String, InetAddress>, block: () -> Unit) {
+    val original = ClientDomainHelper.dns
+    ClientDomainHelper.dns =
+      object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> =
+          listOf(resolve[hostname] ?: throw UnknownHostException(hostname))
+      }
+    try {
+      block()
+    } finally {
+      ClientDomainHelper.dns = original
+    }
+  }
 
   @Test
   fun `CONTROL - standard private and reserved ranges are correctly blocked`() {
@@ -66,6 +91,35 @@ class SsrfBlocklistBypassTest {
   @Test
   fun `additional - 0_0_0_0_8 range is blocked`() {
     assertTrue(guardBlocks("0.1.2.3"), "0.1.2.3 is in 0.0.0.0/8 and must be blocked")
+  }
+
+  @Test
+  fun `BYPASS - a DNS-returned IPv4-mapped IPv6 embedding an internal IPv4 is blocked`() {
+    withDns(
+      mapOf(
+        "mapped-metadata.test" to mappedIpv6(169, 254, 169, 254),
+        "mapped-rfc1918.test" to mappedIpv6(10, 99, 99, 99),
+      )
+    ) {
+      assertTrue(
+        guardBlocks("mapped-metadata.test"),
+        "::ffff:169.254.169.254 from DNS reaches the link-local metadata IP and must be blocked",
+      )
+      assertTrue(
+        guardBlocks("mapped-rfc1918.test"),
+        "::ffff:10.99.99.99 from DNS reaches an RFC1918 IP and must be blocked",
+      )
+    }
+  }
+
+  @Test
+  fun `additional - a DNS-returned IPv4-mapped IPv6 of a public IPv4 is not blocked`() {
+    withDns(mapOf("mapped-public.test" to mappedIpv6(8, 8, 8, 8))) {
+      assertFalse(
+        guardBlocks("mapped-public.test"),
+        "::ffff:8.8.8.8 maps to a public IPv4 and must not be blocked",
+      )
+    }
   }
 
   @Test

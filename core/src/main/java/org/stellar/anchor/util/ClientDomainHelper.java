@@ -288,7 +288,7 @@ public class ClientDomainHelper {
       embedded = new byte[] {a[12], a[13], a[14], a[15]};
     } else if (is6to4(address)) {
       embedded = new byte[] {a[2], a[3], a[4], a[5]};
-    } else if (isIpv4Compatible(a)) {
+    } else if (isIpv4Compatible(a) || isIpv4Mapped(a)) {
       embedded = new byte[] {a[12], a[13], a[14], a[15]};
     } else {
       return address;
@@ -308,6 +308,15 @@ public class ClientDomainHelper {
       }
     }
     return a[10] == 0 && a[11] == 0;
+  }
+
+  private static boolean isIpv4Mapped(byte[] a) {
+    for (int i = 0; i < 10; i++) {
+      if (a[i] != 0) {
+        return false;
+      }
+    }
+    return (a[10] & 0xFF) == 0xFF && (a[11] & 0xFF) == 0xFF;
   }
 
   private static boolean isThisNetwork(InetAddress address) {
