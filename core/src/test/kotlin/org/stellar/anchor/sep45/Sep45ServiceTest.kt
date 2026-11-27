@@ -23,6 +23,7 @@ import org.stellar.anchor.config.StellarNetworkConfig
 import org.stellar.anchor.ledger.StellarRpc
 import org.stellar.anchor.util.ClientDomainHelper
 import org.stellar.anchor.util.GsonUtils
+import org.stellar.sdk.Address
 import org.stellar.sdk.Asset
 import org.stellar.sdk.Auth
 import org.stellar.sdk.KeyPair
@@ -33,10 +34,18 @@ import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse
 import org.stellar.sdk.responses.sorobanrpc.GetNetworkResponse
 import org.stellar.sdk.responses.sorobanrpc.SimulateTransactionResponse
 import org.stellar.sdk.scval.Scv
+import org.stellar.sdk.xdr.InvokeContractArgs
 import org.stellar.sdk.xdr.SCAddressType
 import org.stellar.sdk.xdr.SCMap
 import org.stellar.sdk.xdr.SCMapEntry
+import org.stellar.sdk.xdr.SCVal
 import org.stellar.sdk.xdr.SorobanAuthorizationEntries
+import org.stellar.sdk.xdr.SorobanAuthorizationEntry
+import org.stellar.sdk.xdr.SorobanAuthorizedFunction
+import org.stellar.sdk.xdr.SorobanAuthorizedFunctionType
+import org.stellar.sdk.xdr.SorobanAuthorizedInvocation
+import org.stellar.sdk.xdr.SorobanCredentials
+import org.stellar.sdk.xdr.SorobanCredentialsType
 
 @ExtendWith(LockAndMockTest::class)
 class Sep45ServiceTest {
@@ -261,6 +270,46 @@ class Sep45ServiceTest {
 
     assertNotNull(response)
     assertEquals(jwtToken, response.token)
+  }
+
+  @Test
+  fun `test validate rejects over-nested auth entries instead of over-allocating`() {
+    val fn =
+      SorobanAuthorizedFunction.builder()
+        .discriminant(SorobanAuthorizedFunctionType.SOROBAN_AUTHORIZED_FUNCTION_TYPE_CONTRACT_FN)
+        .contractFn(
+          InvokeContractArgs.builder()
+            .contractAddress(
+              Address("CAYXY6QGTPOCZ676MLGT5JFESVROJ6OJF7VW3LLXMTC2RQIZTP5JYNEL").toSCAddress()
+            )
+            .functionName(Scv.toSymbol("x").sym)
+            .args(arrayOf<SCVal>())
+            .build()
+        )
+        .build()
+    val creds =
+      SorobanCredentials.builder()
+        .discriminant(SorobanCredentialsType.SOROBAN_CREDENTIALS_SOURCE_ACCOUNT)
+        .build()
+    var invocation =
+      SorobanAuthorizedInvocation.builder()
+        .function(fn)
+        .subInvocations(arrayOf<SorobanAuthorizedInvocation>())
+        .build()
+    repeat(40) {
+      invocation =
+        SorobanAuthorizedInvocation.builder()
+          .function(fn)
+          .subInvocations(arrayOf(invocation))
+          .build()
+    }
+    val entry =
+      SorobanAuthorizationEntry.builder().credentials(creds).rootInvocation(invocation).build()
+    val nestedXdr = SorobanAuthorizationEntries(arrayOf(entry)).toXdrBase64()
+
+    val request = ValidationRequest.builder().authorizationEntries(nestedXdr).build()
+    val ex = assertThrows(BadRequestException::class.java) { sep45Service.validate(request) }
+    assertEquals("Failed to decode auth entries", ex.message)
   }
 
   @Test
