@@ -27,6 +27,7 @@ import org.stellar.anchor.util.AssetHelper;
 import org.stellar.sdk.xdr.Asset;
 
 public class PaymentHelper {
+  static final int MAX_ENVELOPE_LENGTH = 8192;
 
   public static LedgerPayment getLedgerPayment(LedgerOperation ledgerOperation) {
     return switch (ledgerOperation.getType()) {
@@ -96,7 +97,7 @@ public class PaymentHelper {
             .createdAt(Optional.ofNullable(ledgerTxn.getCreatedAt()).orElse(Instant.now()))
             .memo(memo)
             .memoType(memoType)
-            .envelope(ledgerTxn.getEnvelopeXdr())
+            .envelope(boundedEnvelope(ledgerTxn))
             .payments(
                 ledgerTxn.getOperations().stream()
                     .map(PaymentHelper::getLedgerPayment)
@@ -136,6 +137,19 @@ public class PaymentHelper {
             .build();
 
     sepTxn.setStellarTransactions(addOrMerge(sepTxn.getStellarTransactions(), stellarTransaction));
+  }
+
+  static String boundedEnvelope(LedgerTransaction ledgerTxn) {
+    String envelope = ledgerTxn.getEnvelopeXdr();
+    if (envelope != null && envelope.length() > MAX_ENVELOPE_LENGTH) {
+      warnF(
+          "The envelope of Stellar transaction {} is {} characters, over the {} limit, so it is not stored.",
+          ledgerTxn.getHash(),
+          envelope.length(),
+          MAX_ENVELOPE_LENGTH);
+      return null;
+    }
+    return envelope;
   }
 
   /**

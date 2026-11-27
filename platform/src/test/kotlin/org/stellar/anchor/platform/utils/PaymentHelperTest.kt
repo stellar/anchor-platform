@@ -92,4 +92,33 @@ class PaymentHelperTest {
     assertEquals("hash-2", txn.stellarTransactionId)
     assertEquals(Instant.parse("2023-05-10T10:18:20Z"), txn.transferReceivedAt)
   }
+
+  @Test
+  fun `recordStellarTransaction keeps an envelope within the limit`() {
+    val txn = JdbcSep31Transaction()
+    val envelope = "A".repeat(PaymentHelper.MAX_ENVELOPE_LENGTH)
+    PaymentHelper.recordStellarTransaction(
+      null,
+      ledgerTransaction("hash-1", payment("1", 10)).apply { envelopeXdr = envelope },
+      txn,
+    )
+
+    assertEquals(envelope, txn.stellarTransactions[0].envelope)
+  }
+
+  @Test
+  fun `recordStellarTransaction drops an envelope over the limit and keeps the payments`() {
+    val txn = JdbcSep31Transaction()
+    PaymentHelper.recordStellarTransaction(
+      null,
+      ledgerTransaction("hash-1", payment("1", 10)).apply {
+        envelopeXdr = "A".repeat(PaymentHelper.MAX_ENVELOPE_LENGTH + 1)
+      },
+      txn,
+    )
+
+    assertNull(txn.stellarTransactions[0].envelope)
+    assertEquals("hash-1", txn.stellarTransactions[0].id)
+    assertEquals(listOf("1"), txn.stellarTransactions[0].payments.map { it.id })
+  }
 }
