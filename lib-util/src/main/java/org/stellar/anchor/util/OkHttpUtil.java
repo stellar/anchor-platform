@@ -1,10 +1,12 @@
 package org.stellar.anchor.util;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import okhttp3.Dns;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 
@@ -53,6 +55,7 @@ public class OkHttpUtil {
         .followRedirects(false)
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
+        .protocols(List.of(Protocol.HTTP_1_1))
         .dns(dns)
         .build();
   }

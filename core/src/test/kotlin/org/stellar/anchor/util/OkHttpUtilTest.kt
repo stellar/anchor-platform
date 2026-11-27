@@ -1,7 +1,10 @@
 package org.stellar.anchor.util
 
+import okhttp3.Dns
+import okhttp3.Protocol
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.util.OkHttpUtil.TYPE_JSON
 
@@ -19,6 +22,15 @@ internal class OkHttpUtilTest {
     assertEquals(5_000, client.connectTimeoutMillis)
     assertEquals(10_000, client.readTimeoutMillis)
     assertEquals(15_000, client.callTimeoutMillis)
+  }
+
+  @Test
+  fun `test buildClient for an untrusted host negotiates only HTTP 1_1`() {
+    val client = OkHttpUtil.buildClient(Dns.SYSTEM, 1_000)
+    assertEquals(listOf(Protocol.HTTP_1_1), client.protocols)
+    assertFalse(client.protocols.contains(Protocol.HTTP_2))
+    assertTrue(client.followRedirects.not())
+    assertEquals(1_000, client.callTimeoutMillis)
   }
 
   @Test
