@@ -17,7 +17,9 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.transaction.CannotCreateTransactionException;
@@ -28,6 +30,8 @@ import org.stellar.anchor.api.exception.AnchorException;
 import org.stellar.anchor.api.exception.SepException;
 import org.stellar.anchor.api.platform.PlatformTransactionData.Sep;
 import org.stellar.anchor.api.sep.SepTransactionStatus;
+import org.stellar.anchor.api.shared.StellarPayment;
+import org.stellar.anchor.api.shared.StellarTransaction;
 import org.stellar.anchor.apiclient.PlatformApiClient;
 import org.stellar.anchor.asset.AssetService;
 import org.stellar.anchor.event.EventService;
@@ -902,9 +906,14 @@ public class DefaultPaymentListener implements PaymentListener {
    */
   private void recordUnderpayment(
       LedgerTransaction ledgerTransaction, JdbcSepTransaction sepTransaction) throws IOException {
-    // A redelivered payment is already in the list: it is not saved again, but the event is sent
-    // again, because the first delivery may have failed after the save.
-    if (!isRecorded(ledgerTransaction, sepTransaction)) {
+    // A redelivery of an already-recorded payment is published again, since the first delivery may
+    // have failed after the save. A different operation of the same recorded transaction is
+    // skipped.
+    if (isRecorded(ledgerTransaction, sepTransaction)) {
+      if (!paymentsAlreadyRecorded(ledgerTransaction, sepTransaction)) {
+        return;
+      }
+    } else {
       try {
         PaymentHelper.recordStellarTransaction(sacToAssetMapper, ledgerTransaction, sepTransaction);
         switch (Sep.from(sepTransaction.getProtocol())) {
@@ -951,5 +960,29 @@ public class DefaultPaymentListener implements PaymentListener {
     return sepTransaction.getStellarTransactions() != null
         && sepTransaction.getStellarTransactions().stream()
             .anyMatch(tx -> Objects.equals(tx.getId(), ledgerTransaction.getHash()));
+  }
+
+  private static boolean paymentsAlreadyRecorded(
+      LedgerTransaction ledgerTransaction, JdbcSepTransaction sepTransaction) {
+    if (sepTransaction.getStellarTransactions() == null) {
+      return false;
+    }
+    StellarTransaction entry =
+        sepTransaction.getStellarTransactions().stream()
+            .filter(tx -> Objects.equals(tx.getId(), ledgerTransaction.getHash()))
+            .findFirst()
+            .orElse(null);
+    if (entry == null || entry.getPayments() == null) {
+      return false;
+    }
+    Set<String> recordedIds =
+        entry.getPayments().stream().map(StellarPayment::getId).collect(Collectors.toSet());
+    List<String> deliveredIds =
+        ledgerTransaction.getOperations().stream()
+            .map(PaymentHelper::getLedgerPayment)
+            .filter(Objects::nonNull)
+            .map(LedgerTransaction.LedgerPayment::getId)
+            .collect(Collectors.toList());
+    return !deliveredIds.isEmpty() && recordedIds.containsAll(deliveredIds);
   }
 }

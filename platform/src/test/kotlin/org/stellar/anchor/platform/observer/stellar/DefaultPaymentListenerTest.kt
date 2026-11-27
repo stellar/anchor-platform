@@ -1234,6 +1234,30 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
+  fun `test other operations of one underpaying transaction publish a single event`() {
+    val first = underpaidEvent()
+    val firstOpId = first.ledgerTransaction.operations[0].paymentOperation.id
+    val txn = pendingSep31()
+    val saved = stubSep31(txn)
+
+    paymentListener.onReceived(first)
+    for (opIndex in 2..4) {
+      val siblingOpId = TOID(ledgerSequence, applicationOrder, opIndex).toInt64().toString()
+      val sibling = underpaidEvent()
+      sibling.operationId = siblingOpId
+      sibling.ledgerTransaction.operations[0].paymentOperation.id = siblingOpId
+      paymentListener.onReceived(sibling)
+    }
+
+    verify(exactly = 1) { sep31TransactionStore.save(any()) }
+    verify(exactly = 1) { eventSession.publish(any()) }
+    assertEquals(
+      listOf(firstOpId),
+      saved.captured.stellarTransactions.flatMap { it.payments }.map { it.id },
+    )
+  }
+
+  @Test
   fun `test underpayment save failing on the transaction manager throws IOException`() {
     stubSep31(pendingSep31())
     every { sep31TransactionStore.save(any()) } throws
