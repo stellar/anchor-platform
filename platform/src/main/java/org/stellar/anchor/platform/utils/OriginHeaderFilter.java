@@ -40,6 +40,17 @@ public class OriginHeaderFilter extends OncePerRequestFilter {
       Pattern.compile(
           "[A-Za-z][A-Za-z0-9+.\\-]*://(?:[A-Za-z0-9._~%\\-]+|\\[[0-9A-Fa-f:.]+])(?::[0-9]{1,5})?");
 
+  /**
+   * Tomcat answers some paths (for example under {@code /WEB-INF/}) with a 404 before the filter
+   * chain and forwards the request to {@code /error}. The default of {@link OncePerRequestFilter}
+   * skips that forward, so Spring would parse the header there; validate it too. A request that
+   * already passed this filter is validated again, which costs one length check and a linear match.
+   */
+  @Override
+  protected boolean shouldNotFilterErrorDispatch() {
+    return false;
+  }
+
   @Override
   protected void doFilterInternal(
       @NotNull HttpServletRequest request,

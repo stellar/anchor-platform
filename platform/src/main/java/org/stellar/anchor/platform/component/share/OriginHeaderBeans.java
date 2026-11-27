@@ -10,11 +10,17 @@ import org.stellar.anchor.platform.utils.OriginHeaderFilter;
 /**
  * Registers the {@code Origin} guard for every server that scans this package (SEP, Platform,
  * Observer and Event processor), ahead of Spring MVC's CORS processing and of the token filters.
+ * The actuator port is a separate context; {@code OriginHeaderManagementConfiguration} covers it.
  */
 @Configuration
 public class OriginHeaderBeans {
   @Bean
   public FilterRegistrationBean<Filter> originHeaderFilter() {
+    return originHeaderRegistration();
+  }
+
+  /** The registration shared by the main context and the actuator (management) context. */
+  public static FilterRegistrationBean<Filter> originHeaderRegistration() {
     FilterRegistrationBean<Filter> registrationBean = new FilterRegistrationBean<>();
     registrationBean.setFilter(new OriginHeaderFilter());
     registrationBean.addUrlPatterns("/*");
