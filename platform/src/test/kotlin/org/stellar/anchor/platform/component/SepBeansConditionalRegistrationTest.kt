@@ -29,6 +29,7 @@ import org.stellar.anchor.platform.component.sep.SepBeans
 import org.stellar.anchor.platform.config.CallbackApiConfig
 import org.stellar.anchor.platform.config.PropertySep24Config
 import org.stellar.anchor.platform.config.PropertySep31Config
+import org.stellar.anchor.platform.config.SepServerConfig
 import org.stellar.anchor.sep10.Sep10Service
 import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
@@ -122,6 +123,10 @@ class SepBeansConditionalRegistrationTest {
         Supplier { mockk<Sep31CustomerIdOwnerStore>(relaxed = true) },
       )
       .withBean(Clock::class.java, Supplier { Clock.systemUTC() })
+      .withBean(
+        SepServerConfig::class.java,
+        Supplier { SepServerConfig().apply { maxFormBodySize = 16384 } },
+      )
       .withPropertyValues(
         "sep10.enabled=false",
         "sep10.home_domains=example.com",

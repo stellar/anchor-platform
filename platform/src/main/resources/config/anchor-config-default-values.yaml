@@ -240,6 +240,12 @@ sep_server:
   # Ex: trusted_proxies: [10.0.0.0/8, 2001:db8::/32]
   # Ex: trusted_proxies: 10.0.0.0/8,2001:db8::/32
   trusted_proxies:
+  # The maximum size, in bytes, of the body of a form-encoded (`application/x-www-form-urlencoded`) PUT, PATCH or
+  # DELETE request. A larger body is rejected with HTTP 413 before the web framework reads it, because the framework
+  # parses such a body into memory, about 30 times its size, before any authentication. The cap times 30 times the
+  # number of concurrent request threads (200 by default) must stay under the JVM heap.
+  # SEP-12 form fields are a few hundred bytes; binary fields are sent as multipart, which this limit does not cover.
+  max_form_body_size: 16384
 
 ######################
 # SEP-1 Configuration
