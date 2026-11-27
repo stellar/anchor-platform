@@ -823,4 +823,64 @@ class Sep45ServiceTest {
       assertEquals(0, requests.get())
     }
   }
+
+  // HackerOne #4210811: the real ClientDomainHelper against the inline-table document,
+  // `x={a.a.a...a={}}` (100,009 bytes), with no SIGNING_KEY.
+  @Test
+  fun `test getChallenge refuses the inline-table client_domain document as missing and creates no nonce`() {
+    every { sep45Config.clientAllowList } returns null
+    every { sep45Config.allowedClientDomains } returns emptyList()
+    ClientDomainTomlFixtures.withTomlServer(
+      ClientDomainTomlFixtures.inlineTableDocument().toByteArray()
+    ) { host ->
+      val challengeRequest =
+        ChallengeRequest.builder()
+          .account(TEST_CONTRACT_ID)
+          .homeDomain("http://localhost:8080")
+          .clientDomain(host)
+          .build()
+
+      val tasksBefore = ClientDomainTomlFixtures.clientDomainCompletedTasks()
+      val start = System.nanoTime()
+      val ex =
+        assertThrows(SepException::class.java) { sep45Service.getChallenge(challengeRequest) }
+      val ms = (System.nanoTime() - start) / 1_000_000
+
+      assertEquals(clientDomainNotPresent, ex.message)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+      assertTrue(
+        ClientDomainTomlFixtures.awaitClientDomainTaskCompleted(tasksBefore),
+        "the fetch did not run on the bounded client_domain pool",
+      )
+      verify(exactly = 0) { nonceManager.create(any()) }
+    }
+  }
+
+  @Test
+  fun `test validate refuses the inline-table client_domain document as missing and consumes no nonce`() {
+    every { sep45Config.clientAllowList } returns null
+    every { sep45Config.allowedClientDomains } returns emptyList()
+    ClientDomainTomlFixtures.withTomlServer(
+      ClientDomainTomlFixtures.inlineTableDocument().toByteArray()
+    ) { host ->
+      val request =
+        authEntriesWithClientDomain(
+          host,
+          "GCHLHDBOKG2JWMJQBTLSL5XG6NO7ESXI2TAQKZXCXWXB5WI2X6W233PR"
+        )
+
+      val tasksBefore = ClientDomainTomlFixtures.clientDomainCompletedTasks()
+      val start = System.nanoTime()
+      val ex = assertThrows(SepException::class.java) { sep45Service.validate(request) }
+      val ms = (System.nanoTime() - start) / 1_000_000
+
+      assertEquals(clientDomainNotPresent, ex.message)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+      assertTrue(
+        ClientDomainTomlFixtures.awaitClientDomainTaskCompleted(tasksBefore),
+        "the fetch did not run on the bounded client_domain pool",
+      )
+      verify(exactly = 0) { nonceManager.verifyAndUse(any()) }
+    }
+  }
 }

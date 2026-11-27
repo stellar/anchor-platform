@@ -1785,6 +1785,26 @@ internal class Sep10ServiceTest {
       )
     }
   }
+
+  // HackerOne #4210811: a dotted key inside an inline table, `x={a.a.a...a={}}`, 100,009 bytes.
+  @Test
+  fun `Test the client_domain fetch refuses the inline-table document as missing within 2500 ms`() {
+    ClientDomainTomlFixtures.withTomlServer(
+      ClientDomainTomlFixtures.inlineTableDocument().toByteArray()
+    ) { host ->
+      val tasksBefore = ClientDomainTomlFixtures.clientDomainCompletedTasks()
+      val start = System.nanoTime()
+      val ex =
+        assertThrows<SepException> { sep10Service.fetchSigningKeyFromClientDomainBounded(host) }
+      val ms = (System.nanoTime() - start) / 1_000_000
+      assertEquals("SIGNING_KEY not present in 'client_domain' TOML", ex.message)
+      assertTrue(ms < 2_500, "took ${ms}ms")
+      assertTrue(
+        ClientDomainTomlFixtures.awaitClientDomainTaskCompleted(tasksBefore),
+        "the fetch did not run on the bounded client_domain pool",
+      )
+    }
+  }
 }
 
 fun Sep10Service.validateAuthorizationToken(

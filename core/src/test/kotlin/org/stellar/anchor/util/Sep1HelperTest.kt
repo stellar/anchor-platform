@@ -1,11 +1,13 @@
 package org.stellar.anchor.util
 
+import java.lang.management.ManagementFactory
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.stellar.anchor.api.exception.InvalidConfigException
 
@@ -379,6 +381,89 @@ class Sep1HelperTest {
       val ms = elapsedMs { result = Sep1Helper.extractSigningKey(doc) }
       assertNull(result, "header length $headerLength")
       assertTrue(ms < 1000, "header length $headerLength took ${ms}ms")
+    }
+  }
+
+  // HackerOne #4210811: a dotted key inside an inline table (step 2) and a single-quoted header key
+  // with a backslash before the closing quote (step 4). toml4j builds the key path, memory growing
+  // with the square of its length, before it rejects the document.
+  private fun assertScan(name: String, doc: String, expected: String?) {
+    var result: String? = "unset"
+    val ms = elapsedMs { result = Sep1Helper.extractSigningKey(doc) }
+    assertEquals(expected, result, name)
+    assertTrue(ms < 1000, "$name took ${ms}ms")
+  }
+
+  @Test
+  fun `test extractSigningKey returns null or the leading key for the inline-table document of the report`() {
+    val doc = ClientDomainTomlFixtures.inlineTableDocument()
+    assertEquals(100_009, doc.length)
+    assertScan("step 2 without a key", doc, null)
+    assertScan(
+      "step 2 after a key",
+      ClientDomainTomlFixtures.withSigningKeyFirst(signingKey, doc),
+      signingKey,
+    )
+  }
+
+  @Test
+  fun `test extractSigningKey returns null or the leading key for the escaped-quote header of the report`() {
+    val doc = ClientDomainTomlFixtures.escapedQuoteHeaderDocument()
+    assertEquals(100_010, doc.length)
+    assertScan("step 4 without a key", doc, null)
+    assertScan(
+      "step 4 after a key",
+      ClientDomainTomlFixtures.withSigningKeyFirst(signingKey, doc),
+      signingKey,
+    )
+  }
+
+  @Test
+  fun `test extractSigningKey returns null or the leading key for every other inline-key shape`() {
+    val shapes = ClientDomainTomlFixtures.otherInlineShapes()
+    assertEquals(4, shapes.size)
+    for ((name, doc) in shapes) {
+      assertTrue(doc.length in 98_000..100_300, "$name document is ${doc.length} bytes")
+      assertScan("$name without a key", doc, null)
+      assertScan(
+        "$name after a key",
+        ClientDomainTomlFixtures.withSigningKeyFirst(signingKey, doc),
+        signingKey,
+      )
+    }
+  }
+
+  private fun allocatedBytes(block: () -> Unit): Long {
+    val bean = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+    val id = Thread.currentThread().id
+    val before = bean.getThreadAllocatedBytes(id)
+    block()
+    return bean.getThreadAllocatedBytes(id) - before
+  }
+
+  @Test
+  fun `test extractSigningKey allocates under 4 MiB on every document of the inline-table report`() {
+    val bean = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+    assumeTrue(bean.isThreadAllocatedMemorySupported, "thread allocation is not measurable")
+    bean.isThreadAllocatedMemoryEnabled = true
+
+    val docs =
+      linkedMapOf(
+        "step 2" to ClientDomainTomlFixtures.inlineTableDocument(),
+        "step 4" to ClientDomainTomlFixtures.escapedQuoteHeaderDocument(),
+      )
+    docs.putAll(ClientDomainTomlFixtures.otherInlineShapes())
+    val limit = 4L * 1024 * 1024
+    for ((name, doc) in docs) {
+      for ((variant, text) in
+        listOf(
+          "without a key" to doc,
+          "after a key" to ClientDomainTomlFixtures.withSigningKeyFirst(signingKey, doc),
+        )) {
+        Sep1Helper.extractSigningKey(text) // warm-up
+        val bytes = allocatedBytes { Sep1Helper.extractSigningKey(text) }
+        assertTrue(bytes < limit, "$name $variant allocated $bytes bytes, limit $limit")
+      }
     }
   }
 }
