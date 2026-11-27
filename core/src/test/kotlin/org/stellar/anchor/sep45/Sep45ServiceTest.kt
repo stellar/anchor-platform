@@ -10,6 +10,8 @@ import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.exception.BadRequestException
 import org.stellar.anchor.api.exception.InternalServerErrorException
 import org.stellar.anchor.api.exception.SepNotAuthorizedException
+import org.stellar.anchor.api.exception.SepValidationException
+import org.stellar.anchor.api.exception.rpc.InvalidRequestException
 import org.stellar.anchor.api.sep.sep45.ChallengeRequest
 import org.stellar.anchor.api.sep.sep45.ValidationRequest
 import org.stellar.anchor.auth.JwtService
@@ -28,6 +30,7 @@ import org.stellar.sdk.Auth
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Network
 import org.stellar.sdk.SorobanServer
+import org.stellar.sdk.Transaction
 import org.stellar.sdk.operations.InvokeHostFunctionOperation
 import org.stellar.sdk.responses.sorobanrpc.GetLatestLedgerResponse
 import org.stellar.sdk.responses.sorobanrpc.GetNetworkResponse
@@ -87,7 +90,7 @@ class Sep45ServiceTest {
     every { sep45Config.jwtTimeout } returns 300
     every { sep45Config.webAuthContractId } returns TEST_CONTRACT_ID
 
-    every { nonceManager.create(300) } returns nonce
+    every { nonceManager.createWithId(any(), 300) } returns nonce
     every { nonceManager.verifyAndUse(any()) } returns true
     every { nonce.id } returns "nonce-id"
     every { stellarNetworkConfig.stellarNetworkPassphrase } returns passphrase
@@ -356,7 +359,7 @@ class Sep45ServiceTest {
       }
     }
 
-    verify(exactly = 0) { nonceManager.create(any()) }
+    verify(exactly = 0) { nonceManager.createWithId(any(), any()) }
     verify(exactly = 0) { stellarRpc.simulateTransaction(any()) }
   }
 
@@ -438,7 +441,7 @@ class Sep45ServiceTest {
       assertEquals("Invalid home domain", ex.message, "message for: $it")
     }
 
-    verify(exactly = 0) { nonceManager.create(any()) }
+    verify(exactly = 0) { nonceManager.createWithId(any(), any()) }
     verify(exactly = 0) { stellarRpc.simulateTransaction(any()) }
   }
 
@@ -480,7 +483,7 @@ class Sep45ServiceTest {
       assertEquals("Invalid home domain", validateEx.message, "validate message for: $it")
     }
 
-    verify(exactly = 0) { nonceManager.create(any()) }
+    verify(exactly = 0) { nonceManager.createWithId(any(), any()) }
     verify(exactly = 0) { stellarRpc.simulateTransaction(any()) }
     verify(exactly = 0) { jwtService.encode<Sep45Jwt>(any()) }
   }
@@ -697,4 +700,97 @@ class Sep45ServiceTest {
       }    
         """
       .trimIndent()
+
+  private val validAuthEntries =
+    ValidationRequest.builder()
+      .authorizationEntries(
+        "AAAAAgAAAAEAAAABMXx6BpvcLPv+Ys0+pKSVYuT5yS/rba13ZMWowRmb+pxF2uWzaxsY/AAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAg0rDjCmCu2tWgC4nvNxeBkA6AXR61vOlF9kmFcoEQPlUAAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAo074x7qA8Iqyn/P1Ewffdh7zMeBtIHvcMhTaUyIBzPEyTx67xLr9pO2AToTSh/VHFki+g3lfEz8eZsh0w0b0BQAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAAAAAAAQAAAAAAAAAAjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0rVNLbc72XYAAIcHUAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAIAAAAPAAAACnB1YmxpY19rZXkAAAAAAA0AAAAgjrOMLlG0mzEwDNcl9ubzXfJK6NTBBWbiva4e2Rq/ra0AAAAPAAAACXNpZ25hdHVyZQAAAAAAAA0AAABAw4WS+M2bdw9HoLBOiFT9DjqU02Z8gm13Mk0/sBS2AIdC7AbxmoWtS/o1A6feb/hNixTaSBArU0SZKx/l3p5TBAAAAAAAAAAB9rB6Ki9HordR0vv2WusMZEtYjSf5gJC5lIzUxSZAimgAAAAPd2ViX2F1dGhfdmVyaWZ5AAAAAAEAAAARAAAAAQAAAAUAAAAPAAAAB2FjY291bnQAAAAADgAAADhDQVlYWTZRR1RQT0NaNjc2TUxHVDVKRkVTVlJPSjZPSkY3VlczTExYTVRDMlJRSVpUUDVKWU5FTAAAAA8AAAALaG9tZV9kb21haW4AAAAADgAAABVodHRwOi8vbG9jYWxob3N0OjgwODAAAAAAAAAPAAAABW5vbmNlAAAAAAAADgAAACRkOTQ2YTFiOS01MzExLTQxMDgtYmQ1MC1hM2YxZjQ4YWY4ZDYAAAAPAAAAD3dlYl9hdXRoX2RvbWFpbgAAAAAOAAAADmxvY2FsaG9zdDo4MDgwAAAAAAAPAAAAF3dlYl9hdXRoX2RvbWFpbl9hY2NvdW50AAAAAA4AAAA4R0NITEhEQk9LRzJKV01KUUJUTFNMNVhHNk5PN0VTWEkyVEFRS1pYQ1hXWEI1V0kyWDZXMjMzUFIAAAAA"
+      )
+      .build()
+
+  private fun nonceArg(transaction: Transaction): String =
+    (transaction.operations[0] as InvokeHostFunctionOperation)
+      .hostFunction
+      .invokeContract
+      .args[0]
+      .map
+      .scMap
+      .first { it.key.sym.scSymbol.toString() == "nonce" }
+      .`val`
+      .str
+      .scString
+      .toString()
+
+  @Test
+  fun `test getChallenge writes the nonce only after the rpc calls`() {
+    val transaction = slot<Transaction>()
+    val nonceId = slot<String>()
+    every { stellarRpc.simulateTransaction(capture(transaction)) } returns
+      GsonUtils.getInstance()
+        .fromJson(jsonSimulateTransactionResponse, SimulateTransactionResponse::class.java)
+    every { nonceManager.createWithId(capture(nonceId), 300) } returns mockk()
+
+    sep45Service.getChallenge(challengeRequestFor("http://localhost:8080"))
+
+    verifyOrder {
+      stellarRpc.simulateTransaction(any())
+      stellarRpc.sorobanServer
+      nonceManager.createWithId(any(), 300)
+    }
+    assertEquals(nonceArg(transaction.captured), nonceId.captured)
+  }
+
+  @Test
+  fun `test getChallenge writes no nonce when the simulation fails`() {
+    val badSimulateResponse = mockk<SimulateTransactionResponse>()
+    every { stellarRpc.simulateTransaction(any()) } returns badSimulateResponse
+    every { badSimulateResponse.error } returns "some error"
+
+    assertThrows(InternalServerErrorException::class.java) {
+      sep45Service.getChallenge(challengeRequestFor("http://localhost:8080"))
+    }
+    verify(exactly = 0) { nonceManager.createWithId(any(), any()) }
+  }
+
+  @Test
+  fun `test getChallenge writes no nonce when the rpc call throws`() {
+    every { stellarRpc.simulateTransaction(any()) } throws RuntimeException("rpc down")
+
+    assertThrows(RuntimeException::class.java) {
+      sep45Service.getChallenge(challengeRequestFor("http://localhost:8080"))
+    }
+    verify(exactly = 0) { nonceManager.createWithId(any(), any()) }
+  }
+
+  @Test
+  fun `test validate consumes the nonce only after the simulation`() {
+    every { jwtService.encode<Sep45Jwt>(any()) } returns "header.payload.signature"
+
+    sep45Service.validate(validAuthEntries)
+
+    verifyOrder {
+      stellarRpc.simulateTransaction(any())
+      nonceManager.verifyAndUse("d946a1b9-5311-4108-bd50-a3f1f48af8d6")
+    }
+  }
+
+  @Test
+  fun `test validate leaves the nonce unused when the simulation fails`() {
+    val badSimulateResponse = mockk<SimulateTransactionResponse>()
+    every { stellarRpc.simulateTransaction(any()) } returns badSimulateResponse
+    every { badSimulateResponse.error } returns "some error"
+
+    assertThrows(InvalidRequestException::class.java) { sep45Service.validate(validAuthEntries) }
+    verify(exactly = 0) { nonceManager.verifyAndUse(any()) }
+    verify(exactly = 0) { jwtService.encode<Sep45Jwt>(any()) }
+  }
+
+  @Test
+  fun `test validate rejects an unknown or used nonce after the simulation`() {
+    every { nonceManager.verifyAndUse(any()) } returns false
+
+    assertThrows(SepValidationException::class.java) { sep45Service.validate(validAuthEntries) }
+    verify(exactly = 1) { stellarRpc.simulateTransaction(any()) }
+    verify(exactly = 0) { jwtService.encode<Sep45Jwt>(any()) }
+  }
 }
