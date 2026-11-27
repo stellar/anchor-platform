@@ -3,6 +3,7 @@ package org.stellar.anchor.sep45;
 import static org.stellar.anchor.util.StringHelper.isEmpty;
 import static org.stellar.sdk.Auth.authorizeEntry;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
@@ -32,6 +33,7 @@ import org.stellar.sdk.xdr.*;
 
 @AllArgsConstructor
 public class Sep45Service {
+  private static final int MAX_AUTH_ENTRIES_DECODE_DEPTH = 16;
   private static final String WEB_AUTH_VERIFY_FN = "web_auth_verify";
   private static final String KEY_ACCOUNT = "account";
   private static final String KEY_HOME_DOMAIN = "home_domain";
@@ -191,7 +193,10 @@ public class Sep45Service {
 
     SorobanAuthorizationEntries authEntries;
     try {
-      authEntries = SorobanAuthorizationEntries.fromXdrBase64(request.getAuthorizationEntries());
+      byte[] xdr = Base64Factory.getInstance().decode(request.getAuthorizationEntries());
+      authEntries =
+          SorobanAuthorizationEntries.decode(
+              new XdrDataInputStream(new ByteArrayInputStream(xdr)), MAX_AUTH_ENTRIES_DECODE_DEPTH);
     } catch (IOException | IllegalArgumentException e) {
       // a value that is not base64 at all fails with IllegalArgumentException, not IOException
       throw new BadRequestException("Failed to decode auth entries");
