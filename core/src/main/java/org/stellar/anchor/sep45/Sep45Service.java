@@ -14,7 +14,6 @@ import org.stellar.anchor.api.sep.sep45.ChallengeResponse;
 import org.stellar.anchor.api.sep.sep45.ValidationRequest;
 import org.stellar.anchor.api.sep.sep45.ValidationResponse;
 import org.stellar.anchor.auth.JwtService;
-import org.stellar.anchor.auth.Nonce;
 import org.stellar.anchor.auth.NonceManager;
 import org.stellar.anchor.auth.Sep45Jwt;
 import org.stellar.anchor.client.ClientFinder;
@@ -68,7 +67,8 @@ public class Sep45Service {
     KeyPair simulatingKeypair = KeyPair.random();
     Network network = new Network(stellarNetworkConfig.getStellarNetworkPassphrase());
 
-    SCVal[] args = createArgsFromRequest(request);
+    String nonceId = UUID.randomUUID().toString();
+    SCVal[] args = createArgsFromRequest(request, nonceId);
 
     // Simulate the transaction in recording mode to get the authorization entries
     InvokeHostFunctionOperation operation =
@@ -107,28 +107,34 @@ public class Sep45Service {
       }
     }
 
+    String authEntriesXdr;
     try {
-      String authEntriesXdr =
+      authEntriesXdr =
           new SorobanAuthorizationEntries(authEntries.toArray(SorobanAuthorizationEntry[]::new))
               .toXdrBase64();
-
-      return ChallengeResponse.builder()
-          .authorizationEntries(authEntriesXdr)
-          .networkPassphrase(stellarRpc.getSorobanServer().getNetwork().getPassphrase())
-          .build();
     } catch (IOException e) {
       throw new InternalServerErrorException("Failed to encode auth entries");
     }
+
+    String networkPassphrase = stellarRpc.getSorobanServer().getNetwork().getPassphrase();
+    nonceManager.createWithId(nonceId, sep45Config.getAuthTimeout());
+
+    return ChallengeResponse.builder()
+        .authorizationEntries(authEntriesXdr)
+        .networkPassphrase(networkPassphrase)
+        .build();
   }
 
   /**
    * Creates the arguments for the web_auth_verify function from a challenge request.
    *
    * @param request the challenge request to create the arguments from
+   * @param nonceId the id of the nonce to embed in the arguments
    * @return the arguments for the web_auth_verify function
    * @throws SepException if the client domain is invalid
    */
-  private SCVal[] createArgsFromRequest(ChallengeRequest request) throws SepException {
+  private SCVal[] createArgsFromRequest(ChallengeRequest request, String nonceId)
+      throws SepException {
     LinkedHashMap<String, String> argsMap = new LinkedHashMap<>();
     argsMap.put(KEY_ACCOUNT, request.getAccount());
     argsMap.put(KEY_HOME_DOMAIN, request.getHomeDomain());
@@ -149,8 +155,7 @@ public class Sep45Service {
       argsMap.put(KEY_CLIENT_DOMAIN_ACCOUNT, clientDomainSigner);
     }
 
-    Nonce nonce = nonceManager.create(sep45Config.getAuthTimeout());
-    argsMap.put(KEY_NONCE, nonce.getId());
+    argsMap.put(KEY_NONCE, nonceId);
     return createArguments(argsMap);
   }
 
@@ -220,12 +225,8 @@ public class Sep45Service {
       }
     }
 
-    // Verify the nonce is valid and consume it
     Map<String, String> argsMap = extractArgs(firstEntryArgs[0].getMap().getSCMap());
     String nonceId = argsMap.get(KEY_NONCE);
-    if (!nonceManager.verifyAndUse(nonceId)) {
-      throw new SepValidationException("Invalid nonce");
-    }
 
     InvokeHostFunctionOperation operation =
         InvokeHostFunctionOperation.invokeContractFunctionOperationBuilder(
@@ -247,6 +248,10 @@ public class Sep45Service {
         stellarRpc.simulateTransaction(transaction);
     if (simulateTransactionResponse.getError() != null) {
       throw new InvalidRequestException("Failed to simulate transaction");
+    }
+
+    if (!nonceManager.verifyAndUse(nonceId)) {
+      throw new SepValidationException("Invalid nonce");
     }
 
     // Construct the JWT token
