@@ -1,6 +1,7 @@
 package org.stellar.anchor.util
 
 import com.sun.net.httpserver.HttpServer
+import io.mockk.every
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.util.concurrent.CountDownLatch
@@ -10,11 +11,17 @@ import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
+import org.stellar.anchor.LockAndMockStatic
+import org.stellar.anchor.LockAndMockTest
 import org.stellar.anchor.api.exception.SepException
+import org.stellar.sdk.KeyPair
 
+@ExtendWith(LockAndMockTest::class)
 class ClientDomainHelperTest {
 
   @Test
@@ -167,6 +174,26 @@ class ClientDomainHelperTest {
     } finally {
       server.stop(0)
     }
+  }
+
+  @Test
+  @LockAndMockStatic([Sep1Helper::class])
+  fun `test mainnet client_domain fetches share one HTTP client`() {
+    val signingKey = KeyPair.random().accountId
+    val clients = mutableListOf<okhttp3.OkHttpClient>()
+    every { Sep1Helper.readToml(any(), any()) } answers
+      {
+        clients.add(secondArg())
+        Sep1Helper.parse("SIGNING_KEY = \"$signingKey\"")
+      }
+
+    repeat(3) {
+      assertEquals(signingKey, ClientDomainHelper.fetchSigningKeyFromClientDomain("8.8.8.8", false))
+    }
+
+    assertEquals(3, clients.size)
+    assertSame(clients[0], clients[1])
+    assertSame(clients[1], clients[2])
   }
 
   @Test

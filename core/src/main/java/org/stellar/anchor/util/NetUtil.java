@@ -19,6 +19,7 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public class NetUtil {
+  private static final OkHttpClient DEFAULT_CLIENT = OkHttpUtil.buildClient();
   private static final long DEFAULT_MAX_RESPONSE_SIZE = 100 * 1024;
   private static final char UTF8_BOM = '\uFEFF';
 
@@ -158,7 +159,7 @@ public class NetUtil {
   }
 
   static Call getCall(Request request) {
-    return OkHttpUtil.buildClient().newCall(request);
+    return DEFAULT_CLIENT.newCall(request);
   }
 
   static Call getCall(Request request, OkHttpClient client) {

@@ -109,6 +109,14 @@ internal class NetUtilTest {
     assertNotNull(getCall(request))
   }
 
+  @Test
+  fun `test getCall reuses one client across calls`() {
+    val request = OkHttpUtil.buildGetRequest("https://www.stellar.org")
+    val first = getCall(request) as okhttp3.internal.connection.RealCall
+    val second = getCall(request) as okhttp3.internal.connection.RealCall
+    assertSame(first.client, second.client)
+  }
+
   @ParameterizedTest
   @ValueSource(
     strings =
