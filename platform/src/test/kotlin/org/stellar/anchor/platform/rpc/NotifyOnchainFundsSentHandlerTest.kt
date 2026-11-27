@@ -247,6 +247,7 @@ class NotifyOnchainFundsSentHandlerTest {
     txn24.status = PENDING_STELLAR.toString()
     txn24.kind = DEPOSIT.kind
     txn24.toAccount = KeyPair.random().accountId
+    txn24.amountOutAsset = "stellar:native"
 
     val source = KeyPair.random()
     val failedPayment =

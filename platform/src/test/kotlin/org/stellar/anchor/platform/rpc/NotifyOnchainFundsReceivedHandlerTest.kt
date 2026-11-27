@@ -185,6 +185,7 @@ class NotifyOnchainFundsReceivedHandlerTest {
     txn24.status = PENDING_USR_TRANSFER_START.toString()
     txn24.kind = WITHDRAWAL.kind
     txn24.withdrawAnchorAccount = KeyPair.random().accountId
+    txn24.amountInAsset = "stellar:native"
 
     val source = KeyPair.random()
     val failedPayment =
