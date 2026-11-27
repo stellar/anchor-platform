@@ -21,17 +21,29 @@ import org.stellar.anchor.util.Log
 import org.stellar.sdk.Asset
 import org.stellar.sdk.AssetTypeCreditAlphaNum
 import org.stellar.sdk.KeyPair
+import org.stellar.sdk.Network
 import org.stellar.sdk.Server
+import org.stellar.sdk.TOID
+import org.stellar.sdk.TransactionBuilder
 import org.stellar.sdk.TrustLineAsset
 import org.stellar.sdk.exception.BadRequestException
 import org.stellar.sdk.exception.NetworkException
+import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.requests.AccountsRequestBuilder
 import org.stellar.sdk.requests.TransactionsRequestBuilder
 import org.stellar.sdk.responses.AccountResponse
 import org.stellar.sdk.responses.AccountResponse.Balance
 import org.stellar.sdk.responses.SubmitTransactionAsyncResponse.TransactionStatus
+import org.stellar.sdk.responses.TransactionResponse
 import org.stellar.sdk.responses.sorobanrpc.SendTransactionResponse.SendTransactionStatus.*
+import org.stellar.sdk.xdr.OperationResult
+import org.stellar.sdk.xdr.OperationResultCode
+import org.stellar.sdk.xdr.OperationType
+import org.stellar.sdk.xdr.PaymentResult
+import org.stellar.sdk.xdr.PaymentResultCode
 import org.stellar.sdk.xdr.SignerKeyType.*
+import org.stellar.sdk.xdr.TransactionResult
+import org.stellar.sdk.xdr.TransactionResultCode
 
 internal class HorizonTest {
   companion object {
@@ -292,5 +304,112 @@ internal class HorizonTest {
 
     val exception = assertThrows<LedgerException> { horizon.getTransaction(hash) }
     assertEquals("Error getting transaction: $hash. Code: 500, body: boom", exception.message)
+  }
+
+  private val paymentDestination = KeyPair.random().accountId
+
+  private fun paymentEnvelope(): String {
+    val source = KeyPair.random()
+    val transaction =
+      TransactionBuilder(org.stellar.sdk.Account(source.accountId, 1L), Network.TESTNET)
+        .addOperation(
+          PaymentOperation.builder()
+            .destination(paymentDestination)
+            .asset(Asset.createNativeAsset())
+            .amount(java.math.BigDecimal("10"))
+            .build()
+        )
+        .setBaseFee(100)
+        .setTimeout(0L)
+        .build()
+    transaction.sign(source)
+    return transaction.toEnvelopeXdrBase64()
+  }
+
+  private fun paymentOpResult(code: PaymentResultCode): OperationResult =
+    OperationResult.builder()
+      .discriminant(OperationResultCode.opINNER)
+      .tr(
+        OperationResult.OperationResultTr.builder()
+          .discriminant(OperationType.PAYMENT)
+          .paymentResult(PaymentResult.builder().discriminant(code).build())
+          .build()
+      )
+      .build()
+
+  private fun txResult(code: TransactionResultCode, opCode: PaymentResultCode): TransactionResult {
+    val result = TransactionResult.TransactionResultResult.builder().discriminant(code)
+    if (code == TransactionResultCode.txSUCCESS || code == TransactionResultCode.txFAILED) {
+      result.results(arrayOf(paymentOpResult(opCode)))
+    }
+    return TransactionResult.builder().result(result.build()).build()
+  }
+
+  private fun horizonReturningPayment(hash: String, txResult: TransactionResult): Horizon {
+    val response = mockk<TransactionResponse>()
+    every { response.envelopeXdr } returns paymentEnvelope()
+    every { response.pagingToken } returns TOID(100, 1, 0).toInt64().toString()
+    every { response.ledger } returns 100L
+    every { response.hash } returns hash
+    every { response.sourceAccount } returns KeyPair.random().accountId
+    every { response.sourceAccountSequence } returns 2L
+    every { response.createdAt } returns "2026-09-23T00:00:00Z"
+    every { response.parseResultXdr() } returns txResult
+
+    val transactionsRequestBuilder: TransactionsRequestBuilder = mockk()
+    every { transactionsRequestBuilder.transaction(hash) } returns response
+    val server = mockk<Server>()
+    every { server.transactions() } returns transactionsRequestBuilder
+
+    val horizon = mockk<Horizon>()
+    every { horizon.server } returns server
+    every { horizon.getTransaction(hash) } answers { callOriginal() }
+    return horizon
+  }
+
+  @Test
+  fun `test getTransaction rejects a failed transaction instead of decoding its payment as executed`() {
+    val hash = "f".repeat(64)
+    val horizon =
+      horizonReturningPayment(
+        hash,
+        txResult(TransactionResultCode.txFAILED, PaymentResultCode.PAYMENT_UNDERFUNDED),
+      )
+
+    val exception = assertThrows<LedgerException> { horizon.getTransaction(hash) }
+    assertEquals("Transaction did not succeed on ledger: $hash", exception.message)
+  }
+
+  @Test
+  fun `test getTransaction rejects every non-success result code`() {
+    val hash = "1".repeat(64)
+    for (code in
+      listOf(
+        TransactionResultCode.txFEE_BUMP_INNER_FAILED,
+        TransactionResultCode.txBAD_SEQ,
+        TransactionResultCode.txINSUFFICIENT_BALANCE,
+      )) {
+      val horizon =
+        horizonReturningPayment(hash, txResult(code, PaymentResultCode.PAYMENT_UNDERFUNDED))
+
+      assertThrows<LedgerException>("$code must be rejected") { horizon.getTransaction(hash) }
+    }
+  }
+
+  @Test
+  fun `test getTransaction still decodes the payment of a successful transaction`() {
+    val hash = "2".repeat(64)
+    val horizon =
+      horizonReturningPayment(
+        hash,
+        txResult(TransactionResultCode.txSUCCESS, PaymentResultCode.PAYMENT_SUCCESS),
+      )
+
+    val txn = horizon.getTransaction(hash)
+
+    assertNotNull(txn)
+    assertEquals(1, txn.operations.size)
+    assertEquals(OperationType.PAYMENT, txn.operations[0].type)
+    assertEquals(paymentDestination, txn.operations[0].paymentOperation.to)
   }
 }
