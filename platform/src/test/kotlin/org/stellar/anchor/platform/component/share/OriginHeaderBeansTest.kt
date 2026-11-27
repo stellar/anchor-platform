@@ -16,6 +16,7 @@ import org.stellar.anchor.platform.EventProcessingServer
 import org.stellar.anchor.platform.PlatformServer
 import org.stellar.anchor.platform.SepServer
 import org.stellar.anchor.platform.StellarObservingServer
+import org.stellar.anchor.platform.component.management.OriginHeaderManagementConfiguration
 import org.stellar.anchor.platform.utils.OriginHeaderFilter
 
 /**
@@ -75,6 +76,30 @@ class OriginHeaderBeansTest {
       assertNotNull(scan, "${server.simpleName} has no @ComponentScan")
       assertTrue(scan.basePackages.contains(pkg)) {
         "${server.simpleName} does not scan $pkg: ${scan.basePackages.toList()}"
+      }
+    }
+  }
+
+  // ORIGIN-16: Boot requires management configurations to stay out of the component scan; a scan
+  // would register the actuator filter in the main context too (duplicate bean name)
+  @Test
+  fun `no server scans the package of the management registration`() {
+    val servers =
+      listOf(
+        SepServer::class.java,
+        PlatformServer::class.java,
+        StellarObservingServer::class.java,
+        EventProcessingServer::class.java,
+      )
+    val pkg = OriginHeaderManagementConfiguration::class.java.packageName
+
+    for (server in servers) {
+      val scan = server.getAnnotation(ComponentScan::class.java)
+      assertNotNull(scan, "${server.simpleName} has no @ComponentScan")
+      for (scanned in scan.basePackages) {
+        assertFalse(pkg == scanned || pkg.startsWith("$scanned.")) {
+          "${server.simpleName} scans $scanned, which contains $pkg"
+        }
       }
     }
   }

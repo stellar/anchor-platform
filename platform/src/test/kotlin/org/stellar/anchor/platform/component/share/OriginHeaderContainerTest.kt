@@ -1,11 +1,10 @@
 package org.stellar.anchor.platform.component.share
 
-import io.mockk.unmockkStatic
+import io.mockk.unmockkAll
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.util.Calendar
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -77,12 +76,14 @@ class OriginHeaderContainerTest {
   private val client = HttpClient.newHttpClient()
 
   /**
-   * `PlatformIntegrationHelperTest` mocks `java.util.Calendar` statically and never undoes it,
-   * which leaves the class instrumented for the rest of the Gradle test JVM and keeps Tomcat from
-   * starting (`NoClassDefFoundError: Rfc6265CookieProcessor`). Undo it before starting a server.
+   * A static MockK mock of a JDK class (`java.util.Calendar`, `TimeZone`, `Instant`, ...) that an
+   * earlier test class never undoes keeps the class instrumented for the rest of the Gradle test
+   * JVM and keeps Tomcat from starting (`NoClassDefFoundError: Rfc6265CookieProcessor`).
+   * `PlatformIntegrationHelperTest` leaks `Calendar` this way. Undo every mock before starting a
+   * server; this class mocks nothing itself.
    */
   private fun launch(vararg properties: String): ConfigurableApplicationContext {
-    unmockkStatic(Calendar::class)
+    unmockkAll()
     return SpringApplicationBuilder(App::class.java)
       .web(WebApplicationType.SERVLET)
       .properties(
@@ -172,6 +173,18 @@ class OriginHeaderContainerTest {
 
     assertEquals(400, answer.status, "status; body: ${answer.body.take(200)}")
     assertEquals(rejection, answer.body)
+  }
+
+  // ORIGIN-15 and ORIGIN-16: the error forward on the management port
+  @Test
+  fun `the actuator port refuses the attack origin on a path Tomcat answers with 404`() {
+    for (method in listOf("GET", "OPTIONS")) {
+      val answer =
+        send(management, "/WEB-INF/x", method, attackOrigin, preflight = method == "OPTIONS")
+
+      assertEquals(400, answer.status, "$method; body: ${answer.body.take(200)}")
+      assertEquals(rejection, answer.body)
+    }
   }
 
   // ORIGIN-16 (unchanged behavior on the actuator port)
