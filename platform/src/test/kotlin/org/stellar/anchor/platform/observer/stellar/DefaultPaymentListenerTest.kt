@@ -647,6 +647,30 @@ class DefaultPaymentListenerTest {
   }
 
   @Test
+  fun `test an underpayment past the payment cap is not recorded or published`() {
+    val txn =
+      pendingSep31().apply {
+        stellarTransactions =
+          listOf(
+            StellarTransaction.builder()
+              .id("pre-existing-underpayment-tx")
+              .payments(
+                (1..DefaultPaymentListener.MAX_RECORDED_UNDERPAYMENT_PAYMENTS).map {
+                  StellarPayment.builder().id("p$it").build()
+                }
+              )
+              .build()
+          )
+      }
+    stubSep31(txn)
+
+    paymentListener.onReceived(underpaidEvent())
+
+    verify(exactly = 0) { eventSession.publish(any()) }
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+  }
+
+  @Test
   fun `test underpayment still logs the insufficient amount error and counts it`() {
     val event = underpaidEvent()
     val ledgerTransaction = event.ledgerTransaction

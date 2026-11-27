@@ -57,6 +57,8 @@ public class DefaultPaymentListener implements PaymentListener {
    */
   static final String LOOKUP_PROBE_MEMO = "anchor-platform-db-probe";
 
+  static final int MAX_RECORDED_UNDERPAYMENT_PAYMENTS = 100;
+
   final PaymentObservingAccountsManager paymentObservingAccountsManager;
   final JdbcSep31TransactionStore sep31TransactionStore;
   final JdbcSep24TransactionStore sep24TransactionStore;
@@ -905,6 +907,16 @@ public class DefaultPaymentListener implements PaymentListener {
     // A redelivered payment is already in the list: it is not saved again, but the event is sent
     // again, because the first delivery may have failed after the save.
     if (!isRecorded(ledgerTransaction, sepTransaction)) {
+      if (recordedPaymentCount(sepTransaction) >= MAX_RECORDED_UNDERPAYMENT_PAYMENTS) {
+        warnF(
+            "Not recording underpayment for SEP-{} transaction {}: already at the {}-payment cap. ledgerTxn.id={}",
+            sepTransaction.getProtocol(),
+            sepTransaction.getId(),
+            MAX_RECORDED_UNDERPAYMENT_PAYMENTS,
+            ledgerTransaction.getHash());
+        Metrics.counter(AnchorMetrics.PAYMENT_OBSERVER_UNDERPAYMENT_CAPPED.toString()).increment();
+        return;
+      }
       try {
         PaymentHelper.recordStellarTransaction(sacToAssetMapper, ledgerTransaction, sepTransaction);
         switch (Sep.from(sepTransaction.getProtocol())) {
@@ -951,5 +963,14 @@ public class DefaultPaymentListener implements PaymentListener {
     return sepTransaction.getStellarTransactions() != null
         && sepTransaction.getStellarTransactions().stream()
             .anyMatch(tx -> Objects.equals(tx.getId(), ledgerTransaction.getHash()));
+  }
+
+  private static int recordedPaymentCount(JdbcSepTransaction sepTransaction) {
+    if (sepTransaction.getStellarTransactions() == null) {
+      return 0;
+    }
+    return sepTransaction.getStellarTransactions().stream()
+        .mapToInt(tx -> tx.getPayments() == null ? 0 : tx.getPayments().size())
+        .sum();
   }
 }
