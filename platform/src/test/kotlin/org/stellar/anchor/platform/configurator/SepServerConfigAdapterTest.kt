@@ -1,13 +1,19 @@
 package org.stellar.anchor.platform.configurator
 
 import java.util.Properties
+import org.apache.catalina.valves.RemoteIpValve
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.springframework.boot.autoconfigure.web.ServerProperties
+import org.springframework.boot.autoconfigure.web.embedded.TomcatWebServerFactoryCustomizer
 import org.springframework.boot.context.properties.bind.Binder
+import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory
 import org.springframework.core.env.PropertiesPropertySource
 import org.springframework.core.env.StandardEnvironment
+import org.springframework.core.env.SystemEnvironmentPropertySource
 import org.stellar.anchor.api.exception.InvalidConfigException
 import org.stellar.anchor.platform.config.SepServerConfig
 import org.stellar.anchor.platform.configurator.ConfigMap.ConfigSource.ENV
@@ -94,5 +100,41 @@ class SepServerConfigAdapterTest {
         )
       }
     assertTrue(indexed.message!!.contains("[10.0.0.0/33]"), indexed.message)
+  }
+
+  private fun remoteIpValveOnKubernetes(springProps: Properties): Boolean {
+    val env = StandardEnvironment()
+    env.propertySources.replace(
+      StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+      SystemEnvironmentPropertySource(
+        StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+        mapOf<String, Any>(
+          "KUBERNETES_SERVICE_HOST" to "10.43.0.1",
+          "KUBERNETES_SERVICE_PORT" to "443",
+        ),
+      ),
+    )
+    env.propertySources.addFirst(PropertiesPropertySource("sep", springProps))
+    val serverProperties =
+      Binder.get(env).bind("server", ServerProperties::class.java).orElse(ServerProperties())
+    val factory = TomcatServletWebServerFactory()
+    TomcatWebServerFactoryCustomizer(env, serverProperties).customize(factory)
+    return factory.engineValves.any { it is RemoteIpValve }
+  }
+
+  @Test
+  fun `the SEP server turns off Spring's forwarded-header handling`() {
+    adapter.updateSpringEnv(ConfigHelper.loadDefaultConfig())
+
+    assertEquals("none", adapter.props.getProperty("server.forward-headers-strategy"))
+  }
+
+  @Test
+  fun `on Kubernetes no RemoteIpValve rewrites the peer address before the resolver`() {
+    assertTrue(remoteIpValveOnKubernetes(Properties()))
+
+    adapter.updateSpringEnv(ConfigHelper.loadDefaultConfig())
+
+    assertFalse(remoteIpValveOnKubernetes(adapter.props))
   }
 }
