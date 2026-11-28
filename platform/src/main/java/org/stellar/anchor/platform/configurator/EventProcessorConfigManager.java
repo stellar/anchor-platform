@@ -46,6 +46,10 @@ class EventProcessorConfigAdapter extends SpringConfigAdapter {
     copy(config, "event_processor.context_path", "server.servlet.context-path");
     copy(config, "event_processor.port", "server.port");
     set("spring.mvc.converters.preferred-json-mapper", "gson");
+    // No server serves static files. Spring Boot's default resource handler would build a URL from
+    // the text before a ":/" in any unmatched path and, with java.protocol.handler.pkgs set,
+    // keep that text on the heap for good (HackerOne #4245484).
+    set("spring.web.resources.add-mappings", false);
 
     // Enable the management server for Spring Actuator
     copy(config, "event_processor.management_server_port", "management.server.port");
