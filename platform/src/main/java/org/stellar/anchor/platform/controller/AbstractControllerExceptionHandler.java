@@ -18,6 +18,7 @@ import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.sep.CustomerInfoNeededResponse;
@@ -100,7 +101,8 @@ public abstract class AbstractControllerExceptionHandler {
   @ExceptionHandler({
     SepNotFoundException.class,
     NotFoundException.class,
-    NoResourceFoundException.class
+    NoResourceFoundException.class,
+    NoHandlerFoundException.class
   })
   @ResponseStatus(value = HttpStatus.NOT_FOUND)
   SepExceptionResponse handleNotFound(Exception ex) {

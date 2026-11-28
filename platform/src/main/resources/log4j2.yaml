@@ -62,3 +62,6 @@ Configutation:
         level: warn
       - name: com.zaxxer
         level: warn
+      # One warning per unmatched request would carry the whole request path (HackerOne #4245484).
+      - name: org.springframework.web.servlet.PageNotFound
+        level: error
