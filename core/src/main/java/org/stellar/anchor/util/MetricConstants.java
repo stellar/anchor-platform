@@ -54,6 +54,7 @@ public class MetricConstants {
   // event processor metrics
   public static final String EVENT_RECEIVED = "event_processor.event_received";
   public static final String EVENT_PROCESSED = "event_processor.event_processed";
+  public static final String EVENT_DROPPED = "event_processor.event_dropped";
   public static final String TV_BUSINESS_SERVER_CALLBACK = "business_server_callback_api";
   public static final String TV_STATUS_CALLBACK = "status_callback";
   public static final String TV_UNKNOWN = "unknown";

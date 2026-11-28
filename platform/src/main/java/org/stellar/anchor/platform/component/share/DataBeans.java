@@ -1,5 +1,6 @@
 package org.stellar.anchor.platform.component.share;
 
+import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.stellar.anchor.auth.NonceStore;
@@ -70,6 +71,6 @@ public class DataBeans {
   // job being reachable in every supported topology rather than only some.
   @Bean
   public NonceCleanupJob nonceCleanupJob(NonceStore nonceStore) {
-    return new NonceCleanupJob(nonceStore);
+    return new NonceCleanupJob(nonceStore, Clock.systemUTC());
   }
 }

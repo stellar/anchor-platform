@@ -20,6 +20,8 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.InvalidDataAccessResourceUsageException
 import org.springframework.dao.OptimisticLockingFailureException
@@ -52,6 +54,7 @@ import org.stellar.anchor.sep31.Sep31Transaction
 import org.stellar.anchor.sep6.Sep6Transaction
 import org.stellar.anchor.util.AssetHelper.fromXdrAmount
 import org.stellar.anchor.util.AssetHelper.getSep11AssetName
+import org.stellar.anchor.util.GsonUtils
 import org.stellar.anchor.util.Log
 import org.stellar.sdk.MuxedAccount
 import org.stellar.sdk.StrKey
@@ -644,6 +647,54 @@ class DefaultPaymentListenerTest {
       listOf(event.ledgerTransaction.hash),
       transaction.stellarTransactions.map { it.id }
     )
+  }
+
+  @Test
+  fun `test an underpayment past the payment cap is not recorded or published`() {
+    val txn =
+      pendingSep31().apply {
+        stellarTransactions =
+          listOf(
+            StellarTransaction.builder()
+              .id("pre-existing-underpayment-tx")
+              .payments(
+                (1..DefaultPaymentListener.MAX_RECORDED_UNDERPAYMENT_PAYMENTS).map {
+                  StellarPayment.builder().id("p$it").build()
+                }
+              )
+              .build()
+          )
+      }
+    stubSep31(txn)
+
+    paymentListener.onReceived(underpaidEvent())
+
+    verify(exactly = 0) { eventSession.publish(any()) }
+    verify(exactly = 0) { sep31TransactionStore.save(any()) }
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = [20_000, 8_192])
+  fun `test a stream of dust transactions on one withdrawal keeps its row bounded`(
+    envelopeLength: Int
+  ) {
+    val txn = pendingSep31()
+    val saved = stubSep31(txn)
+    val cap = DefaultPaymentListener.MAX_RECORDED_UNDERPAYMENT_PAYMENTS
+
+    (1..cap + 50).forEach { i ->
+      val event = underpaidEvent()
+      event.ledgerTransaction.hash = "%064x".format(i)
+      event.ledgerTransaction.envelopeXdr = "A".repeat(envelopeLength)
+      paymentListener.onReceived(event)
+    }
+
+    verify(exactly = cap) { sep31TransactionStore.save(any()) }
+    verify(exactly = cap) { eventSession.publish(any()) }
+    val entries = saved.captured.stellarTransactions
+    assertEquals(cap, entries.size)
+    entries.forEach { assertTrue(it.envelope == null || it.envelope.length <= 8_192) }
+    assertTrue(GsonUtils.getInstance().toJson(entries).length < 1_000_000)
   }
 
   @Test

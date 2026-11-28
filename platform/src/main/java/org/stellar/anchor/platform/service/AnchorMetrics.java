@@ -15,6 +15,7 @@ public enum AnchorMetrics {
   PAYMENT_OBSERVER_AMOUNT_TRUNCATED("payment_observer.amount_truncated"),
   PAYMENT_OBSERVER_EVENT_SKIPPED("payment_observer.event_skipped"),
   PAYMENT_OBSERVER_LOOKUP_FAILED("payment_observer.lookup_failed"),
+  PAYMENT_OBSERVER_UNDERPAYMENT_CAPPED("payment_observer.underpayment_capped"),
   LOGGER("logger"),
 
   PLATFORM_RPC_TRANSACTION("platform_server.rpc_transaction"),
