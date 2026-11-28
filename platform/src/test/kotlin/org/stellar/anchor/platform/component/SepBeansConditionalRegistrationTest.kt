@@ -29,6 +29,7 @@ import org.stellar.anchor.platform.component.sep.SepBeans
 import org.stellar.anchor.platform.config.CallbackApiConfig
 import org.stellar.anchor.platform.config.PropertySep24Config
 import org.stellar.anchor.platform.config.PropertySep31Config
+import org.stellar.anchor.platform.config.SepServerConfig
 import org.stellar.anchor.sep10.Sep10Service
 import org.stellar.anchor.sep24.Sep24TransactionStore
 import org.stellar.anchor.sep31.Sep31CustomerIdOwnerStore
@@ -75,6 +76,10 @@ class SepBeansConditionalRegistrationTest {
       .withBean(
         CallbackApiConfig::class.java,
         Supplier { mockk<CallbackApiConfig>(relaxed = true) },
+      )
+      .withBean(
+        SepServerConfig::class.java,
+        Supplier { SepServerConfig().apply { requestBodyReadTimeoutSeconds = 30 } },
       )
       .withBean(JwtService::class.java, Supplier { mockk<JwtService>(relaxed = true) })
       .withBean(AssetService::class.java, Supplier { mockk<AssetService>(relaxed = true) })

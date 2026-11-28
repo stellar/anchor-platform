@@ -4,6 +4,8 @@ import jakarta.servlet.Filter;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +25,7 @@ import org.stellar.anchor.platform.config.PlatformApiConfig;
 import org.stellar.anchor.platform.config.PlatformServerConfig;
 import org.stellar.anchor.platform.data.JdbcClientConfigRepo;
 import org.stellar.anchor.platform.service.*;
+import org.stellar.anchor.platform.utils.RequestBodyReadDeadlineValve;
 import org.stellar.anchor.platform.utils.RequestBodySizeLimitFilter;
 import org.stellar.anchor.sep24.Sep24DepositInfoGenerator;
 import org.stellar.anchor.sep24.Sep24TransactionStore;
@@ -65,6 +68,22 @@ public class PlatformServerBeans {
     FilterRegistrationBean<Filter> registrationBean = new FilterRegistrationBean<>();
     registrationBean.setFilter(anchorToPlatformFilter);
     return registrationBean;
+  }
+
+  /**
+   * Limit the total time a request body may take to arrive. See {@link
+   * RequestBodyReadDeadlineValve}.
+   */
+  @Bean
+  public WebServerFactoryCustomizer<TomcatServletWebServerFactory>
+      requestBodyReadDeadlineCustomizer(PlatformServerConfig platformServerConfig)
+          throws InvalidConfigException {
+    long seconds = platformServerConfig.getRequestBodyReadTimeoutSeconds();
+    if (seconds <= 0) {
+      throw new InvalidConfigException(
+          "platform_server.request_body_read_timeout_seconds must be a positive number of seconds");
+    }
+    return RequestBodyReadDeadlineValve.customizer(seconds);
   }
 
   @Bean

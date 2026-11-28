@@ -22,6 +22,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.stellar.anchor.api.exception.*;
 import org.stellar.anchor.api.sep.CustomerInfoNeededResponse;
 import org.stellar.anchor.api.sep.SepExceptionResponse;
+import org.stellar.anchor.platform.utils.RequestBodyReadDeadlineValve;
 import org.stellar.anchor.platform.utils.RequestBodySizeLimitFilter;
 
 public abstract class AbstractControllerExceptionHandler {
@@ -49,6 +50,10 @@ public abstract class AbstractControllerExceptionHandler {
       if (cause instanceof RequestBodySizeLimitFilter.RequestBodyTooLargeException) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
             .body(new SepExceptionResponse("The request body is too large."));
+      }
+      if (cause instanceof RequestBodyReadDeadlineValve.RequestBodyReadTimeoutException) {
+        return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+            .body(new SepExceptionResponse("The request body took too long to arrive."));
       }
     }
     debugF("Spring is unable to read HTTP message: {}", ex.getMessage());
