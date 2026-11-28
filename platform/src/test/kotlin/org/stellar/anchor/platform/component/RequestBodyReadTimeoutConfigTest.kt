@@ -3,10 +3,10 @@ package org.stellar.anchor.platform.component
 import java.time.Duration
 import java.util.Properties
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.springframework.boot.context.properties.bind.Bindable
 import org.springframework.boot.context.properties.bind.Binder
 import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory
 import org.springframework.core.env.PropertiesPropertySource
@@ -52,6 +52,18 @@ class RequestBodyReadTimeoutConfigTest {
   }
 
   @Test
+  fun `the Platform key set in the configuration reaches the Platform server config`() {
+    val env = StandardEnvironment()
+    val props = Properties().apply { setProperty(platformKey, "45") }
+    env.propertySources.addFirst(PropertiesPropertySource("test", props))
+
+    val bound =
+      Binder.get(env).bind("platform-server", Bindable.ofInstance(platformConfig(0))).get()
+
+    assertEquals(45, bound.requestBodyReadTimeoutSeconds)
+  }
+
+  @Test
   fun `the SEP server refuses a zero or negative deadline naming the key`() {
     for (bad in listOf(0L, -1L)) {
       val ex =
@@ -88,7 +100,6 @@ class RequestBodyReadTimeoutConfigTest {
 
     PlatformServerBeans().requestBodyReadDeadlineCustomizer(platformConfig(45)).customize(factory)
 
-    assertNotNull(valveOf(factory))
     assertEquals(Duration.ofSeconds(45), valveOf(factory).timeout)
   }
 }

@@ -72,6 +72,30 @@ class DeadlineInputBufferTest {
   }
 
   @Test
+  fun `a read after the deadline does not touch the source`() {
+    val body = buffer(Source(listOf(byteArrayOf(1), byteArrayOf(2))), contentLength = 5000)
+    assertEquals(1, body.readOne())
+    now = deadlineNanos + 1
+    val readsBefore = delegateReads
+
+    assertThrows(RequestBodyReadTimeoutException::class.java) { body.readOne() }
+
+    assertEquals(readsBefore, delegateReads)
+  }
+
+  @Test
+  fun `the deadline counts from when the buffer was built`() {
+    now = 1_000 * deadlineNanos
+    val body = buffer(Source(listOf(byteArrayOf(1), byteArrayOf(2))), contentLength = 5000)
+
+    now += deadlineNanos
+    assertEquals(1, body.readOne())
+
+    now += 1
+    assertThrows(RequestBodyReadTimeoutException::class.java) { body.readOne() }
+  }
+
+  @Test
   fun `a read that returns data after the deadline passed during it throws the timeout`() {
     val body =
       buffer(
