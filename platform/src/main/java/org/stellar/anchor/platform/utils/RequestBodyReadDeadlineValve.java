@@ -2,6 +2,7 @@ package org.stellar.anchor.platform.utils;
 
 import static org.stellar.anchor.util.Log.warnF;
 
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -30,6 +31,13 @@ import org.springframework.boot.web.server.WebServerFactoryCustomizer;
  * valve therefore answers first, then reads the rest under the deadline, and drops the connection
  * with {@link ActionCode#CLOSE_NOW} when the deadline passes. Throwing out of the valve does not
  * stop Tomcat's own read; the close action does.
+ *
+ * <p>Known limits: a rejection made with {@code sendError} (Spring's no-handler 404, a {@code
+ * ResponseStatusException}) is not committed by {@code flushBuffer}, so when the body is then cut
+ * off that client sees the connection close without a status line; rejections made with {@code
+ * setStatus}, as the token filters do, are delivered. A client that sends {@code Expect:
+ * 100-continue}, is rejected and then keeps the connection without sending the body holds the
+ * worker until it closes or Tomcat's read timeout fires, like any connection that sends nothing.
  */
 public class RequestBodyReadDeadlineValve extends ValveBase {
   /** What the valve reads and discards from an unfinished body; Tomcat's default swallow size. */
@@ -63,7 +71,9 @@ public class RequestBodyReadDeadlineValve extends ValveBase {
   @Override
   public void invoke(Request request, Response response) throws IOException, ServletException {
     long contentLength = request.getContentLengthLong();
-    if (!hasBody(contentLength, request.getHeader("Transfer-Encoding"))) {
+    // An async or error re-dispatch belongs to a request the first dispatch already handled.
+    if (request.getDispatcherType() != DispatcherType.REQUEST
+        || !hasBody(contentLength, request.getHeader("Transfer-Encoding"))) {
       getNext().invoke(request, response);
       return;
     }
@@ -95,7 +105,17 @@ public class RequestBodyReadDeadlineValve extends ValveBase {
       Response response,
       org.apache.coyote.Request coyoteRequest,
       DeadlineInputBuffer body) {
+    if (request.isAsyncStarted() || body.finished()) {
+      return;
+    }
+    try {
+      discardBuffered(body);
+    } catch (IOException e) {
+      // The deadline already passed: the blocking drain below throws it after the answer is sent.
+    }
     if (body.finished()) {
+      // The whole body had already arrived; there is nothing to wait for and the response keeps
+      // the framing it would have had without the valve.
       return;
     }
     try {
@@ -116,6 +136,16 @@ public class RequestBodyReadDeadlineValve extends ValveBase {
       coyoteRequest.action(ActionCode.CLOSE_NOW, e);
     } catch (IOException e) {
       // The client closed the connection while the rest of the body was being read.
+    }
+  }
+
+  /** Discards what is already buffered, which never blocks. */
+  static void discardBuffered(DeadlineInputBuffer body) throws IOException {
+    ApplicationBufferHandler handler = new DrainHandler();
+    while (!body.finished() && body.available() > 0) {
+      if (body.doRead(handler) <= 0) {
+        break;
+      }
     }
   }
 
