@@ -6,6 +6,7 @@ import lombok.Data;
 public class PlatformServerConfig {
   String contextPath;
   long maxRequestBodySize;
+  long requestBodyReadTimeoutSeconds;
   int maxPatchRecords;
   PropertySecretConfig secretConfig;
 

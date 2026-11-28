@@ -203,6 +203,13 @@ platform_server:
   # The maximum size, in bytes, of a request body the Platform server accepts. Larger requests
   # are rejected with HTTP 413 before they are read into memory.
   max_request_body_size: 1048576
+  # The maximum time, in seconds, a request body may take to arrive in full. A request whose body is still
+  # incomplete when the time is up is cut off and its connection is closed; a rejected request is answered first.
+  # The limit counts from when the server starts reading the body, not from each read, so a sender that trickles
+  # bytes cannot hold a worker thread. A connection that sends nothing at all is still closed by the web server's
+  # own read timeout (60 seconds). Run the server behind a proxy that reads the whole request body before it
+  # contacts the server (the default of ingress-nginx and of most cloud load balancers).
+  request_body_read_timeout_seconds: 30
   # The maximum number of records a single PATCH /transactions request can update.
   max_patch_records: 1000
 
@@ -240,6 +247,13 @@ sep_server:
   # Ex: trusted_proxies: [10.0.0.0/8, 2001:db8::/32]
   # Ex: trusted_proxies: 10.0.0.0/8,2001:db8::/32
   trusted_proxies:
+  # The maximum time, in seconds, a request body may take to arrive in full. A request whose body is still
+  # incomplete when the time is up is cut off and its connection is closed; a rejected request is answered first.
+  # The limit counts from when the server starts reading the body, not from each read, so a sender that trickles
+  # bytes cannot hold a worker thread. A connection that sends nothing at all is still closed by the web server's
+  # own read timeout (60 seconds). Run the server behind a proxy that reads the whole request body before it
+  # contacts the server (the default of ingress-nginx and of most cloud load balancers).
+  request_body_read_timeout_seconds: 30
 
 ######################
 # SEP-1 Configuration
