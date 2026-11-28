@@ -19,13 +19,13 @@ class RequestBodyReadDeadlineValveTest {
         mockk<Request>(relaxed = true) {
           every { contentLengthLong } returns 5000
           every { dispatcherType } returns dispatch
+          every { coyoteRequest } throws AssertionError("the input buffer must not be touched")
         }
       val response = mockk<Response>(relaxed = true)
 
       valve.invoke(request, response)
 
       verify(exactly = 1) { next.invoke(request, response) }
-      verify(exactly = 0) { request.coyoteRequest }
     }
   }
 }

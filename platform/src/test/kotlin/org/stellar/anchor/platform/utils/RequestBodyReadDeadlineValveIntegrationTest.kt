@@ -36,7 +36,7 @@ class RequestBodyReadDeadlineValveIntegrationTest {
 
   /** Records the class of the coyote input buffer on the way in and out of the valves after it. */
   private class SpyValve(private val phase: String, private val seen: MutableList<String>) :
-    ValveBase() {
+    ValveBase(true) {
     override fun invoke(request: Request, response: Response) {
       seen.add("$phase-enter ${request.requestURI} ${request.coyoteRequest.inputBuffer.javaClass}")
       next.invoke(request, response)
@@ -45,7 +45,7 @@ class RequestBodyReadDeadlineValveIntegrationTest {
   }
 
   /** Fails the request on `/throw` before any servlet runs. */
-  private class ThrowingValve : ValveBase() {
+  private class ThrowingValve : ValveBase(true) {
     override fun invoke(request: Request, response: Response) {
       if (request.requestURI == "/throw") throw ServletException("handler failure")
       next.invoke(request, response)
@@ -80,6 +80,16 @@ class RequestBodyReadDeadlineValveIntegrationTest {
         resp.writer.print("multipart:${req.parts.size}")
       }
       servlet(context, "reject", "/reject") { _, resp -> resp.status = 403 }
+      servlet(context, "async", "/async", async = true) { req, _ ->
+        val async = req.startAsync()
+        Thread {
+            Thread.sleep(3000)
+            val size = req.inputStream.readAllBytes().size
+            async.response.writer.print("async:$size")
+            async.complete()
+          }
+          .start()
+      }
       val health =
         Tomcat.addServlet(
           context,
@@ -101,6 +111,7 @@ class RequestBodyReadDeadlineValveIntegrationTest {
       name: String,
       path: String,
       multipart: Boolean = false,
+      async: Boolean = false,
       handler: (HttpServletRequest, HttpServletResponse) -> Unit,
     ) {
       val wrapper =
@@ -113,6 +124,7 @@ class RequestBodyReadDeadlineValveIntegrationTest {
           },
         )
       if (multipart) wrapper.multipartConfigElement = MultipartConfigElement("")
+      if (async) wrapper.isAsyncSupported = true
       context.addServletMappingDecoded(path, name)
     }
 
@@ -367,6 +379,45 @@ class RequestBodyReadDeadlineValveIntegrationTest {
 
       assertTrue(response.headers.any { it.startsWith("Content-Length:", ignoreCase = true) })
       assertFalse(response.headers.any { it.startsWith("Transfer-Encoding:", ignoreCase = true) })
+    }
+  }
+
+  @Test
+  fun `a rejection is answered at once when the body is chunked and only partly framed`() {
+    TestServer(withValve = true, deadlineSeconds).use { server ->
+      val (path, type, _) = rejectArm
+      Drip(server.port, path, type, "13", count = 1, chunked = true).start().use { drip ->
+        val socket = drip.sockets.first()
+        socket.soTimeout = 700
+        val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+
+        // The next byte of the drip arrives after 1 s: the answer must not wait for it.
+        assertEquals("HTTP/1.1 403", reader.readLine().substringBeforeLast(" "))
+      }
+    }
+  }
+
+  @Test
+  fun `a body that an async handler reads after the valve returned is left alone`() {
+    TestServer(withValve = true, deadlineSeconds).use { server ->
+      Socket("127.0.0.1", server.port).use { socket ->
+        socket.soTimeout = 8000
+        val out = socket.getOutputStream()
+        out.write(
+          ("POST /async HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n" +
+              "Content-Length: 10\r\nConnection: close\r\n\r\n01234")
+            .toByteArray()
+        )
+        out.flush()
+        // The deadline (2 s) passes while the handler waits; the rest arrives after that.
+        Thread.sleep(3500)
+        out.write("56789".toByteArray())
+        out.flush()
+
+        val response = readResponse(BufferedReader(InputStreamReader(socket.getInputStream())))
+
+        assertEquals("async:10", response.body)
+      }
     }
   }
 

@@ -37,7 +37,9 @@ import org.springframework.boot.web.server.WebServerFactoryCustomizer;
  * off that client sees the connection close without a status line; rejections made with {@code
  * setStatus}, as the token filters do, are delivered. A client that sends {@code Expect:
  * 100-continue}, is rejected and then keeps the connection without sending the body holds the
- * worker until it closes or Tomcat's read timeout fires, like any connection that sends nothing.
+ * worker until it closes or Tomcat's read timeout fires, like any connection that sends nothing. A
+ * body that an async handler reads after the valve returned is outside the deadline: the valve
+ * leaves a request alone once async processing has started.
  */
 public class RequestBodyReadDeadlineValve extends ValveBase {
   /** What the valve reads and discards from an unfinished body; Tomcat's default swallow size. */
@@ -108,10 +110,14 @@ public class RequestBodyReadDeadlineValve extends ValveBase {
     if (request.isAsyncStarted() || body.finished()) {
       return;
     }
-    try {
-      discardBuffered(body);
-    } catch (IOException e) {
-      // The deadline already passed: the blocking drain below throws it after the answer is sent.
+    if (request.getContentLengthLong() >= 0) {
+      // Only a body with a Content-Length: for a chunked body "available" counts chunk framing, so
+      // it does not promise data and the read could block before the answer is sent.
+      try {
+        discardBuffered(body);
+      } catch (IOException e) {
+        // The deadline already passed: the blocking drain below throws it after the answer is sent.
+      }
     }
     if (body.finished()) {
       // The whole body had already arrived; there is nothing to wait for and the response keeps
@@ -139,7 +145,7 @@ public class RequestBodyReadDeadlineValve extends ValveBase {
     }
   }
 
-  /** Discards what is already buffered, which never blocks. */
+  /** Discards what is already buffered, which does not block for a body with a Content-Length. */
   static void discardBuffered(DeadlineInputBuffer body) throws IOException {
     ApplicationBufferHandler handler = new DrainHandler();
     while (!body.finished() && body.available() > 0) {
